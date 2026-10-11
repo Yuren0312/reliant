@@ -4062,7 +4062,7 @@ func executeToolsWithSpawnSupport(
 					ResponseToolSchemas:   etArgs.GetResponseToolSchemas(),
 					CompactionThreshold:   etArgs.GetCompactionThreshold(),
 					Capabilities:          etArgs.GetCapabilities(),
-					RefusedToolCalls:      refused,
+					RefusedToolCalls:      refused, //nolint:staticcheck // SA1019: set only by the legacy approval gate
 				}},
 			}
 
@@ -4077,9 +4077,10 @@ func executeToolsWithSpawnSupport(
 			return workflow.ExecuteActivity(activityCtx, "ExecuteTools", makeInput(regularNode))
 		}
 
-		// A mutating integration action in an attended run asks first; the
-		// batch runs once every such call has been answered.
-		if gated := actionApprovalCalls(split.regularToolCalls, etArgs.GetCapabilities()); len(gated) > 0 {
+		// A run that recorded this batch behind the removed integration action
+		// approval prompt replays it (action_approval_legacy.go); every other
+		// batch runs at once.
+		if gated := legacyActionApprovalGate(ctx, split.regularToolCalls, etArgs.GetCapabilities()); len(gated) > 0 {
 			regularToolsFuture = afterActionApprovals(ctx, activityCtx, rtx, gated, runRegular)
 		} else {
 			regularToolsFuture = runRegular(nil)
