@@ -356,6 +356,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
     const maxFitAttempts = 20; // Try for up to 2 seconds
     
     const doInitialFit = () => {
+      if (disposed) return;
       const container = terminalRef.current;
       if (!container) return;
       
@@ -743,6 +744,10 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
       }
 
       term.dispose();
+      // Nothing may reach the disposed terminal through the refs: the refit
+      // and resize paths check them before calling fit().
+      if (xtermRef.current === term) xtermRef.current = null;
+      if (fitAddonRef.current === fitAddon) fitAddonRef.current = null;
     };
   }, [sessionId, workingDir, worktreeId, projectId, updateSessionPID, setDaemonSessionId, updateConnectionState]); // updateConnectionState is a stable setter
 
@@ -847,6 +852,9 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
 
   // Listen for terminal container changes and refit
   useEffect(() => {
+    // Delayed refits must not outlive the terminal: after unmount they would
+    // call fit() on a disposed xterm and log after the component is gone.
+    const refitTimers: ReturnType<typeof setTimeout>[] = [];
     const handleContainerChange = () => {
       if (fitAddonRef.current && xtermRef.current) {
         // Try fitting immediately and with delays
@@ -862,8 +870,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
         };
 
         tryFit();
-        setTimeout(tryFit, 50);
-        setTimeout(tryFit, 150);
+        refitTimers.push(setTimeout(tryFit, 50), setTimeout(tryFit, 150));
       }
     };
 
@@ -884,6 +891,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
     return () => {
       window.removeEventListener('terminal-container-changed', handleContainerChange);
       window.removeEventListener('resize', handleResize);
+      refitTimers.forEach(clearTimeout);
     };
   }, [sessionId]);
 
@@ -904,9 +912,10 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
         }
       };
 
-      // Delay to ensure DOM has updated
-      setTimeout(tryFit, 50);
-      setTimeout(tryFit, 150);
+      // Delay to ensure DOM has updated. Cleared on unmount or the next
+      // resize, so a refit never runs against a disposed terminal.
+      const timers = [setTimeout(tryFit, 50), setTimeout(tryFit, 150)];
+      return () => timers.forEach(clearTimeout);
     }
   }, [sessionId, sidebarWidth, diffHeightPercent]);
 
