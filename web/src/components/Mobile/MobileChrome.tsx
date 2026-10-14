@@ -43,9 +43,12 @@ export function MobileScreenHeader({
   leading,
   trailing,
   titleClassName,
+  titleContent,
   subtitle,
 }: {
   title: string;
+  /** A combined title/subtitle control, such as workflow navigation. */
+  titleContent?: ReactNode;
   /** Hamburger or back control. Must be at least 44px square. */
   leading?: ReactNode;
   trailing?: ReactNode;
@@ -69,6 +72,7 @@ export function MobileScreenHeader({
           leading ? "px-1" : "px-2",
         )}
       >
+        {titleContent ?? (<>
         <h1
           className={cn(
             "truncate tracking-tight text-foreground",
@@ -80,6 +84,7 @@ export function MobileScreenHeader({
         {subtitle && (
           <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
         )}
+        </>)}
       </div>
       {trailing}
     </header>

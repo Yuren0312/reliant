@@ -34,12 +34,21 @@
  */
 
 import type { ReactNode } from "react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { SurfaceProvider } from "../../lib/surfaceContext";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 
 export function MobileLayout({ children }: { children: ReactNode }) {
+  const [viewportHeight, setViewportHeight] = useState<number>();
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const update = () => { if (viewport.scale === 1) setViewportHeight(viewport.height); };
+    update();
+    viewport.addEventListener("resize", update);
+    return () => viewport.removeEventListener("resize", update);
+  }, []);
   // The pre-hydration bootstrap in index.html only runs on a full page load,
   // but users reach /m/* by client-side redirect — so without this the mobile
   // type scale would only apply to hard navigations. Re-applying on mount (and
@@ -67,6 +76,7 @@ export function MobileLayout({ children }: { children: ReactNode }) {
           // Top inset keeps content clear of the notch. Inline because these
           // are `env()` values Tailwind has no token for.
           paddingTop: "env(safe-area-inset-top)",
+          height: viewportHeight,
           // The BOTTOM inset is deliberately not applied here. Padding on this
           // container would stop the tab bar's background short of the screen
           // edge, leaving a strip of page behind the home indicator. The bar

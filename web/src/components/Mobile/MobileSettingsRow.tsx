@@ -108,8 +108,10 @@ export function MobileSelectRow({
   sheetTitle,
   placeholder,
   action,
+  icon,
 }: {
   label: string;
+  icon?: ReactNode;
   description?: string;
   value: string;
   options: MobileSettingOption[];
@@ -130,17 +132,18 @@ export function MobileSelectRow({
         onClick={() => setOpen(true)}
         className="flex min-h-[44px] w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-foreground/5"
       >
+        {icon && <span className="flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-xl bg-foreground/5 text-muted-foreground">{icon}</span>}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground">{label}</p>
           {description && (
             <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground">
-          <span className="max-w-[140px] truncate">
+        <div className="flex min-w-0 max-w-[50%] items-center gap-1 text-sm text-muted-foreground">
+          <span className="min-w-0 truncate">
             {selected?.label ?? (value || placeholder)}
           </span>
-          <ChevronRight className="h-4 w-4" />
+          <ChevronRight className="h-4 w-4 shrink-0" />
         </div>
       </button>
       {open && (

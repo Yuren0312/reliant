@@ -9,3 +9,86 @@
 .chat-composer::placeholder {
   color: var(--chat-input-placeholder);
 }
+
+/* Mobile layout changes presentation without changing desktop controls. */
+.mobile-chat-composer [data-mobile-composer] {
+  border-radius: 28px;
+  border-color: hsl(var(--border) / 0.65);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 3%);
+}
+.mobile-chat-composer .chat-composer {
+  font-size: max(16px, 1rem);
+}
+.mobile-chat-composer .chat-button {
+  min-height: 44px;
+  min-width: 44px;
+}
+.mobile-chat-composer [aria-label="Model settings"] span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mobile-chat-sheet button, .mobile-chat-sheet select {
+  min-height: 44px;
+}
+.mobile-chat-sheet input, .mobile-chat-sheet textarea {
+  font-size: max(16px, 1rem);
+}
+.mobile-chat-sheet .mobile-chat-settings {
+  overflow-wrap: anywhere;
+}
+.mobile-chat-sheet .mobile-chat-settings > div {
+  max-height: none;
+}
+.mobile-chat-configuration > div > div,
+.mobile-chat-configuration > div > div > div {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+[data-surface="mobile"] .chat-input-container {
+  min-width: 0;
+}
+[data-surface="mobile"] .chat-input-container button[aria-label="Remove attachment"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.mobile-chat-configuration [class*="bottom-full"] {
+  position: relative;
+  bottom: auto;
+  left: auto;
+  width: 100%;
+  max-width: 100%;
+}
+[data-surface="mobile"] .chat-input-container button {
+  min-height: 44px;
+}
+.mobile-chat-sheet button:has(> svg:only-child) {
+  min-width: 44px;
+}
+
+.mobile-composer-text .chat-composer {
+  line-height: 1.5;
+}
+.mobile-composer-toolbar .chat-button {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+  border: 0;
+}
+.mobile-composer-toolbar .chat-button:disabled {
+  background: hsl(var(--foreground) / 0.12);
+  color: hsl(var(--foreground) / 0.4);
+  opacity: 1;
+}
+.mobile-composer-toolbar .chat-button svg {
+  width: 20px;
+  height: 20px;
+}
+.mobile-composer-toolbar .chat-button[data-testid="queue-send-button"] {
+  background: hsl(var(--foreground) / 0.08);
+  color: hsl(var(--foreground));
+}
+.mobile-composer-model {
+  max-height: 44px;
+}

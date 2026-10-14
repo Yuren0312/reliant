@@ -134,8 +134,9 @@ export function MessageActionsSheet({
         ref={sheetRef}
         role="dialog"
         aria-modal="true"
+        aria-label="Message actions"
         className={cn(
-          "relative w-full max-w-lg rounded-t-2xl border-t border-border bg-popover shadow-2xl transition-transform duration-200",
+          "relative flex max-h-[90dvh] w-full max-w-lg flex-col rounded-t-2xl border-t border-border bg-popover shadow-2xl transition-transform duration-200",
           visible ? "translate-y-0" : "translate-y-full",
         )}
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
@@ -151,7 +152,7 @@ export function MessageActionsSheet({
           </div>
         )}
 
-        <div className="flex flex-col px-2 pb-2 pt-1">
+        <div className="flex min-h-0 flex-col overflow-y-auto overscroll-contain px-2 pb-2 pt-1">
           {actions.map((action) => (
             <button
               key={action.key}

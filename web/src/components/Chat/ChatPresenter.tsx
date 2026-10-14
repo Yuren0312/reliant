@@ -109,6 +109,8 @@ interface ChatPresenterProps {
 
   /** The host shows the chat's title itself; see ChatHeader.hideTitle. */
   hideChatTitle?: boolean;
+  /** Optional host navigation-bar slot for shared chat actions. */
+  headerActionsTarget?: HTMLElement | null;
 }
 
 export const ChatPresenter = memo(function ChatPresenter({
@@ -137,6 +139,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   hasOlderMessages,
   isChatSyncing = false,
   hideChatTitle,
+  headerActionsTarget,
 }: ChatPresenterProps) {
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -624,6 +627,7 @@ export const ChatPresenter = memo(function ChatPresenter({
           onToggleWorkflowViewer={showDesktopChrome ? handleToggleWorkflowViewer : undefined}
           isWorkflowViewerOpen={isWorkflowViewerOpen}
           hideTitle={hideChatTitle}
+          actionsTarget={headerActionsTarget}
         />
 
         {!noMachine && <ResumeDaemonPill />}
