@@ -32,6 +32,10 @@
         "rpc_service": "reliant.v1.FileSystemService"
       },
       {
+        "name": "inbox",
+        "rpc_service": "reliant.v1.InboxService"
+      },
+      {
         "name": "message",
         "rpc_service": "reliant.v1.MessageService"
       },

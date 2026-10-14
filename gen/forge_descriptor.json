@@ -15354,8 +15354,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "TriggerHealthStatus"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "MCPService",
@@ -33937,5 +33936,5 @@
       "Line": 15
     }
   ],
-  "source_hash": "5cbf1d4aafbe6adab0a21ede20b22dec249bf362810e11429f48fa41170fa017"
+  "source_hash": "6c77657276bab48ddaa6a2f8dda9ba3f717ee7bc5ad2f7c87ef5b9f3ab5844f0"
 }
