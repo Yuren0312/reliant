@@ -9,6 +9,16 @@ An **automation** starts a run without anyone typing. "Every weekday at 9, revie
   <img src="/images/v2/p2-automations-schedule-webhook-github.png" alt="The Automations list showing a schedule, a webhook and a GitHub automation" />
 </Frame>
 
+## Just describe it in a chat
+
+You do not need to write the YAML or know the trigger syntax. Open a chat in your project and describe the job the way you would to a colleague:
+
+> Every weekday at 10am, check the open pull requests on `acme/shopfront` and post a summary to #eng in Slack.
+
+The agent loads the workflow-builder skill and the workflow tools, asks about anything it cannot guess (which Slack channel, what counts as stale), writes a workflow with a `triggers:` block, and tests it. It does not turn the automation on: when the workflow is ready it hands it to you to [enable](#declare-in-yaml-enable-in-the-app), and that is where you choose the project and machine its runs use, or **No machine** if the job only needs the web and your integrations. The same works for events ("when someone opens an issue on `acme/shopfront`, label and triage it") and for bots and monitors that are really an agent on a clock. For a longer or more involved job, start the built-in [Create a Workflow](/guides/create-a-workflow) workflow, which scopes, builds and tests it in phases.
+
+You can then open the result in the workflow builder, change the cron or the filter, and the automation follows the edit. The rest of this page explains what the agent wrote.
+
 ## Declare in YAML, enable in the app
 
 Automations have two halves, and keeping them apart is what makes a workflow shareable.
