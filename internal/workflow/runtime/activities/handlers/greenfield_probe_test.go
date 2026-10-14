@@ -351,6 +351,11 @@ func TestGreenfieldGuidanceStatesTheCeiling(t *testing.T) {
 func TestGreenfieldGuidanceDoesNotPromiseRemovedDeployTargets(t *testing.T) {
 	content := BuildGreenfieldGuidance(nil)
 
+	// The automations paragraph names Lambda only as outside infrastructure not
+	// to reach for; what is checked here is the forge deploy story after it.
+	_, content, found := strings.Cut(content, "enforces the rules.")
+	require.True(t, found)
+
 	for _, removed := range []string{"Fly", "Cloud Run", "ECS", "Lambda"} {
 		assert.NotContains(t, content, removed,
 			"forge has no runtime for %s today; the guidance must not offer it", removed)
@@ -416,4 +421,73 @@ func TestGreenfieldGuidanceRequiresDisclosure(t *testing.T) {
 		"the model needs to know WHY it must announce the choice, or it will treat it as optional")
 	assert.Contains(t, content, "say so explicitly in your reply",
 		"disclosure must be an instruction about the reply, not a vague suggestion")
+}
+
+// The thing that went wrong: "build a bot that wakes up twice a day" read as "a
+// script", and the model recommended cron on a VPS without mentioning that the
+// platform it runs on does scheduled agents. Unattended work must route to a
+// workflow with a trigger, via the skill that knows how to build one.
+func TestGreenfieldGuidanceRoutesUnattendedWorkToWorkflows(t *testing.T) {
+	content := BuildGreenfieldGuidance(nil)
+
+	automations, forgeSection, found := strings.Cut(content, "If the user has NOT named a stack")
+	require.True(t, found)
+
+	for _, want := range []string{
+		"on a schedule", "twice a day", "cron", "webhook", "a bot", "a monitor",
+		"Reliant workflow with a trigger", "`workflow-builder`", "however small the code is",
+	} {
+		assert.Contains(t, automations, want, "automations paragraph must carry %q", want)
+	}
+	assert.Contains(t, automations, "tell the user that is what you are proposing",
+		"the user cannot see this message; the model must say it is proposing a workflow")
+	assert.Contains(t, automations, "only if they ask for it",
+		"outside schedulers are for when the user asks, not the default")
+	assert.Contains(t, automations, "forge project",
+		"state-holding code is forge, called by the workflow's agent")
+
+	assert.Less(t, strings.Index(content, "Reliant workflow with a trigger"), strings.Index(content, "`reliant forge`"),
+		"automations come before forge")
+	assert.NotContains(t, forgeSection, "`workflow-builder`")
+}
+
+// forge hosts anything deployed or kept running, not just SaaS. Scoping it to
+// "SaaS-shaped" made workers, crons, operators and static sites read as out of
+// scope.
+func TestGreenfieldGuidanceDoesNotScopeForgeToSaaS(t *testing.T) {
+	content := BuildGreenfieldGuidance(nil)
+
+	assert.NotContains(t, content, "SaaS")
+	for _, want := range []string{
+		"background workers", "cron jobs", "Kubernetes operators", "a CLI",
+		"mobile app", "a static site", "React Native", "health probes",
+		"auth that fails closed", "secrets kept out of git",
+	} {
+		assert.Contains(t, content, want, "forge scope must name %q", want)
+	}
+}
+
+// A schedule-driven script is an automation, so "script" cannot be a blanket
+// reason to stay away from the platform: only a one-off one is.
+func TestGreenfieldGuidanceDoesNotExcludeScheduledScripts(t *testing.T) {
+	content := BuildGreenfieldGuidance(nil)
+
+	_, negative, found := strings.Cut(content, "Do NOT suggest forge when")
+	require.True(t, found)
+
+	assert.Contains(t, negative, "one-off")
+	assert.Contains(t, negative, "A script that should run on a schedule or react to events is not a one-off")
+	assert.Contains(t, negative, "automation (above)")
+	assert.NotContains(t, negative, "a CLI", "a CLI is a forge case now")
+	assert.NotContains(t, negative, "systems")
+}
+
+// Hosting refuses some workload kinds; promising them would send the user into
+// a failed deploy.
+func TestGreenfieldGuidanceStatesWhatHostingRefuses(t *testing.T) {
+	content := BuildGreenfieldGuidance(nil)
+
+	assert.Contains(t, content, "Reliant hosting runs services, workers and jobs")
+	assert.Contains(t, content, "a cron-kind workload or an operator needs a cluster they operate")
+	assert.Contains(t, content, "a worker that runs its own schedule is fine hosted")
 }

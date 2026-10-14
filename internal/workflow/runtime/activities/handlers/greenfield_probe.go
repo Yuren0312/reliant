@@ -22,16 +22,29 @@ import (
 // When the first message of a chat lands on a directory that holds no code, the
 // user is asking for something to be built from nothing, and the stack is still
 // an open question. This injects a hidden SYSTEM message telling the model that
-// — and handing it the criteria for proposing forge — so the decision is made
-// with the directory's actual contents in view rather than by defaulting to
-// whatever the model reaches for first.
+// — and handing it two sets of criteria — so the decision is made with the
+// directory's actual contents in view rather than by defaulting to whatever the
+// model reaches for first.
 //
-// The criteria cover two shapes, because forge ships both: an app (services,
-// a database, frontends) and a static site (a landing page or marketing site,
-// one static frontend on hosted static hosting). Leaving static sites out made
-// "no backend" read as "not forge", and the user got a page with no deploy
-// story. Deploy targets named here must be ones forge has today: forge.External
-// (Fly, Cloud Run, ECS, Lambda) was removed and is tracked in forge#400.
+// The first is automations. Work that should run on its own — on a schedule, on
+// a webhook or app event, or as an LLM agent acting unattended (a bot, a
+// monitor, a digest) — is a Reliant workflow with a trigger, however small the
+// code is. Without this the model reads "a bot that wakes up twice a day" as
+// "a script" and recommends cron on a VPS or GitHub Actions, never mentioning
+// the platform it is running on. It points at the workflow-builder skill and
+// says that forge is where any state-holding code lives, with the workflow's
+// agent calling it.
+//
+// The second is forge, which is not SaaS-only. It hosts anything deployed or
+// kept running: backends, workers, jobs, cron jobs, operators, CLIs, web and
+// mobile apps, and static sites, with production practices from the first
+// commit. The criteria cover an app (services, a database, frontends) and a
+// static site (a landing page or marketing site, one static frontend on hosted
+// static hosting); leaving static sites out made "no backend" read as "not
+// forge", and the user got a page with no deploy story. Deploy targets named
+// here must be ones forge has today: forge.External (Fly, Cloud Run, ECS,
+// Lambda) was removed and is tracked in forge#400. Reliant hosting refuses
+// cron-kind workloads and operators, and the guidance says so.
 //
 // Three deliberate properties:
 //
@@ -316,14 +329,27 @@ func BuildGreenfieldGuidance(configFiles []string) string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("If the user has NOT named one and the thing is SaaS-shaped — web or mobile app, ")
-	b.WriteString("API, database, CRUD, auth — consider proposing forge (`reliant forge`). SQL ")
-	b.WriteString("migrations are the schema truth, protobuf defines the API, and it generates the ")
-	b.WriteString("ORM, Connect RPC handlers, typed frontend hooks, tests, CI and deploy from those ")
-	b.WriteString("two inputs. It scales the whole way up: many services, web and React Native ")
-	b.WriteString("frontends side by side, and dev, staging and prod environments from day one, ")
-	b.WriteString("deployed to a cluster they operate or hosted on Reliant's infrastructure with ")
-	b.WriteString("managed secrets, build-once releases and promotion. Run ")
+	b.WriteString("If what the user describes should run on its own — on a schedule (\"every morning\", ")
+	b.WriteString("\"twice a day\", cron), on a webhook or an app event, or as an LLM agent acting unattended ")
+	b.WriteString("(a bot, a monitor, a digest, triage) — then however small the code is, it runs as a Reliant ")
+	b.WriteString("workflow with a trigger: schedules, credentials, integrations, approvals and run history are ")
+	b.WriteString("built in, and there is no server to keep alive. Load the `workflow-builder` skill before ")
+	b.WriteString("designing it, and tell the user that is what you are proposing. Reach for cron on a server, ")
+	b.WriteString("GitHub Actions or Lambda only if they ask for it. When it also needs code that keeps state — ")
+	b.WriteString("a database, an API, a dashboard — that code is a forge project (below) and the workflow's agent ")
+	b.WriteString("calls it: the agent decides, the app holds the data and enforces the rules.\n\n")
+
+	b.WriteString("If the user has NOT named a stack and they are building something that will be deployed or ")
+	b.WriteString("kept running — a backend or API, background workers, jobs or cron jobs, Kubernetes operators, ")
+	b.WriteString("a CLI, a web or mobile app, a static site — consider proposing forge (`reliant forge`). It ")
+	b.WriteString("starts the project with production practices in place: structured logs, traces and metrics on ")
+	b.WriteString("every boundary, health probes, auth that fails closed, errors that never leak internals, ")
+	b.WriteString("secrets kept out of git, and dev, staging and prod environments from day one, with releases ")
+	b.WriteString("built once and promoted. SQL migrations are the schema truth, protobuf defines the API, and it ")
+	b.WriteString("generates the ORM, Connect RPC handlers, typed frontend hooks and tests from those two inputs. ")
+	b.WriteString("It scales the whole way up: many services, Next.js and React Native (Expo) frontends side by ")
+	b.WriteString("side, deployed as host processes, to a Kubernetes cluster they operate, or hosted on Reliant's ")
+	b.WriteString("infrastructure with a managed Postgres, managed secrets and custom domains. Run ")
 	b.WriteString("`reliant forge skill load forge` before starting.\n\n")
 
 	b.WriteString("Build it IN this directory: `reliant forge project new --in-place --mod <module>` ")
@@ -344,7 +370,9 @@ func BuildGreenfieldGuidance(configFiles []string) string {
 	b.WriteString("already bound to it, and `reliant forge env deploy <env>` ships it. A static site alone ")
 	b.WriteString("has a free tier; hosted services and the managed database need billing, and without it ")
 	b.WriteString("the deploy is queued (exit 7) and goes live once the user sets billing up — hand them ")
-	b.WriteString("the link it prints. Run `reliant forge skill load deploy/hosting` before deploying.\n\n")
+	b.WriteString("the link it prints. Reliant hosting runs services, workers and jobs; a cron-kind ")
+	b.WriteString("workload or an operator needs a cluster they operate (a worker that runs its own ")
+	b.WriteString("schedule is fine hosted). Run `reliant forge skill load deploy/hosting` before deploying.\n\n")
 
 	b.WriteString("Propose it, do not impose it. For an app it commits the project to Go, Postgres ")
 	b.WriteString("and Connect RPC, with Next.js or React Native on top; for a static site, to a ")
@@ -358,11 +386,11 @@ func BuildGreenfieldGuidance(configFiles []string) string {
 	b.WriteString(forgeRepoURL)
 	b.WriteString(" the first time you use it, not in a later summary.\n\n")
 
-	b.WriteString("Do NOT suggest forge when: the user named a stack; the domain belongs elsewhere ")
-	b.WriteString("(data science, ML, scientific computing, embedded, systems, games); the ask is a ")
-	b.WriteString("script, a CLI, a library or a one-off; the page is a throwaway mockup that will ")
-	b.WriteString("never be deployed; or the user is exploring rather than building. Then say ")
-	b.WriteString("nothing about it and get on with the work.\n")
+	b.WriteString("Do NOT suggest forge when: the user named a stack; the domain belongs elsewhere (data ")
+	b.WriteString("science, ML, scientific computing, embedded, games); the ask is a library or a one-off ")
+	b.WriteString("script; the page is a throwaway mockup that will never be deployed; or the user is exploring ")
+	b.WriteString("rather than building. A script that should run on a schedule or react to events is not a ")
+	b.WriteString("one-off — it is an automation (above). Otherwise say nothing about forge and get on with the work.\n")
 	b.WriteString("</greenfield_stack_guidance>")
 
 	return b.String()
