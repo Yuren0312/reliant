@@ -69,10 +69,10 @@ function touch(x: number, y: number) {
   return { touches: [{ clientX: x, clientY: y }] };
 }
 
-function renderMobile(role: MessageRole) {
+function renderMobile(role: MessageRole, isLatestMessage = false) {
   return render(
     <SurfaceProvider surface="mobile">
-      <ChatMessage message={buildMessage(role)} chatId="chat-1" />
+      <ChatMessage message={buildMessage(role)} chatId="chat-1" isLatestMessage={isLatestMessage} />
     </SurfaceProvider>,
   );
 }
@@ -90,6 +90,7 @@ describe("ChatMessage long-press actions (mobile)", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it("opens the actions sheet after a 500ms press", () => {
@@ -193,5 +194,33 @@ describe("ChatMessage long-press actions (mobile)", () => {
     expect(surface.className).not.toContain("select-none");
     expect(surface.className).not.toContain("touch-callout");
     expect(fireEvent.contextMenu(surface)).toBe(true);
+  });
+});
+
+describe("Mobile inline message actions", () => {
+  it("copies on a direct tap without requiring hover", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    renderMobile(MessageRole.ASSISTANT, true);
+    const copy = screen.getByRole("button", { name: "Copy message" });
+    expect(copy).toHaveClass("pointer-events-auto");
+    expect(copy).not.toHaveClass("pointer-events-none");
+    await act(async () => { fireEvent.click(copy); });
+    expect(writeText).toHaveBeenCalledWith("Hello there.");
+    expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
+  it("opens branch choices immediately on a tap and branches from the selected message", async () => {
+    branchChat.mockClear();
+    renderMobile(MessageRole.USER, true);
+    const branch = screen.getByRole("button", { name: "Branch from message" });
+    expect(branch).toHaveClass("pointer-events-auto");
+    fireEvent.click(branch);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.parentElement).not.toHaveClass("pointer-events-none");
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Branch in place" })); });
+    expect(branchChat).toHaveBeenCalledWith("chat-1", "msg-1");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

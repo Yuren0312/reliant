@@ -1818,7 +1818,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         style={{ minHeight: 0, position: "relative", zIndex: 20 }}
       >
         <div className={isMobile ? "mobile-chat-composer px-3 pb-2" : "px-4 sm:px-6 lg:px-8"}>
-          <div className="max-w-[1200px] mx-auto">
+          <div className={isMobile ? "mx-auto w-full max-w-[760px]" : "max-w-[1200px] mx-auto"}>
             <div ref={containerRef} className="mt-1 mb-1.5">
               <div
                 className={`relative rounded-lg chat-input-container ${isMobile ? "mobile-composer-card border" : "border-2"} transition-all duration-200 cursor-text ${hasPendingQuestion ? "border-yellow-500/70" : threadBorderColor ? "" : "border-border/70"}`}

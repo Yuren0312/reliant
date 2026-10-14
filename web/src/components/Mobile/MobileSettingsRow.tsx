@@ -20,6 +20,7 @@
  * `:active` state was the only feedback a tap got, and it read as a dead button.
  */
 
+import { useMobileViewport } from "../../hooks/useMobileViewport";
 import { useState, type ReactNode } from "react";
 import { Check, ChevronRight, X } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -189,8 +190,9 @@ export function MobileOptionSheet({
   onClose: () => void;
   action?: MobileSheetAction;
 }) {
+  const viewport = useMobileViewport();
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+    <div className="fixed z-50 flex flex-col justify-end" style={{ top: viewport.top, left: viewport.left, width: viewport.width, height: viewport.height }}>
       <button
         type="button"
         aria-label="Dismiss"
@@ -198,8 +200,8 @@ export function MobileOptionSheet({
         className="absolute inset-0 bg-black/40"
       />
       <div
-        className="relative flex max-h-[75vh] flex-col rounded-t-2xl border-t border-border bg-background shadow-lg"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        className="relative flex max-h-[90%] flex-col rounded-t-2xl border-t border-border bg-background shadow-lg"
+        style={{ paddingBottom: "var(--mobile-bottom-inset, env(safe-area-inset-bottom))" }}
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <span className="text-sm font-semibold text-foreground">{title}</span>

@@ -1,3 +1,4 @@
+import { useSurface } from "../../../lib/surfaceContext";
 /**
 /**
  * InterleavedTimeline - Single chronological timeline with workflow context
@@ -617,7 +618,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     timelineVariant === "card" && "chat-timeline-card",
     timelineVariant === "minimal" && "chat-timeline-minimal"
   );
-  const contentMaxWidthClass = timelineVariant === "minimal" ? "max-w-[900px]" : "max-w-[1200px]";
+  const isMobile = useSurface() === "mobile";
+  const contentMaxWidthClass = isMobile ? "max-w-[760px]" : timelineVariant === "minimal" ? "max-w-[900px]" : "max-w-[1200px]";
   const timelineHorizontalPaddingClass = timelineVariant === "minimal" ? "px-4 sm:px-8" : "px-4 sm:px-6 lg:px-8";
   const timelineGapClass = timelineVariant === "card" ? "py-1" : timelineVariant === "minimal" ? "py-0.5" : "";
   const timelineItems = useMemo(() => {

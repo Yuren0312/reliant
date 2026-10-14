@@ -205,7 +205,8 @@ describe("ChatMessage hover actions", () => {
       </SurfaceProvider>,
     );
 
-    expect(toolbar().parentElement?.parentElement).not.toHaveClass("pt-7");
+    expect(document.querySelector(".message-actions")).toBeNull();
+    expect(document.querySelector(".message-container .pt-7")).toBeNull();
   });
 
   it.each([

@@ -61,7 +61,7 @@ export function MobileScreenHeader({
   subtitle?: ReactNode;
 }) {
   return (
-    <header className="flex min-h-[56px] shrink-0 items-center gap-1 border-b border-border bg-background px-2">
+    <header className="relative z-30 isolate flex min-h-[56px] shrink-0 items-center gap-1 border-b border-border bg-background px-2 py-2">
       {leading}
       <div
         className={cn(

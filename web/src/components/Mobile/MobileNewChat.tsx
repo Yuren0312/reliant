@@ -247,16 +247,18 @@ export function MobileNewChat() {
         }
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-5 pb-6">
+      <div className="relative isolate min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-3 pb-4">
+        <div className="mx-auto w-full max-w-[760px]">
         {startOptions}
         {noMachine && <p role="note" className="mt-3 px-1 text-xs leading-relaxed text-muted-foreground">{NO_MACHINE_COMPOSER_HINT}</p>}
+        </div>
       </div>
 
       {error && (
         <p className="shrink-0 px-4 py-2 text-xs text-destructive-ink">{error}</p>
       )}
 
-      <div className="shrink-0" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <div className="shrink-0" style={{ paddingBottom: "var(--mobile-bottom-inset, env(safe-area-inset-bottom))" }}>
         <ChatInput onSend={handleSend} disabled={isCreating || !currentProject} />
       </div>
 

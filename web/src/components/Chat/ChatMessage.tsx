@@ -219,6 +219,7 @@ function ChatMessageComponent({
   const surface = useSurface();
   const isMobile = surface === "mobile";
   const [showActionsSheet, setShowActionsSheet] = useState(false);
+  const [actionsOpenedByLongPress, setActionsOpenedByLongPress] = useState(true);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -292,9 +293,14 @@ function ChatMessageComponent({
   // Show branch options menu when clicking the branch button
   const handleBranchClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isMobile) {
+      setActionsOpenedByLongPress(false);
+      setShowActionsSheet(true);
+      return;
+    }
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setBranchMenuPosition({ x: rect.left, y: rect.bottom + 4 });
-  }, []);
+  }, [isMobile]);
 
   // Branch chat in same worktree (original behavior)
   const handleBranchChat = useCallback(async () => {
@@ -405,6 +411,7 @@ function ChatMessageComponent({
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       logger.error("Failed to copy message:", error);
+      toast.error("Could not copy the message. Please try again.");
     }
   };
 
@@ -558,6 +565,7 @@ function ChatMessageComponent({
     if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
       navigator.vibrate(10);
     }
+    setActionsOpenedByLongPress(true);
     setShowActionsSheet(true);
   }, []);
   const longPressHandlers = useLongPress(handleLongPress);
@@ -715,8 +723,9 @@ function ChatMessageComponent({
   //
   // The inline variant is in the flow with nothing underneath it and does not
   // disable its box, so these classes are simply redundant there.
-  const revealedControl =
-    "pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto";
+  const revealedControl = isMobile || (isLatestMessage && !pinned)
+    ? "pointer-events-auto"
+    : "pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto";
 
   const actionControls = (
     <>
@@ -741,6 +750,7 @@ function ChatMessageComponent({
         className={cn(
           "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
           revealedControl,
+          isMobile && "min-h-[44px] min-w-[44px]",
           copied && "text-success-ink"
         )}
         type="button"
@@ -771,6 +781,7 @@ function ChatMessageComponent({
         className={cn(
           "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
           revealedControl,
+          isMobile && "min-h-[44px] min-w-[44px]",
           isOptimistic && "cursor-not-allowed opacity-50"
         )}
         type="button"
@@ -1151,7 +1162,7 @@ function ChatMessageComponent({
           {/* Rendered once, outside the role branches, so it anchors to the
               content column rather than to the user bubble or the assistant
               block. The pin is a breadcrumb and gets no toolbar at all. */}
-          {!pinned && !showInlineActions && floatingMessageActions}
+          {!pinned && !showInlineActions && !isMobile && floatingMessageActions}
         </div>
       </div>
 
@@ -1195,6 +1206,7 @@ function ChatMessageComponent({
       {isMobile && (
         <MessageActionsSheet
           isOpen={showActionsSheet}
+          waitForRelease={actionsOpenedByLongPress}
           onClose={() => setShowActionsSheet(false)}
           actions={mobileMessageActions}
           timestampLabel={fullTimestampText || undefined}

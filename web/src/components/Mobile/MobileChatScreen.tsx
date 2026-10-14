@@ -114,7 +114,7 @@ export function MobileChatScreen() {
           otherwise sit under the home indicator. */}
       <div
         className="min-h-0 flex-1"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        style={{ paddingBottom: "var(--mobile-bottom-inset, env(safe-area-inset-bottom))" }}
       >
         <ChatContainer tabId={chatId} hideChatTitle headerActionsTarget={headerActionsTarget} />
       </div>

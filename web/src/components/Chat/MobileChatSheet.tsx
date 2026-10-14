@@ -61,7 +61,7 @@ export function MobileChatSheet({ title, onClose, onBack, children }: {
       <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
       <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId}
         className="relative flex max-h-[90%] w-full max-w-lg min-w-0 flex-col rounded-t-[28px] border border-border bg-popover shadow-xl outline-none"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }} data-modal-open="true">
+        style={{ paddingBottom: "var(--mobile-bottom-inset, env(safe-area-inset-bottom))" }} data-modal-open="true">
         <div aria-hidden="true" className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-muted-foreground/30" />
         <div className="flex shrink-0 items-center gap-2 px-3 py-2">
           {onBack && <button type="button" aria-label="Back" onClick={onBack} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full active:bg-muted"><ChevronLeft className="h-5 w-5" /></button>}
