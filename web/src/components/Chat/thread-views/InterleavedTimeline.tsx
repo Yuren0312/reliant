@@ -1,3 +1,4 @@
+import { useComposerKeyboardScroll } from "../../../hooks/useComposerKeyboardScroll";
 import { useSurface } from "../../../lib/surfaceContext";
 /**
 /**
@@ -993,6 +994,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // per-scroll resolver does not re-subscribe on every change.
   const pinnedUserMessageIdxRef = useRef<number | null>(null);
   const setScrollerEl = timeline.scrollerRef;
+
+  useComposerKeyboardScroll(isMobile, () => {
+    pinnedUserMessageIdxRef.current = null;
+    setPinnedUserMessageIdx(null);
+    scrollToBottom();
+  });
 
   // Report at-bottom upward for the scroll-to-bottom button.
   useEffect(() => {
