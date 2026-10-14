@@ -227,7 +227,7 @@ accounts it listens through. One declaration can have many activations (one per 
 ```yaml
 name: triage-new-issues
 inputs:
-  issue_number: {type: integer, default: 0}   # required inputs must be mapped by every trigger, or set per activation
+  issue_number: {type: integer, default: 0}   # required inputs must be mapped by every trigger, or set by the user when enabling
 triggers:
   - name: new-issue                 # unique within the workflow: lowercase, digits, - and _
     description: A new issue
@@ -257,16 +257,16 @@ nodes: ...
 `trigger` — the run, its inputs and nodes do not exist yet. A schedule has no event, so no filter.
 An event whose payload a filter or input cannot read is recorded as a FAILED firing: guard optional
 fields with `has()` or a ternary. Each `inputs` key must be a declared workflow input; a value set there wins
-over the activation's params (activation refuses a param it would override).
+over the user's params (enabling drops a param it would override).
 
 **`prompt`** is the message every run the trigger starts begins from, a `{{ }}` template over `trigger` like
-`inputs`. Write it so activating needs no prompt: an activation's own `message` overrides it, and with
-neither, activation is refused. The event is still attached after it as untrusted data.
+`inputs`. Write it so enabling needs no prompt: the prompt the user writes when enabling overrides it, and with
+neither, enabling is refused. The event is still attached after it as untrusted data.
 
 **`trigger.activation`** is the activation the event fires for, readable in a `filter`, `inputs`, `prompt` and `dedupe_key` (not in nodes, which read `inputs`):
 `trigger.activation.params.<input>`, `.id`, `.owner.user_id`, and `.owner.github_id` (the GitHub user id of the connection it listens through, a string; empty without one). Use it so one declaration serves many activations instead of pasting
-a repo list into the filter: declare `repos: {type: array, default: []}` as an input and write `filter: "trigger.payload.attributes.repository in trigger.activation.params.repos"`; each activation sets its own
-`params: {repos: [...]}`. `params` holds the workflow's inputs except those this trigger's `inputs` map from the event, with defaults applied and declared types, so an unset list is `[]`.
+a repo list into the filter: declare `repos: {type: array, default: []}` as an input and write `filter: "trigger.payload.attributes.repository in trigger.activation.params.repos"`; whoever enables the workflow fills in
+`repos` in the Enable dialog's inputs (each activation keeps its own). `params` holds the workflow's inputs except those this trigger's `inputs` map from the event, with defaults applied and declared types, so an unset list is `[]`.
 Validation types it from the workflow's inputs: `trigger.activation.params.repo` for a `repos` input is an error when you save. Trust is a filter, not a table: ids are strings, so
 `trigger.sender.verified && (trigger.sender.id == trigger.activation.owner.github_id || trigger.sender.id in trigger.activation.params.trusted_ids)` admits you and the quoted ids in a `trusted_ids` array input.
 

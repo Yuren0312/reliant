@@ -341,7 +341,7 @@ accounts it listens through. One declaration can have many activations (one per 
 ` + "```yaml" + `
 name: triage-new-issues
 inputs:
-  issue_number: {type: integer, default: 0}   # required inputs must be mapped by every trigger, or set per activation
+  issue_number: {type: integer, default: 0}   # required inputs must be mapped by every trigger, or set by the user when enabling
 triggers:
   - name: new-issue                 # unique within the workflow: lowercase, digits, - and _
     description: A new issue
@@ -371,16 +371,16 @@ nodes: ...
 ` + bt + `trigger` + bt + ` — the run, its inputs and nodes do not exist yet. A schedule has no event, so no filter.
 An event whose payload a filter or input cannot read is recorded as a FAILED firing: guard optional
 fields with ` + bt + `has()` + bt + ` or a ternary. Each ` + bt + `inputs` + bt + ` key must be a declared workflow input; a value set there wins
-over the activation's params (activation refuses a param it would override).
+over the user's params (enabling drops a param it would override).
 
 **` + bt + `prompt` + bt + `** is the message every run the trigger starts begins from, a ` + bt + `{{ }}` + bt + ` template over ` + bt + `trigger` + bt + ` like
-` + bt + `inputs` + bt + `. Write it so activating needs no prompt: an activation's own ` + bt + `message` + bt + ` overrides it, and with
-neither, activation is refused. The event is still attached after it as untrusted data.
+` + bt + `inputs` + bt + `. Write it so enabling needs no prompt: the prompt the user writes when enabling overrides it, and with
+neither, enabling is refused. The event is still attached after it as untrusted data.
 
 **` + bt + `trigger.activation` + bt + `** is the activation the event fires for, readable in a ` + bt + `filter` + bt + `, ` + bt + `inputs` + bt + `, ` + bt + `prompt` + bt + ` and ` + bt + `dedupe_key` + bt + ` (not in nodes, which read ` + bt + `inputs` + bt + `):
 ` + bt + `trigger.activation.params.<input>` + bt + `, ` + bt + `.id` + bt + `, ` + bt + `.owner.user_id` + bt + `, and ` + bt + `.owner.github_id` + bt + ` (the GitHub user id of the connection it listens through, a string; empty without one). Use it so one declaration serves many activations instead of pasting
-a repo list into the filter: declare ` + bt + `repos: {type: array, default: []}` + bt + ` as an input and write ` + bt + `filter: "trigger.payload.attributes.repository in trigger.activation.params.repos"` + bt + `; each activation sets its own
-` + bt + `params: {repos: [...]}` + bt + `. ` + bt + `params` + bt + ` holds the workflow's inputs except those this trigger's ` + bt + `inputs` + bt + ` map from the event, with defaults applied and declared types, so an unset list is ` + bt + `[]` + bt + `.
+a repo list into the filter: declare ` + bt + `repos: {type: array, default: []}` + bt + ` as an input and write ` + bt + `filter: "trigger.payload.attributes.repository in trigger.activation.params.repos"` + bt + `; whoever enables the workflow fills in
+` + bt + `repos` + bt + ` in the Enable dialog's inputs (each activation keeps its own). ` + bt + `params` + bt + ` holds the workflow's inputs except those this trigger's ` + bt + `inputs` + bt + ` map from the event, with defaults applied and declared types, so an unset list is ` + bt + `[]` + bt + `.
 Validation types it from the workflow's inputs: ` + bt + `trigger.activation.params.repo` + bt + ` for a ` + bt + `repos` + bt + ` input is an error when you save. Trust is a filter, not a table: ids are strings, so
 ` + bt + `trigger.sender.verified && (trigger.sender.id == trigger.activation.owner.github_id || trigger.sender.id in trigger.activation.params.trusted_ids)` + bt + ` admits you and the quoted ids in a ` + bt + `trusted_ids` + bt + ` array input.
 
