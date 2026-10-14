@@ -17,7 +17,7 @@ func TestDefaultProjectReliantMD_PinsRoutingFacts(t *testing.T) {
 		"`triggers:` block",
 		"`http/request@1`",
 		"even when it sounds like \"just a script\"",
-		"`search_reliant`",
+		"`mcp__reliant-docs__search_reliant`",
 		"reliant forge skill load forge",
 		"https://github.com/reliant-labs/forge",
 		"cron-kind workloads and operators need",
