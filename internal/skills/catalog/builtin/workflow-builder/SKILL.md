@@ -1,6 +1,6 @@
 ---
 name: workflow-builder
-description: Build, edit, debug, and test Reliant workflows. Use when creating new workflows, modifying existing ones, writing scenario tests, or troubleshooting workflow execution issues.
+description: Build a bot or agent that runs on a schedule or event (cron, webhook, twice a day, daily digest, monitor, triage); also multi-agent Reliant workflows. Use to create, edit, test or debug any workflow.
 compatibility: reliant
 metadata:
   category: workflow
@@ -16,6 +16,7 @@ Load it before designing a workflow's control flow.
 
 ## When to use
 
+- Building an agent or automation that runs on its own: on a schedule ("every morning", "twice a day", cron), on a webhook or an app event — a bot, monitor, digest or triage job, even when it sounds like "just a script"
 - Creating a new Reliant workflow from scratch
 - Editing or extending an existing workflow
 - Debugging workflow execution issues
