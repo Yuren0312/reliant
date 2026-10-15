@@ -52,6 +52,20 @@ export function workspaceOptions(worktrees: Worktree[]): MobileSettingOption[] {
   }));
 }
 
+/** Short, user-facing summaries for the mobile workflow chooser. */
+function mobileWorkflowSummary(label: string, description?: string): string | undefined {
+  const summaries: Record<string, string> = {
+    "agent": "Chat, code, and get things done.",
+    "best of three": "Three agents work in parallel; choose the best result.",
+    "create a workflow": "Build a reusable workflow through chat.",
+  };
+  const summary = summaries[label.toLowerCase()];
+  if (summary) return summary;
+  const firstSentence = description?.split(/(?<=[.!?])\s|\n/)[0]?.trim();
+  if (!firstSentence) return undefined;
+  return firstSentence.length > 90 ? `${firstSentence.slice(0, 87).replace(/\s+\S*$/, "")}…` : firstSentence;
+}
+
 export function MobileNewChat() {
   const navigate = useNavigate();
   // `strict: false` — nested under `_authenticated` → `_mobile`, same as
@@ -74,7 +88,7 @@ export function MobileNewChat() {
       if (seen.has(name) || isWorkflowHidden(workflow.name) || !isChatLaunchable(workflow)) return false;
       seen.add(name);
       return true;
-    }).map(workflow => ({ value: workflow.name, label: workflowDisplayName(workflow), description: workflow.description || undefined }));
+    }).map(workflow => ({ value: workflow.name, label: workflowDisplayName(workflow), description: mobileWorkflowSummary(workflowDisplayName(workflow), workflow.description) }));
   }, [workflows, isWorkflowHidden]);
   const workflowRowValue = workflowOptions.find(option => normalizeWorkflowRef(option.value) === normalizeWorkflowRef(effectiveWorkflow))?.value ?? effectiveWorkflow;
   const changeWorkflow = (value: string) => {
