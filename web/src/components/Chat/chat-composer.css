@@ -70,7 +70,7 @@
 
 .mobile-composer-text .chat-composer {
   display: block;
-  min-height: 24px;
+  min-height: 32px;
   line-height: 1.5;
 }
 .mobile-composer-toolbar .chat-button {
@@ -160,4 +160,23 @@
 [data-mobile-plain-response] {
   min-height: 44px;
   padding-right: 44px;
+}
+
+/* Smaller visual controls retain a full 44px touch area. */
+.mobile-composer-toolbar .mobile-composer-add,
+.mobile-composer-toolbar .chat-button {
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  border: 4px solid var(--chat-input-bg);
+}
+.mobile-composer-toolbar .mobile-composer-add svg {
+  width: 20px;
+  height: 20px;
+}
+.mobile-composer-toolbar .mobile-composer-model,
+.mobile-composer-toolbar button[aria-label="Open chat options"] {
+  box-sizing: border-box;
+  border: 4px solid var(--chat-input-bg);
+  font-size: 13px;
 }

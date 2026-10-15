@@ -1826,7 +1826,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                 data-onboarding="chat-input"
                 onClick={handleInputContainerClick}
                 style={{
-                  padding: isMobile ? "8px 10px 6px" : "4px 8px",
+                  padding: isMobile ? "12px 10px 6px" : "4px 8px",
                   ...(threadBorderColor ? { borderColor: threadBorderColor } : {}),
                   backgroundColor: isDragging
                     ? "var(--chat-drag-bg, var(--transparent-button-hover))"
@@ -1969,7 +1969,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                       />
                     </div>
                   </div>}
-                  {isMobile && <div className="mobile-composer-toolbar flex min-w-0 items-center gap-2 pt-1">
+                  {isMobile && <div className="mobile-composer-toolbar flex min-w-0 items-center gap-1 pt-2">
                     <button type="button" aria-label="Add files or chat options" onClick={() => setMobileMenu("add")} disabled={disabled || uploading}
                       className="mobile-composer-add relative flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full bg-foreground/5 active:bg-foreground/10 disabled:opacity-50">
                       <Plus className="h-6 w-6" strokeWidth={1.75} />
