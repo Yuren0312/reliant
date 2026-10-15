@@ -20,9 +20,9 @@
  * `:active` state was the only feedback a tap got, and it read as a dead button.
  */
 
-import { useMobileViewport } from "../../hooks/useMobileViewport";
+import { MobileChatSheet } from "../Chat/MobileChatSheet";
 import { useState, type ReactNode } from "react";
-import { Check, ChevronRight, X } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 export interface MobileSettingOption {
@@ -190,31 +190,9 @@ export function MobileOptionSheet({
   onClose: () => void;
   action?: MobileSheetAction;
 }) {
-  const viewport = useMobileViewport();
   return (
-    <div className="fixed z-50 flex flex-col justify-end" style={{ top: viewport.top, left: viewport.left, width: viewport.width, height: viewport.height }}>
-      <button
-        type="button"
-        aria-label="Dismiss"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/40"
-      />
-      <div
-        className="relative flex max-h-[90%] flex-col rounded-t-2xl border-t border-border bg-background shadow-lg"
-        style={{ paddingBottom: "var(--mobile-bottom-inset, env(safe-area-inset-bottom))" }}
-      >
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="text-sm font-semibold text-foreground">{title}</span>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-muted-foreground active:bg-muted"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto py-1">
+    <MobileChatSheet title={title} onClose={onClose} closeLabel="Close">
+        <div className="py-1">
           {options.map((option) => {
             const isSelected = option.value === value;
             return (
@@ -254,8 +232,7 @@ export function MobileOptionSheet({
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </MobileChatSheet>
   );
 }
 

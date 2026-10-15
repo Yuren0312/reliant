@@ -153,7 +153,7 @@ export function ChatThinkingIndicator({
         }
       `}</style>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-        <span className="text-sm text-muted-foreground">{stillWorking ? STILL_WORKING : isMobile && !waitingOnMachine ? "Working…" : thinkingMessage}</span>
+        <span className={isMobile && !waitingOnMachine && !stillWorking ? "sr-only" : "text-sm text-muted-foreground"}>{stillWorking ? STILL_WORKING : isMobile && !waitingOnMachine ? "Working…" : thinkingMessage}</span>
         <div className="flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full thinking-dot-1" style={{ backgroundColor: 'hsl(var(--primary))' }} />
           <div className="w-1.5 h-1.5 rounded-full thinking-dot-2" style={{ backgroundColor: 'hsl(var(--primary))' }} />
