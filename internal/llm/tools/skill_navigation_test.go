@@ -179,3 +179,37 @@ func TestSkillNavigation_PreloadAndHandLoadAgree(t *testing.T) {
 	assert.Equal(t, preloaded, handLoaded.Content)
 	assert.Contains(t, preloaded, navTailMarker)
 }
+
+// forge's start-here, and only that skill, has a temporary allowance over
+// MaxSkillBodySize (forge#808). A body inside the allowance arrives whole at that
+// path, in any case. It arrives identically through the preload renderer and
+// the skill tool, wrapper included. The same body anywhere else is still windowed.
+func TestSkillDelivery_ForgeStartHereAllowance(t *testing.T) {
+	t.Parallel()
+	body := navBody(MaxSkillBodySize + 200)
+	skills := []config.StoredSkill{
+		{SkillPath: ForgeStartHereSkillPath, Name: "forge", Body: body},
+		{SkillPath: "pkg/main", Name: "main", Body: body},
+	}
+
+	for _, path := range []string{ForgeStartHereSkillPath, " Forge/Forge "} {
+		_, content, ok := LoadSkillForInjection(skills, path)
+		require.True(t, ok, "%q must resolve", path)
+		preloaded, truncated := DeliverSkillContent(path, content)
+		require.False(t, truncated, "%q: the start-here must arrive whole inside its allowance", path)
+		assert.Contains(t, preloaded, navTailMarker)
+		assert.LessOrEqual(t, len(preloaded), ForgeStartHereSkillBodySize)
+
+		input := fmt.Sprintf(`{"action":"load","path":%q}`, path)
+		handLoaded, err := NewSkillTool(skills).Run(
+			&rctx.ToolContext{Context: context.Background()},
+			ToolCall{ID: "c1", Name: ToolSkill, Input: input},
+		)
+		require.NoError(t, err)
+		assert.Equal(t, preloaded, handLoaded.Content, "%q: preload and hand load must be the same bytes", path)
+	}
+
+	other, truncated := DeliverSkillContent("pkg/main", body)
+	assert.True(t, truncated, "every other skill keeps MaxSkillBodySize")
+	assert.LessOrEqual(t, len(other), MaxSkillBodySize)
+}

@@ -36,7 +36,42 @@ const (
 	// turn of every run. The fix for an oversize skill is to split it at the
 	// source, which is what the truncation notice tells the reader to do.
 	MaxSkillBodySize = MaxOutputSize
+
+	// ForgeStartHereSkillPath is the catalog path of forge's start-here skill:
+	// the body `reliant forge skill load forge` prints. Not "forge" — in
+	// reliant's catalog that path is the synthesized map of forge's sub-skills.
+	ForgeStartHereSkillPath = "forge/forge"
+
+	// ForgeStartHereSkillBodySize is a TEMPORARY delivery allowance for forge's
+	// start-here skill alone — the one skill the harness preloads into every
+	// forge project's chat. It is a stopgap, not a second budget to grow into.
+	//
+	// forge's size guard checks the SKILL.md source against MaxSkillBodySize,
+	// but a skill arrives rendered: each of the start-here's 92 commands is
+	// spelled `reliant forge`, 8 bytes longer than in the source. At forge
+	// f3fd8c02 that turns a 23,380-byte source into a 24,116-byte body, over
+	// MaxSkillBodySize before the footer, so every forge chat got a windowed
+	// start-here missing its Rules. Until forge measures what is delivered and
+	// trims the skill (https://github.com/reliant-labs/forge/issues/808), the
+	// start-here gets just enough to arrive whole: ~24,230 bytes with its footer
+	// and navigation pointer, leaving ~270 to spare, about the growth that broke it.
+	//
+	// Delete it once a forge pin carries forge#808. After that,
+	// TestForgeStartHerePreload_IsWhatTheCLIPrints holds the start-here to
+	// MaxSkillBodySize again.
+	ForgeStartHereSkillBodySize = 24_500
 )
+
+// skillDeliveryBudget is the delivered-size ceiling for one load of the skill
+// at path: MaxSkillBodySize for every skill except forge's start-here (see
+// ForgeStartHereSkillBodySize). renderSkillDelivery applies it on both delivery
+// paths, so a preloaded skill and a hand-loaded one stay byte-identical.
+func skillDeliveryBudget(path string) int {
+	if strings.EqualFold(strings.TrimSpace(path), ForgeStartHereSkillPath) {
+		return ForgeStartHereSkillBodySize
+	}
+	return MaxSkillBodySize
+}
 
 // CapSkillContent enforces MaxSkillBodySize on the text delivered for a skill
 // load and reports whether anything was dropped.
@@ -147,9 +182,17 @@ func (e *OutputLimitError) Error() string {
 // Keep this in sync with MaxReadSize, which bounds how much view READS; this
 // bounds how much the wrapper DELIVERS. A larger read ceiling with the shared
 // delivery ceiling would truncate right back to 24KB and read as a no-op.
+//
+// The skill tool already caps each load to its own budget, footer included
+// (renderSkillDelivery). For that tool this ceiling is only a backstop, so it
+// admits the largest budget; otherwise it would cut the start-here allowance
+// back down.
 func outputCeilingFor(toolName string) int {
-	if toolName == ViewToolName {
+	switch toolName {
+	case ViewToolName:
 		return MaxReadSize
+	case ToolSkill:
+		return ForgeStartHereSkillBodySize
 	}
 	return MaxOutputSize
 }
