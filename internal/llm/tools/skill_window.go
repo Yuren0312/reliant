@@ -300,8 +300,8 @@ func filterSkillLines(content string, p SkillParams) (string, int, error) {
 	return b.String(), matches, nil
 }
 
-// renderSkillDelivery caps the window to MaxSkillBodySize INCLUDING its footer
-// and appends that footer.
+// renderSkillDelivery caps the window to the skill's delivery budget
+// (skillDeliveryBudget) INCLUDING its footer and appends that footer.
 //
 // The cap is applied here rather than left to the ToolWrapper on purpose: the
 // wrapper's generic cut would take the footer off — the one part of the result
@@ -309,13 +309,14 @@ func filterSkillLines(content string, p SkillParams) (string, int, error) {
 // Returns the delivered text and how many bytes of w.Text survived, so the
 // caller can report truncation without re-deriving it.
 func renderSkillDelivery(path string, w skillWindow) (string, int) {
+	budget := skillDeliveryBudget(path)
 	keep := len(w.Text)
 	footer := skillDeliveryFooter(path, w, keep)
 
 	// The footer's length depends on the numbers it reports, which depend on
 	// how much text survives, so converge instead of guessing a reserve.
-	for i := 0; i < 8 && keep+len(footer) > MaxSkillBodySize; i++ {
-		keep = MaxSkillBodySize - len(footer)
+	for i := 0; i < 8 && keep+len(footer) > budget; i++ {
+		keep = budget - len(footer)
 		if keep < 0 {
 			keep = 0
 		}
@@ -330,7 +331,7 @@ func renderSkillDelivery(path string, w skillWindow) (string, int) {
 			text = text[:idx+1]
 		}
 		footer = skillDeliveryFooter(path, w, len(text))
-		for len(text) > 0 && len(text)+len(footer) > MaxSkillBodySize {
+		for len(text) > 0 && len(text)+len(footer) > budget {
 			text = text[:len(text)-1]
 			footer = skillDeliveryFooter(path, w, len(text))
 		}

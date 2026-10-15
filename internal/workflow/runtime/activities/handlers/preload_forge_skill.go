@@ -5,13 +5,14 @@ import (
 	"strings"
 
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 )
 
 // forgeStartHereSkill is the catalog path of forge's own start-here skill: the
-// body `reliant forge skill load forge` prints. Not "forge" — in reliant's
-// catalog that path is the synthesized map of forge's sub-skills.
-const forgeStartHereSkill = "forge/forge"
+// body `reliant forge skill load forge` prints. It is the path the delivery
+// renderer keys the start-here's allowance on, so it is declared there once.
+const forgeStartHereSkill = tools.ForgeStartHereSkillPath
 
 // withForgeStartHere returns the skills an agent node preloads: its own
 // request, plus forge's start-here skill when the project root is a forge
