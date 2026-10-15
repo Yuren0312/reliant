@@ -1,9 +1,8 @@
 /** Compact workflow navigation, optionally combined with the mobile chat title. */
 
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, Loader2, Workflow as WorkflowIcon } from "lucide-react";
+import { ChevronDown, Workflow as WorkflowIcon } from "lucide-react";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
-import { WorkflowState } from "../../gen/reliant/v1/chat_pb";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 
 interface MobileWorkflowExecutionEntryProps {
@@ -19,10 +18,6 @@ export function MobileWorkflowExecutionEntry({
 
   if (!execution) return title ? <h1 className="truncate text-base font-semibold tracking-tight text-foreground">{title}</h1> : null;
 
-  const running =
-    execution.state === WorkflowState.ACTIVE ||
-    execution.state === WorkflowState.PENDING;
-
   return (
     <Link
       to="/m/chats/$chatId/workflow"
@@ -33,11 +28,7 @@ export function MobileWorkflowExecutionEntry({
       <div className="min-w-0">
         {title && <h1 className="truncate text-base font-semibold tracking-tight text-foreground">{title}</h1>}
         <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          {running ? (
-            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
-          ) : (
-            <WorkflowIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          )}
+          <WorkflowIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="min-w-0 truncate">{getWorkflowDisplayName(execution.workflowName, true)}</span>
           <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
         </span>

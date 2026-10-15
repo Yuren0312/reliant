@@ -1826,7 +1826,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                 data-onboarding="chat-input"
                 onClick={handleInputContainerClick}
                 style={{
-                  padding: isMobile ? "12px 12px 8px" : "4px 8px",
+                  padding: isMobile ? "8px 10px 6px" : "4px 8px",
                   ...(threadBorderColor ? { borderColor: threadBorderColor } : {}),
                   backgroundColor: isDragging
                     ? "var(--chat-drag-bg, var(--transparent-button-hover))"
@@ -1969,13 +1969,13 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                       />
                     </div>
                   </div>}
-                  {isMobile && <div className="mobile-composer-toolbar flex min-w-0 items-center gap-2 pt-2">
+                  {isMobile && <div className="mobile-composer-toolbar flex min-w-0 items-center gap-2 pt-1">
                     <button type="button" aria-label="Add files or chat options" onClick={() => setMobileMenu("add")} disabled={disabled || uploading}
                       className="mobile-composer-add relative flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full bg-foreground/5 active:bg-foreground/10 disabled:opacity-50">
                       <Plus className="h-6 w-6" strokeWidth={1.75} />
                       {hasUnsetParams && <span aria-label="Required settings missing" className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />}
                     </button>
-                    <div className="min-w-0 flex-1">{renderModelControl()}</div>
+                    <div className="min-w-0 flex-1">{renderModelControl() ?? <button type="button" aria-label="Open chat options" onClick={() => setMobileMenu("options")} className="flex min-h-[44px] max-w-full items-center gap-1.5 rounded-full bg-foreground/5 px-3 text-sm text-muted-foreground"><Settings2 className="h-4 w-4 shrink-0" /><span className="truncate">Chat options</span></button>}</div>
                     <ButtonLayout layout={["sendStop"]} onSend={handleSend} onStop={handleStop} onQueue={handleQueue}
                       canSend={input.trim().length > 0 || attachments.length > 0} isStreaming={effectiveStreaming}
                       disabled={disabled || uploading || !isMessagingAllowed} onAttach={handleAttachClick} uploading={uploading} />

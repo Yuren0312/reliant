@@ -74,6 +74,11 @@ describe("Mobile chat composer", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(document.activeElement).toBe(trigger);
   });
+  it("keeps chat settings reachable when no model field is available", () => {
+    renderMobile({ onSend: vi.fn() });
+    fireEvent.click(screen.getByRole("button", {name:"Open chat options"}));
+    expect(screen.getByRole("dialog", {name:"Chat options"})).toBeInTheDocument();
+  });
   it("uses a short mobile placeholder", () => {
     renderMobile({ onSend: vi.fn() });
     expect(composer()).toHaveAttribute("placeholder", "Message Reliant");

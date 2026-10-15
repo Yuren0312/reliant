@@ -3,10 +3,11 @@ import { createPortal } from "react-dom";
 import { ChevronLeft, X } from "lucide-react";
 
 /** A viewport-bound sheet shared by the mobile composer and its settings. */
-export function MobileChatSheet({ title, onClose, onBack, children }: {
+export function MobileChatSheet({ title, onClose, onBack, closeLabel = "Close chat options", children }: {
   title: string;
   onClose: () => void;
   onBack?: () => void;
+  closeLabel?: string;
   children: ReactNode;
 }) {
   const titleId = useId();
@@ -66,7 +67,7 @@ export function MobileChatSheet({ title, onClose, onBack, children }: {
         <div className="flex shrink-0 items-center gap-2 px-3 py-2">
           {onBack && <button type="button" aria-label="Back" onClick={onBack} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full active:bg-muted"><ChevronLeft className="h-5 w-5" /></button>}
           <h2 id={titleId} className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>
-          <button type="button" aria-label="Close chat options" onClick={onClose} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full active:bg-muted"><X className="h-5 w-5" /></button>
+          <button type="button" aria-label={closeLabel} onClick={onClose} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full active:bg-muted"><X className="h-5 w-5" /></button>
         </div>
         <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-4 pt-2">{children}</div>
       </div>

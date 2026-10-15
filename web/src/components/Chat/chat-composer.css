@@ -69,6 +69,8 @@
 }
 
 .mobile-composer-text .chat-composer {
+  display: block;
+  min-height: 24px;
   line-height: 1.5;
 }
 .mobile-composer-toolbar .chat-button {
@@ -91,4 +93,71 @@
 }
 .mobile-composer-model {
   max-height: 44px;
+}
+
+/* Mobile transcript hierarchy, independent of desktop density preferences. */
+[data-mobile-message] {
+  margin-bottom: 8px;
+}
+[data-mobile-message] .message-content {
+  padding-inline: 0;
+}
+[data-mobile-message] .message-bubble {
+  font-size: max(16px, 1rem);
+  line-height: 1.5;
+}
+[data-mobile-message] .message-bubble p,
+[data-mobile-message] .message-bubble li {
+  font-size: inherit;
+  line-height: inherit;
+}
+[data-mobile-message] .message-bubble > * + * {
+  margin-top: 8px;
+}
+[data-mobile-question] button {
+  min-height: 44px;
+  min-width: 44px;
+}
+[data-mobile-question] textarea {
+  font-size: 16px;
+}
+[data-mobile-question] button,
+[data-mobile-question] p {
+  overflow-wrap: anywhere;
+}
+/* The global font preference rules wrap preformatted content by default. */
+@layer utilities {
+.mobile-thread-code,
+.mobile-thread-code code {
+  white-space: pre !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
+}
+[data-mobile-message] .prose,
+[data-mobile-message] .user-message-content > div {
+  font-size: max(16px, 1rem);
+  line-height: 1.5;
+}
+[data-mobile-question] {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+  padding-inline: 16px;
+}
+
+[data-mobile-message][data-message-role="user"] {
+  margin-top: 8px;
+}
+[data-surface="mobile"] .chat-background {
+  background-image: none;
+}
+
+[data-mobile-turn-end] {
+  margin-bottom: 8px;
+}
+/* Plain replies share their first line with More; activity turns use the summary row. */
+[data-mobile-plain-response] {
+  min-height: 44px;
+  padding-right: 44px;
 }

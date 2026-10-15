@@ -205,6 +205,7 @@ describe("ChatMessage hover actions", () => {
       </SurfaceProvider>,
     );
 
+    expect(screen.getByRole("button", { name: "More message actions" })).toBeInTheDocument();
     expect(document.querySelector(".message-actions")).toBeNull();
     expect(document.querySelector(".message-container .pt-7")).toBeNull();
   });
