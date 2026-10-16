@@ -93,6 +93,9 @@ const ForgePanePreview = lazyRoute(
 // no backend. Also what the Playwright smoke drives (e2e/observability.spec.ts).
 const ObservabilityPreview = lazyRoute(
   () => import('./components/Forge/Observability/__preview__/ObservabilityPreview'), 'default')
+// Console v3 PROTOTYPE (research/console-v3/PROPOSAL.md) — fabricated data only.
+const ConsoleV3Preview = lazyRoute(
+  () => import('./components/Forge/ConsoleV3/__preview__/ConsoleV3Preview'), 'default')
 const SettingsPage = lazyRoute(
   () => import('./components/Settings/SettingsPage'), 'SettingsPage')
 const ConnectorConsentPage = lazyRoute(
@@ -492,6 +495,12 @@ const forgeObservabilityPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><ObservabilityPreview /></DevOnlyRoute>,
 })
 
+const forgeConsoleV3PreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-console-v3-preview',
+  component: () => <DevOnlyRoute><ConsoleV3Preview /></DevOnlyRoute>,
+})
+
 // (`/checkout/embed` removed with the embedded-checkout path. It existed to
 // host Stripe's hosted checkout page in a bare Electron BrowserWindow, because
 // payment-method domains are registered by HOSTNAME and app://bundle cannot be
@@ -843,6 +852,7 @@ const routeTree = rootRoute.addChildren([
   forgeSecretsPreviewRoute,
   forgePanePreviewRoute,
   forgeObservabilityPreviewRoute,
+  forgeConsoleV3PreviewRoute,
   projectPickerRedirectRoute,
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([
