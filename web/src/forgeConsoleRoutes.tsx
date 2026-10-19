@@ -11,7 +11,7 @@
  *     /forge/domains, /forge/topology, …    → the retired URLs, redirected
  *     /forge/p/$project                     ConsoleLayout: nav, top bar, scope
  *       /                                   Overview
- *       /releases, /releases/delivery
+ *       /releases, /releases/$version
  *       /observability, /observability/$view
  *       /environments, /environments/$env
  *       /secrets, /domains, /monitoring, /settings, /activity
@@ -24,8 +24,11 @@ import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tans
 
 import { isObsNavView } from './components/Forge/Console/paths'
 import {
+  forgeConsoleActivitySearchSchema,
   forgeConsoleEnvSearchSchema,
   forgeConsoleObsSearchSchema,
+  forgeConsoleReleaseSearchSchema,
+  forgeConsoleReleasesSearchSchema,
   forgeConsoleSearchSchema,
   forgeConsoleSecretsSearchSchema,
   forgeLegacyEnvSearchSchema,
@@ -41,7 +44,7 @@ export interface ForgeConsoleComponents {
   console: RouteComponent
   overview: RouteComponent
   releases: RouteComponent
-  delivery: RouteComponent
+  release: RouteComponent
   observability: RouteComponent
   observabilityView: RouteComponent
   environments: RouteComponent
@@ -119,14 +122,14 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const releasesRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'releases',
-    validateSearch: forgeConsoleSearchSchema,
+    validateSearch: forgeConsoleReleasesSearchSchema,
     component: components.releases,
   })
-  const deliveryRoute = createRoute({
+  const releaseRoute = createRoute({
     getParentRoute: () => consoleRoute,
-    path: 'releases/delivery',
-    validateSearch: forgeConsoleObsSearchSchema,
-    component: components.delivery,
+    path: 'releases/$version',
+    validateSearch: forgeConsoleReleaseSearchSchema,
+    component: components.release,
   })
   const observabilityRoute = createRoute({
     getParentRoute: () => consoleRoute,
@@ -179,7 +182,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const activityRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'activity',
-    validateSearch: forgeConsoleSearchSchema,
+    validateSearch: forgeConsoleActivitySearchSchema,
     component: components.activity,
   })
   const settingsRoute = createRoute({
@@ -201,7 +204,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     consoleRoute.addChildren([
       overviewRoute,
       releasesRoute,
-      deliveryRoute,
+      releaseRoute,
       observabilityRoute,
       observabilityViewRoute,
       environmentsRoute,
