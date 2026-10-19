@@ -149,3 +149,41 @@ func TestWatcherNilSafety(t *testing.T) {
 	}
 	w.Run(context.Background()) // must not panic
 }
+
+// TestWatcherCarriesOOMKillsIntoTheSample pins what the heartbeat tells the
+// user: kills since the watcher started (never the counter's baseline, which
+// predates this daemon), when the newest was seen, and an immediate Changed so
+// the heartbeat carries it without waiting a tick.
+func TestWatcherCarriesOOMKillsIntoTheSample(t *testing.T) {
+	dir := writeCgroupFixture(t, "100\n", "1000\n", "", eventsFixture) // oom_kill 3 at start
+	w := NewWatcher(NewReader(dir), time.Hour)
+	seen := time.Date(2026, 10, 19, 3, 23, 31, 0, time.UTC)
+	w.now = func() time.Time { return seen }
+
+	w.poll()
+	if s, _ := w.Latest(); s.OOMKills != 0 || !s.LastOOMKillAt.IsZero() {
+		t.Fatalf("baseline reported as kills: %+v", s)
+	}
+
+	writeEvents(t, dir, 42, 12, 5) // two more kills
+	w.poll()
+	s, _ := w.Latest()
+	if s.OOMKills != 2 || !s.LastOOMKillAt.Equal(seen) {
+		t.Errorf("sample = %+v, want OOMKills 2 at %v", s, seen)
+	}
+	select {
+	case <-w.Changed():
+	default:
+		t.Error("a new OOM kill must signal Changed so the next heartbeat carries it")
+	}
+
+	w.poll() // no new kill: the count stays and nothing signals
+	if s, _ := w.Latest(); s.OOMKills != 2 {
+		t.Errorf("OOMKills = %d after a quiet poll, want 2", s.OOMKills)
+	}
+	select {
+	case <-w.Changed():
+		t.Error("Changed fired with no new kill and no pressure flip")
+	default:
+	}
+}

@@ -119,6 +119,7 @@ import { formatMachineSpec } from "@/components/Billing/machineSpecs";
 import { MachineCost } from "@/components/Billing/MachineCost";
 import { CardInset } from "@/components/forge-ui/card";
 import { MachineDiskCard } from "./MachineDiskCard";
+import { machineCrashSummary } from "@/lib/machineMemory";
 import { DiskGrowNotice, GrowDiskModal, type GrowStage } from "./GrowDiskModal";
 import { diskGrowStatus, isStorageDenied } from "./diskGrow";
 import { DaemonDiskState } from "@/gen/controlplane/controlplane/v1/shared_pb";
@@ -2064,6 +2065,10 @@ function EnvironmentDetail({
                   />
                   {!external && <InfoRow label="Idle timeout" value={spec?.idleTimeout || "Not set"} />}
                   <InfoRow label="Last status" value={daemon.lastStatusMessage} />
+                  {/* Restarts the machine did not choose: its VM dying, or the
+                      daemon's container killed for memory. Without this row a
+                      crash reads as a reconnect. */}
+                  {!external && <InfoRow label="Last crash" value={machineCrashSummary(spec, fmtTimestamp) ?? "None"} />}
                 </dl>
               </CardContent>
             </Card>

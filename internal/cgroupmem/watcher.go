@@ -30,6 +30,14 @@ type Sample struct {
 	UsedBytes  uint64
 	LimitBytes uint64
 	Pressure   bool
+	// OOMKills counts the kernel OOM kills in the workspace cgroup since the
+	// watcher started (memory.events oom_kill growth; the counter's value at
+	// start is the baseline). It covers every process in the workspace, the
+	// docker subtree included, not only the commands a tool call ran.
+	OOMKills uint64
+	// LastOOMKillAt is when the watcher first saw the newest of those kills,
+	// so within one poll interval of it; zero when there has been none.
+	LastOOMKillAt time.Time
 }
 
 // Watcher polls cgroup memory usage and tracks a hysteresis-smoothed
@@ -49,6 +57,14 @@ type Watcher struct {
 	eventsSeen  bool
 	lastSqueeze time.Time
 
+	// oomKills / lastOOMKillAt accumulate OOM kills seen since the baseline,
+	// carried into every Sample.
+	oomKills      uint64
+	lastOOMKillAt time.Time
+
+	// now is time.Now; tests pin it.
+	now func() time.Time
+
 	// changed receives one token when the pressure bit flips, letting the
 	// heartbeat loop emit immediately instead of waiting for the next tick.
 	// Buffered(1) + non-blocking send: transitions coalesce, never block.
@@ -65,6 +81,7 @@ func NewWatcher(reader *Reader, interval time.Duration) *Watcher {
 		reader:   reader,
 		interval: interval,
 		changed:  make(chan struct{}, 1),
+		now:      time.Now,
 	}
 }
 
@@ -118,12 +135,15 @@ func (w *Watcher) poll() {
 		return
 	}
 
-	w.logEvents(stats)
+	newKill := w.logEvents(stats)
 
 	w.mu.Lock()
 	prev := w.latest.Pressure
 	next := nextPressure(prev, stats.UsedBytes, stats.LimitBytes)
-	w.latest = Sample{UsedBytes: stats.UsedBytes, LimitBytes: stats.LimitBytes, Pressure: next}
+	w.latest = Sample{
+		UsedBytes: stats.UsedBytes, LimitBytes: stats.LimitBytes, Pressure: next,
+		OOMKills: w.oomKills, LastOOMKillAt: w.lastOOMKillAt,
+	}
 	w.valid = true
 	w.mu.Unlock()
 
@@ -136,6 +156,10 @@ func (w *Watcher) poll() {
 			logging.Info("[cgroupmem] Workspace memory pressure cleared",
 				"used", FormatBytes(stats.UsedBytes), "limit", FormatBytes(stats.LimitBytes))
 		}
+	}
+	// A new OOM kill is news as much as a pressure flip: the user should hear
+	// about it on the next heartbeat, not a tick later.
+	if next != prev || newKill {
 		select {
 		case w.changed <- struct{}{}:
 		default:
@@ -151,11 +175,12 @@ const squeezeLogEvery = time.Minute
 // logEvents reports growth in memory.events since the previous poll: an OOM
 // kill is an ERROR the moment it is seen (the exec path only names kills it
 // can attribute to one of its own commands), and growth in high/max is a WARN,
-// at most once a minute, carrying the counts since the last line.
-func (w *Watcher) logEvents(stats Stats) {
+// at most once a minute, carrying the counts since the last line. It reports
+// whether it saw a new OOM kill.
+func (w *Watcher) logEvents(stats Stats) (newKill bool) {
 	ev, ok := w.reader.Events()
 	if !ok {
-		return
+		return false
 	}
 	w.mu.Lock()
 	prev, seen := w.events, w.eventsSeen
@@ -165,12 +190,17 @@ func (w *Watcher) logEvents(stats Stats) {
 		logSqueeze = true
 		w.lastSqueeze = time.Now()
 	}
+	newKill = seen && ev.OOMKill > prev.OOMKill
+	if newKill {
+		w.oomKills += ev.OOMKill - prev.OOMKill
+		w.lastOOMKillAt = w.now()
+	}
 	w.mu.Unlock()
 	if !seen {
-		return
+		return false
 	}
 
-	if ev.OOMKill > prev.OOMKill {
+	if newKill {
 		logging.Error("[cgroupmem] Workspace cgroup OOM kill",
 			"oom_kills", ev.OOMKill-prev.OOMKill,
 			"oom_kills_total", ev.OOMKill,
@@ -185,6 +215,7 @@ func (w *Watcher) logEvents(stats Stats) {
 			"memory_limit_bytes", stats.LimitBytes,
 			"memory_used_bytes", stats.UsedBytes)
 	}
+	return newKill
 }
 
 // nextPressure is the pure hysteresis transition: assert at >= 85% of the

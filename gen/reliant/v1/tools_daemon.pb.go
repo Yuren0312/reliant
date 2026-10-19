@@ -1303,8 +1303,15 @@ type DaemonHeartbeat struct {
 	// replica drains, and the replica the daemon moved to has no record of it;
 	// this count is how that replica keeps the machine awake for it.
 	ToolCallsInFlight uint32 `protobuf:"varint,7,opt,name=tool_calls_in_flight,json=toolCallsInFlight,proto3" json:"tool_calls_in_flight,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Kernel OOM kills in the workspace cgroup since the daemon started
+	// (memory.events oom_kill growth), whichever process they hit: a tool
+	// command, a background server, a docker build. 0 for daemons without
+	// cgroup accounting and for a workspace that has had none.
+	OomKills uint64 `protobuf:"varint,8,opt,name=oom_kills,json=oomKills,proto3" json:"oom_kills,omitempty"`
+	// When the daemon saw the newest of those kills (unix ms); 0 when none.
+	LastOomKillAtMs int64 `protobuf:"varint,9,opt,name=last_oom_kill_at_ms,json=lastOomKillAtMs,proto3" json:"last_oom_kill_at_ms,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DaemonHeartbeat) Reset() {
@@ -1382,6 +1389,20 @@ func (x *DaemonHeartbeat) GetDisk() *DiskReport {
 func (x *DaemonHeartbeat) GetToolCallsInFlight() uint32 {
 	if x != nil {
 		return x.ToolCallsInFlight
+	}
+	return 0
+}
+
+func (x *DaemonHeartbeat) GetOomKills() uint64 {
+	if x != nil {
+		return x.OomKills
+	}
+	return 0
+}
+
+func (x *DaemonHeartbeat) GetLastOomKillAtMs() int64 {
+	if x != nil {
+		return x.LastOomKillAtMs
 	}
 	return 0
 }
@@ -4853,7 +4874,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\rerror_message\x18\x06 \x01(\tR\ferrorMessage\x12\x1d\n" +
 	"\n" +
 	"error_code\x18\a \x01(\tR\terrorCode\x12\"\n" +
-	"\fbackgrounded\x18\b \x01(\bR\fbackgrounded\"\xb6\x02\n" +
+	"\fbackgrounded\x18\b \x01(\bR\fbackgrounded\"\x81\x03\n" +
 	"\x0fDaemonHeartbeat\x12\x1c\n" +
 	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\x12*\n" +
 	"\x11memory_used_bytes\x18\x02 \x01(\x04R\x0fmemoryUsedBytes\x12,\n" +
@@ -4861,7 +4882,9 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x0fmemory_pressure\x18\x04 \x01(\bR\x0ememoryPressure\x12%\n" +
 	"\x0edetected_ports\x18\x05 \x03(\rR\rdetectedPorts\x12*\n" +
 	"\x04disk\x18\x06 \x01(\v2\x16.reliant.v1.DiskReportR\x04disk\x12/\n" +
-	"\x14tool_calls_in_flight\x18\a \x01(\rR\x11toolCallsInFlight\"\x90\x01\n" +
+	"\x14tool_calls_in_flight\x18\a \x01(\rR\x11toolCallsInFlight\x12\x1b\n" +
+	"\toom_kills\x18\b \x01(\x04R\boomKills\x12,\n" +
+	"\x13last_oom_kill_at_ms\x18\t \x01(\x03R\x0flastOomKillAtMs\"\x90\x01\n" +
 	"\n" +
 	"DiskReport\x120\n" +
 	"\avolumes\x18\x01 \x03(\v2\x16.reliant.v1.DiskVolumeR\avolumes\x12$\n" +

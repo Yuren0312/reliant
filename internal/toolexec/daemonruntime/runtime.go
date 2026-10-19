@@ -1570,6 +1570,10 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 			hb.MemoryUsedBytes = sample.UsedBytes
 			hb.MemoryLimitBytes = sample.LimitBytes
 			hb.MemoryPressure = sample.Pressure
+			hb.OomKills = sample.OOMKills
+			if !sample.LastOOMKillAt.IsZero() {
+				hb.LastOomKillAtMs = sample.LastOOMKillAt.UnixMilli()
+			}
 		}
 		// Piggyback detected listener ports (pod-hosted daemons only; the
 		// watcher is nil-safe and ok stays false until the first scan).

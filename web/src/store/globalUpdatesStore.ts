@@ -26,6 +26,7 @@ import { useProjectStore } from "./projectStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import type { BackgroundProcess } from "../api/background-grpc";
 import { logger } from "../lib/logger";
+import { heartbeatOomKills, type ProcessOomKills } from "../lib/machineMemory";
 import { getEventBus } from "../lib/events";
 import { queryClient } from "../lib/query-client";
 import { invalidateDaemonList, reconcileDaemonHeartbeat } from "../hooks/useDaemonStatus";
@@ -160,6 +161,12 @@ interface GlobalUpdatesState {
   // "Open preview" affordance next to the daemon status dot.
   daemonDetectedPorts: Record<string, number[]>;
 
+  // Process OOM kills per daemon (from heartbeat oom_kills /
+  // last_oom_kill_at_ms): processes the kernel killed at the machine's memory
+  // limit, which restart nothing and so reach the app no other way. Drives
+  // OomKillBanner's process-kill notice.
+  daemonProcessOomKills: Record<string, ProcessOomKills>;
+
   // Currently subscribed chat ID for detail events
   subscribedChatId: string | null;
   
@@ -200,6 +207,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
   lastSequence: 0,
   daemonLastSeen: null,
   daemonDetectedPorts: {},
+  daemonProcessOomKills: {},
   subscribedChatId: null,
   wsService: null,
 
@@ -472,6 +480,19 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
                 return state; // unchanged — avoid re-render churn every 15s
               }
               return { daemonDetectedPorts: { ...state.daemonDetectedPorts, [daemonId]: ports } };
+            });
+          }
+          // OOM kills are cumulative on the daemon, so a heartbeat without
+          // them (a machine that has had none) leaves the store alone.
+          const kills = data?.daemon_id ? heartbeatOomKills(data) : undefined;
+          if (kills) {
+            const daemonId = data.daemon_id as string;
+            set((state) => {
+              const prev = state.daemonProcessOomKills[daemonId];
+              if (prev && prev.count === kills.count && prev.lastAtMs === kills.lastAtMs) {
+                return state;
+              }
+              return { daemonProcessOomKills: { ...state.daemonProcessOomKills, [daemonId]: kills } };
             });
           }
           try { getEventBus().emit("daemon:heartbeat"); } catch { /* bus not ready */ }

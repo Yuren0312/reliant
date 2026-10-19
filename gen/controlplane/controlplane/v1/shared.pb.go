@@ -712,6 +712,13 @@ type Daemon struct {
 	// has been observed. The UI keys "recent" off last_oom_killed_at.
 	LastOomKilledAt *timestamppb.Timestamp `protobuf:"bytes,28,opt,name=last_oom_killed_at,json=lastOomKilledAt,proto3" json:"last_oom_killed_at,omitempty"`
 	OomKillCount    int32                  `protobuf:"varint,29,opt,name=oom_kill_count,json=oomKillCount,proto3" json:"oom_kill_count,omitempty"`
+	// VM-crash tracking (managed daemons), mirrored from the Workspace CR the
+	// same way as the OOM fields: deaths of the machine's VM (a kata sandbox),
+	// which take every process with them and which the kubelet reports only as
+	// a container exit plus a re-created sandbox. Unset/zero when none has
+	// been observed.
+	LastVmCrashAt *timestamppb.Timestamp `protobuf:"bytes,33,opt,name=last_vm_crash_at,json=lastVmCrashAt,proto3" json:"last_vm_crash_at,omitempty"`
+	VmCrashCount  int32                  `protobuf:"varint,34,opt,name=vm_crash_count,json=vmCrashCount,proto3" json:"vm_crash_count,omitempty"`
 	// What the machine is currently DOING, when it isn't ready yet.
 	//
 	// `status` answers "can I use this machine"; it deliberately collapses the
@@ -926,6 +933,20 @@ func (x *Daemon) GetLastOomKilledAt() *timestamppb.Timestamp {
 func (x *Daemon) GetOomKillCount() int32 {
 	if x != nil {
 		return x.OomKillCount
+	}
+	return 0
+}
+
+func (x *Daemon) GetLastVmCrashAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastVmCrashAt
+	}
+	return nil
+}
+
+func (x *Daemon) GetVmCrashCount() int32 {
+	if x != nil {
+		return x.VmCrashCount
 	}
 	return 0
 }
@@ -3728,7 +3749,8 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"cpuRequest\x12\x1b\n" +
 	"\tcpu_limit\x18\x02 \x01(\tR\bcpuLimit\x12%\n" +
 	"\x0ememory_request\x18\x03 \x01(\tR\rmemoryRequest\x12!\n" +
-	"\fmemory_limit\x18\x04 \x01(\tR\vmemoryLimit\"\xf7\t\n" +
+	"\fmemory_limit\x18\x04 \x01(\tR\vmemoryLimit\"\xe2\n" +
+	"\n" +
 	"\x06Daemon\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x19\n" +
@@ -3758,7 +3780,9 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x13last_status_message\x18\x1a \x01(\tR\x11lastStatusMessage\x12O\n" +
 	"\x16last_status_changed_at\x18\x1b \x01(\v2\x1a.google.protobuf.TimestampR\x13lastStatusChangedAt\x12G\n" +
 	"\x12last_oom_killed_at\x18\x1c \x01(\v2\x1a.google.protobuf.TimestampR\x0flastOomKilledAt\x12$\n" +
-	"\x0eoom_kill_count\x18\x1d \x01(\x05R\foomKillCount\x12N\n" +
+	"\x0eoom_kill_count\x18\x1d \x01(\x05R\foomKillCount\x12C\n" +
+	"\x10last_vm_crash_at\x18! \x01(\v2\x1a.google.protobuf.TimestampR\rlastVmCrashAt\x12$\n" +
+	"\x0evm_crash_count\x18\" \x01(\x05R\fvmCrashCount\x12N\n" +
 	"\x0flifecycle_phase\x18\x1f \x01(\x0e2%.controlplane.v1.DaemonLifecyclePhaseR\x0elifecyclePhase\x12O\n" +
 	"\x13default_port_access\x18\x1e \x01(\x0e2\x1f.controlplane.v1.PortAccessModeR\x11defaultPortAccess\x12/\n" +
 	"\x04disk\x18  \x01(\v2\x1b.controlplane.v1.DaemonDiskR\x04disk\"\xe8\x01\n" +
@@ -4190,61 +4214,62 @@ var file_controlplane_v1_shared_proto_depIdxs = []int32{
 	4,  // 8: controlplane.v1.Daemon.size:type_name -> controlplane.v1.DaemonSize
 	36, // 9: controlplane.v1.Daemon.last_status_changed_at:type_name -> google.protobuf.Timestamp
 	36, // 10: controlplane.v1.Daemon.last_oom_killed_at:type_name -> google.protobuf.Timestamp
-	2,  // 11: controlplane.v1.Daemon.lifecycle_phase:type_name -> controlplane.v1.DaemonLifecyclePhase
-	5,  // 12: controlplane.v1.Daemon.default_port_access:type_name -> controlplane.v1.PortAccessMode
-	12, // 13: controlplane.v1.Daemon.disk:type_name -> controlplane.v1.DaemonDisk
-	9,  // 14: controlplane.v1.DaemonDisk.state:type_name -> controlplane.v1.DaemonDiskState
-	5,  // 15: controlplane.v1.PortAccessRule.access_mode:type_name -> controlplane.v1.PortAccessMode
-	36, // 16: controlplane.v1.PortAccessRule.created_at:type_name -> google.protobuf.Timestamp
-	36, // 17: controlplane.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	36, // 18: controlplane.v1.User.updated_at:type_name -> google.protobuf.Timestamp
-	37, // 19: controlplane.v1.User.onboarding_data:type_name -> google.protobuf.Struct
-	36, // 20: controlplane.v1.Organization.created_at:type_name -> google.protobuf.Timestamp
-	36, // 21: controlplane.v1.Organization.updated_at:type_name -> google.protobuf.Timestamp
-	17, // 22: controlplane.v1.PlanLimits.metered_dimensions:type_name -> controlplane.v1.MeteredDimension
-	18, // 23: controlplane.v1.PlanLimits.infra_overage_policy:type_name -> controlplane.v1.InfraOveragePolicy
-	21, // 24: controlplane.v1.DaemonPricing.sizes:type_name -> controlplane.v1.DaemonSizePrice
-	7,  // 25: controlplane.v1.Plan.tier:type_name -> controlplane.v1.PlanTier
-	36, // 26: controlplane.v1.Plan.created_at:type_name -> google.protobuf.Timestamp
-	19, // 27: controlplane.v1.Plan.structured_limits:type_name -> controlplane.v1.PlanLimits
-	22, // 28: controlplane.v1.Subscription.plan:type_name -> controlplane.v1.Plan
-	6,  // 29: controlplane.v1.Subscription.status:type_name -> controlplane.v1.SubscriptionStatus
-	36, // 30: controlplane.v1.Subscription.current_period_start:type_name -> google.protobuf.Timestamp
-	36, // 31: controlplane.v1.Subscription.current_period_end:type_name -> google.protobuf.Timestamp
-	36, // 32: controlplane.v1.Subscription.created_at:type_name -> google.protobuf.Timestamp
-	36, // 33: controlplane.v1.Subscription.updated_at:type_name -> google.protobuf.Timestamp
-	36, // 34: controlplane.v1.ReliantEntitlement.current_period_start:type_name -> google.protobuf.Timestamp
-	36, // 35: controlplane.v1.ReliantEntitlement.current_period_end:type_name -> google.protobuf.Timestamp
-	36, // 36: controlplane.v1.ReliantEntitlement.updated_at:type_name -> google.protobuf.Timestamp
-	36, // 37: controlplane.v1.Invoice.period_start:type_name -> google.protobuf.Timestamp
-	36, // 38: controlplane.v1.Invoice.period_end:type_name -> google.protobuf.Timestamp
-	36, // 39: controlplane.v1.Invoice.created_at:type_name -> google.protobuf.Timestamp
-	36, // 40: controlplane.v1.Wallet.created_at:type_name -> google.protobuf.Timestamp
-	36, // 41: controlplane.v1.Wallet.updated_at:type_name -> google.protobuf.Timestamp
-	36, // 42: controlplane.v1.WalletLedgerEntry.created_at:type_name -> google.protobuf.Timestamp
-	36, // 43: controlplane.v1.WalletTopup.created_at:type_name -> google.protobuf.Timestamp
-	36, // 44: controlplane.v1.WalletTopup.updated_at:type_name -> google.protobuf.Timestamp
-	15, // 45: controlplane.v1.WalletOverview.organization:type_name -> controlplane.v1.Organization
-	27, // 46: controlplane.v1.WalletOverview.wallet:type_name -> controlplane.v1.Wallet
-	28, // 47: controlplane.v1.WalletOverview.ledger_entries:type_name -> controlplane.v1.WalletLedgerEntry
-	29, // 48: controlplane.v1.WalletOverview.topups:type_name -> controlplane.v1.WalletTopup
-	8,  // 49: controlplane.v1.LLMKey.status:type_name -> controlplane.v1.LLMKeyStatus
-	36, // 50: controlplane.v1.LLMKey.created_at:type_name -> google.protobuf.Timestamp
-	36, // 51: controlplane.v1.LLMKey.revoked_at:type_name -> google.protobuf.Timestamp
-	36, // 52: controlplane.v1.LLMSpendEntry.period_start:type_name -> google.protobuf.Timestamp
-	36, // 53: controlplane.v1.LLMSpendEntry.period_end:type_name -> google.protobuf.Timestamp
-	36, // 54: controlplane.v1.ManagedReliantAccess.last_rotated_at:type_name -> google.protobuf.Timestamp
-	36, // 55: controlplane.v1.ManagedReliantAccess.last_provisioned_at:type_name -> google.protobuf.Timestamp
-	36, // 56: controlplane.v1.ManagedReliantAccess.created_at:type_name -> google.protobuf.Timestamp
-	36, // 57: controlplane.v1.ManagedReliantAccess.updated_at:type_name -> google.protobuf.Timestamp
-	24, // 58: controlplane.v1.ReliantOverview.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	33, // 59: controlplane.v1.ReliantOverview.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
-	36, // 60: controlplane.v1.GitRepo.updated_at:type_name -> google.protobuf.Timestamp
-	61, // [61:61] is the sub-list for method output_type
-	61, // [61:61] is the sub-list for method input_type
-	61, // [61:61] is the sub-list for extension type_name
-	61, // [61:61] is the sub-list for extension extendee
-	0,  // [0:61] is the sub-list for field type_name
+	36, // 11: controlplane.v1.Daemon.last_vm_crash_at:type_name -> google.protobuf.Timestamp
+	2,  // 12: controlplane.v1.Daemon.lifecycle_phase:type_name -> controlplane.v1.DaemonLifecyclePhase
+	5,  // 13: controlplane.v1.Daemon.default_port_access:type_name -> controlplane.v1.PortAccessMode
+	12, // 14: controlplane.v1.Daemon.disk:type_name -> controlplane.v1.DaemonDisk
+	9,  // 15: controlplane.v1.DaemonDisk.state:type_name -> controlplane.v1.DaemonDiskState
+	5,  // 16: controlplane.v1.PortAccessRule.access_mode:type_name -> controlplane.v1.PortAccessMode
+	36, // 17: controlplane.v1.PortAccessRule.created_at:type_name -> google.protobuf.Timestamp
+	36, // 18: controlplane.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	36, // 19: controlplane.v1.User.updated_at:type_name -> google.protobuf.Timestamp
+	37, // 20: controlplane.v1.User.onboarding_data:type_name -> google.protobuf.Struct
+	36, // 21: controlplane.v1.Organization.created_at:type_name -> google.protobuf.Timestamp
+	36, // 22: controlplane.v1.Organization.updated_at:type_name -> google.protobuf.Timestamp
+	17, // 23: controlplane.v1.PlanLimits.metered_dimensions:type_name -> controlplane.v1.MeteredDimension
+	18, // 24: controlplane.v1.PlanLimits.infra_overage_policy:type_name -> controlplane.v1.InfraOveragePolicy
+	21, // 25: controlplane.v1.DaemonPricing.sizes:type_name -> controlplane.v1.DaemonSizePrice
+	7,  // 26: controlplane.v1.Plan.tier:type_name -> controlplane.v1.PlanTier
+	36, // 27: controlplane.v1.Plan.created_at:type_name -> google.protobuf.Timestamp
+	19, // 28: controlplane.v1.Plan.structured_limits:type_name -> controlplane.v1.PlanLimits
+	22, // 29: controlplane.v1.Subscription.plan:type_name -> controlplane.v1.Plan
+	6,  // 30: controlplane.v1.Subscription.status:type_name -> controlplane.v1.SubscriptionStatus
+	36, // 31: controlplane.v1.Subscription.current_period_start:type_name -> google.protobuf.Timestamp
+	36, // 32: controlplane.v1.Subscription.current_period_end:type_name -> google.protobuf.Timestamp
+	36, // 33: controlplane.v1.Subscription.created_at:type_name -> google.protobuf.Timestamp
+	36, // 34: controlplane.v1.Subscription.updated_at:type_name -> google.protobuf.Timestamp
+	36, // 35: controlplane.v1.ReliantEntitlement.current_period_start:type_name -> google.protobuf.Timestamp
+	36, // 36: controlplane.v1.ReliantEntitlement.current_period_end:type_name -> google.protobuf.Timestamp
+	36, // 37: controlplane.v1.ReliantEntitlement.updated_at:type_name -> google.protobuf.Timestamp
+	36, // 38: controlplane.v1.Invoice.period_start:type_name -> google.protobuf.Timestamp
+	36, // 39: controlplane.v1.Invoice.period_end:type_name -> google.protobuf.Timestamp
+	36, // 40: controlplane.v1.Invoice.created_at:type_name -> google.protobuf.Timestamp
+	36, // 41: controlplane.v1.Wallet.created_at:type_name -> google.protobuf.Timestamp
+	36, // 42: controlplane.v1.Wallet.updated_at:type_name -> google.protobuf.Timestamp
+	36, // 43: controlplane.v1.WalletLedgerEntry.created_at:type_name -> google.protobuf.Timestamp
+	36, // 44: controlplane.v1.WalletTopup.created_at:type_name -> google.protobuf.Timestamp
+	36, // 45: controlplane.v1.WalletTopup.updated_at:type_name -> google.protobuf.Timestamp
+	15, // 46: controlplane.v1.WalletOverview.organization:type_name -> controlplane.v1.Organization
+	27, // 47: controlplane.v1.WalletOverview.wallet:type_name -> controlplane.v1.Wallet
+	28, // 48: controlplane.v1.WalletOverview.ledger_entries:type_name -> controlplane.v1.WalletLedgerEntry
+	29, // 49: controlplane.v1.WalletOverview.topups:type_name -> controlplane.v1.WalletTopup
+	8,  // 50: controlplane.v1.LLMKey.status:type_name -> controlplane.v1.LLMKeyStatus
+	36, // 51: controlplane.v1.LLMKey.created_at:type_name -> google.protobuf.Timestamp
+	36, // 52: controlplane.v1.LLMKey.revoked_at:type_name -> google.protobuf.Timestamp
+	36, // 53: controlplane.v1.LLMSpendEntry.period_start:type_name -> google.protobuf.Timestamp
+	36, // 54: controlplane.v1.LLMSpendEntry.period_end:type_name -> google.protobuf.Timestamp
+	36, // 55: controlplane.v1.ManagedReliantAccess.last_rotated_at:type_name -> google.protobuf.Timestamp
+	36, // 56: controlplane.v1.ManagedReliantAccess.last_provisioned_at:type_name -> google.protobuf.Timestamp
+	36, // 57: controlplane.v1.ManagedReliantAccess.created_at:type_name -> google.protobuf.Timestamp
+	36, // 58: controlplane.v1.ManagedReliantAccess.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 59: controlplane.v1.ReliantOverview.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	33, // 60: controlplane.v1.ReliantOverview.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
+	36, // 61: controlplane.v1.GitRepo.updated_at:type_name -> google.protobuf.Timestamp
+	62, // [62:62] is the sub-list for method output_type
+	62, // [62:62] is the sub-list for method input_type
+	62, // [62:62] is the sub-list for extension type_name
+	62, // [62:62] is the sub-list for extension extendee
+	0,  // [0:62] is the sub-list for field type_name
 }
 
 func init() { file_controlplane_v1_shared_proto_init() }
