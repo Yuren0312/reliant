@@ -289,8 +289,9 @@ func verifyObjects(ctx context.Context, commonDir string, removed []string, rep 
 	referenced := map[string]bool{}
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || !(strings.Contains(line, "missing") || strings.Contains(line, "broken") ||
-			strings.HasPrefix(line, "error") || strings.HasPrefix(line, "fatal")) {
+		finding := strings.Contains(line, "missing") || strings.Contains(line, "broken") ||
+			strings.HasPrefix(line, "error") || strings.HasPrefix(line, "fatal")
+		if !finding {
 			continue
 		}
 		for _, m := range objectID.FindAllString(line, -1) {
@@ -423,7 +424,8 @@ func repairRegistration(ctx context.Context, adminDir string, opts RepairOptions
 			return
 		}
 		ours := underRoot || ReliantLock(reason)
-		if locked && !(ReliantLock(reason) || (reason == "" && underRoot)) {
+		lockIsOurs := ReliantLock(reason) || (reason == "" && underRoot)
+		if locked && !lockIsOurs {
 			ours = false
 		}
 		if !ours {
