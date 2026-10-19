@@ -43,6 +43,8 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/sqlc-dev/pqtype v0.3.0
 	github.com/stretchr/testify v1.12.1
+	github.com/uptrace/bun v1.3.0
+	github.com/uptrace/bun/dialect/pgdialect v1.3.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/sdk v1.47.0
@@ -251,8 +253,6 @@ require (
 	github.com/tmthrgd/go-hex v0.0.0-20190904060850-447a3041c3bc // indirect
 	github.com/u-root/u-root v0.16.0 // indirect
 	github.com/ulikunitz/xz v0.5.16 // indirect
-	github.com/uptrace/bun v1.3.0 // indirect
-	github.com/uptrace/bun/dialect/pgdialect v1.3.0 // indirect
 	github.com/uptrace/bun/extra/bunotel v1.3.0 // indirect
 	github.com/uptrace/opentelemetry-go-extra/otelsql v0.3.2 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
