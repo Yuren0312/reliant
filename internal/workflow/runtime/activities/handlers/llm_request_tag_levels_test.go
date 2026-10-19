@@ -78,12 +78,12 @@ func TestResolveLLMCall_AppliesTagThinkingLevel(t *testing.T) {
 			wantThinking: "high",
 		},
 		{
-			// The general preset: [flagship] → 5.5 at the flagship entry's xhigh.
-			name:         "flagship tier runs claude-5.5-opus at xhigh",
+			// The general preset: [flagship] → 5.5 at the flagship entry's high.
+			name:         "flagship tier runs claude-5.5-opus at high",
 			selector:     models.ModelSelector{Tags: []string{models.TagFlagship}},
 			providers:    []string{"anthropic"},
 			wantModelID:  "claude-5.5-opus@anthropic",
-			wantThinking: "xhigh",
+			wantThinking: "high",
 		},
 		{
 			// The implementer preset: [moderate] → claude-5.5-sonnet at the
@@ -278,6 +278,15 @@ func provisionProviderKeys(t *testing.T, ctx context.Context, userID string, pro
 			// api_keys row is only the connection marker.
 			require.NoError(t, repo.SetCopilotAuthTokens(ctx, userID, db.CopilotAuthTokens{
 				GitHubAccessToken: "gho_test-key-copilot",
+			}))
+			require.NoError(t, repo.SetProviderAPIKey(ctx, userID, provider, db.ProviderOAuthMarker))
+			continue
+		}
+		if provider == "codex" {
+			// Codex's credential lives in its own token table too.
+			require.NoError(t, repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
+				AccessToken:  "codex-access",
+				RefreshToken: "codex-refresh",
 			}))
 			require.NoError(t, repo.SetProviderAPIKey(ctx, userID, provider, db.ProviderOAuthMarker))
 			continue
