@@ -35,6 +35,33 @@
 //	}
 package store
 
+import (
+	"context"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+)
+
+// CascadeTerminalStatusToThreadSubtree closes every running/paused thread
+// owned by workflowID or any workflow under it — the forge-ORM port of the
+// sqlc query of the same name. The CTE anchor is the workflow itself (a
+// parameter, not a row), so it is a bare SELECT ?::text.
+func CascadeTerminalStatusToThreadSubtree(ctx context.Context, db orm.Context, workflowID string, status int32) error {
+	anchor := db.Bun().NewSelect().ColumnExpr("?::text AS id", workflowID)
+	step := db.Bun().NewSelect().TableExpr("workflows AS c").Column("c.id").
+		Join("JOIN subtree AS s ON c.parent_id = s.id")
+	_, err := db.Bun().NewUpdate().
+		WithRecursive("subtree", anchor.UnionAll(step)).
+		Model((*Thread)(nil)).
+		ModelTableExpr("threads AS t").
+		TableExpr("subtree").
+		Set("status = ?", status).
+		Set("completed_at = NOW()").
+		Where("t.workflow_id = subtree.id").
+		Where("t.status IN (2, 6)").
+		Exec(ctx)
+	return err
+}
+
 // ThreadExtra carries fields on Thread that are NOT columns — computed
 // values, transient state, anything derived rather than stored. Thread is
 // embedded on ThreadExtra (see thread_orm.go), so a field added here is a field on

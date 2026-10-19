@@ -31,6 +31,12 @@ type spikeEnv struct {
 	Repo *db.Repo
 	SQL  *sql.DB
 	ORM  *orm.Client
+	// ORMExec is the ORM over a second pgx pool on the same database with
+	// default_query_exec_mode=exec. bun interpolates every argument into the
+	// SQL text, so under pgx's default (cache_statement) a query whose values
+	// vary is a new statement every call: an extra Parse/Describe round trip
+	// and prepared-statement churn. Benchmarks report both.
+	ORMExec *orm.Client
 }
 
 // newSpikeEnv clones a migrated template (forge pgtest.NewFromTemplate, built
@@ -44,7 +50,7 @@ func newSpikeEnv(tb testing.TB) *spikeEnv {
 	if testing.Short() {
 		tb.Skip("P5b spike: DB-backed; skipped under -short")
 	}
-	base := os.Getenv(pgtest.EnvBaseURL)
+	base := os.Getenv(pgtest.EnvBaseURL) //nolint:forbidigo // the test harness reads pgtest's server DSN, not app config
 	if base == "" {
 		tb.Skipf("SKIPPING DB-BACKED SPIKE TEST — set %s to a postgres maintenance DSN", pgtest.EnvBaseURL)
 	}
@@ -85,7 +91,16 @@ func newSpikeEnv(tb testing.TB) *spikeEnv {
 	if err != nil {
 		tb.Fatalf("orm client: %v", err)
 	}
-	return &spikeEnv{Repo: db.NewRepoWithDriver(sqlDB, db.DriverPostgres), SQL: sqlDB, ORM: client}
+	execDB, err := sql.Open("pgx", withDatabase(tb, base, name)+"&default_query_exec_mode=exec")
+	if err != nil {
+		tb.Fatalf("open pgx (exec mode): %v", err)
+	}
+	tb.Cleanup(func() { _ = execDB.Close() })
+	execClient, err := orm.NewClientWithDB(execDB, "postgres")
+	if err != nil {
+		tb.Fatalf("orm client (exec mode): %v", err)
+	}
+	return &spikeEnv{Repo: db.NewRepoWithDriver(sqlDB, db.DriverPostgres), SQL: sqlDB, ORM: client, ORMExec: execClient}
 }
 
 func withDatabase(tb testing.TB, base, name string) string {

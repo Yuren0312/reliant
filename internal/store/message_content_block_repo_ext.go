@@ -35,6 +35,44 @@
 //	}
 package store
 
+import (
+	"context"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+)
+
+// AppendToContentBlock appends a streamed delta to a block — the hottest
+// write on the streaming path (one per provider delta). bun builder, no raw
+// SQL. The delta is interpolated into the statement text (bun formats every
+// argument client-side), so its bytes travel inside the SQL string.
+func AppendToContentBlock(ctx context.Context, db orm.Context, blockID, delta string) error {
+	delta = validUTF8(delta)
+	if delta == "" {
+		return nil
+	}
+	_, err := db.Bun().NewUpdate().
+		Model((*MessageContentBlock)(nil)).
+		Set("content = COALESCE(content, '') || ?", delta).
+		Set("version = version + 1").
+		Set("updated_at = NOW()").
+		Where("id = ?", blockID).
+		Exec(ctx)
+	return err
+}
+
+// ListContentBlocksForMessages is the read path's batch block load: the
+// GENERATED ListMessageContentBlock with QueryOptions, no hand query at all.
+func ListContentBlocksForMessages(ctx context.Context, db orm.Context, messageIDs []string) ([]*MessageContentBlock, error) {
+	if len(messageIDs) == 0 {
+		return []*MessageContentBlock{}, nil
+	}
+	return ListMessageContentBlock(ctx, db,
+		orm.WhereIn(MessageContentBlockFieldMessageId, messageIDs),
+		orm.WithOrderBy(MessageContentBlockFieldMessageId, orm.Asc),
+		orm.WithOrderBy(MessageContentBlockFieldPosition, orm.Asc),
+	)
+}
+
 // MessageContentBlockExtra carries fields on MessageContentBlock that are NOT columns — computed
 // values, transient state, anything derived rather than stored. MessageContentBlock is
 // embedded on MessageContentBlockExtra (see message_content_block_orm.go), so a field added here is a field on

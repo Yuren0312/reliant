@@ -35,6 +35,49 @@
 //	}
 package store
 
+import (
+	"context"
+	"time"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/uptrace/bun"
+)
+
+// ClaimRunEvents leases up to max undispatched run events whose lease is free
+// or expired — the forge-ORM port of the sqlc ClaimRunEvents query. FOR UPDATE
+// SKIP LOCKED in the inner select lets several relays drain the outbox without
+// handing one row to two of them. Expressed with bun's builder: no raw SQL.
+func ClaimRunEvents(ctx context.Context, db orm.Context, now, leaseUntil time.Time, max int) ([]*RunEvent, error) {
+	if max <= 0 {
+		return nil, nil
+	}
+	claimable := db.Bun().NewSelect().
+		TableExpr("run_events AS r").
+		Column("r.id").
+		Where("r.dispatched_at IS NULL").
+		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("r.claimed_until IS NULL").WhereOr("r.claimed_until < ?", now)
+		}).
+		OrderExpr("r.created_at, r.id").
+		Limit(int64(max)).
+		For("UPDATE SKIP LOCKED")
+
+	var rows []*RunEvent
+	err := db.Bun().NewUpdate().
+		Model((*RunEvent)(nil)).
+		Set("claimed_until = ?", leaseUntil).
+		Where("id IN (?)", claimable).
+		Returning("*").
+		Scan(ctx, &rows)
+	return rows, err
+}
+
+// MarkRunEventDispatched stamps dispatched_at through the generated masked
+// update: no hand SQL at all.
+func MarkRunEventDispatched(ctx context.Context, db orm.Context, id string, at time.Time) error {
+	return UpdateRunEventMasked(ctx, db, &RunEvent{Id: id, DispatchedAt: &at}, []string{RunEventFieldDispatchedAt})
+}
+
 // RunEventExtra carries fields on RunEvent that are NOT columns — computed
 // values, transient state, anything derived rather than stored. RunEvent is
 // embedded on RunEventExtra (see run_event_orm.go), so a field added here is a field on

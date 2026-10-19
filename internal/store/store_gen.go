@@ -3938,81 +3938,81 @@ type Store interface {
 // store is the aggregate adapter: one handle, one accessor per entity.
 type store struct{ db orm.Context }
 
-func (s store) AccessTokens() AccessTokenStore   { return accessTokenStore{db: s.db} }
-func (s store) AgentMessages() AgentMessageStore { return agentMessageStore{db: s.db} }
+func (s store) AccessTokens() AccessTokenStore   { return accessTokenStore(s) }
+func (s store) AgentMessages() AgentMessageStore { return agentMessageStore(s) }
 func (s store) AntigravityAuthTokens() AntigravityAuthTokenStore {
-	return antigravityAuthTokenStore{db: s.db}
+	return antigravityAuthTokenStore(s)
 }
-func (s store) ApiKeys() ApiKeyStore                        { return apiKeyStore{db: s.db} }
-func (s store) Approvals() ApprovalStore                    { return approvalStore{db: s.db} }
-func (s store) Attachments() AttachmentStore                { return attachmentStore{db: s.db} }
-func (s store) BackgroundProcesses() BackgroundProcessStore { return backgroundProcessStore{db: s.db} }
-func (s store) Chats() ChatStore                            { return chatStore{db: s.db} }
-func (s store) ChatUpdates() ChatUpdateStore                { return chatUpdateStore{db: s.db} }
-func (s store) ClaudeAuthTokens() ClaudeAuthTokenStore      { return claudeAuthTokenStore{db: s.db} }
-func (s store) CodexAuthTokens() CodexAuthTokenStore        { return codexAuthTokenStore{db: s.db} }
-func (s store) CommandFavorites() CommandFavoriteStore      { return commandFavoriteStore{db: s.db} }
-func (s store) Connections() ConnectionStore                { return connectionStore{db: s.db} }
-func (s store) ConnectionEvents() ConnectionEventStore      { return connectionEventStore{db: s.db} }
+func (s store) ApiKeys() ApiKeyStore                        { return apiKeyStore(s) }
+func (s store) Approvals() ApprovalStore                    { return approvalStore(s) }
+func (s store) Attachments() AttachmentStore                { return attachmentStore(s) }
+func (s store) BackgroundProcesses() BackgroundProcessStore { return backgroundProcessStore(s) }
+func (s store) Chats() ChatStore                            { return chatStore(s) }
+func (s store) ChatUpdates() ChatUpdateStore                { return chatUpdateStore(s) }
+func (s store) ClaudeAuthTokens() ClaudeAuthTokenStore      { return claudeAuthTokenStore(s) }
+func (s store) CodexAuthTokens() CodexAuthTokenStore        { return codexAuthTokenStore(s) }
+func (s store) CommandFavorites() CommandFavoriteStore      { return commandFavoriteStore(s) }
+func (s store) Connections() ConnectionStore                { return connectionStore(s) }
+func (s store) ConnectionEvents() ConnectionEventStore      { return connectionEventStore(s) }
 func (s store) ConnectorClientBindings() ConnectorClientBindingStore {
-	return connectorClientBindingStore{db: s.db}
+	return connectorClientBindingStore(s)
 }
-func (s store) ConnectorGrants() ConnectorGrantStore     { return connectorGrantStore{db: s.db} }
-func (s store) ContextWindows() ContextWindowStore       { return contextWindowStore{db: s.db} }
-func (s store) CopilotAuthTokens() CopilotAuthTokenStore { return copilotAuthTokenStore{db: s.db} }
-func (s store) Daemons() DaemonStore                     { return daemonStore{db: s.db} }
+func (s store) ConnectorGrants() ConnectorGrantStore     { return connectorGrantStore(s) }
+func (s store) ContextWindows() ContextWindowStore       { return contextWindowStore(s) }
+func (s store) CopilotAuthTokens() CopilotAuthTokenStore { return copilotAuthTokenStore(s) }
+func (s store) Daemons() DaemonStore                     { return daemonStore(s) }
 func (s store) DefaultPresetAssignments() DefaultPresetAssignmentStore {
-	return defaultPresetAssignmentStore{db: s.db}
+	return defaultPresetAssignmentStore(s)
 }
-func (s store) IntegrationWrites() IntegrationWriteStore { return integrationWriteStore{db: s.db} }
-func (s store) ItemDefaults() ItemDefaultStore           { return itemDefaultStore{db: s.db} }
-func (s store) Messages() MessageStore                   { return messageStore{db: s.db} }
+func (s store) IntegrationWrites() IntegrationWriteStore { return integrationWriteStore(s) }
+func (s store) ItemDefaults() ItemDefaultStore           { return itemDefaultStore(s) }
+func (s store) Messages() MessageStore                   { return messageStore(s) }
 func (s store) MessageContentBlocks() MessageContentBlockStore {
-	return messageContentBlockStore{db: s.db}
+	return messageContentBlockStore(s)
 }
-func (s store) ModelEndpoints() ModelEndpointStore     { return modelEndpointStore{db: s.db} }
-func (s store) OauthFlows() OauthFlowStore             { return oauthFlowStore{db: s.db} }
-func (s store) Plans() PlanStore                       { return planStore{db: s.db} }
-func (s store) Presets() PresetStore                   { return presetStore{db: s.db} }
-func (s store) Projects() ProjectStore                 { return projectStore{db: s.db} }
-func (s store) ProjectConfigs() ProjectConfigStore     { return projectConfigStore{db: s.db} }
-func (s store) ProviderAccounts() ProviderAccountStore { return providerAccountStore{db: s.db} }
+func (s store) ModelEndpoints() ModelEndpointStore     { return modelEndpointStore(s) }
+func (s store) OauthFlows() OauthFlowStore             { return oauthFlowStore(s) }
+func (s store) Plans() PlanStore                       { return planStore(s) }
+func (s store) Presets() PresetStore                   { return presetStore(s) }
+func (s store) Projects() ProjectStore                 { return projectStore(s) }
+func (s store) ProjectConfigs() ProjectConfigStore     { return projectConfigStore(s) }
+func (s store) ProviderAccounts() ProviderAccountStore { return providerAccountStore(s) }
 func (s store) ProviderAccountLimits() ProviderAccountLimitStore {
-	return providerAccountLimitStore{db: s.db}
+	return providerAccountLimitStore(s)
 }
-func (s store) Questions() QuestionStore              { return questionStore{db: s.db} }
-func (s store) Repos() RepoStore                      { return repoStore{db: s.db} }
-func (s store) RunEvents() RunEventStore              { return runEventStore{db: s.db} }
-func (s store) Settings() SettingStore                { return settingStore{db: s.db} }
-func (s store) StepExecutions() StepExecutionStore    { return stepExecutionStore{db: s.db} }
-func (s store) Tasks() TaskStore                      { return taskStore{db: s.db} }
-func (s store) TaskDependencies() TaskDependencyStore { return taskDependencyStore{db: s.db} }
+func (s store) Questions() QuestionStore              { return questionStore(s) }
+func (s store) Repos() RepoStore                      { return repoStore(s) }
+func (s store) RunEvents() RunEventStore              { return runEventStore(s) }
+func (s store) Settings() SettingStore                { return settingStore(s) }
+func (s store) StepExecutions() StepExecutionStore    { return stepExecutionStore(s) }
+func (s store) Tasks() TaskStore                      { return taskStore(s) }
+func (s store) TaskDependencies() TaskDependencyStore { return taskDependencyStore(s) }
 func (s store) TemporalPayloadBlobs() TemporalPayloadBlobStore {
-	return temporalPayloadBlobStore{db: s.db}
+	return temporalPayloadBlobStore(s)
 }
-func (s store) Threads() ThreadStore                 { return threadStore{db: s.db} }
-func (s store) ToolCalls() ToolCallStore             { return toolCallStore{db: s.db} }
-func (s store) ToolCallResults() ToolCallResultStore { return toolCallResultStore{db: s.db} }
-func (s store) Triggers() TriggerStore               { return triggerStore{db: s.db} }
-func (s store) TriggerEvents() TriggerEventStore     { return triggerEventStore{db: s.db} }
+func (s store) Threads() ThreadStore                 { return threadStore(s) }
+func (s store) ToolCalls() ToolCallStore             { return toolCallStore(s) }
+func (s store) ToolCallResults() ToolCallResultStore { return toolCallResultStore(s) }
+func (s store) Triggers() TriggerStore               { return triggerStore(s) }
+func (s store) TriggerEvents() TriggerEventStore     { return triggerEventStore(s) }
 func (s store) TriggerRegistrations() TriggerRegistrationStore {
-	return triggerRegistrationStore{db: s.db}
+	return triggerRegistrationStore(s)
 }
-func (s store) UserUpdates() UserUpdateStore { return userUpdateStore{db: s.db} }
-func (s store) VaultKeys() VaultKeyStore     { return vaultKeyStore{db: s.db} }
+func (s store) UserUpdates() UserUpdateStore { return userUpdateStore(s) }
+func (s store) VaultKeys() VaultKeyStore     { return vaultKeyStore(s) }
 func (s store) VideoGenerationJobs() VideoGenerationJobStore {
-	return videoGenerationJobStore{db: s.db}
+	return videoGenerationJobStore(s)
 }
 func (s store) VisibilityOverrides() VisibilityOverrideStore {
-	return visibilityOverrideStore{db: s.db}
+	return visibilityOverrideStore(s)
 }
-func (s store) Workflows() WorkflowStore { return workflowStore{db: s.db} }
+func (s store) Workflows() WorkflowStore { return workflowStore(s) }
 func (s store) WorkflowCheckpoints() WorkflowCheckpointStore {
-	return workflowCheckpointStore{db: s.db}
+	return workflowCheckpointStore(s)
 }
-func (s store) WorkflowDrafts() WorkflowDraftStore       { return workflowDraftStore{db: s.db} }
-func (s store) WorkflowScenarios() WorkflowScenarioStore { return workflowScenarioStore{db: s.db} }
-func (s store) Worktrees() WorktreeStore                 { return worktreeStore{db: s.db} }
+func (s store) WorkflowDrafts() WorkflowDraftStore       { return workflowDraftStore(s) }
+func (s store) WorkflowScenarios() WorkflowScenarioStore { return workflowScenarioStore(s) }
+func (s store) Worktrees() WorktreeStore                 { return worktreeStore(s) }
 
 // WithTx rebinds every accessor to tx.
 func (store) WithTx(tx orm.Context) Store { return NewStore(tx) }
