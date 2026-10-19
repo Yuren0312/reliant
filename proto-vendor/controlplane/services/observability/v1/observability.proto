@@ -854,7 +854,8 @@ message QueryPanelRequest {
 
 message QueryPanelResponse {
   string panel_id = 1;
-  // Echo of panel.kind: "line", "number" or "table".
+  // Echo of panel.kind: "line", "number", "table", "funnel", "issues" or
+  // "sessions".
   string kind = 2;
   string unit = 3;
   // line panels: one entry per (series x group); a ratio panel yields one
@@ -865,8 +866,77 @@ message QueryPanelResponse {
   repeated string columns = 5;
   repeated PanelTableRow rows = 6;
   int32 step_seconds = 7;
-  // True when a cap cut the result (50 series, 200 table rows).
+  // True when a cap cut the result (50 series, 200 table rows, 50 issues or
+  // sessions).
   bool truncated = 8;
+  // funnel panels: one entry per step, in the funnel's order. Each count is the
+  // number of sessions (or users) that reached that step and every step before
+  // it, within the window.
+  repeated FunnelStepResult funnel_steps = 9;
+  // issues panels: errors grouped by distinct stack, most events first.
+  repeated PanelIssue issues = 10;
+  // sessions panels: browser sessions that started in the range, newest first.
+  repeated PanelSession sessions = 11;
+}
+
+message FunnelStepResult {
+  // The product event name this step matches.
+  string event = 1;
+  int64 count = 2;
+  // count / the first step's count; 0 when the first step is 0.
+  double rate_from_first = 3;
+  // count / the previous step's count; 0 when the previous step is 0. The first
+  // step reports 1 when it has any entrant.
+  double rate_from_previous = 4;
+}
+
+// One error issue of an issues panel. Today an issue is one distinct stack of
+// one service (error_hourly's RawStackHash); the same bug in two builds is two
+// entries until the enrichment worker fingerprints stacks across builds.
+message PanelIssue {
+  string service_name = 1;
+  // error_events.RawStackHash (a UInt64) in decimal; a string so a JavaScript
+  // client cannot round it.
+  string stack_hash = 2;
+  // exception.type of the most recent event, e.g. "TypeError".
+  string exception_type = 3;
+  // The most recent event's message with volatile parts masked (urls, uuids,
+  // quoted strings, hex runs, integers), which is what groups the events.
+  string message = 4;
+  // Route of the most recent event: location.href without origin, query or
+  // fragment.
+  string url_path = 5;
+  // service.version (the build) of the most recent event.
+  string service_version = 6;
+  // Events and distinct sessions in the range, at hour granularity.
+  int64 events = 7;
+  int64 sessions = 8;
+  // Earliest and latest event of this stack within the range.
+  google.protobuf.Timestamp first_seen = 9;
+  google.protobuf.Timestamp last_seen = 10;
+  // The most recent event's trace and session, for "open trace" and "watch
+  // replay" links.
+  string sample_trace_id = 11;
+  string sample_session_id = 12;
+}
+
+// One browser session of a sessions panel.
+message PanelSession {
+  string session_id = 1;
+  string service_name = 2;
+  string service_version = 3;
+  string env_id = 4;
+  // The signed-in user (the SDK's userId global attribute); empty when anonymous.
+  string user_id = 5;
+  // Route of the session's first page view, without origin, query or fragment.
+  string entry_path = 6;
+  google.protobuf.Timestamp start = 7;
+  google.protobuf.Timestamp end = 8;
+  int64 page_views = 9;
+  int64 interactions = 10;
+  int64 errors = 11;
+  // True when the session's replay was recorded (and has not expired).
+  bool has_replay = 12;
 }
 
 message PanelSeriesResult {
@@ -949,9 +1019,18 @@ message Panel {
   string id = 1;
   string title = 2;
   string description = 3;
-  // number | line | table | search
+  // number | line | table | search | funnel | issues | sessions
+  //
+  // funnel, issues and sessions are read by QueryPanel from the tenant's browser
+  // tables (product_events, error_hourly, rum_sessions) instead of from series
+  // over a signal. They take no series, ratio, group_by or columns, accept
+  // `where` (a small field vocabulary: service.name, service.version,
+  // reliant.env.id, deployment.environment.name, resource.attr.rum.sessionId,
+  // and for funnels span.attr.<prop> and span.attr.userId), and
+  // are read over at most 90 days (funnel) or 30 days (issues, sessions).
   string kind = 4;
-  // traces | metrics | logs
+  // traces | metrics | logs. funnel, issues and sessions read browser telemetry:
+  // their signal is "traces" or empty.
   string signal = 5;
   repeated PanelSeries series = 6;
   bool ratio = 7;
@@ -962,6 +1041,25 @@ message Panel {
   string unit = 11;
   int32 width = 12;
   int32 height = 13;
+  // funnel panels only: the ordered product events to count. Required for kind
+  // funnel, refused otherwise.
+  PanelFunnel funnel = 14;
+  // sessions panels only: keep only sessions that hit an error.
+  bool has_error = 15;
+}
+
+// The definition a funnel panel draws (forge.Funnel): product event names in
+// order, compiled to ClickHouse windowFunnel over product_events.
+message PanelFunnel {
+  // 2 to 10 distinct event names, in the order a journey passes through them.
+  repeated string steps = 1;
+  // How long a journey may take from its first step to its last: a number and a
+  // unit of s, m, h or d ("1h", "7d"), at most 90d. Empty is "1h".
+  string window = 2;
+  // What a journey is: "session" (events sharing a browser session id) or
+  // "user" (events sharing the SDK's userId, across sessions; anonymous events
+  // are skipped). Empty is "session".
+  string by = 3;
 }
 
 message PanelSeries {
