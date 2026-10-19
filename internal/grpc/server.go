@@ -363,7 +363,19 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("project service: %w", err)
 	}
-	worktreeSweeper := worktreesweep.New(database, router).WithKeepFiles(worktreesweep.KeepSetting{R: database})
+	// RELIANT_WORKTREE_AUTO_ARCHIVE: "dry-run" (default) logs the active
+	// worktrees its daemon reports finished (clean, merged or pushed, idle over
+	// 24h, not in use) and archives nothing; read the finished= count in the
+	// "[WorktreeSweep] auto-archive" line, then set "on" to archive them so the
+	// ordinary removal reaches them; "off" never asks.
+	worktreeSweeper := worktreesweep.New(database, router).
+		WithKeepFiles(worktreesweep.KeepSetting{R: database}).
+		WithAutoArchive(worktreesweep.ParseAutoArchiveMode(os.Getenv("RELIANT_WORKTREE_AUTO_ARCHIVE")), database,
+			func(ctx context.Context, userID, projectID, worktreeID string) {
+				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
+					logging.Warn("worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
+				}
+			})
 	worktreeService, err := worktree.New(worktree.Deps{
 		Logger:   handlerLogger,
 		Config:   handlerConfig,
