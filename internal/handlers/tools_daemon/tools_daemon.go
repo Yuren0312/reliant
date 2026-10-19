@@ -549,6 +549,12 @@ func (s *Service) publishDaemonHeartbeat(_ context.Context, userID, daemonID str
 		payload["memory_used_bytes"] = hb.MemoryUsedBytes
 		payload["memory_limit_bytes"] = hb.MemoryLimitBytes
 		payload["memory_pressure"] = hb.MemoryPressure
+		// The workspace's OOM kills, so the app can tell the user a process
+		// was killed at the memory limit — including ones no tool call ran.
+		if hb.OomKills > 0 {
+			payload["oom_kills"] = hb.OomKills
+			payload["last_oom_kill_at_ms"] = hb.LastOomKillAtMs
+		}
 	}
 	if hb != nil {
 		// Always included (may be empty) so the UI can clear its preview

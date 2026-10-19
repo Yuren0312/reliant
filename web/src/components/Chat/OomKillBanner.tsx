@@ -12,7 +12,13 @@
  * the kubelet restarts the container in place, so nothing else in the UI
  * ever says "you ran out of memory".
  *
- * Dismissal is keyed on `${daemonId}:${lastOomKilledAt}` in sessionStorage
+ * It also covers the kill that restarts nothing: inside a kata VM the kernel
+ * kills one process at the machine's memory limit and the container lives on,
+ * so the operator never sees it. The daemon reads those kills from its cgroup
+ * and carries them on every heartbeat (lib/machineMemory.ts); the newer of the
+ * two kinds is the one shown.
+ *
+ * Dismissal is keyed on `${daemonId}:${kill time}` in sessionStorage
  * (mirroring ResumeDaemonPill) so a NEW kill re-surfaces the banner even
  * after the user dismissed an earlier one.
  */
@@ -23,6 +29,8 @@ import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
+import { useGlobalUpdatesStore } from "@/store/globalUpdatesStore";
+import { processOomKillNotice } from "@/lib/machineMemory";
 
 const DISMISS_KEY = "reliant.oomKillBanner.dismissed";
 
@@ -91,29 +99,50 @@ export function OomKillBanner() {
     );
   }, [daemons, activeDaemon?.daemonId]);
 
-  const sig = oomDaemon ? `${oomDaemon.daemonId}:${lastOomKillMs(oomDaemon)}` : "";
+  // Process kills on the machine the app is on, from its heartbeats.
+  const processKills = useGlobalUpdatesStore((state) =>
+    activeDaemon ? state.daemonProcessOomKills[activeDaemon.daemonId] : undefined,
+  );
+  const now = Date.now();
+  const processKill =
+    activeDaemon && processKills && processKills.lastAtMs > now - RECENT_WINDOW_MS ? processKills : undefined;
+  const podKillMs = oomDaemon ? lastOomKillMs(oomDaemon) : 0;
+  const showProcessKill = !!processKill && processKill.lastAtMs > podKillMs;
+
+  const sig = showProcessKill
+    ? `${activeDaemon?.daemonId}:process:${processKill.lastAtMs}`
+    : oomDaemon
+      ? `${oomDaemon.daemonId}:${podKillMs}`
+      : "";
 
   const dismiss = useCallback(() => {
     setDismissedSig(sig);
     writeDismissed(sig);
   }, [sig]);
 
-  if (!oomDaemon) return null;
+  if (!sig) return null;
   if (dismissedSig && dismissedSig === sig) return null;
 
-  const descriptor = machineDescriptor(oomDaemon);
+  const descriptor = oomDaemon ? machineDescriptor(oomDaemon) : "";
 
   return (
     <div className="flex-shrink-0 border-t border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
           <MemoryStick className="h-4 w-4 flex-shrink-0" />
-          <span>
-            Your machine ran out of memory
-            {descriptor ? ` (${descriptor})` : ""} — {oomDaemon.oomKillCount}
-            &times; recently. Upgrade the machine size or reduce memory-heavy
-            commands.
-          </span>
+          {showProcessKill ? (
+            <span data-testid="oom-kill-banner-process">
+              {processOomKillNotice(processKill)} Stop memory-heavy processes or
+              upgrade the machine size.
+            </span>
+          ) : (
+            <span>
+              Your machine ran out of memory
+              {descriptor ? ` (${descriptor})` : ""} — {oomDaemon?.oomKillCount}
+              &times; recently. Upgrade the machine size or reduce memory-heavy
+              commands.
+            </span>
+          )}
         </div>
         <div className="flex flex-shrink-0 items-center gap-2">
           <button

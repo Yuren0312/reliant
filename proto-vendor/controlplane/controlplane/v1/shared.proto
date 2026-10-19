@@ -179,6 +179,14 @@ message Daemon {
   google.protobuf.Timestamp last_oom_killed_at = 28;
   int32 oom_kill_count = 29;
 
+  // VM-crash tracking (managed daemons), mirrored from the Workspace CR the
+  // same way as the OOM fields: deaths of the machine's VM (a kata sandbox),
+  // which take every process with them and which the kubelet reports only as
+  // a container exit plus a re-created sandbox. Unset/zero when none has
+  // been observed.
+  google.protobuf.Timestamp last_vm_crash_at = 33;
+  int32 vm_crash_count = 34;
+
   // What the machine is currently DOING, when it isn't ready yet.
   //
   // `status` answers "can I use this machine"; it deliberately collapses the
