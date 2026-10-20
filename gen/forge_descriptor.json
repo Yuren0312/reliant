@@ -35017,6 +35017,11 @@
           {
             "name": "automation_only",
             "kind": "bool"
+          },
+          {
+            "name": "on_failure",
+            "kind": "message",
+            "type_name": "reliant.v1.Workflow"
           }
         ],
         "reliant.v1.WorkflowEventSource": [
@@ -35376,71 +35381,14 @@
           "Flag": "",
           "DefaultValue": "",
           "Required": false,
-          "Description": "Send no analytics events",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/analytics_config.proto"
-        },
-        {
-          "Name": "statsig_key",
-          "GoName": "StatsigKey",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "STATSIG_CLIENT_KEY",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Statsig key analytics events are sent with",
-          "Sensitive": true,
-          "Category": "",
-          "Optional": true,
-          "ProtoFile": "config/v1/analytics_config.proto"
-        },
-        {
-          "Name": "supabase_url",
-          "GoName": "SupabaseUrl",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "SUPABASE_URL",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Supabase project URL analytics events are also written to",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/analytics_config.proto"
-        },
-        {
-          "Name": "supabase_anon_key",
-          "GoName": "SupabaseAnonKey",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "SUPABASE_ANON_KEY",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Supabase publishable (anon) key for analytics writes",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/analytics_config.proto"
-        },
-        {
-          "Name": "app_data_dir",
-          "GoName": "AppDataDir",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "RELIANT_APP_DATA_DIR",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Writable app data directory analytics caches its device id in",
+          "Description": "Record no product analytics events",
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "config/v1/analytics_config.proto"
         }
       ],
       "ProtoFile": "config/v1/analytics_config.proto",
-      "Line": 12
+      "Line": 14
     },
     {
       "Name": "ControlPlaneConfig",
@@ -37828,5 +37776,5 @@
       "Line": 20
     }
   ],
-  "source_hash": "0166099606146256f72a705d547ad1030f71d17ef88d0843a405c61a964cc4b9"
+  "source_hash": "8e0df647df23fd421b8df7a88b306c7f5c70a0a56f20f0193fb84c7c4e44aad7"
 }
