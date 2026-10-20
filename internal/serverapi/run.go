@@ -242,11 +242,11 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	defer func() {
 		if err := obsProvider.Shutdown(); err != nil {
-			logging.Warn("Failed to shutdown observability", "error", err)
+			logging.WarnContext(ctx, "Failed to shutdown observability", "error", err)
 		}
 	}()
 
-	logging.Info("Starting Reliant API server (stateless)",
+	logging.InfoContext(ctx, "Starting Reliant API server (stateless)",
 		"grpc_port", opts.GRPCPort,
 		"temporal", fmt.Sprintf("%s:%d", opts.TemporalHost, opts.TemporalPort),
 		"db_driver", opts.DatabaseDriver,
@@ -256,7 +256,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Ensure RELIANT_DATA_DIR is set for activities that need to locate files
 	if err := os.Setenv("RELIANT_DATA_DIR", opts.DataDir); err != nil {
-		logging.Warn("Failed to set RELIANT_DATA_DIR env var", "error", err)
+		logging.WarnContext(ctx, "Failed to set RELIANT_DATA_DIR env var", "error", err)
 	}
 
 	// Global model registry
@@ -289,14 +289,14 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
-	logging.Info("Database initialized", "driver", opts.DatabaseDriver)
+	logging.InfoContext(ctx, "Database initialized", "driver", opts.DatabaseDriver)
 	// The database, the Temporal client and the daemon router close after
 	// every node has stopped (deferred, in reverse): the listener's handlers
 	// and the loops use them until then.
 	defer func() {
-		logging.Info("Closing database")
+		logging.InfoContext(ctx, "Closing database")
 		if err := repo.Close(); err != nil {
-			logging.Error("Error closing database", "error", err)
+			logging.ErrorContext(ctx, "Error closing database", "error", err)
 		}
 	}()
 
@@ -340,10 +340,10 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to connect to Temporal: %w", err)
 	}
 	defer func() {
-		logging.Info("Closing Temporal client")
+		logging.InfoContext(ctx, "Closing Temporal client")
 		temporalClient.Close()
 	}()
-	logging.Info("Connected to external Temporal server", "host", opts.TemporalHost, "port", opts.TemporalPort)
+	logging.InfoContext(ctx, "Connected to external Temporal server", "host", opts.TemporalHost, "port", opts.TemporalPort)
 
 	// Tools factory (catalog metadata only; the api-server executes no tools)
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
@@ -393,7 +393,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	userUpdateHub = streaming.NewNATSUpdateHub[db.UserUpdate](nc, "user.updates", "UserUpdate")
 	chatUpdateHub = streaming.NewNATSUpdateHub[db.ChatUpdate](nc, "chat.updates", "ChatUpdate")
-	logging.Info("Update hubs initialized (NATS)")
+	logging.InfoContext(ctx, "Update hubs initialized (NATS)")
 	defer func() { _ = userUpdateHub.Close() }()
 	defer func() { _ = chatUpdateHub.Close() }()
 
@@ -430,7 +430,7 @@ func Run(ctx context.Context, opts Options) error {
 	reconciler.SetResetGuard(resetGuard)
 
 	// Analytics
-	logging.Info("[Analytics] Initializing analytics")
+	logging.InfoContext(ctx, "[Analytics] Initializing analytics")
 	analyticsClient := analytics.NewClientFromSettings(ctx, "", true, opts.Analytics)
 	analytics.SetClient(analyticsClient)
 	analytics.SetPrivacyChecker(repo)
@@ -451,18 +451,18 @@ func Run(ctx context.Context, opts Options) error {
 			tlsCertFile = certPaths.CertFile
 			tlsKeyFile = certPaths.KeyFile
 		}
-		logging.Info("TLS enabled", "cert", tlsCertFile)
+		logging.InfoContext(ctx, "TLS enabled", "cert", tlsCertFile)
 	} else {
 		tlsCertFile = ""
 		tlsKeyFile = ""
-		logging.Info("TLS disabled via DISABLE_TLS=true, using plaintext HTTP")
+		logging.InfoContext(ctx, "TLS disabled via DISABLE_TLS=true, using plaintext HTTP")
 	}
 
 	// Daemon routing: reuses the same NATS connection
 	daemonRouter := toolexec.NewNATSDaemonRouter(nc, daemonRouterOptions(repo, opts.ControlPlane.URL)...)
 	defer func() { _ = daemonRouter.Close() }()
 	natsChecker := nc.IsConnected
-	logging.Info("Using NATS daemon router — daemon services run in separate daemon-gateway process")
+	logging.InfoContext(ctx, "Using NATS daemon router — daemon services run in separate daemon-gateway process")
 
 	// Backgrounded tool calls end when their process does, and only the daemon
 	// running the process can say so. The reconciler asks on every pass; set
@@ -644,9 +644,9 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to bind health endpoint: %w", err)
 	}
 	go func() {
-		logging.Info("Health endpoint started", "address", healthAddr)
+		logging.InfoContext(ctx, "Health endpoint started", "address", healthAddr)
 		if err := healthServer.Serve(healthLn); err != nil && err != http.ErrServerClosed {
-			logging.Error("Health endpoint failed", "error", err)
+			logging.ErrorContext(ctx, "Health endpoint failed", "error", err)
 		}
 	}()
 
@@ -661,7 +661,7 @@ func Run(ctx context.Context, opts Options) error {
 	// connection-refused on every rollout. Then it stops the nodes in
 	// reverse inside one SHUTDOWN_TIMEOUT budget — the listener first (see
 	// apiNodes) — logs each phase ("drain: …"), and flushes telemetry last.
-	logging.Info("Starting Reliant API server nodes",
+	logging.InfoContext(ctx, "Starting Reliant API server nodes",
 		"setup_duration", time.Since(startTime),
 		"grpc_port", opts.GRPCPort,
 		"pprof_port", opts.PprofPort,
@@ -681,7 +681,7 @@ func Run(ctx context.Context, opts Options) error {
 	healthCtx, cancelHealth := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelHealth()
 	if err := healthServer.Shutdown(healthCtx); err != nil {
-		logging.Warn("Health endpoint did not stop cleanly", "error", err)
+		logging.WarnContext(ctx, "Health endpoint did not stop cleanly", "error", err)
 	}
 
 	// Note: the daemon router, NATS, the Temporal client, the database and
@@ -689,7 +689,7 @@ func Run(ctx context.Context, opts Options) error {
 	if runErr != nil {
 		return fmt.Errorf("api-server: %w", runErr)
 	}
-	logging.Info("API server shut down gracefully")
+	logging.InfoContext(ctx, "API server shut down gracefully")
 	return nil
 }
 
@@ -786,7 +786,7 @@ func apiNodes(c apiComponents) []lifecyclekit.Node {
 			Name: "daemon-events-consumer",
 			Run: func(ctx context.Context) error {
 				if err := c.projects.StartDaemonEventConsumer(ctx, c.nc); err != nil && ctx.Err() == nil {
-					logging.Warn("daemon-events consumer exited with error", "error", err)
+					logging.WarnContext(ctx, "daemon-events consumer exited with error", "error", err)
 				}
 				return nil
 			},
@@ -795,7 +795,7 @@ func apiNodes(c apiComponents) []lifecyclekit.Node {
 			Name: "queued-delivery",
 			Run: func(ctx context.Context) error {
 				if err := c.queued.Run(ctx, c.nc); err != nil && ctx.Err() == nil {
-					logging.Warn("queued-delivery consumer exited with error; the reconciler's sweep still delivers", "error", err)
+					logging.WarnContext(ctx, "queued-delivery consumer exited with error; the reconciler's sweep still delivers", "error", err)
 				}
 				return nil
 			},

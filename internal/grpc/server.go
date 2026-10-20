@@ -371,7 +371,7 @@ func NewAPI(cfg *Config) (*API, error) {
 		WithAutoArchive(cfg.WorktreeAutoArchive, database,
 			func(ctx context.Context, userID, projectID, worktreeID string) {
 				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
-					logging.Warn("worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
+					logging.WarnContext(ctx, "worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
 				}
 			})
 	worktreeService, err := worktree.New(worktree.Deps{

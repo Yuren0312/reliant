@@ -109,7 +109,7 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	// Track workflow in database for parent-child hierarchy
 	if err := a.trackWorkflow(ctx, input); err != nil {
 		// Log but don't fail - chat_update is more important for UI
-		logging.Warn("[WorkflowStatus] Failed to track workflow", "error", err)
+		logging.WarnContext(ctx, "[WorkflowStatus] Failed to track workflow", "error", err)
 	}
 
 	// Determine if this is a root workflow (no parent)
@@ -139,7 +139,7 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 		}
 		if reason != "" {
 			if err := a.repo.UpdateChatUnread(ctx, input.ChatID, true, reason); err != nil {
-				logging.Warn("[WorkflowStatus] Failed to mark chat as unread", "error", err, "reason", reason)
+				logging.WarnContext(ctx, "[WorkflowStatus] Failed to mark chat as unread", "error", err, "reason", reason)
 			}
 		}
 		a.archiveSucceededAutomationRun(ctx, input)
@@ -179,20 +179,20 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	if input.Status == "started" && input.ParentWorkflowID != "" {
 		if err := a.emitThreadUpdate(ctx, input); err != nil {
 			// Log but don't fail - the workflow_status update is more important
-			logging.Warn("[WorkflowStatus] Failed to emit thread update", "error", err)
+			logging.WarnContext(ctx, "[WorkflowStatus] Failed to emit thread update", "error", err)
 		}
 	}
 
 	// For child workflows completing/failing/cancelling, update thread status
 	if input.Status != "started" && input.ParentWorkflowID != "" {
 		if err := a.emitThreadStatusUpdate(ctx, input); err != nil {
-			logging.Warn("[WorkflowStatus] Failed to emit thread status update", "error", err)
+			logging.WarnContext(ctx, "[WorkflowStatus] Failed to emit thread status update", "error", err)
 		}
 	}
 
 	// Emit refetch signal so frontend updates workflow executions without polling
 	if err := a.repo.EmitChatRefetch(ctx, input.ChatID, db.RefetchWorkflowExecutions); err != nil {
-		logging.Warn("[WorkflowStatus] Failed to emit workflow executions refetch", "error", err)
+		logging.WarnContext(ctx, "[WorkflowStatus] Failed to emit workflow executions refetch", "error", err)
 	}
 
 	return WorkflowStatusOutput{Success: true}, nil
@@ -227,7 +227,7 @@ func (a *WorkflowStatusActivity) completionNotifies(ctx context.Context, input W
 	chat, err := a.repo.GetChat(ctx, input.ChatID)
 	if err != nil || chat == nil {
 		// Unknown origin: surface the result rather than silently drop it.
-		logging.Warn("[WorkflowStatus] Could not read chat launch kind; notifying", "chat_id", input.ChatID, "error", err)
+		logging.WarnContext(ctx, "[WorkflowStatus] Could not read chat launch kind; notifying", "chat_id", input.ChatID, "error", err)
 		return true
 	}
 	if isInteractiveLaunchKind(chat.LaunchKind) {
@@ -264,7 +264,7 @@ func (a *WorkflowStatusActivity) failureNotifies(ctx context.Context, input Work
 	}
 	firings, err := a.repo.FiringsSinceLastSuccess(ctx, chat.UserID, []string{triggerID}, triggers.EpisodeFirings)
 	if err != nil {
-		logging.Warn("[WorkflowStatus] Could not read trigger firings; notifying", "chat_id", input.ChatID, "error", err)
+		logging.WarnContext(ctx, "[WorkflowStatus] Could not read trigger firings; notifying", "chat_id", input.ChatID, "error", err)
 		return true
 	}
 	prior, found := triggers.PriorFailureStreak(firings[triggerID], input.ChatID)
@@ -299,7 +299,7 @@ func (a *WorkflowStatusActivity) recordLaunchRunStatus(ctx context.Context, inpu
 		return
 	}
 	if err := a.repo.SetLaunchEventRunStatus(ctx, input.ChatID, status); err != nil {
-		logging.Warn("[WorkflowStatus] Failed to record the launch run's status", "chat_id", input.ChatID, "status", status, "error", err)
+		logging.WarnContext(ctx, "[WorkflowStatus] Failed to record the launch run's status", "chat_id", input.ChatID, "status", status, "error", err)
 	}
 }
 
@@ -363,14 +363,14 @@ func (a *WorkflowStatusActivity) reviveThreadForNewRun(ctx context.Context, inpu
 
 	revived, err := a.repo.ReviveThread(ctx, thread)
 	if err != nil {
-		logging.Warn("[WorkflowStatus] Failed to revive thread for new run",
+		logging.WarnContext(ctx, "[WorkflowStatus] Failed to revive thread for new run",
 			"threadID", thread,
 			"workflowID", input.WorkflowID,
 			"error", err)
 		return
 	}
 	if revived > 0 {
-		logging.Info("[WorkflowStatus] Revived thread for new run — a previous turn had left it terminal",
+		logging.InfoContext(ctx, "[WorkflowStatus] Revived thread for new run — a previous turn had left it terminal",
 			"threadID", thread,
 			"workflowID", input.WorkflowID,
 			"chatID", input.ChatID)
@@ -388,7 +388,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		// handling below still creates/updates the notifying workflow's row.
 		if input.Resumed && input.ChatID != "" {
 			if err := a.repo.ResumeWorkflowsByChat(ctx, input.ChatID); err != nil {
-				logging.Warn("[WorkflowStatus] Failed to resume chat workflows after self-pause resume",
+				logging.WarnContext(ctx, "[WorkflowStatus] Failed to resume chat workflows after self-pause resume",
 					"chatID", input.ChatID,
 					"workflowID", input.WorkflowID,
 					"error", err)
@@ -496,7 +496,7 @@ func (a *WorkflowStatusActivity) trackPausedForMachine(ctx context.Context, inpu
 		return
 	}
 	if _, err := a.repo.SetChatPausedForMachine(ctx, input.ChatID, paused); err != nil {
-		logging.Warn("[WorkflowStatus] Failed to record whether the chat is paused for its machine",
+		logging.WarnContext(ctx, "[WorkflowStatus] Failed to record whether the chat is paused for its machine",
 			"chatID", input.ChatID, "workflowID", input.WorkflowID, "paused", paused, "error", err)
 	}
 }
@@ -567,7 +567,7 @@ func (a *WorkflowStatusActivity) markWorkflowStarted(ctx context.Context, input 
 			return err
 		}
 		if _, err := a.repo.UpdateThreadWorkflow(ctx, thread, input.WorkflowID); err != nil {
-			logging.Warn("[WorkflowStatus] Failed to update thread workflow_id",
+			logging.WarnContext(ctx, "[WorkflowStatus] Failed to update thread workflow_id",
 				db.UpdateTypeThread, thread,
 				"workflow_id", input.WorkflowID,
 				"error", err)
@@ -602,7 +602,7 @@ func (a *WorkflowStatusActivity) markWorkflowStarted(ctx context.Context, input 
 			if createErr := a.repo.CreateWorkflow(ctx, childWorkflow); createErr != nil {
 				return fmt.Errorf("child workflow %s does not exist (lookup: %v) and create-on-missing failed: %w", input.WorkflowID, err, createErr)
 			}
-			logging.Info("[WorkflowStatus] Created missing child workflow row (status update raced ahead of parent creation)",
+			logging.InfoContext(ctx, "[WorkflowStatus] Created missing child workflow row (status update raced ahead of parent creation)",
 				"workflowID", input.WorkflowID,
 				"parentWorkflowID", input.ParentWorkflowID)
 			return nil
@@ -615,7 +615,7 @@ func (a *WorkflowStatusActivity) markWorkflowStarted(ctx context.Context, input 
 			}
 		}
 
-		logging.Info("[WorkflowStatus] Child workflow status updated",
+		logging.InfoContext(ctx, "[WorkflowStatus] Child workflow status updated",
 			"workflowID", input.WorkflowID,
 			"previousStatus", existingWorkflow.Status.Label(),
 			"newStatus", db.Active().Label())
@@ -701,7 +701,7 @@ func (a *WorkflowStatusActivity) emitTerminal(ctx context.Context, input Workflo
 		if last, err := threads.NewService(a.repo).LastAssistantMessage(ctx, thread); err == nil {
 			summary = last.Content
 		} else {
-			logging.Warn("[WorkflowStatus] Could not read final assistant text for run event",
+			logging.WarnContext(ctx, "[WorkflowStatus] Could not read final assistant text for run event",
 				"chatID", input.ChatID, "error", err)
 		}
 	}
@@ -734,7 +734,7 @@ func temporalRunID(ctx context.Context) string {
 // SendMessage only consults it for failed/terminated predecessors.
 func (a *WorkflowStatusActivity) clearCheckpoint(ctx context.Context, workflowID string) {
 	if err := a.repo.DeleteWorkflowCheckpoint(ctx, workflowID); err != nil {
-		logging.Warn("[WorkflowStatus] Failed to clear workflow checkpoint",
+		logging.WarnContext(ctx, "[WorkflowStatus] Failed to clear workflow checkpoint",
 			"workflowID", workflowID,
 			"error", err)
 	}
@@ -833,7 +833,7 @@ func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input Workf
 	var presets []string
 	chat, err := a.repo.GetChat(ctx, input.ChatID)
 	if err != nil {
-		logging.Warn("[WorkflowStatus] Failed to load chat for analytics", "chatID", input.ChatID, "error", err)
+		logging.WarnContext(ctx, "[WorkflowStatus] Failed to load chat for analytics", "chatID", input.ChatID, "error", err)
 	} else {
 		userID = chat.UserID
 		presets = selectedPresetNames(chat.SelectedPresets)
