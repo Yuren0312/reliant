@@ -36890,7 +36890,7 @@
           "Flag": "account",
           "DefaultValue": "",
           "Required": false,
-          "Description": "Account (Supabase subject) this daemon runs as; selects among several accounts on one server",
+          "Description": "Account (user id) this daemon runs as; selects among several accounts on one server",
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "config/v1/daemon_config.proto"
@@ -37299,7 +37299,7 @@
           "Flag": "account",
           "DefaultValue": "",
           "Required": false,
-          "Description": "Account (Supabase subject) to register; separate accounts on one server keep separate credentials",
+          "Description": "Account (user id) to register; separate accounts on one server keep separate credentials",
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "config/v1/daemon_config.proto"
@@ -37828,5 +37828,5 @@
       "Line": 20
     }
   ],
-  "source_hash": "48feec7b0943fc17b5db1e8739b4632eed9e46877f441b64a468a600ba231159"
+  "source_hash": "0166099606146256f72a705d547ad1030f71d17ef88d0843a405c61a964cc4b9"
 }
