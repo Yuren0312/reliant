@@ -55,11 +55,13 @@ is dropped (React StrictMode double effects, retried RPCs).
   from the browser SDK's `custom-action` tracer, on the same session as the
   page's errors and replay. Props are snake_cased and bounded by the runtime.
   The user is the `userId` attribute set by `setTelemetryUserId`.
-- **Sentry**, while web Sentry is still enabled (until control-plane
+- **Sentry**, while web Sentry is still enabled (until
   `research/frontend-observability/DESIGN.md` §6.6): a breadcrumb per event
   and a message for the funnel-marker events the alert rules match on.
 
-The user's in-app analytics toggle gates both.
+The user's in-app analytics toggle gates both. The ClickStack sink is live only
+in a build that sets `VITE_OTEL_ENDPOINT`; until a deploy sets it, web events
+reach Sentry alone.
 
 ## Retention
 

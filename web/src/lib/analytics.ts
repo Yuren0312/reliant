@@ -12,7 +12,7 @@
  *    records with the same `product.` names (dev-docs/product-events.md).
  *
  *  - Sentry, while web Sentry is still on (it is being replaced by ClickStack;
- *    control-plane research/frontend-observability/DESIGN.md 6.6). It keeps the
+ *    research/frontend-observability/DESIGN.md 6.6). It keeps the
  *    funnel visible until ClickStack is the only sink, and because funnel events
  *    and errors share a session, a funnel cliff arrives with the replay of the
  *    user hitting it.
