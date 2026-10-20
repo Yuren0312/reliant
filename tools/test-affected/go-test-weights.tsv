@@ -106,7 +106,6 @@
 0.2	github.com/reliant-labs/reliant/internal/repo
 0.2	github.com/reliant-labs/reliant/internal/config
 0.1	github.com/reliant-labs/reliant/internal/workflow/runtime/proto_key_bug
-0.1	github.com/reliant-labs/reliant/internal/features
 0.1	github.com/reliant-labs/reliant/internal/workflow/scenario
 0.1	github.com/reliant-labs/reliant/internal/daemonliveness
 0.1	github.com/reliant-labs/reliant/internal/analytics
