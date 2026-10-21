@@ -107,9 +107,6 @@ type Repo struct {
 	DB              *WrappedDBTX
 	driver          DatabaseDriver
 	runs            core.RunStore
-	projects        core.ProjectStore
-	worktrees       core.WorktreeStore
-	repos           core.RepoStore
 	settings        core.SettingStore
 	accounts        *postgresstore.AccountStore
 	workflows       core.WorkflowStore
@@ -161,17 +158,14 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 	pgQueries := pgdb.New(q)
 
 	return &Repo{
-		DB:        q,
-		driver:    driver,
-		accounts:  postgresstore.NewProviderAccountStore(db),
-		runs:      postgresstore.NewRunStore(client),
-		projects:  postgresstore.NewProjectStore(pgQueries),
-		worktrees: postgresstore.NewWorktreeStore(pgQueries),
-		repos:     postgresstore.NewRepoStore(pgQueries),
+		DB:       q,
+		driver:   driver,
+		accounts: postgresstore.NewProviderAccountStore(db),
+		runs:     postgresstore.NewRunStore(client),
 		settings: postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
 			return (&Repo{driver: DriverPostgres}).bindQuery(query)
 		}),
-		workflows:       postgresstore.NewWorkflowStore(client, pgQueries),
+		workflows:       postgresstore.NewWorkflowStore(client),
 		workflowCatalog: postgresstore.NewWorkflowCatalogStore(client),
 		triggers:        postgresstore.NewTriggerStore(pgQueries),
 		runEvents:       postgresstore.NewRunEventStore(client),
@@ -1156,14 +1150,6 @@ func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 // Temporal is the source of truth for workflow execution status
 
 // IsChatBusy removed - use Temporal client to query running workflows for a chat
-
-// Null type conversion helpers
-func nullStringToPtr(ns sql.NullString) *string {
-	if ns.Valid {
-		return &ns.String
-	}
-	return nil
-}
 
 // =============================================================================
 // Activity Idempotency Helpers
