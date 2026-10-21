@@ -55,9 +55,15 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ci verify-test-run`](#reliant-forge-ci-verify-test-run) | Verify a `go test -json` run actually ran its tests (reads output; runs nothing) |
 | [`reliant forge ci vuln-scan`](#reliant-forge-ci-vuln-scan) | Run vulnerability scanners based on forge.yaml config |
 | [`reliant forge cloud`](#reliant-forge-cloud) | Talk to the hosted control plane an environment declares |
-| [`reliant forge cloud identity`](#reliant-forge-cloud-identity) | Inspect managed identity and invite users to an environment |
-| [`reliant forge cloud identity invite`](#reliant-forge-cloud-identity-invite) | Email an invitation and grant console-managed roles (org admin) |
+| [`reliant forge cloud identity`](#reliant-forge-cloud-identity) | Inspect managed identity and administer its users |
+| [`reliant forge cloud identity delete`](#reliant-forge-cloud-identity-delete) | Delete a user's account (org admin; asks first) |
+| [`reliant forge cloud identity invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and ask for an invitation email (org admin) |
+| [`reliant forge cloud identity lock`](#reliant-forge-cloud-identity-lock) | Block a user from signing in (org admin) |
+| [`reliant forge cloud identity reset`](#reliant-forge-cloud-identity-reset) | Email a user a link to set a new password (org admin) |
+| [`reliant forge cloud identity revoke-sessions`](#reliant-forge-cloud-identity-revoke-sessions) | End a user's sign-in sessions (org admin) |
+| [`reliant forge cloud identity set-roles`](#reliant-forge-cloud-identity-set-roles) | Replace a user's console-managed roles (org admin) |
 | [`reliant forge cloud identity status`](#reliant-forge-cloud-identity-status) | Show managed-identity state, issuer and delivery metadata |
+| [`reliant forge cloud identity unlock`](#reliant-forge-cloud-identity-unlock) | Let a locked user sign in again (org admin) |
 | [`reliant forge cloud identity users`](#reliant-forge-cloud-identity-users) | List one page of users and declared roles (no credentials) |
 | [`reliant forge cloud releases`](#reliant-forge-cloud-releases) | List releases from the hosted control plane |
 | [`reliant forge cloud status`](#reliant-forge-cloud-status) | Show the endpoint and credential source for an environment |
@@ -154,6 +160,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge fix composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`reliant forge fix narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge fix operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`reliant forge fix tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47) |
 | [`reliant forge frontend`](#reliant-forge-frontend) | Operate on built frontends |
 | [`reliant forge frontend sourcemaps`](#reliant-forge-frontend-sourcemaps) | File a frontend's source maps so its browser errors can be symbolicated |
 | [`reliant forge frontend sourcemaps push`](#reliant-forge-frontend-sourcemaps-push) | File the source maps of a built directory forge did not build |
@@ -1457,7 +1464,7 @@ reliant forge cloud
 
 | Command | Description |
 |---------|-------------|
-| [`identity`](#reliant-forge-cloud-identity) | Inspect managed identity and invite users to an environment |
+| [`identity`](#reliant-forge-cloud-identity) | Inspect managed identity and administer its users |
 | [`releases`](#reliant-forge-cloud-releases) | List releases from the hosted control plane |
 | [`status`](#reliant-forge-cloud-status) | Show the endpoint and credential source for an environment |
 | [`token`](#reliant-forge-cloud-token) | Mint, list and revoke ORG automation tokens (the CI deploy credential) |
@@ -1466,17 +1473,28 @@ reliant forge cloud
 
 #### reliant forge cloud identity
 
-Inspect managed identity and invite users to an environment
+Inspect managed identity and administer its users
 
 Manage the identity an environment declares in KCL, using its control plane.
 
-Requires a human session (Reliant's session helper or forge login); machine
-credentials are refused by the server. Members may read; invitations require
-an org admin. The organization is resolved from the authenticated server, not
-a token claim or a flag. The environment must already exist in this project.
+Reads (status, users) need identity:read; every verb that changes a user
+(invite, set-roles, reset, lock, unlock, delete, revoke-sessions) needs
+identity:manage and an org admin. Under Reliant, or after forge login, nothing
+extra is needed: when the control plane answers that the credential lacks one of
+those scopes, forge trades it for the scope on demand (an hour, and only while
+the person behind the session holds the grant), as deploy does for deploy:read.
+A --token or the token env var is used exactly as given and must carry the scope.
+The organization is resolved from the authenticated server, not a token claim or
+a flag. The environment must already exist in this project.
 
-Inviting sends an email link for the recipient to set their own credential.
-There is no password option, seed account or implicit recipient. Roles managed
+--user takes a user id or an exact email address (see 'users').
+
+Inviting creates the account (or grants roles to an existing one) and asks the
+instance to email a code. No mail is sent unless the environment declares smtp
+in KCL: without it the call succeeds and delivers nothing, so hand the person a
+password-set code through a channel you control (the deploy/managed-identity
+skill, "What an invitation does, and does not, do"). There is no password
+option, seed account or implicit recipient. Roles managed
 in deploy/kcl/identity.k (members_from = "declared") are read-only here.
 
 ```
@@ -1487,21 +1505,51 @@ reliant forge cloud identity
 
 | Command | Description |
 |---------|-------------|
-| [`invite`](#reliant-forge-cloud-identity-invite) | Email an invitation and grant console-managed roles (org admin) |
+| [`delete`](#reliant-forge-cloud-identity-delete) | Delete a user's account (org admin; asks first) |
+| [`invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and ask for an invitation email (org admin) |
+| [`lock`](#reliant-forge-cloud-identity-lock) | Block a user from signing in (org admin) |
+| [`reset`](#reliant-forge-cloud-identity-reset) | Email a user a link to set a new password (org admin) |
+| [`revoke-sessions`](#reliant-forge-cloud-identity-revoke-sessions) | End a user's sign-in sessions (org admin) |
+| [`set-roles`](#reliant-forge-cloud-identity-set-roles) | Replace a user's console-managed roles (org admin) |
 | [`status`](#reliant-forge-cloud-identity-status) | Show managed-identity state, issuer and delivery metadata |
+| [`unlock`](#reliant-forge-cloud-identity-unlock) | Let a locked user sign in again (org admin) |
 | [`users`](#reliant-forge-cloud-identity-users) | List one page of users and declared roles (no credentials) |
+
+---
+
+#### reliant forge cloud identity delete
+
+Delete a user's account (org admin; asks first)
+
+Remove the account. This cannot be undone. A user who holds a declared role is
+refused: the next reconcile would recreate them. Without --yes the command asks
+on the terminal and refuses when stdin is not one.
+
+```
+reliant forge cloud identity delete <env> --user <id|email> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+| `--user` | `string` | - | The user, by user id or exact email address (required) |
+| `--yes`, `-y` | `bool` | - | Delete without asking |
 
 ---
 
 #### reliant forge cloud identity invite
 
-Email an invitation and grant console-managed roles (org admin)
+Create an account (or grant roles) and ask for an invitation email (org admin)
 
 Invite this explicit email address; repeat --role for multiple roles.
-The recipient sets their own credential using the invitation email. An existing
-account receives the requested roles (created=false). The server refuses unknown
-or declared/read-only roles, machine credentials and an identity that is not
-ready. Such a refusal is an error, never a fallback to a seeded password.
+The account is created and the instance is asked to email a code, but mail
+goes out only when the environment declares smtp; otherwise nothing is sent and
+the person needs a password-set code from you. An existing account receives the requested roles (created=false). The server refuses unknown
+or declared/read-only roles, a credential without identity:manage and an
+identity that is not ready. Such a refusal is an error, never a fallback to a seeded password.
 
 ```
 reliant forge cloud identity invite <env> --email <address> --role <role> [flags]
@@ -1515,6 +1563,92 @@ reliant forge cloud identity invite <env> --email <address> --role <role> [flags
 | `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
 | `--role` | `stringArray` | `[]` | Console-managed role to grant (required; repeat for multiple roles) |
 | `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+
+---
+
+#### reliant forge cloud identity lock
+
+Block a user from signing in (org admin)
+
+Block sign-in for the user. Reversible with `forge cloud identity unlock`.
+
+```
+reliant forge cloud identity lock <env> --user <id|email> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+| `--user` | `string` | - | The user, by user id or exact email address (required) |
+
+---
+
+#### reliant forge cloud identity reset
+
+Email a user a link to set a new password (org admin)
+
+Email the user a link to set a new password. Whether the environment's identity
+can send mail at all is shown by `forge cloud identity status`.
+
+```
+reliant forge cloud identity reset <env> --user <id|email> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+| `--user` | `string` | - | The user, by user id or exact email address (required) |
+
+---
+
+#### reliant forge cloud identity revoke-sessions
+
+End a user's sign-in sessions (org admin)
+
+End every sign-in session the user holds. Access tokens already issued stay
+valid until they expire.
+
+```
+reliant forge cloud identity revoke-sessions <env> --user <id|email> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+| `--user` | `string` | - | The user, by user id or exact email address (required) |
+
+---
+
+#### reliant forge cloud identity set-roles
+
+Replace a user's console-managed roles (org admin)
+
+Replace the user's console-managed roles with exactly the --role values. Roles
+the environment declares in deploy/kcl/identity.k are left as they are, and
+naming one is refused. To remove every console-managed role, pass --none.
+
+```
+reliant forge cloud identity set-roles <env> --user <id|email> --role <role> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--none` | `bool` | - | Remove every console-managed role |
+| `--role` | `stringArray` | `[]` | Console-managed role the user should hold (repeat for several) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+| `--user` | `string` | - | The user, by user id or exact email address (required) |
 
 ---
 
@@ -1532,6 +1666,26 @@ reliant forge cloud identity status <env> [flags]
 |------|------|---------|-------------|
 | `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
 | `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+
+---
+
+#### reliant forge cloud identity unlock
+
+Let a locked user sign in again (org admin)
+
+Undo `forge cloud identity lock`.
+
+```
+reliant forge cloud identity unlock <env> --user <id|email> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+| `--user` | `string` | - | The user, by user id or exact email address (required) |
 
 ---
 
@@ -2519,6 +2673,13 @@ Examples:
   forge db migration new add_preferences --context
   forge db migration new add_preferences --dsn "$DATABASE_URL"
   forge db migration new add_retired_at --backward-compatible "additive column the previous release never reads"
+  forge db migration new --closed-set access_tokens_scopes
+
+--closed-set <constraint> writes the migration `forge lint --closed-sets` prints for a
+CHECK declared 'forge:closed-set <set>' whose value list differs from the set:
+the CHECK replaced whole with the set's values, the declaration re-issued, and
+the compatibility line (a widening is backward-compatible, a narrowing breaks
+rollback). The name defaults to <constraint>_closed_set.
 
 ```
 reliant forge db migration new [name] [flags]
@@ -2530,6 +2691,7 @@ reliant forge db migration new [name] [flags]
 |------|------|---------|-------------|
 | `--backward-compatible` | `string` | - | declare that the previous release keeps working on this schema, and `why` (writes "-- forge:backward-compatible — <why>") |
 | `--breaks-rollback` | `string` | - | declare that the previous release deliberately does NOT keep working on this schema, and `why` (writes "-- forge:breaks-rollback <why>") |
+| `--closed-set` | `string` | - | write the migration that brings the forge:closed-set CHECK named `constraint` back to its set (what `forge lint --closed-sets` prints) |
 | `--context` | `bool` | - | write the schema, the previous migration and the history into the file's header instead of a pointer to them |
 | `--dir` | `string` | - | Migrations directory (default: forge.yaml database.migrations_dir, else db/migrations; a relative path resolves against the project root, not the CWD) |
 | `--dsn` | `string` | - | Database connection string for live schema introspection (implies --context) |
@@ -5136,6 +5298,7 @@ reliant forge fix
 | [`composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47) |
 
 ---
 
@@ -5230,6 +5393,53 @@ The rest of the v0.1.46 story is the migration skill: `forge skill load migratio
 
 ```
 reliant forge fix operatorkit [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+
+---
+
+#### reliant forge fix tx-isolation
+
+Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47)
+
+Make every pkg/orm transaction name its isolation, exactly as it ran before.
+
+forge v0.1.47 removed the default isolation level. RunTx, RunTransaction and
+BeginDetached now take a policy that names the level and carries the attempt
+budget (orm.Serializable, orm.ReadCommitted, orm.RepeatableRead, refined with
+WithMaxAttempts / WithReadOnly into an orm.TxOptions); an unset level is
+rejected with orm.ErrInvalidTxOptions. RunTxWithOptions,
+RunTransactionWithOptions, Client.BeginTx and orm.IsolationDefault are gone,
+and orm.IsolationSerializable / IsolationReadCommitted / IsolationRepeatableRead
+are orm.Serializable / ReadCommitted / RepeatableRead.
+
+This rewrites every call on a pkg/orm handle to the explicit form that keeps
+what it did:
+
+  RunTx(ctx, fn)                      → RunTx(ctx, orm.Serializable, fn)          serializable, 7 attempts
+  tx.RunTx(ctx, fn) on an *orm.Tx     → tx.Join(ctx, fn)                          a join: its own level
+  RunTxWithOptions(ctx, opts, fn)     → RunTx(ctx, <opts spelled out>, fn)
+  BeginDetached(ctx, orm.TxOptions{}) → BeginDetached(ctx, orm.Serializable.WithMaxAttempts(1))
+  RunTransaction(ctx, fn)             → RunTransaction(ctx, orm.ReadCommitted, fn) read committed, 1 attempt
+  RunTransactionWithOptions(ctx, nil, fn), BeginTx(ctx, nil)
+                                      → … orm.ReadCommitted (BeginTx → BeginDetached)
+
+and every orm.TxOptions literal that left the level or the attempt budget to a
+default. It never picks a different level: it prints each site, and choosing
+READ COMMITTED for a SERIALIZABLE transaction that takes a lock is yours
+(forgeconv-tx-lock-under-serializable lists them). A shape it cannot decide —
+options computed at run time — is listed with the edit to make. Generated
+files, vendor/ and testdata/ are left alone. Re-running it changes nothing.
+
+The rest of the v0.1.47 story is the migration skill: `forge skill load migrations/v0.1.47`.
+
+```
+reliant forge fix tx-isolation [flags]
 ```
 
 **Flags:**
@@ -5999,6 +6209,7 @@ reliant forge lint [paths...] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--check` | `bool` | - | Report only: write nothing, print the diff each fix would apply, and exit non-zero if any is pending. The default; beats --fix (also spelled --no-fix) |
+| `--closed-sets` | `bool` | - | Fail when a CHECK declared forge:closed-set <set> does not list exactly that Go set, and print the migration that fixes it |
 | `--column-markers` | `bool` | - | Fail on a COMMENT ON TABLE/VIEW/COLUMN/CONSTRAINT carrying a forge: marker that object does not read |
 | `--computed-fields` | `bool` | - | Flag a forge:computed field that no non-generated Go file assigns — nothing populates it, so the insert takes the column default. FAILS the build, except while the service still holds forge-scaffolded unwired rpc stubs (then a warning naming them) |
 | `--config-deps` | `bool` | - | Flag scalar Deps fields — scalars are configuration; declare a <Component>Config block in proto/config and take it as a typed field (warnings only) |
@@ -7045,6 +7256,9 @@ Pick a project kind with --kind:
                             no proto/services, no deploy/.
   --kind library            Pure Go module: pkg/<name>/ skeleton, no cmd/,
                             no CI workflows by default.
+  --kind site               A static site: adopt the frontend at the root of
+                            the current directory (with --in-place). Writes
+                            forge.yaml and deploy/kcl envs only — no Go.
 
 Use --disable to turn features off at creation time. Each is pinned off in
 forge.yaml's features: block, so a later change to the tree does not turn it
@@ -7105,7 +7319,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--go-version` | `string` | - | Go version to use in go.mod (e.g., 1.24); defaults to detected version |
 | `--harness` | `string` | `reliant` | AI harness conventions to scaffold for. Each writes a memory file; Forge never writes skill files for any harness. reliant (default): reliant.md — skills are read from the forge binary ('forge skill search|load') and discovered via forge.yaml. claude: CLAUDE.md. For non-reliant harnesses, add your own skill telling the agent to run 'forge skill search <query>'. cursor: .cursorrules. copilot: .github/copilot-instructions.md. codex: AGENTS.md. Recorded as 'harness:' in forge.yaml and honored by every later generate |
 | `--in-place` | `bool` | - | Create project in current directory instead of a new subdirectory |
-| `--kind` | `string` | `service` | Project kind: service (default), cli, library |
+| `--kind` | `string` | - | Project kind: service (default), cli, library, site (adopt the static frontend at this directory's root, with --in-place) |
 | `--link-forge` | `bool` | - | Bridge the project to the forge checkout this binary was built from (gitignored go.work 'use' + .forge-link/ for the web runtime). Off by default; required for a service scaffold from an unreleased forge build (also: FORGE_LINK_FORGE=1) |
 | `--mod` | `string` | - | Go module path (e.g., github.com/example/my-project). Defaults to example.com/<name>, so a first project needs no flag; set it to the path you will publish under |
 | `--name` | `string` | - | Project name. Same as the positional arg, and the way to name an --in-place project whose directory (a worktree, a branch checkout) is not the product name; defaults to the directory name |
@@ -7115,6 +7329,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--service` | `stringSlice` | `[]` | Name(s) of initial Go services (repeatable or comma-separated). Name services after domain entities (item, order), not the binary. Omit to scaffold zero services and add them later via 'forge scaffold service <entity>' |
 | `--skip-tools` | `bool` | - | Skip auto-installing protoc-gen-go / protoc-gen-connect-go (run 'forge tools install' later) |
 | `--verbose`, `-v` | `bool` | - | Print the raw output behind a step forge summarizes in one line (e.g. git's explanation when the initial commit is skipped for want of a git identity) |
+| `--verify` | `bool` | - | Compile the scaffold before returning: the bootstrap generate then ends with its go build check and a render of every deploy env (adds ~1s warm, ~40s on a cold build cache, and saturates the CPU while it runs). Off by default: the scaffold is deterministic and forge's own e2e corpus compiles it, and your first go build or forge generate pays for the same compile |
 
 ---
 

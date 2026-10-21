@@ -9,9 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestAccessTokensScopesCheckMatchesForge pins reliant's access_tokens CHECK to
-// forge's closed scope set. The CHECK had lagged (no daemon:resume, cluster:manage,
-// domain:*), so a mint of a newer scope failed the constraint.
+// TestAccessTokensScopesCheckMatchesForge proves, against a database, that
+// every scope in forge's closed set satisfies the applied access_tokens CHECK
+// and that one outside it does not. The hermetic pin is `forge lint
+// --closed-sets`: the CHECK carries `forge:closed-set accesstoken.AllScopes`
+// (db/migrations/20261021172252_declare_access_token_closed_sets.up.sql), so a
+// forge bump that adds a scope fails that lane on the bump's own PR. The CHECK
+// had lagged before (no daemon:resume, cluster:manage, domain:*), so a mint of
+// a newer scope failed the constraint.
 func TestAccessTokensScopesCheckMatchesForge(t *testing.T) {
 	_, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
