@@ -134,7 +134,6 @@ type Querier interface {
 	CountWorkflowDraftsByUser(ctx context.Context, userID string) (int64, error)
 	CountWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) (int64, error)
 	CountWorkflowScenariosByUser(ctx context.Context, userID string) (int64, error)
-	CreateChat(ctx context.Context, arg CreateChatParams) error
 	CreateChatUpdate(ctx context.Context, arg CreateChatUpdateParams) error
 	CreateContentBlock(ctx context.Context, arg CreateContentBlockParams) error
 	CreateContentBlockIfNotExists(ctx context.Context, arg CreateContentBlockIfNotExistsParams) error
@@ -184,7 +183,6 @@ type Querier interface {
 	CreateWorkflowScenario(ctx context.Context, arg CreateWorkflowScenarioParams) (WorkflowScenario, error)
 	CreateWorktree(ctx context.Context, arg CreateWorktreeParams) error
 	DeleteAllVisibilityOverrides(ctx context.Context, arg DeleteAllVisibilityOverridesParams) error
-	DeleteChat(ctx context.Context, id string) error
 	DeleteContextWindow(ctx context.Context, id string) error
 	DeleteContextWindowsByThread(ctx context.Context, threadID string) error
 	DeleteDispatchedRunEventsBefore(ctx context.Context, dispatchedAt sql.NullTime) (int64, error)
@@ -216,7 +214,6 @@ type Querier interface {
 	DeleteWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) error
 	DeleteWorkflowsByChat(ctx context.Context, chatID string) error
 	DeleteWorktree(ctx context.Context, id string) error
-	DismissInboxItems(ctx context.Context, arg DismissInboxItemsParams) error
 	EnqueueAgentMessage(ctx context.Context, arg EnqueueAgentMessageParams) error
 	// The stranded-background-spawn sweep's write half (spec §7.1). ON CONFLICT
 	// against idx_agent_messages_one_terminal_report_per_chat_spawn is what makes this
@@ -299,7 +296,6 @@ type Querier interface {
 	// picks up iteration 2's save, and NULL (not in a loop) matches NULL.
 	// Save rows carry no output_json, as in the FULL view.
 	GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]GetBasicStepExecutionsForChatRow, error)
-	GetChat(ctx context.Context, id string) (ChatsWithActivity, error)
 	// NOTE: there is deliberately no MAX(sequence_number)+1 allocator here.
 	// Sequence numbers come from the chat's row in update_stream_counters; see
 	// allocateUpdateSequence in internal/db/repo.go and migration
@@ -307,7 +303,6 @@ type Querier interface {
 	// share a transaction so sequence order and commit order cannot diverge.
 	GetChatUpdates(ctx context.Context, arg GetChatUpdatesParams) ([]ChatUpdate, error)
 	GetChatUpdatesSince(ctx context.Context, arg GetChatUpdatesSinceParams) ([]ChatUpdate, error)
-	GetChatWithUserCheck(ctx context.Context, arg GetChatWithUserCheckParams) (ChatsWithActivity, error)
 	GetContentBlock(ctx context.Context, id string) (MessageContentBlock, error)
 	GetContextWindow(ctx context.Context, id string) (ContextWindow, error)
 	GetContextWindowBySequence(ctx context.Context, arg GetContextWindowBySequenceParams) (ContextWindow, error)
@@ -568,15 +563,6 @@ type Querier interface {
 	ListAllTriggers(ctx context.Context) ([]Trigger, error)
 	// Every activation of a declared trigger, for the periodic reconcile.
 	ListAllWorkflowTriggerActivations(ctx context.Context) ([]Trigger, error)
-	// List archived chats with worktree info. Reads chats_with_activity (not chats)
-	// so the root workflow state and last_message_at come back like every other
-	// chat read; falls back to project name if worktree name is unavailable.
-	//
-	// The sidebar's Archived tab, so it lists what the sidebar lists: the
-	// list_in_sidebar policy, as ListChats applies it with sidebar_only. An
-	// automation archives its own runs once they succeed; those are history in
-	// Runs (ListRuns with include_archived), not chats the user put away.
-	ListArchivedChats(ctx context.Context, userID string) ([]ListArchivedChatsRow, error)
 	// Every backgrounded call whose outcome lives in a daemon's process table:
 	// status 6 with no child workflow. Spawns are excluded — their outcome is the
 	// child workflow, which ListStrandedBackgroundSpawnToolCalls reconciles.
@@ -590,21 +576,6 @@ type Querier interface {
 	// Served by idx_tool_calls_chat_live (status IN (1,2,6)), which stays small
 	// once the sweep keeps status 6 honest.
 	ListBackgroundedProcessToolCalls(ctx context.Context) ([]ListBackgroundedProcessToolCallsRow, error)
-	ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWithActivity, error)
-	// Chats whose root run the daemon-offline breaker paused and nothing has
-	// resumed, oldest first. The root run must still read paused: a marker left
-	// behind by a run that ended since is not a chat to resume. An empty user_id
-	// lists every user's (the sweep); otherwise one user's (a machine of theirs
-	// just connected). Archived chats are left alone.
-	ListChatsPausedForMachine(ctx context.Context, arg ListChatsPausedForMachineParams) ([]ListChatsPausedForMachineRow, error)
-	// Chats holding a message queued for their machine, oldest first. An empty
-	// user_id lists every user's (the delivery sweep); otherwise one user's (a
-	// machine of theirs just connected). Archived chats are left alone.
-	ListChatsQueuedForMachine(ctx context.Context, arg ListChatsQueuedForMachineParams) ([]ListChatsQueuedForMachineRow, error)
-	// One user's chats whose root run is live and parked waiting for a machine
-	// (the daemon-pending marker on a running root workflow): the runs to tell
-	// when one of the user's machines connects.
-	ListChatsWaitingForMachine(ctx context.Context, userID string) ([]ListChatsWaitingForMachineRow, error)
 	// Get all threads that fork from a given thread (direct children only)
 	ListChildThreads(ctx context.Context, parentThreadID sql.NullString) ([]Thread, error)
 	ListChildWorkflows(ctx context.Context, parentID sql.NullString) ([]Workflow, error)
@@ -612,8 +583,6 @@ type Querier interface {
 	ListContentBlocks(ctx context.Context, messageID string) ([]MessageContentBlock, error)
 	ListContentBlocksForMessages(ctx context.Context, messageIds []string) ([]MessageContentBlock, error)
 	ListContextWindowsByThread(ctx context.Context, threadID string) ([]ContextWindow, error)
-	// Which of the candidate item ids this user has dismissed.
-	ListDismissedInboxItemIDs(ctx context.Context, arg ListDismissedInboxItemIDsParams) ([]string, error)
 	// Every firing of each named trigger after its newest SUCCESS (a launched
 	// firing whose run completed), newest first, capped at per_trigger rows. A
 	// trigger with no success returns its whole history up to the cap. This is
@@ -632,34 +601,6 @@ type Querier interface {
 	// Archived workspaces the daemon declined to remove on its own, for the
 	// storage inbox item.
 	ListHeldWorktreesForUser(ctx context.Context, userID string) ([]ListHeldWorktreesForUserRow, error)
-	// The Inbox: everything waiting on one user, across every chat and project
-	// (research/WORKFLOW_UI.md §8). One UNION ALL so the read is one round trip;
-	// every branch is scoped by c.user_id / t.user_id, never by a request value.
-	//
-	// Dismissal is applied in Go (ListDismissedInboxItemIDs), uniformly for every
-	// dismissable kind. Disabled automations are not listed: pausing is the cure.
-	// kind (reliantv1.InboxItemKind): 1 approval, 2 question, 3 waiting for
-	// machine, 5 automation launch failed (one per failure episode), 6 run
-	// finished (opted-in automation). 4 (automation failing) is derived in Go from
-	// the trigger's firings — internal/triggers owns that rule. Archived chats are
-	// not waiting on anyone.
-	//
-	// Every item must be OPENABLE, so every branch INNER-joins its project and
-	// requires the same owner. chats.project_id has no foreign key: deleting a
-	// project leaves its chats (and their pending questions) behind, and the run
-	// page cannot open a chat whose project is gone. A LEFT JOIN here listed those
-	// as dead "This run doesn't exist" items. Likewise a blocking item of a run
-	// that completed (stop_reason 1) or was cancelled (4) can never be answered —
-	// nothing expires it when the run stops — so it is not listed either. A failed
-	// (2) or paused (3) run is resumable and keeps its items.
-	//
-	// Generic payload columns (a_text, b_text, a_int) carry the kind-specific bits:
-	//   approval:        a_text title, a_int approval_type
-	//   question:        a_text thread_id, b_text metadata JSON
-	//   launch failed:   a_text newest outcome_detail, b_text event kind, a_int failures in the episode
-	//   waiting machine: a_text daemon_id, b_text daemon name; item_key is the chat
-	//                    id and the block's start, so a later block is a new item
-	ListInboxPending(ctx context.Context, arg ListInboxPendingParams) ([]ListInboxPendingRow, error)
 	// The users with at least one enabled trigger of an integration: whose
 	// access the periodic refresher keeps fresh.
 	ListIntegrationTriggerOwners(ctx context.Context, integration string) ([]string, error)
@@ -1117,7 +1058,6 @@ type Querier interface {
 	// the ids to ask Temporal and to log something actionable.
 	ReapOrphanedWorkflowDescendants(ctx context.Context) ([]ReapOrphanedWorkflowDescendantsRow, error)
 	RemoveCommandFavorite(ctx context.Context, arg RemoveCommandFavoriteParams) error
-	RestoreInboxItems(ctx context.Context, arg RestoreInboxItemsParams) error
 	// Resume all paused workflows for a chat.
 	// Used when resuming a chat to ensure child workflows are also resumed.
 	ResumeWorkflowsByChat(ctx context.Context, chatID string) error
@@ -1209,7 +1149,6 @@ type Querier interface {
 	// removed (account), a repository removed from it (account + resource), a
 	// member removed (subject, optionally narrowed to an account).
 	RevokeIntegrationAccess(ctx context.Context, arg RevokeIntegrationAccessParams) (int64, error)
-	SearchChats(ctx context.Context, arg SearchChatsParams) ([]ChatsWithActivity, error)
 	// Backfills the envelope pointer on rows this drain already claimed.
 	//
 	// Separate from the claim because the claim has to happen BEFORE the envelope
@@ -1218,23 +1157,6 @@ type Querier interface {
 	// status = 2 from our own claim, and re-applying the status = 1 guard here
 	// would match nothing.
 	SetAgentMessagesDeliveredMessageID(ctx context.Context, arg SetAgentMessagesDeliveredMessageIDParams) error
-	// Idempotent: adopting an adopted chat keeps its original adopted_at, and
-	// clearing an un-adopted one is a no-op. Scoped to the owner; zero rows means
-	// the chat is not the caller's (or does not exist).
-	SetChatAdoptedAt(ctx context.Context, arg SetChatAdoptedAtParams) (int64, error)
-	// Sets or clears the daemon-pending marker. Returns 1 only when the value
-	// actually changed, so callers emit chat_activity_changed on transitions and
-	// not on every tool call.
-	SetChatDaemonBlocked(ctx context.Context, arg SetChatDaemonBlockedParams) (int64, error)
-	// Sets or clears the paused-for-machine marker: the chat's run was paused by
-	// the daemon-offline breaker (not by the user). Returns 1 only when the value
-	// actually changed, so clearing is a claim: of two resumers that race exactly
-	// one sees the row change.
-	SetChatPausedForMachine(ctx context.Context, arg SetChatPausedForMachineParams) (int64, error)
-	// Sets or clears the queued-for-machine marker. Returns 1 only when the value
-	// actually changed: clearing is how a deliverer CLAIMS the queued message, so
-	// of two that race exactly one sees the row change.
-	SetChatQueuedForMachine(ctx context.Context, arg SetChatQueuedForMachineParams) (int64, error)
 	SetCompactionSummaryMessage(ctx context.Context, arg SetCompactionSummaryMessageParams) (ContextWindow, error)
 	// Records how the run a trigger fired ended, on the chat's launch event (the
 	// same earliest-event rule as GetTriggerEventByChatID).
@@ -1269,13 +1191,6 @@ type Querier interface {
 	SettlePendingTriggerEvent(ctx context.Context, arg SettlePendingTriggerEventParams) (int64, error)
 	TouchProject(ctx context.Context, arg TouchProjectParams) error
 	UnarchiveWorktree(ctx context.Context, id string) error
-	UpdateChat(ctx context.Context, arg UpdateChatParams) error
-	// Pinning a daemon puts the chat on a machine, so it ends no-machine in the same
-	// write (chats_no_machine_has_no_daemon_check). Clearing the daemon never sets
-	// no_machine: a chat that has had a machine does not become one without.
-	UpdateChatActiveDaemon(ctx context.Context, arg UpdateChatActiveDaemonParams) error
-	UpdateChatSelectedPresets(ctx context.Context, arg UpdateChatSelectedPresetsParams) error
-	UpdateChatTitle(ctx context.Context, arg UpdateChatTitleParams) error
 	UpdateContentBlock(ctx context.Context, arg UpdateContentBlockParams) error
 	UpdateMessage(ctx context.Context, arg UpdateMessageParams) error
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) error

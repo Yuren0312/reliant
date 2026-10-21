@@ -201,7 +201,8 @@ type ChatsWithActivity struct {
 	NoMachine            bool           `json:"no_machine"`
 	QueuedForMachineAt   sql.NullTime   `json:"queued_for_machine_at"`
 	LastMessageAt        interface{}    `json:"last_message_at"`
-	Activity             int32          `json:"activity"`
+	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.ChatActivity
+	Activity int32 `json:"activity"`
 	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.WorkflowState
 	RootWorkflowState sql.NullInt32 `json:"root_workflow_state"`
 	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.WorkflowStopReason
@@ -209,10 +210,11 @@ type ChatsWithActivity struct {
 	LaunchKind             sql.NullString `json:"launch_kind"`
 	TriggerID              sql.NullString `json:"trigger_id"`
 	ListInSidebar          sql.NullBool   `json:"list_in_sidebar"`
-	DisplayState           int32          `json:"display_state"`
-	UsageLimitResumesAt    sql.NullTime   `json:"usage_limit_resumes_at"`
-	UsageLimitProvider     sql.NullString `json:"usage_limit_provider"`
-	UsageLimitProbing      bool           `json:"usage_limit_probing"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.RunDisplayState
+	DisplayState        int32          `json:"display_state"`
+	UsageLimitResumesAt sql.NullTime   `json:"usage_limit_resumes_at"`
+	UsageLimitProvider  sql.NullString `json:"usage_limit_provider"`
+	UsageLimitProbing   bool           `json:"usage_limit_probing"`
 }
 
 type ClaudeAuthToken struct {

@@ -30,7 +30,7 @@ func (r *Repo) CreateChat(ctx context.Context, chat *Chat) error {
 	if chat == nil {
 		return fmt.Errorf("chat cannot be nil")
 	}
-	return r.chats.CreateChat(ctx, chat)
+	return store.InsertChat(ctx, r.ORM(), chat)
 }
 
 func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
@@ -38,7 +38,7 @@ func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	return r.chats.GetChat(ctx, id)
+	return store.GetChat(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID string) (*Chat, error) {
@@ -49,15 +49,15 @@ func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID strin
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
-	return r.chats.GetChatWithUserCheck(ctx, id, userID)
+	return store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
 }
 
 func (r *Repo) ListChats(ctx context.Context, filters ChatFilters) ([]*Chat, error) {
-	return r.chats.ListChats(ctx, filters)
+	return store.ListChats(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) SearchChats(ctx context.Context, filters ChatSearchFilters) ([]*Chat, error) {
-	return r.chats.SearchChats(ctx, filters)
+	return store.SearchChats(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) UpdateChat(ctx context.Context, chat *Chat) error {
@@ -67,18 +67,18 @@ func (r *Repo) UpdateChat(ctx context.Context, chat *Chat) error {
 	if chat.ID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.chats.UpdateChat(ctx, chat)
+	return store.SaveChat(ctx, r.ORM(), chat)
 }
 
 func (r *Repo) DeleteChat(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.chats.DeleteChat(ctx, id)
+	return store.RemoveChat(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListArchivedChats(ctx context.Context, userID string) ([]*ArchivedChatInfo, error) {
-	return r.chats.ListArchivedChats(ctx, userID)
+	return store.ListArchivedChats(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) ListRuns(ctx context.Context, filters RunListFilters) ([]*RunListItem, bool, error) {
@@ -3905,28 +3905,28 @@ func (r *Repo) ListInboxPending(ctx context.Context, userID string) ([]*core.Inb
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.ListInboxPending(ctx, userID)
+	return store.ListInboxPending(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.ListDismissedInboxItemIDs(ctx, userID, itemIDs)
+	return store.ListDismissedInboxItemIDs(ctx, r.ORM(), userID, itemIDs)
 }
 
 func (r *Repo) DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error {
 	if userID == "" {
 		return fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.DismissInboxItems(ctx, userID, itemIDs, at)
+	return store.DismissInboxItems(ctx, r.ORM(), userID, itemIDs, at)
 }
 
 func (r *Repo) RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error {
 	if userID == "" {
 		return fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.RestoreInboxItems(ctx, userID, itemIDs)
+	return store.RestoreInboxItems(ctx, r.ORM(), userID, itemIDs)
 }
 
 func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
@@ -4757,31 +4757,9 @@ func (r *Repo) CreateQuestion(ctx context.Context, question *Question) error {
 	if question.ID == "" {
 		return fmt.Errorf("question ID cannot be empty")
 	}
-
-	query := `INSERT INTO questions (id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	query = r.bindQuery(query)
-
-	_, err := r.DB.DB(ctx).ExecContext(ctx, query,
-		question.ID,
-		question.ChatID,
-		question.WorkflowID,
-		question.TemporalWorkflowID,
-		question.ThreadID,
-		question.StepID,
-		question.LoopNodeID,
-		question.LoopIteration,
-		question.Status,
-		question.Metadata,
-		question.ResponseData,
-		question.CreatedAt,
-		question.ResolvedAt,
-		question.ToolCallID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create question: %w", err)
+	if err := store.InsertQuestion(ctx, r.ORM(), question); err != nil {
+		return err
 	}
-
 	_ = r.emitChatActivityIfChanged(ctx, question.ChatID)
 	return nil
 }
@@ -4790,88 +4768,26 @@ func (r *Repo) GetQuestionByID(ctx context.Context, id string) (*Question, error
 	if id == "" {
 		return nil, fmt.Errorf("question ID cannot be empty")
 	}
-
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
-		FROM questions WHERE id = ?`
-	query = r.bindQuery(query)
-
-	var q Question
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, id).Scan(
-		&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
-		&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
-		&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get question: %w", err)
-	}
-	return &q, nil
+	return store.GetQuestion(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetPendingQuestionByChatID(ctx context.Context, chatID string) (*Question, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
-		FROM questions WHERE chat_id = ? AND status = 1 ORDER BY created_at DESC LIMIT 1`
-	query = r.bindQuery(query)
-
-	var q Question
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, chatID).Scan(
-		&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
-		&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
-		&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get pending question: %w", err)
-	}
-	return &q, nil
+	return store.GetPendingQuestionByChatID(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error) {
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
-		FROM questions WHERE workflow_id = ? AND step_id = ? AND loop_iteration = ?`
-	query = r.bindQuery(query)
-
-	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, workflowID, stepID, iteration)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get questions by workflow step iteration: %w", err)
-	}
-	defer rows.Close()
-
-	var questions []*Question
-	for rows.Next() {
-		var q Question
-		if err := rows.Scan(
-			&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
-			&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
-			&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan question: %w", err)
-		}
-		questions = append(questions, &q)
-	}
-	return questions, rows.Err()
+	return store.ListQuestionsByWorkflowStepIteration(ctx, r.ORM(), workflowID, stepID, iteration)
 }
 
 func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
 	if id == "" {
 		return fmt.Errorf("question ID cannot be empty")
 	}
-
-	now := time.Now().UTC()
-	query := `UPDATE questions SET status = 2, response_data = ?, resolved_at = ? WHERE id = ?`
-	query = r.bindQuery(query)
-
-	_, err := r.DB.DB(ctx).ExecContext(ctx, query, responseData, now, id)
-	if err != nil {
-		return fmt.Errorf("failed to resolve question: %w", err)
+	if err := store.ResolveQuestion(ctx, r.ORM(), id, responseData, time.Now().UTC()); err != nil {
+		return err
 	}
 
 	// Emit activity change

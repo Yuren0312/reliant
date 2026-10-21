@@ -690,24 +690,9 @@ type TriggerFilters = core.TriggerFilters
 
 // QuestionStatus represents the status of a question (stored as INTEGER in DB)
 const (
-	QuestionStatusPending  = 1 // QUESTION_STATUS_PENDING
-	QuestionStatusResolved = 2 // QUESTION_STATUS_RESOLVED
+	QuestionStatusPending  = core.QuestionStatusPending
+	QuestionStatusResolved = core.QuestionStatusResolved
 )
 
-// Question represents a pending question for user interaction
-type Question struct {
-	ID                 string
-	ChatID             string
-	WorkflowID         string
-	TemporalWorkflowID string
-	ThreadID           string
-	StepID             string
-	LoopNodeID         *string
-	LoopIteration      *int
-	Status             int
-	Metadata           *string
-	ResponseData       *string
-	CreatedAt          time.Time
-	ResolvedAt         *time.Time
-	ToolCallID         *string
-}
+// Question is an alias to the shared core question model.
+type Question = core.Question
