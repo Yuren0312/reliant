@@ -31,7 +31,7 @@ func (l integrationWriteLedger) own(ctx context.Context, fn func(db orm.Context)
 	if !orm.InTx(ctx) {
 		return fn(l.orm)
 	}
-	tx, err := l.orm.BeginDetached(ctx, orm.TxOptions{})
+	tx, err := l.orm.BeginDetached(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted})
 	if err != nil {
 		return err
 	}

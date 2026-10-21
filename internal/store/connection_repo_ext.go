@@ -57,13 +57,17 @@ import (
 // enforces ownership in SQL. connections.deleted_at is bun's soft-delete
 // column, so every model query below already excludes deleted rows.
 //
-// The writes run in connectionTx: one transaction (joining one ctx already
-// carries) that is never retried. WithConnectionSecretsLock hands its
-// callback a locked row while it refreshes a token over the network, and a
-// retry would refresh twice.
+// The writes run in connectionTx: one READ COMMITTED transaction (joining
+// one ctx already carries) that is never retried. Their consistency comes
+// from row locks and the advisory lock, not from snapshot isolation — under
+// the ORM's SERIALIZABLE default two workers refreshing one token would fail
+// one with a serialization error instead of letting it read the winner's
+// generation. And WithConnectionSecretsLock hands its callback a locked row
+// while it refreshes a token over the network, so a retry would refresh
+// twice.
 
 func connectionTx(ctx context.Context, db orm.Context, fn func(ctx context.Context) error) error {
-	return db.RunTxWithOptions(ctx, orm.TxOptions{MaxAttempts: 1}, fn)
+	return db.RunTxWithOptions(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted, MaxAttempts: 1}, fn)
 }
 
 // InsertUserConnection inserts c, its secrets and its created event in one

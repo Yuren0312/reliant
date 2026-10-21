@@ -24,6 +24,8 @@ type SQLStore struct {
 
 // NewSQLStore returns a Store backed by db. A call made with a ctx carrying a
 // transaction joins it.
+//
+//forge:lint-disable-next-line forgeconv-internal-package-contract-names: forge#1040: the rule skips forge:not-a-component packages once reliant re-pins forge; until then this package passed only while it declared two private scan-helper interfaces
 func NewSQLStore(db orm.Context) *SQLStore {
 	return &SQLStore{db: db}
 }

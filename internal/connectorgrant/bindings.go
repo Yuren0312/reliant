@@ -18,6 +18,8 @@ import (
 // An OAuth token identifies a user; a grant says what may be touched. This is
 // the user's explicit answer to "which workspace may this application use?",
 // captured at consent so later requests resolve without asking again.
+//
+//forge:lint-disable-next-line forgeconv-internal-package-contract-names: forge#1040: the rule skips forge:not-a-component packages once reliant re-pins forge; until then this package passed only while it declared two private scan-helper interfaces
 type ClientBinding struct {
 	ID         string
 	UserID     string
