@@ -334,13 +334,6 @@ func newBlockColumns(blocks []core.MessageContentBlock) blockColumns {
 	return c
 }
 
-func deref(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
-
 // displayStyleValue is the display_style column value: NULL, or the enum's
 // number.
 func displayStyleValue(d *reliantv1.DisplayStyle) *int32 {
