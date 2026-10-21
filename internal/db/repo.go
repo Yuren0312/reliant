@@ -172,19 +172,17 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 	})
 
 	return &Repo{
-		DB:            q,
-		driver:        driver,
-		accounts:      postgresstore.NewProviderAccountStore(client),
-		chats:         postgresstore.NewChatStore(pgQueries, q),
-		runs:          postgresstore.NewRunStore(client),
-		messages:      postgresstore.NewMessageStore(pgQueries, q),
-		agentMessages: postgresstore.NewAgentMessageStore(pgQueries, q),
-		projects:      postgresstore.NewProjectStore(pgQueries),
-		worktrees:     postgresstore.NewWorktreeStore(pgQueries),
-		repos:         postgresstore.NewRepoStore(pgQueries),
-		settings: postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
-			return (&Repo{driver: DriverPostgres}).bindQuery(query)
-		}),
+		DB:              q,
+		driver:          driver,
+		accounts:        postgresstore.NewProviderAccountStore(client),
+		chats:           postgresstore.NewChatStore(pgQueries, q),
+		runs:            postgresstore.NewRunStore(client),
+		messages:        postgresstore.NewMessageStore(pgQueries, q),
+		agentMessages:   postgresstore.NewAgentMessageStore(pgQueries, q),
+		projects:        postgresstore.NewProjectStore(pgQueries),
+		worktrees:       postgresstore.NewWorktreeStore(pgQueries),
+		repos:           postgresstore.NewRepoStore(pgQueries),
+		settings:        postgresstore.NewSettingStore(pgQueries, client),
 		workflows:       postgresstore.NewWorkflowStore(client, pgQueries),
 		threads:         postgresstore.NewThreadStore(pgQueries),
 		contextWindows:  postgresstore.NewContextWindowStore(pgQueries),
