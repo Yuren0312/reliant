@@ -2,28 +2,13 @@ package postgres
 
 import (
 	"database/sql"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// Helpers the chat store used to own, kept for the stores still on sqlc that
-// read chat columns (run_store.go, trigger_store.go). The chats queries
+// The helper the chat store used to own, kept for trigger_store.go, which is
+// still on sqlc and reads a chat's root workflow status. The chats queries
 // themselves are internal/store's (P5b L1b).
-
-func chatPtrToNullString(s *string) sql.NullString {
-	if s != nil {
-		return sql.NullString{String: *s, Valid: true}
-	}
-	return sql.NullString{Valid: false}
-}
-
-func chatNullTimeToPtr(nt sql.NullTime) *time.Time {
-	if nt.Valid {
-		return &nt.Time
-	}
-	return nil
-}
 
 // chatRootStatus maps a root_workflow_state / stop_reason pair (the
 // chats_with_activity columns, or a join on the root workflow) onto a
