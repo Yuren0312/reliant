@@ -45,6 +45,9 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -184,8 +187,10 @@ func UpdateTriggerEventPayload(ctx context.Context, db orm.Context, id string, p
 }
 
 func writeTriggerEvent(ctx context.Context, db orm.Context, row *TriggerEvent, what string, fields ...string) error {
+	// forge#1042: UpdateTriggerEventMasked takes no UpdateOption at this pin,
+	// so NoReadBack goes through the repo itself.
 	err := triggerEventRepo.UpdateMasked(ctx, db, row, fields, crud.NoReadBack())
-	if errors.Is(err, orm.ErrNoRows) {
+	if errors.Is(err, svcerr.ErrNotFound) {
 		return core.ErrTriggerEventNotFound
 	}
 	if err != nil {
@@ -215,6 +220,11 @@ func SetLaunchEventRunStatus(ctx context.Context, db orm.Context, chatID, status
 	return nil
 }
 
+// The pending-event statements below spell `outcome = 'pending'` into the SQL
+// rather than binding it: it is idx_trigger_events_pending's partial-index
+// predicate, which the planner must see at plan time, and for the claim and
+// settle it is the guard that makes them conditional.
+
 // ListStalePendingTriggerEvents returns inbound events recorded but not yet
 // settled, older than the cutoff, oldest first: the fire workflow for them was
 // never started (the receiver crashed between the insert and the start) or
@@ -224,7 +234,7 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
 		limit = defaultTriggerEventLimit
 	}
 	rows, err := ListTriggerEvent(ctx, db,
-		orm.WhereEq(TriggerEventFieldOutcome, core.TriggerEventPending),
+		func(q *bun.SelectQuery) { q.Where("outcome = 'pending'") },
 		orm.WhereLt(TriggerEventFieldCreatedAt, olderThan),
 		orm.WithOrderBy(TriggerEventFieldCreatedAt, orm.Asc),
 		orm.WithLimit(limit))
@@ -253,11 +263,11 @@ func ClaimPendingTriggerEvent(ctx context.Context, db orm.Context, id string, pa
 		return false, fmt.Errorf("marshal trigger event payload: %w", err)
 	}
 	res, err := db.Bun().NewUpdate().Model((*TriggerEvent)(nil)).
-		Set("outcome = ?", core.TriggerEventLaunched).
+		Set("outcome = 'launched'").
 		Set("outcome_detail = ''").
 		Set("payload = ?", string(encoded)).
 		Where("id = ?", id).
-		Where("outcome = ?", core.TriggerEventPending).
+		Where("outcome = 'pending'").
 		Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to claim pending trigger event: %w", err)
@@ -273,7 +283,7 @@ func SettlePendingTriggerEvent(ctx context.Context, db orm.Context, id string, o
 		Set("outcome = ?", outcome).
 		Set("outcome_detail = ?", detail).
 		Where("id = ?", id).
-		Where("outcome = ?", core.TriggerEventPending).
+		Where("outcome = 'pending'").
 		Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to settle pending trigger event: %w", err)
@@ -289,45 +299,44 @@ func oneRowTouched(res sql.Result) (bool, error) {
 	return n == 1, nil
 }
 
-// triggerEventColumnsE is every trigger_events column, qualified by the alias
-// e, and triggerFiringRunColumns the run a firing launched, for the firing
-// reads below; scanTriggerFiring is their scan, column for column.
-//
-// run_display_state is the SAME table as queries/runs.sql (ListRuns) — keep
-// the two in step; a test pins them equal. It is meaningful only when
-// run_chat_id is set.
-const (
-	triggerEventColumnsE = `e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at,
-	e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at, e.run_status, e.sender, e.origin`
-	triggerFiringRunColumns = `c.id AS run_chat_id,
+// triggerFiringRow is a trigger_events row with the run it launched, as the
+// three firing reads select it. The run columns are NULL unless the firing
+// joined a chat that still exists.
+type triggerFiringRow struct {
+	TriggerEvent
+	RunChatID         *string `bun:"run_chat_id"`
+	RunTitle          *string `bun:"run_title"`
+	RunRootState      *int32  `bun:"run_root_state"`
+	RunRootStopReason *int32  `bun:"run_root_stop_reason"`
+	RunDisplayState   int32   `bun:"run_display_state"`
+}
+
+// triggerFiringRunColumns is the run a firing launched, for the firing reads
+// below. run_display_state is the SAME table as ListRuns' — keep the two in
+// step. It is meaningful only when run_chat_id is set.
+const triggerFiringRunColumns = `c.id AS run_chat_id,
 	c.title AS run_title,
 	rw.state AS run_root_state,
 	rw.stop_reason AS run_root_stop_reason,
 	COALESCE(c.display_state, 1)::integer AS run_display_state`
-)
-
-// The three firing reads run through orm.Context's raw passthrough with bound
-// $N parameters rather than NewRaw: they are large statements on the trigger
-// list, detail and Inbox paths, whose text must not vary per call
-// (internal/db/SCHEMA.md, "A hot hand-tuned statement binds its values").
 
 // listTriggerEventsSQL is one page of a trigger's firings, newest first,
 // keyset on (occurred_at, id) so a firing recorded mid-pagination can neither
 // repeat nor be skipped; two fires can share an occurred_at, and id breaks the
 // tie. user_id scopes the rows even though the handler already checked
 // ownership. Served by idx_trigger_events_trigger_occurred_id.
-const listTriggerEventsSQL = `SELECT ` + triggerEventColumnsE + `,
+const listTriggerEventsSQL = `SELECT e.*,
 	` + triggerFiringRunColumns + `
 FROM trigger_events e
 LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
 LEFT JOIN workflows rw ON rw.id = c.workflow_id
-WHERE e.trigger_id = $1::text
-	AND e.user_id = $2::text
-	AND (cardinality($3::text[]) = 0 OR e.outcome = ANY($3::text[]))
-	AND ($4::timestamptz IS NULL
-	     OR (e.occurred_at, e.id) < ($4::timestamptz, $5::text))
+WHERE e.trigger_id = ?0::text
+	AND e.user_id = ?1::text
+	AND (cardinality(?2::text[]) = 0 OR e.outcome = ANY(?2::text[]))
+	AND (?3::timestamptz IS NULL
+	     OR (e.occurred_at, e.id) < (?3::timestamptz, ?4::text))
 ORDER BY e.occurred_at DESC, e.id DESC
-LIMIT $6`
+LIMIT ?5`
 
 // ListTriggerEventsPage returns up to f.Limit of a trigger's firings, each
 // with the run it launched, and whether more follow. It reads one row beyond
@@ -347,13 +356,15 @@ func ListTriggerEventsPage(ctx context.Context, db orm.Context, f core.TriggerEv
 	if f.After != nil {
 		cursorAt, cursorID = &f.After.OccurredAt, &f.After.ID
 	}
-	rows, err := db.Query(ctx, listTriggerEventsSQL, f.TriggerID, f.UserID, outcomes, cursorAt, cursorID, limit+1)
+	var rows []triggerFiringRow
+	err := db.Bun().NewRaw(listTriggerEventsSQL,
+		f.TriggerID, f.UserID, pgdialect.Array(outcomes), cursorAt, cursorID, orm.Arg(limit+1)).Scan(ctx, &rows)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to list trigger events: %w", err)
 	}
-	events, err := scanTriggerFirings(rows)
+	events, err := triggerFiringsToCore(rows)
 	if err != nil {
-		return nil, false, fmt.Errorf("failed to list trigger events: %w", err)
+		return nil, false, err
 	}
 	hasMore := len(events) > limit
 	if hasMore {
@@ -362,7 +373,7 @@ func ListTriggerEventsPage(ctx context.Context, db orm.Context, f core.TriggerEv
 	return events, hasMore, nil
 }
 
-// recentTriggerFiringsSQL is the newest $3 firings of each named trigger, with
+// recentTriggerFiringsSQL is the newest ?2 firings of each named trigger, with
 // their runs, in ONE query. This is what health and last_event are computed
 // from, so listing N triggers costs one extra query rather than N.
 const recentTriggerFiringsSQL = `WITH ranked AS (
@@ -370,16 +381,16 @@ const recentTriggerFiringsSQL = `WITH ranked AS (
 		e.id,
 		row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
 	FROM trigger_events e
-	WHERE e.user_id = $1::text
-		AND e.trigger_id = ANY($2::text[])
+	WHERE e.user_id = ?0::text
+		AND e.trigger_id = ANY(?1::text[])
 )
-SELECT ` + triggerEventColumnsE + `,
+SELECT e.*,
 	` + triggerFiringRunColumns + `
 FROM ranked r
 JOIN trigger_events e ON e.id = r.id
 LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
 LEFT JOIN workflows rw ON rw.id = c.workflow_id
-WHERE r.rn <= $3::integer
+WHERE r.rn <= ?2::integer
 ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 
 // RecentTriggerFirings returns each named trigger's newest perTrigger firings
@@ -391,7 +402,7 @@ func RecentTriggerFirings(ctx context.Context, db orm.Context, userID string, tr
 
 // firingsSinceLastSuccessSQL is every firing of each named trigger after its
 // newest SUCCESS (a launched firing whose run completed), newest first, capped
-// at $3 rows. A trigger with no success returns its whole history up to the
+// at ?2 rows. A trigger with no success returns its whole history up to the
 // cap. This is the failure episode: Go reads its length and its oldest
 // failure from it, so the episode is not truncated at the 10-firing health
 // window.
@@ -403,8 +414,8 @@ const firingsSinceLastSuccessSQL = `WITH last_success AS (
 	SELECT DISTINCT ON (e.trigger_id) e.trigger_id, e.occurred_at, e.id
 	FROM trigger_events e
 	LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
-	WHERE e.user_id = $1::text
-		AND e.trigger_id = ANY($2::text[])
+	WHERE e.user_id = ?0::text
+		AND e.trigger_id = ANY(?1::text[])
 		AND e.outcome = 'launched'
 		AND (e.run_status = 'completed' OR (e.run_status IS NULL AND c.display_state = 5))
 	ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC
@@ -414,17 +425,17 @@ const firingsSinceLastSuccessSQL = `WITH last_success AS (
 		row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
 	FROM trigger_events e
 	LEFT JOIN last_success s ON s.trigger_id = e.trigger_id
-	WHERE e.user_id = $1::text
-		AND e.trigger_id = ANY($2::text[])
+	WHERE e.user_id = ?0::text
+		AND e.trigger_id = ANY(?1::text[])
 		AND (s.id IS NULL OR (e.occurred_at, e.id) > (s.occurred_at, s.id))
 )
-SELECT ` + triggerEventColumnsE + `,
+SELECT e.*,
 	` + triggerFiringRunColumns + `
 FROM ranked r
 JOIN trigger_events e ON e.id = r.id
 LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
 LEFT JOIN workflows rw ON rw.id = c.workflow_id
-WHERE r.rn <= $3::integer
+WHERE r.rn <= ?2::integer
 ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 
 // FiringsSinceLastSuccess returns, per named trigger, every firing after its
@@ -439,13 +450,13 @@ func triggerFiringsByTrigger(ctx context.Context, db orm.Context, what, query, u
 	if len(triggerIDs) == 0 || perTrigger <= 0 {
 		return out, nil
 	}
-	rows, err := db.Query(ctx, query, userID, triggerIDs, perTrigger)
-	if err != nil {
+	var rows []triggerFiringRow
+	if err := db.Bun().NewRaw(query, userID, pgdialect.Array(triggerIDs), orm.Arg(perTrigger)).Scan(ctx, &rows); err != nil {
 		return nil, fmt.Errorf("failed to %s: %w", what, err)
 	}
-	firings, err := scanTriggerFirings(rows)
+	firings, err := triggerFiringsToCore(rows)
 	if err != nil {
-		return nil, fmt.Errorf("failed to %s: %w", what, err)
+		return nil, err
 	}
 	for _, f := range firings {
 		if f.Event.TriggerID == nil {
@@ -456,46 +467,33 @@ func triggerFiringsByTrigger(ctx context.Context, db orm.Context, what, query, u
 	return out, nil
 }
 
-// scanTriggerFirings reads (and closes) rows of triggerEventColumnsE followed
-// by triggerFiringRunColumns.
-func scanTriggerFirings(rows *sql.Rows) ([]*core.TriggerEventWithRun, error) {
-	defer rows.Close()
-	out := []*core.TriggerEventWithRun{}
-	for rows.Next() {
-		var row TriggerEvent
-		var runChatID, runTitle sql.NullString
-		var rootState, rootStop sql.NullInt32
-		var display int32
-		if err := rows.Scan(
-			&row.ID, &row.TriggerID, &row.UserID, (*string)(&row.Kind), &row.DedupeKey, &row.OccurredAt,
-			(*[]byte)(&row.Payload), (*string)(&row.Outcome), &row.OutcomeDetail, &row.ChatID, &row.CreatedAt, &row.RunStatus,
-			(*[]byte)(&row.Sender), (*[]byte)(&row.Origin),
-			&runChatID, &runTitle, &rootState, &rootStop, &display,
-		); err != nil {
-			return nil, err
-		}
-		ev, err := triggerEventToCore(&row)
+func triggerFiringsToCore(rows []triggerFiringRow) ([]*core.TriggerEventWithRun, error) {
+	out := make([]*core.TriggerEventWithRun, 0, len(rows))
+	for i := range rows {
+		row := &rows[i]
+		ev, err := triggerEventToCore(&row.TriggerEvent)
 		if err != nil {
 			return nil, err
 		}
 		firing := &core.TriggerEventWithRun{Event: ev}
-		// The run is nil unless the firing joined a chat that still exists.
-		if runChatID.Valid {
+		if row.RunChatID != nil {
 			firing.Run = &core.TriggerEventRun{
-				ChatID:       runChatID.String,
-				Title:        runTitle.String,
-				DisplayState: core.RunDisplayState(display),
+				ChatID:       *row.RunChatID,
+				DisplayState: core.RunDisplayState(row.RunDisplayState),
 			}
-			if rootState.Valid {
-				firing.Run.RootStatus = core.WorkflowStatus{
-					State:      core.WorkflowState(rootState.Int32),
-					StopReason: core.WorkflowStopReason(rootStop.Int32),
+			if row.RunTitle != nil {
+				firing.Run.Title = *row.RunTitle
+			}
+			if row.RunRootState != nil {
+				firing.Run.RootStatus = core.WorkflowStatus{State: core.WorkflowState(*row.RunRootState)}
+				if row.RunRootStopReason != nil {
+					firing.Run.RootStatus.StopReason = core.WorkflowStopReason(*row.RunRootStopReason)
 				}
 			}
 		}
 		out = append(out, firing)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func triggerEventFromCore(ev *core.TriggerEvent) (*TriggerEvent, error) {

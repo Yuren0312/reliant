@@ -85,14 +85,12 @@ func ListTriggerRegistrationsForUser(ctx context.Context, db orm.Context, userID
 
 // upsertTriggerRegistrationSQL writes a trigger's provider state. status_since
 // moves only when status changes, so it is the start of the current status
-// episode however often the source is polled. It runs through the raw
-// passthrough with bound $N parameters: every poll of every polled trigger
-// writes it, with a new cursor and timestamp each time.
+// episode however often the source is polled.
 const upsertTriggerRegistrationSQL = `INSERT INTO trigger_registrations (
 	trigger_id, provider, registration_id, cursor, last_polled_at, status, status_detail,
 	last_gap_at, last_gap_detail, status_since, created_at, updated_at
 ) VALUES (
-	$1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW(), NOW()
+	?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NOW(), NOW(), NOW()
 )
 ON CONFLICT (trigger_id) DO UPDATE SET
 	provider = EXCLUDED.provider,
@@ -114,9 +112,9 @@ func UpsertTriggerRegistration(ctx context.Context, db orm.Context, reg *core.Tr
 	if status == "" {
 		status = core.TriggerRegistrationActive
 	}
-	_, err := db.Exec(ctx, upsertTriggerRegistrationSQL,
+	_, err := db.Bun().NewRaw(upsertTriggerRegistrationSQL,
 		reg.TriggerID, reg.Provider, reg.RegistrationID, reg.Cursor, reg.LastPolledAt, status,
-		reg.StatusDetail, reg.LastGapAt, reg.LastGapDetail)
+		reg.StatusDetail, reg.LastGapAt, reg.LastGapDetail).Exec(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to upsert trigger registration: %w", err)
 	}

@@ -146,15 +146,6 @@ type Querier interface {
 	GetThreadByWorkflow(ctx context.Context, workflowID sql.NullString) (Thread, error)
 	// Get thread with parent info for fork chain resolution
 	GetThreadWithParent(ctx context.Context, id string) (GetThreadWithParentRow, error)
-	// Access-gated routing for app-level provider events. See the migration
-	// 20261005061008_integration_event_access.sql for the model.
-	// Every enabled integration trigger of one integration whose OWNER can see
-	// the event's (account, resource) per a snapshot refreshed after
-	// fresh_after. A stale snapshot routes nothing: access is only trusted while
-	// recently confirmed. A trigger that names a connection must name its own
-	// owner's live one; one with no connection (a delegated authority, e.g.
-	// GitHub via control-plane) is routed on access alone.
-	ListAccessRoutedTriggers(ctx context.Context, arg ListAccessRoutedTriggersParams) ([]ListAccessRoutedTriggersRow, error)
 	// List archived chats with worktree info. Reads chats_with_activity (not chats)
 	// so the root workflow state and last_message_at come back like every other
 	// chat read; falls back to project name if worktree name is unavailable.

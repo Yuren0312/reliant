@@ -136,8 +136,8 @@ func TestTriggerQueries(t *testing.T) {
 		t.Fatalf("LockTrigger(missing) err = %v, want ErrTriggerNotFound", err)
 	}
 
-	// ReplaceTrigger writes the definition and the caller's updated_at, and
-	// never the identity columns.
+	// ReplaceTrigger writes the definition and stamps updated_at, and never
+	// the identity columns.
 	edited, _ := env.Repo.GetTrigger(ctx, "trg-a")
 	edited.Name, edited.Enabled, edited.DaemonID, edited.NoMachine = "a-edited", false, "", true
 	edited.Kind, edited.UserID = core.TriggerKindWebhook, "someone-else"
@@ -146,8 +146,8 @@ func TestTriggerQueries(t *testing.T) {
 		t.Fatalf("ReplaceTrigger: %v", err)
 	}
 	twin, _ := env.Repo.GetTrigger(ctx, "trg-a")
-	if twin.Name != "a-edited" || twin.Enabled || twin.DaemonID != "" || !twin.NoMachine || !twin.UpdatedAt.Equal(edited.UpdatedAt) || twin.Kind != core.TriggerKindSchedule || twin.UserID != storetest.SeedUserID {
-		t.Fatalf("after ReplaceTrigger Repo.GetTrigger = %+v, want the edit with kind and owner kept", twin)
+	if twin.Name != "a-edited" || twin.Enabled || twin.DaemonID != "" || !twin.NoMachine || !twin.UpdatedAt.After(edited.UpdatedAt) || twin.Kind != core.TriggerKindSchedule || twin.UserID != storetest.SeedUserID {
+		t.Fatalf("after ReplaceTrigger Repo.GetTrigger = %+v, want the edit, updated_at stamped, kind and owner kept", twin)
 	}
 	twin.Name = "a-twin"
 	if err := env.Repo.UpdateTrigger(ctx, twin); err != nil {
@@ -161,10 +161,11 @@ func TestTriggerQueries(t *testing.T) {
 	}
 
 	// SetTriggerEnabled stamps updated_at.
+	replaced, _ := env.Repo.GetTrigger(ctx, "trg-a")
 	if err := store.SetTriggerEnabled(ctx, env.ORM, "trg-a", true); err != nil {
 		t.Fatalf("SetTriggerEnabled: %v", err)
 	}
-	if twin, _ := env.Repo.GetTrigger(ctx, "trg-a"); !twin.Enabled || !twin.UpdatedAt.After(edited.UpdatedAt) {
+	if twin, _ := env.Repo.GetTrigger(ctx, "trg-a"); !twin.Enabled || !twin.UpdatedAt.After(replaced.UpdatedAt) {
 		t.Fatalf("after SetTriggerEnabled = %+v, want enabled and updated_at stamped", twin)
 	}
 	if err := store.SetTriggerEnabled(ctx, env.ORM, "missing", true); !errors.Is(err, core.ErrTriggerNotFound) {
@@ -397,5 +398,71 @@ func TestTriggerRegistrationQueries(t *testing.T) {
 	mine, _ := store.ListTriggerRegistrationsForUser(ctx, env.ORM, storetest.SeedUserID, []string{"trg-reg-a", "trg-reg-b", "trg-reg-foreign"})
 	if len(mine) != 2 || mine["trg-reg-b"].RegistrationID != "hook-trg-reg-b" || mine["trg-reg-foreign"] != nil {
 		t.Fatalf("ListTriggerRegistrationsForUser = %+v, want only the caller's two", mine)
+	}
+}
+
+// TestListAccessRoutedTriggers ports integration_access.sql's
+// ListAccessRoutedTriggers, interleaved with its sqlc twin.
+func TestListAccessRoutedTriggers(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	for _, conn := range []struct{ id, user, status string }{
+		{"conn-ok", storetest.SeedUserID, "active"},
+		{"conn-reauth", storetest.SeedUserID, "needs_reauth"},
+		{"conn-foreign", "someone-else", "active"},
+	} {
+		if _, err := env.SQL.ExecContext(ctx, `INSERT INTO connections (id, user_id, integration_id, auth_kind, name, status)
+			VALUES ($1, $2, 'github', 'oauth2', $1, $3)`, conn.id, conn.user, conn.status); err != nil {
+			t.Fatalf("insert connection %s: %v", conn.id, err)
+		}
+	}
+	routed := func(id string, conn *string, enabled bool, which string) {
+		t.Helper()
+		tr := newStoreTrigger(id, id, now)
+		tr.Kind, tr.Enabled, tr.ConnectionID = core.TriggerKindIntegration, enabled, conn
+		tr.Config = json.RawMessage(`{"integration":"` + which + `"}`)
+		if err := store.InsertTrigger(ctx, env.ORM, tr); err != nil {
+			t.Fatalf("InsertTrigger(%s): %v", id, err)
+		}
+	}
+	routed("trg-acc-none", nil, true, "github")
+	routed("trg-acc-ok", strp("conn-ok"), true, "github")
+	routed("trg-acc-reauth", strp("conn-reauth"), true, "github")
+	routed("trg-acc-foreign-conn", strp("conn-foreign"), true, "github")
+	routed("trg-acc-off", nil, false, "github")
+	routed("trg-acc-slack", nil, true, "slack")
+	if err := env.Repo.ReplaceIntegrationAccess(ctx, storetest.SeedUserID, "github", "11", now, []core.IntegrationAccessGrant{
+		{AccountKey: "100", ResourceKey: "1"},
+	}); err != nil {
+		t.Fatalf("ReplaceIntegrationAccess: %v", err)
+	}
+
+	for _, c := range []struct {
+		account, resource string
+		fresh             time.Time
+		want              []string
+	}{
+		{"100", "1", now.Add(-time.Minute), []string{"trg-acc-none", "trg-acc-ok"}},
+		{"100", "2", now.Add(-time.Minute), nil},
+		{"200", "1", now.Add(-time.Minute), nil},
+		{"100", "1", now.Add(time.Minute), nil},
+	} {
+		port, err := store.ListAccessRoutedTriggers(ctx, env.ORM, "github", c.account, c.resource, c.fresh)
+		if err != nil {
+			t.Fatalf("ListAccessRoutedTriggers(%s/%s): %v", c.account, c.resource, err)
+		}
+		twin, err := env.Repo.ListAccessRoutedTriggers(ctx, "github", c.account, c.resource, c.fresh)
+		if err != nil {
+			t.Fatalf("Repo.ListAccessRoutedTriggers(%s/%s): %v", c.account, c.resource, err)
+		}
+		sameValue(t, "ListAccessRoutedTriggers", port, twin)
+		var got []string
+		for _, tr := range port {
+			got = append(got, tr.ID)
+		}
+		if !reflect.DeepEqual(got, c.want) {
+			t.Fatalf("ListAccessRoutedTriggers(%s/%s, fresh %v) = %v, want %v", c.account, c.resource, c.fresh, got, c.want)
+		}
 	}
 }
