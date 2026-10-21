@@ -208,7 +208,7 @@ func ListWorktreesByIDs(ctx context.Context, db orm.Context, ids []string) ([]*c
 	}
 	var rows []*Worktree
 	err := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted().
-		Where("id IN (?)", bun.In(ids)).
+		Where("id IN (?)", bun.List(ids)).
 		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees by id: %w", err)

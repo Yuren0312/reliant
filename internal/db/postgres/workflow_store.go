@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -451,27 +450,6 @@ func (s *workflowStore) GetStepExecutionsByStep(ctx context.Context, workflowID,
 
 func (s *workflowStore) DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error {
 	return s.q.DeleteStepExecutionsForWorkflow(ctx, workflowID)
-}
-
-func (s *workflowStore) ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error) {
-	return s.q.ListCommandFavorites(ctx, pgdb.ListCommandFavoritesParams{UserID: userID, ProjectID: projectID})
-}
-
-func (s *workflowStore) AddCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error {
-	return s.q.AddCommandFavorite(ctx, pgdb.AddCommandFavoriteParams{
-		ID:         uuid.New().String(),
-		UserID:     userID,
-		ProjectID:  projectID,
-		CommandKey: commandKey,
-	})
-}
-
-func (s *workflowStore) RemoveCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error {
-	return s.q.RemoveCommandFavorite(ctx, pgdb.RemoveCommandFavoriteParams{
-		UserID:     userID,
-		ProjectID:  projectID,
-		CommandKey: commandKey,
-	})
 }
 
 func workflowFromPG(row pgdb.Workflow) *core.Workflow {
