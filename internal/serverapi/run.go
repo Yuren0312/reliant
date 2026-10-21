@@ -73,7 +73,7 @@ type Options struct {
 	// (db.DatabaseConfig.DirectURL); empty when DatabaseURL already is one.
 	DatabaseDirectURL string
 	// DatabasePool sizes the pool and bounds the waits on the database
-	// (the role config's DatabaseConfig).
+	// (the server roles' DatabaseConfig).
 	DatabasePool db.Pool
 	DataDir      string
 
@@ -143,7 +143,7 @@ type Options struct {
 	Log logging.Settings
 
 	// ControlPlane is the control plane hosting this deployment; the zero
-	// value is self-hosted (the role config's ControlPlaneConfig).
+	// value is self-hosted (ServerProcessConfig's ControlPlaneConfig).
 	ControlPlane controlplane.Endpoint
 
 	// PublicURL is this deployment's externally reachable base URL
@@ -529,7 +529,7 @@ func Run(ctx context.Context, opts Options) error {
 		ControlPlane:        opts.ControlPlane,
 		Database:            repo,
 		SQL:                 repo.DB.SQLDB(),
-		ConnectorGrants:     connectorgrant.NewSQLStore(repo.DB.SQLDB()),
+		ConnectorGrants:     connectorgrant.NewSQLStore(connectorgrant.Deps{DB: repo.ORM()}),
 		ToolsFactory:        toolsFactory,
 		TemporalClient:      temporalClient,
 		StreamingHub:        streamingHub,
@@ -571,7 +571,7 @@ func Run(ctx context.Context, opts Options) error {
 	// for it when one of the user's machines connects, and deliver the ones
 	// whose run already ended. The reconciler sweeps for connects this misses
 	// and continues the message of a run it ends as wedged.
-	queued := queueddelivery.New(queueddelivery.Deps{Store: repo, Machines: daemonRouter, Deliverer: api.ChatService(), Signaler: temporalClient})
+	queued := queueddelivery.NewInstrumented(queueddelivery.Deps{Store: repo, Machines: daemonRouter, Deliverer: api.ChatService(), Signaler: temporalClient})
 	reconciler.SetQueuedDelivery(queued)
 
 	scheduleSyncer := triggers.NewSyncer(
