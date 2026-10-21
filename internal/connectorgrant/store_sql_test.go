@@ -23,7 +23,7 @@ import (
 func setupStore(t *testing.T) (*connectorgrant.SQLStore, *sql.DB, string) {
 	t.Helper()
 
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
 
 	daemonID := "daemon-" + uuid.New().String()
@@ -33,7 +33,7 @@ func setupStore(t *testing.T) (*connectorgrant.SQLStore, *sql.DB, string) {
 	)
 	require.NoError(t, err)
 
-	return connectorgrant.NewSQLStore(rawDB), rawDB, daemonID
+	return connectorgrant.NewSQLStore(repo.ORM()), rawDB, daemonID
 }
 
 func newGrant(daemonID string) *connectorgrant.Grant {
