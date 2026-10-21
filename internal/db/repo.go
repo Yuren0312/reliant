@@ -180,7 +180,7 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 		accounts:      postgresstore.NewProviderAccountStore(db),
 		planTasks:     postgresstore.NewPlanTaskStore(pgQueries),
 		chats:         postgresstore.NewChatStore(pgQueries, q),
-		runs:          postgresstore.NewRunStore(pgQueries),
+		runs:          postgresstore.NewRunStore(client),
 		messages:      postgresstore.NewMessageStore(pgQueries, q),
 		approvals:     postgresstore.NewApprovalStore(pgQueries),
 		agentMessages: postgresstore.NewAgentMessageStore(pgQueries, q),
@@ -191,13 +191,13 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 			return (&Repo{driver: DriverPostgres}).bindQuery(query)
 		}),
 		attachments:     postgresstore.NewAttachmentStore(pgQueries, q),
-		workflows:       postgresstore.NewWorkflowStore(pgQueries),
+		workflows:       postgresstore.NewWorkflowStore(client, pgQueries),
 		threads:         postgresstore.NewThreadStore(pgQueries),
 		contextWindows:  postgresstore.NewContextWindowStore(pgQueries),
 		workflowCatalog: postgresstore.NewWorkflowCatalogStore(pgQueries),
 		triggers:        postgresstore.NewTriggerStore(pgQueries),
 		inbox:           postgresstore.NewInboxStore(pgQueries),
-		runEvents:       postgresstore.NewRunEventStore(pgQueries),
+		runEvents:       postgresstore.NewRunEventStore(client),
 		tokenCounts:     tokenCounts,
 	}, nil
 }
