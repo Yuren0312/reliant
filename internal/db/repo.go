@@ -163,7 +163,7 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 	return &Repo{
 		DB:            q,
 		driver:        driver,
-		accounts:      postgresstore.NewProviderAccountStore(db),
+		accounts:      postgresstore.NewProviderAccountStore(client),
 		runs:          postgresstore.NewRunStore(client),
 		agentMessages: postgresstore.NewAgentMessageStore(pgQueries, q),
 		settings: postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
