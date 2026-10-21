@@ -72,7 +72,7 @@ func ListTriggerRegistrationsForUser(ctx context.Context, db orm.Context, userID
 	err := db.Bun().NewSelect().Model(&rows).
 		Join("JOIN triggers AS t ON t.id = trigger_registrations.trigger_id").
 		Where("t.user_id = ?", userID).
-		Where("trigger_registrations.trigger_id IN (?)", bun.In(triggerIDs)).
+		Where("trigger_registrations.trigger_id IN (?)", bun.List(triggerIDs)).
 		Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list trigger registrations: %w", err)
