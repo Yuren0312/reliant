@@ -106,17 +106,14 @@ type ChatUpdateNotifier func(chatID string, seqNum int64, update ChatUpdate)
 type Repo struct {
 	DB              *WrappedDBTX
 	driver          DatabaseDriver
-	planTasks       core.PlanTaskStore
 	chats           core.ChatStore
 	runs            core.RunStore
-	approvals       core.ApprovalStore
 	agentMessages   core.AgentMessageStore
 	projects        core.ProjectStore
 	worktrees       core.WorktreeStore
 	repos           core.RepoStore
 	settings        core.SettingStore
 	accounts        *postgresstore.AccountStore
-	attachments     core.AttachmentStore
 	workflows       core.WorkflowStore
 	threads         core.ThreadStore
 	contextWindows  core.ContextWindowStore
@@ -172,10 +169,8 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 		DB:            q,
 		driver:        driver,
 		accounts:      postgresstore.NewProviderAccountStore(db),
-		planTasks:     postgresstore.NewPlanTaskStore(pgQueries),
 		chats:         postgresstore.NewChatStore(pgQueries, q),
 		runs:          postgresstore.NewRunStore(pgQueries),
-		approvals:     postgresstore.NewApprovalStore(pgQueries),
 		agentMessages: postgresstore.NewAgentMessageStore(pgQueries, q),
 		projects:      postgresstore.NewProjectStore(pgQueries),
 		worktrees:     postgresstore.NewWorktreeStore(pgQueries),
@@ -183,7 +178,6 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 		settings: postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
 			return (&Repo{driver: DriverPostgres}).bindQuery(query)
 		}),
-		attachments:     postgresstore.NewAttachmentStore(pgQueries, q),
 		workflows:       postgresstore.NewWorkflowStore(pgQueries),
 		threads:         postgresstore.NewThreadStore(pgQueries),
 		contextWindows:  postgresstore.NewContextWindowStore(pgQueries),
