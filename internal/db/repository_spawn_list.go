@@ -331,7 +331,7 @@ func (r *Repo) GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string
 		return nil, fmt.Errorf("failed to read the latest spawn run of thread %s: %w", threadID, err)
 	}
 	stopped := row.ThreadOrigin == string(ThreadOriginSpawn) &&
-		row.ThreadStatus == ThreadStatusFailed &&
+		ThreadStatus(row.ThreadStatus) == ThreadStatusFailed &&
 		WorkflowState(row.WorkflowState) == WorkflowStateStopped &&
 		WorkflowStopReason(row.WorkflowStopReason) == StopReasonFailed
 	if !stopped || row.ParentThreadID == "" {

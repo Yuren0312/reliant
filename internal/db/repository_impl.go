@@ -4170,70 +4170,70 @@ func (r *Repo) CreateThread(ctx context.Context, thread *Thread) (*Thread, error
 	if thread.ChatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.CreateThread(ctx, thread)
+	return store.InsertThread(ctx, r.ORM(), thread)
 }
 
 func (r *Repo) GetThread(ctx context.Context, id string) (*Thread, error) {
 	if id == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.GetThread(ctx, id)
+	return store.GetThread(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetThreadByWorkflow(ctx context.Context, workflowID string) (*Thread, error) {
 	if workflowID == "" {
 		return nil, fmt.Errorf("workflow ID cannot be empty")
 	}
-	return r.threads.GetThreadByWorkflow(ctx, workflowID)
+	return store.GetThreadByWorkflow(ctx, r.ORM(), workflowID)
 }
 
 func (r *Repo) GetRootThread(ctx context.Context, chatID string) (*Thread, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.GetRootThread(ctx, chatID)
+	return store.GetRootThread(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) GetThreadWithParent(ctx context.Context, id string) (*Thread, *string, error) {
 	if id == "" {
 		return nil, nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.GetThreadWithParent(ctx, id)
+	return store.GetThreadWithParent(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListThreadsByConversation(ctx context.Context, chatID string) ([]*Thread, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.ListThreadsByConversation(ctx, chatID)
+	return store.ListThreadsByConversation(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) ListChildThreads(ctx context.Context, parentThreadID string) ([]*Thread, error) {
 	if parentThreadID == "" {
 		return nil, fmt.Errorf("parent thread ID cannot be empty")
 	}
-	return r.threads.ListChildThreads(ctx, parentThreadID)
+	return store.ListChildThreads(ctx, r.ORM(), parentThreadID)
 }
 
 func (r *Repo) UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*Thread, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.UpdateThreadWorkflow(ctx, threadID, workflowID)
+	return store.UpdateThreadWorkflow(ctx, r.ORM(), threadID, workflowID)
 }
 
 func (r *Repo) UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtMessageID *string) (*Thread, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.UpdateThreadForkPoint(ctx, threadID, forkAtMessageID)
+	return store.UpdateThreadForkPoint(ctx, r.ORM(), threadID, forkAtMessageID)
 }
 
-func (r *Repo) UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error) {
+func (r *Repo) UpdateThreadStatus(ctx context.Context, threadID string, status ThreadStatus, completedAt *time.Time) (*Thread, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.UpdateThreadStatus(ctx, threadID, status, completedAt)
+	return store.UpdateThreadStatus(ctx, r.ORM(), threadID, status, completedAt)
 }
 
 // ReviveThread moves a terminal thread back to running because a new run has
@@ -4243,7 +4243,7 @@ func (r *Repo) ReviveThread(ctx context.Context, threadID string) (int64, error)
 	if threadID == "" {
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.ReviveThread(ctx, threadID)
+	return store.ReviveThread(ctx, r.ORM(), threadID)
 }
 
 // CascadeTerminalStatusToThreadSubtree closes every thread owned by
@@ -4263,42 +4263,42 @@ func (r *Repo) CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflo
 	if !terminal {
 		return nil
 	}
-	return r.threads.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, threadStatus)
+	return store.CascadeTerminalStatusToThreadSubtree(ctx, r.ORM(), workflowID, threadStatus)
 }
 
 // ReapOrphanedThreads ends running/paused threads whose workflow is already
 // terminal, at the workflow's own status, returning the rows repaired. See
 // the Repository interface for why the backstop is needed.
 func (r *Repo) ReapOrphanedThreads(ctx context.Context) ([]ReapedThread, error) {
-	return r.threads.ReapOrphanedThreads(ctx)
+	return store.ReapOrphanedThreads(ctx, r.ORM())
 }
 
 func (r *Repo) ListThreadsByOrigin(ctx context.Context, conversationID string, origin ThreadOrigin) ([]*Thread, error) {
 	if conversationID == "" {
 		return nil, fmt.Errorf("conversation ID cannot be empty")
 	}
-	return r.threads.ListThreadsByOrigin(ctx, conversationID, origin)
+	return store.ListThreadsByOrigin(ctx, r.ORM(), conversationID, origin)
 }
 
 func (r *Repo) DeleteThread(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.DeleteThread(ctx, id)
+	return store.RemoveThread(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeleteThreadsByConversation(ctx context.Context, chatID string) error {
 	if chatID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.DeleteThreadsByConversation(ctx, chatID)
+	return store.DeleteThreadsByConversation(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) CountThreadsInConversation(ctx context.Context, chatID string) (int64, error) {
 	if chatID == "" {
 		return 0, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.CountThreadsInConversation(ctx, chatID)
+	return store.CountThreadsInConversation(ctx, r.ORM(), chatID)
 }
 
 // ==================== Context Windows ====================
@@ -4314,77 +4314,77 @@ func (r *Repo) CreateContextWindow(ctx context.Context, cw *ContextWindow) (*Con
 	if cw.ThreadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.CreateContextWindow(ctx, cw)
+	return store.InsertContextWindow(ctx, r.ORM(), cw)
 }
 
 func (r *Repo) GetContextWindow(ctx context.Context, id string) (*ContextWindow, error) {
 	if id == "" {
 		return nil, fmt.Errorf("context window ID cannot be empty")
 	}
-	return r.contextWindows.GetContextWindow(ctx, id)
+	return store.GetContextWindow(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetLatestContextWindow(ctx context.Context, threadID string) (*ContextWindow, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.GetLatestContextWindow(ctx, threadID)
+	return store.GetLatestContextWindow(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) GetContextWindowBySequence(ctx context.Context, threadID string, sequence int) (*ContextWindow, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.GetContextWindowBySequence(ctx, threadID, sequence)
+	return store.GetContextWindowBySequence(ctx, r.ORM(), threadID, sequence)
 }
 
 func (r *Repo) ListForkedThreadIDs(ctx context.Context, threadIDs []string) ([]string, error) {
 	if len(threadIDs) == 0 {
 		return nil, nil
 	}
-	return r.contextWindows.ListForkedThreadIDs(ctx, threadIDs)
+	return store.ListForkedThreadIDs(ctx, r.ORM(), threadIDs)
 }
 
 func (r *Repo) GetContextWindowWithThread(ctx context.Context, id string) (*ContextWindow, string, *string, *string, error) {
 	if id == "" {
 		return nil, "", nil, nil, fmt.Errorf("context window ID cannot be empty")
 	}
-	return r.contextWindows.GetContextWindowWithThread(ctx, id)
+	return store.GetContextWindowWithThread(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListContextWindowsByThread(ctx context.Context, threadID string) ([]*ContextWindow, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.ListContextWindowsByThread(ctx, threadID)
+	return store.ListContextWindowsByThread(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) GetMaxSequenceForThread(ctx context.Context, threadID string) (int, error) {
 	if threadID == "" {
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.GetMaxSequenceForThread(ctx, threadID)
+	return store.GetMaxSequenceForThread(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) SetCompactionSummaryMessage(ctx context.Context, cwID, messageID string) (*ContextWindow, error) {
 	if cwID == "" {
 		return nil, fmt.Errorf("context window ID cannot be empty")
 	}
-	return r.contextWindows.SetCompactionSummaryMessage(ctx, cwID, messageID)
+	return store.SetCompactionSummaryMessage(ctx, r.ORM(), cwID, messageID)
 }
 
 func (r *Repo) DeleteContextWindow(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("context window ID cannot be empty")
 	}
-	return r.contextWindows.DeleteContextWindow(ctx, id)
+	return store.RemoveContextWindow(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeleteContextWindowsByThread(ctx context.Context, threadID string) error {
 	if threadID == "" {
 		return fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.DeleteContextWindowsByThread(ctx, threadID)
+	return store.DeleteContextWindowsByThread(ctx, r.ORM(), threadID)
 }
 
 // ==================== Workflow Drafts ==

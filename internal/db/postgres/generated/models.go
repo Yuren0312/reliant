@@ -31,13 +31,15 @@ type AccessToken struct {
 }
 
 type AgentMessage struct {
-	ID                 string                `json:"id"`
-	ChatID             string                `json:"chat_id"`
-	FromThreadID       string                `json:"from_thread_id"`
-	ToThreadID         string                `json:"to_thread_id"`
-	Kind               int32                 `json:"kind"`
-	Body               string                `json:"body"`
-	ToolCallID         sql.NullString        `json:"tool_call_id"`
+	ID           string `json:"id"`
+	ChatID       string `json:"chat_id"`
+	FromThreadID string `json:"from_thread_id"`
+	ToThreadID   string `json:"to_thread_id"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.AgentMessageKind
+	Kind       int32          `json:"kind"`
+	Body       string         `json:"body"`
+	ToolCallID sql.NullString `json:"tool_call_id"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.AgentMessageStatus
 	Status             int32                 `json:"status"`
 	CreatedAt          time.Time             `json:"created_at"`
 	DeliveredAt        sql.NullTime          `json:"delivered_at"`
@@ -802,14 +804,15 @@ type TemporalPayloadBlob struct {
 }
 
 type Thread struct {
-	ID              string         `json:"id"`
-	ChatID          string         `json:"chat_id"`
-	ParentThreadID  sql.NullString `json:"parent_thread_id"`
-	WorkflowID      sql.NullString `json:"workflow_id"`
-	CreatedAt       time.Time      `json:"created_at"`
-	Title           sql.NullString `json:"title"`
-	Origin          string         `json:"origin"`
-	OriginNodeID    sql.NullString `json:"origin_node_id"`
+	ID             string         `json:"id"`
+	ChatID         string         `json:"chat_id"`
+	ParentThreadID sql.NullString `json:"parent_thread_id"`
+	WorkflowID     sql.NullString `json:"workflow_id"`
+	CreatedAt      time.Time      `json:"created_at"`
+	Title          sql.NullString `json:"title"`
+	Origin         string         `json:"origin"`
+	OriginNodeID   sql.NullString `json:"origin_node_id"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.ThreadStatus
 	Status          int32          `json:"status"`
 	CompletedAt     sql.NullTime   `json:"completed_at"`
 	ForkAtMessageID sql.NullString `json:"fork_at_message_id"`

@@ -110,15 +110,12 @@ type Repo struct {
 	chats           core.ChatStore
 	runs            core.RunStore
 	messages        core.MessageStore
-	agentMessages   core.AgentMessageStore
 	projects        core.ProjectStore
 	worktrees       core.WorktreeStore
 	repos           core.RepoStore
 	settings        core.SettingStore
 	accounts        *postgresstore.AccountStore
 	workflows       core.WorkflowStore
-	threads         core.ThreadStore
-	contextWindows  core.ContextWindowStore
 	workflowCatalog core.WorkflowCatalogStore
 	triggers        core.TriggerStore
 	runEvents       core.RunEventStore
@@ -172,22 +169,19 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 	})
 
 	return &Repo{
-		DB:            q,
-		driver:        driver,
-		accounts:      postgresstore.NewProviderAccountStore(db),
-		chats:         postgresstore.NewChatStore(pgQueries),
-		runs:          postgresstore.NewRunStore(pgQueries),
-		messages:      postgresstore.NewMessageStore(pgQueries, q),
-		agentMessages: postgresstore.NewAgentMessageStore(pgQueries, q),
-		projects:      postgresstore.NewProjectStore(pgQueries),
-		worktrees:     postgresstore.NewWorktreeStore(pgQueries),
-		repos:         postgresstore.NewRepoStore(pgQueries),
+		DB:        q,
+		driver:    driver,
+		accounts:  postgresstore.NewProviderAccountStore(db),
+		chats:     postgresstore.NewChatStore(pgQueries),
+		runs:      postgresstore.NewRunStore(pgQueries),
+		messages:  postgresstore.NewMessageStore(pgQueries, q),
+		projects:  postgresstore.NewProjectStore(pgQueries),
+		worktrees: postgresstore.NewWorktreeStore(pgQueries),
+		repos:     postgresstore.NewRepoStore(pgQueries),
 		settings: postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
 			return (&Repo{driver: DriverPostgres}).bindQuery(query)
 		}),
 		workflows:       postgresstore.NewWorkflowStore(pgQueries),
-		threads:         postgresstore.NewThreadStore(pgQueries),
-		contextWindows:  postgresstore.NewContextWindowStore(pgQueries),
 		workflowCatalog: postgresstore.NewWorkflowCatalogStore(pgQueries),
 		triggers:        postgresstore.NewTriggerStore(pgQueries),
 		runEvents:       postgresstore.NewRunEventStore(pgQueries),

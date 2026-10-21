@@ -3,7 +3,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -102,38 +101,6 @@ func TestGeneratedArrayParamQueries_ZeroOneMany(t *testing.T) {
 			requireSameIDs(t, tc.ids, got, tc.name)
 		}
 	})
-
-	// The two writes run in order on the same rows: claim, then backfill the
-	// envelope pointer on exactly what was claimed — the drain's sequence.
-	t.Run("MarkAgentMessagesDelivered+SetAgentMessagesDeliveredMessageID", func(t *testing.T) {
-		deliveredAt := sql.NullTime{Time: time.Now().UTC().Truncate(time.Second), Valid: true}
-		for _, tc := range idCases(fx.agentMessageIDs) {
-			claimed, err := q.MarkAgentMessagesDelivered(ctx, pgdb.MarkAgentMessagesDeliveredParams{
-				DeliveredAt: deliveredAt,
-				Ids:         tc.ids,
-			})
-			require.NoError(t, err, tc.name)
-			requireSameIDs(t, tc.ids, claimed, tc.name)
-
-			require.NoError(t, q.SetAgentMessagesDeliveredMessageID(ctx, pgdb.SetAgentMessagesDeliveredMessageIDParams{
-				DeliveredMessageID: sql.NullString{String: fx.envelopeMessageID, Valid: true},
-				Ids:                tc.ids,
-			}), tc.name)
-		}
-
-		// Every row was in exactly one case, so all of them must now be
-		// delivered and point at the envelope — including the ones a
-		// first-id-only query would have skipped.
-		for _, id := range fx.agentMessageIDs {
-			var status int32
-			var envelope sql.NullString
-			require.NoError(t, rawDB.QueryRowContext(ctx,
-				`SELECT status, delivered_message_id FROM agent_messages WHERE id = $1`, id,
-			).Scan(&status, &envelope))
-			require.Equal(t, int32(core.AgentMessageStatusDelivered), status, "message %s status", id)
-			require.Equal(t, fx.envelopeMessageID, envelope.String, "message %s envelope", id)
-		}
-	})
 }
 
 type idCase struct {
@@ -168,9 +135,7 @@ func requireSameIDs(t *testing.T, want, got []string, msg string) {
 }
 
 type arrayParamFixture struct {
-	messageIDs        []string // 4, each with one content block, one tool call and one result
-	agentMessageIDs   []string // 4, queued
-	envelopeMessageID string
+	messageIDs []string // 4, each with one content block, one tool call and one result
 }
 
 // seedArrayParamFixture writes four of everything, so each query sees one id
@@ -181,7 +146,7 @@ func seedArrayParamFixture(t *testing.T, repo *Repo, ctx context.Context) arrayP
 	now := time.Now().UTC()
 	var fx arrayParamFixture
 
-	chatID, parentThreadID, childThreadID := seedAgentMessageThreads(t, repo, ctx)
+	chatID, parentThreadID, _ := seedAgentMessageThreads(t, repo, ctx)
 	cwID := uuid.New().String()
 	_, err := repo.CreateContextWindow(ctx, &ContextWindow{ID: cwID, ThreadID: parentThreadID, Sequence: 0, CreatedAt: now})
 	require.NoError(t, err)
@@ -212,16 +177,11 @@ func seedArrayParamFixture(t *testing.T, repo *Repo, ctx context.Context) arrayP
 			CreatedAt: now, UpdatedAt: now,
 		}))
 
-		agentMessageID := uuid.New().String()
-		enqueueTestAgentMessage(t, repo, ctx, agentMessageID, chatID, parentThreadID, childThreadID, "m", now)
-
 		if decoy {
 			continue
 		}
 		fx.messageIDs = append(fx.messageIDs, messageID)
-		fx.agentMessageIDs = append(fx.agentMessageIDs, agentMessageID)
 	}
 
-	fx.envelopeMessageID = seedDeliveredMessage(t, repo, ctx, chatID, childThreadID)
 	return fx
 }

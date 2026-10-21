@@ -598,9 +598,10 @@ func checkOneOf(name, value string, allowed []string) error {
 	quoted := make([]string, len(allowed))
 	for i, a := range allowed {
 		quoted[i] = a
-		if a == " " {
+		switch a {
+		case " ":
 			quoted[i] = "a space"
-		} else if a == "," {
+		case ",":
 			quoted[i] = "a comma"
 		}
 	}
