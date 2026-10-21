@@ -716,7 +716,7 @@ type Repository interface {
 	ListChildThreads(ctx context.Context, parentThreadID string) ([]*Thread, error)
 	UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*Thread, error)
 	UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtMessageID *string) (*Thread, error)
-	UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error)
+	UpdateThreadStatus(ctx context.Context, threadID string, status ThreadStatus, completedAt *time.Time) (*Thread, error)
 	// ReviveThread moves a terminal thread back to running because a new run
 	// has started on it, and clears the completed_at of the turn that ended.
 	// The inverse of CascadeTerminalStatusToThreadSubtree below, and the
@@ -824,7 +824,6 @@ type Repository interface {
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
 	SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error
-	ListWorkflowTriggerActivations(ctx context.Context, userID, workflow string) ([]*core.Trigger, error)
 	ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error)
 
 	// Trigger events - one row per firing. The insert is ON CONFLICT
@@ -880,7 +879,6 @@ type Repository interface {
 	GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error)
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
 	UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error
-	DeleteTriggerRegistration(ctx context.Context, triggerID string) error
 
 	// Step Executions (for CEL history queries)
 	CreateStepExecution(ctx context.Context, exec *StepExecution) error

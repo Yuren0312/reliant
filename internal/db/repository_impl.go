@@ -31,7 +31,7 @@ func (r *Repo) CreateChat(ctx context.Context, chat *Chat) error {
 	if chat == nil {
 		return fmt.Errorf("chat cannot be nil")
 	}
-	return r.chats.CreateChat(ctx, chat)
+	return store.InsertChat(ctx, r.ORM(), chat)
 }
 
 func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
@@ -39,7 +39,7 @@ func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	return r.chats.GetChat(ctx, id)
+	return store.GetChat(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID string) (*Chat, error) {
@@ -50,15 +50,15 @@ func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID strin
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
-	return r.chats.GetChatWithUserCheck(ctx, id, userID)
+	return store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
 }
 
 func (r *Repo) ListChats(ctx context.Context, filters ChatFilters) ([]*Chat, error) {
-	return r.chats.ListChats(ctx, filters)
+	return store.ListChats(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) SearchChats(ctx context.Context, filters ChatSearchFilters) ([]*Chat, error) {
-	return r.chats.SearchChats(ctx, filters)
+	return store.SearchChats(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) UpdateChat(ctx context.Context, chat *Chat) error {
@@ -68,18 +68,18 @@ func (r *Repo) UpdateChat(ctx context.Context, chat *Chat) error {
 	if chat.ID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.chats.UpdateChat(ctx, chat)
+	return store.SaveChat(ctx, r.ORM(), chat)
 }
 
 func (r *Repo) DeleteChat(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.chats.DeleteChat(ctx, id)
+	return store.RemoveChat(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListArchivedChats(ctx context.Context, userID string) ([]*ArchivedChatInfo, error) {
-	return r.chats.ListArchivedChats(ctx, userID)
+	return store.ListArchivedChats(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) ListRuns(ctx context.Context, filters RunListFilters) ([]*RunListItem, bool, error) {
@@ -2824,8 +2824,8 @@ func (r *Repo) DeleteWorkflowsByChat(ctx context.Context, chatID string) error {
 
 // ==================== Triggers ====================
 //
-// Every method here goes through r.triggers, whose queries run against
-// WrappedDBTX.DB(ctx) — so they pick up an ambient RunTx transaction
+// Every method here delegates to internal/store over r.ORM(), which joins the
+// transaction ctx carries — so they pick up an ambient RunTx transaction
 // automatically. That is what lets the launcher write the trigger event row in
 // the SAME transaction as the chat it launches: either both commit or neither
 // does, and there is no window where a chat exists with nothing recording why.
@@ -2834,32 +2834,32 @@ func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t == nil {
 		return fmt.Errorf("trigger cannot be nil")
 	}
-	return r.triggers.CreateTrigger(ctx, t)
+	return store.InsertTrigger(ctx, r.ORM(), t)
 }
 
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
 	if id == "" {
 		return nil, fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.GetTrigger(ctx, id)
+	return store.GetTrigger(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
 	if f.UserID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
 	}
-	return r.triggers.ListTriggers(ctx, f)
+	return store.ListTriggersForUser(ctx, r.ORM(), f)
 }
 
 func (r *Repo) ListAllTriggers(ctx context.Context) ([]*core.Trigger, error) {
-	return r.triggers.ListAllTriggers(ctx)
+	return store.ListAllTriggers(ctx, r.ORM())
 }
 
 func (r *Repo) LockTrigger(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.LockTrigger(ctx, id)
+	return store.LockTrigger(ctx, r.ORM(), id)
 }
 
 func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
@@ -2869,39 +2869,32 @@ func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t.ID == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.UpdateTrigger(ctx, t)
+	return store.ReplaceTrigger(ctx, r.ORM(), t)
 }
 
 func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.DeleteTrigger(ctx, id)
+	return store.RemoveTrigger(ctx, r.ORM(), id)
 }
 
 func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.SetTriggerEnabled(ctx, id, enabled)
+	return store.SetTriggerEnabled(ctx, r.ORM(), id, enabled)
 }
 
 func (r *Repo) SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.SetTriggerProjection(ctx, id, p)
-}
-
-func (r *Repo) ListWorkflowTriggerActivations(ctx context.Context, userID, workflow string) ([]*core.Trigger, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return r.triggers.ListWorkflowTriggerActivations(ctx, userID, workflow)
+	return store.SetTriggerProjection(ctx, r.ORM(), id, p)
 }
 
 func (r *Repo) ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error) {
-	return r.triggers.ListAllWorkflowTriggerActivations(ctx)
+	return store.ListAllWorkflowTriggerActivations(ctx, r.ORM())
 }
 
 func (r *Repo) CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (bool, error) {
@@ -2914,56 +2907,56 @@ func (r *Repo) CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (b
 		// second real firing would silently report "already launched".
 		return false, fmt.Errorf("trigger event dedupe key cannot be empty")
 	}
-	return r.triggers.CreateTriggerEvent(ctx, ev)
+	return store.InsertTriggerEventIfAbsent(ctx, r.ORM(), ev)
 }
 
 func (r *Repo) GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error) {
 	if dedupeKey == "" {
 		return nil, fmt.Errorf("trigger event dedupe key cannot be empty")
 	}
-	return r.triggers.GetTriggerEventByDedupe(ctx, kind, dedupeKey)
+	return store.GetTriggerEventByDedupe(ctx, r.ORM(), kind, dedupeKey)
 }
 
 func (r *Repo) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.triggers.GetTriggerEventByChatID(ctx, chatID)
+	return store.GetTriggerEventByChatID(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.triggers.GetTriggerEventByChat(ctx, kind, chatID)
+	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
 }
 
 func (r *Repo) CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error) {
 	if userID == "" {
 		return 0, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.CountLiveLaunchedRuns(ctx, userID, kind)
+	return store.CountLiveLaunchedRuns(ctx, r.ORM(), userID, kind)
 }
 
 func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
 	}
-	return r.triggers.UpdateTriggerEventOutcome(ctx, id, outcome, detail, chatID)
+	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
 }
 
 func (r *Repo) SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error {
 	if chatID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.triggers.SetLaunchEventRunStatus(ctx, chatID, status)
+	return store.SetLaunchEventRunStatus(ctx, r.ORM(), chatID, status)
 }
 
 func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
 	}
-	return r.triggers.UpdateTriggerEventPayload(ctx, id, payload)
+	return store.UpdateTriggerEventPayload(ctx, r.ORM(), id, payload)
 }
 
 func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error) {
@@ -2973,35 +2966,35 @@ func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters
 	if f.UserID == "" {
 		return nil, false, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.ListTriggerEvents(ctx, f)
+	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
 }
 
 func (r *Repo) ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.ListInboxPending(ctx, userID)
+	return store.ListInboxPending(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.ListDismissedInboxItemIDs(ctx, userID, itemIDs)
+	return store.ListDismissedInboxItemIDs(ctx, r.ORM(), userID, itemIDs)
 }
 
 func (r *Repo) DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error {
 	if userID == "" {
 		return fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.DismissInboxItems(ctx, userID, itemIDs, at)
+	return store.DismissInboxItems(ctx, r.ORM(), userID, itemIDs, at)
 }
 
 func (r *Repo) RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error {
 	if userID == "" {
 		return fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.RestoreInboxItems(ctx, userID, itemIDs)
+	return store.RestoreInboxItems(ctx, r.ORM(), userID, itemIDs)
 }
 
 func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
@@ -3073,80 +3066,76 @@ func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerI
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.RecentTriggerFirings(ctx, userID, triggerIDs, perTrigger)
+	return store.RecentTriggerFirings(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
 func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.FiringsSinceLastSuccess(ctx, userID, triggerIDs, perTrigger)
+	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
 func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
 	if triggerID == "" {
 		return nil, fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.GetLatestTriggerEvent(ctx, triggerID, outcome)
+	return store.GetLatestTriggerEvent(ctx, r.ORM(), triggerID, outcome)
 }
 
 func (r *Repo) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.SetTriggerWebhookTokenHash(ctx, id, hash)
+	return store.SetTriggerWebhookTokenHash(ctx, r.ORM(), id, hash)
 }
 
 func (r *Repo) SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.SetTriggerWebhookSecret(ctx, id, sealed)
+	return store.SetTriggerWebhookSecret(ctx, r.ORM(), id, sealed)
 }
 
 func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
 	if id == "" {
 		return nil, core.ErrTriggerNotFound
 	}
-	return r.triggers.GetTriggerWebhookCredentials(ctx, id)
+	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error) {
-	return r.triggers.ListIntegrationTriggers(ctx, integration)
+	return store.ListIntegrationTriggers(ctx, r.ORM(), integration)
 }
 
 func (r *Repo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {
-	return r.triggers.ListStalePendingTriggerEvents(ctx, olderThan, limit)
+	return store.ListStalePendingTriggerEvents(ctx, r.ORM(), olderThan, limit)
 }
 
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (bool, error) {
-	return r.triggers.ClaimPendingTriggerEvent(ctx, id, payload)
+	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload)
 }
 
 func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
-	return r.triggers.SettlePendingTriggerEvent(ctx, id, outcome, detail)
+	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail)
 }
 
 func (r *Repo) GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error) {
-	return r.triggers.GetTriggerRegistration(ctx, triggerID)
+	return store.GetTriggerRegistration(ctx, r.ORM(), triggerID)
 }
 
 func (r *Repo) ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.ListTriggerRegistrations(ctx, userID, triggerIDs)
+	return store.ListTriggerRegistrationsForUser(ctx, r.ORM(), userID, triggerIDs)
 }
 
 func (r *Repo) UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error {
 	if reg == nil || reg.TriggerID == "" {
 		return fmt.Errorf("trigger registration needs a trigger ID")
 	}
-	return r.triggers.UpsertTriggerRegistration(ctx, reg)
-}
-
-func (r *Repo) DeleteTriggerRegistration(ctx context.Context, triggerID string) error {
-	return r.triggers.DeleteTriggerRegistration(ctx, triggerID)
+	return store.UpsertTriggerRegistration(ctx, r.ORM(), reg)
 }
 
 // ==================== Step Executions ====================
@@ -3245,70 +3234,70 @@ func (r *Repo) CreateThread(ctx context.Context, thread *Thread) (*Thread, error
 	if thread.ChatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.CreateThread(ctx, thread)
+	return store.InsertThread(ctx, r.ORM(), thread)
 }
 
 func (r *Repo) GetThread(ctx context.Context, id string) (*Thread, error) {
 	if id == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.GetThread(ctx, id)
+	return store.GetThread(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetThreadByWorkflow(ctx context.Context, workflowID string) (*Thread, error) {
 	if workflowID == "" {
 		return nil, fmt.Errorf("workflow ID cannot be empty")
 	}
-	return r.threads.GetThreadByWorkflow(ctx, workflowID)
+	return store.GetThreadByWorkflow(ctx, r.ORM(), workflowID)
 }
 
 func (r *Repo) GetRootThread(ctx context.Context, chatID string) (*Thread, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.GetRootThread(ctx, chatID)
+	return store.GetRootThread(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) GetThreadWithParent(ctx context.Context, id string) (*Thread, *string, error) {
 	if id == "" {
 		return nil, nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.GetThreadWithParent(ctx, id)
+	return store.GetThreadWithParent(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListThreadsByConversation(ctx context.Context, chatID string) ([]*Thread, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.ListThreadsByConversation(ctx, chatID)
+	return store.ListThreadsByConversation(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) ListChildThreads(ctx context.Context, parentThreadID string) ([]*Thread, error) {
 	if parentThreadID == "" {
 		return nil, fmt.Errorf("parent thread ID cannot be empty")
 	}
-	return r.threads.ListChildThreads(ctx, parentThreadID)
+	return store.ListChildThreads(ctx, r.ORM(), parentThreadID)
 }
 
 func (r *Repo) UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*Thread, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.UpdateThreadWorkflow(ctx, threadID, workflowID)
+	return store.UpdateThreadWorkflow(ctx, r.ORM(), threadID, workflowID)
 }
 
 func (r *Repo) UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtMessageID *string) (*Thread, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.UpdateThreadForkPoint(ctx, threadID, forkAtMessageID)
+	return store.UpdateThreadForkPoint(ctx, r.ORM(), threadID, forkAtMessageID)
 }
 
-func (r *Repo) UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error) {
+func (r *Repo) UpdateThreadStatus(ctx context.Context, threadID string, status ThreadStatus, completedAt *time.Time) (*Thread, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.UpdateThreadStatus(ctx, threadID, status, completedAt)
+	return store.UpdateThreadStatus(ctx, r.ORM(), threadID, status, completedAt)
 }
 
 // ReviveThread moves a terminal thread back to running because a new run has
@@ -3318,7 +3307,7 @@ func (r *Repo) ReviveThread(ctx context.Context, threadID string) (int64, error)
 	if threadID == "" {
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.ReviveThread(ctx, threadID)
+	return store.ReviveThread(ctx, r.ORM(), threadID)
 }
 
 // CascadeTerminalStatusToThreadSubtree closes every thread owned by
@@ -3338,42 +3327,42 @@ func (r *Repo) CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflo
 	if !terminal {
 		return nil
 	}
-	return r.threads.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, threadStatus)
+	return store.CascadeTerminalStatusToThreadSubtree(ctx, r.ORM(), workflowID, threadStatus)
 }
 
 // ReapOrphanedThreads ends running/paused threads whose workflow is already
 // terminal, at the workflow's own status, returning the rows repaired. See
 // the Repository interface for why the backstop is needed.
 func (r *Repo) ReapOrphanedThreads(ctx context.Context) ([]ReapedThread, error) {
-	return r.threads.ReapOrphanedThreads(ctx)
+	return store.ReapOrphanedThreads(ctx, r.ORM())
 }
 
 func (r *Repo) ListThreadsByOrigin(ctx context.Context, conversationID string, origin ThreadOrigin) ([]*Thread, error) {
 	if conversationID == "" {
 		return nil, fmt.Errorf("conversation ID cannot be empty")
 	}
-	return r.threads.ListThreadsByOrigin(ctx, conversationID, origin)
+	return store.ListThreadsByOrigin(ctx, r.ORM(), conversationID, origin)
 }
 
 func (r *Repo) DeleteThread(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.DeleteThread(ctx, id)
+	return store.RemoveThread(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeleteThreadsByConversation(ctx context.Context, chatID string) error {
 	if chatID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.DeleteThreadsByConversation(ctx, chatID)
+	return store.DeleteThreadsByConversation(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) CountThreadsInConversation(ctx context.Context, chatID string) (int64, error) {
 	if chatID == "" {
 		return 0, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.CountThreadsInConversation(ctx, chatID)
+	return store.CountThreadsInConversation(ctx, r.ORM(), chatID)
 }
 
 // ==================== Context Windows ====================
@@ -3389,77 +3378,77 @@ func (r *Repo) CreateContextWindow(ctx context.Context, cw *ContextWindow) (*Con
 	if cw.ThreadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.CreateContextWindow(ctx, cw)
+	return store.InsertContextWindow(ctx, r.ORM(), cw)
 }
 
 func (r *Repo) GetContextWindow(ctx context.Context, id string) (*ContextWindow, error) {
 	if id == "" {
 		return nil, fmt.Errorf("context window ID cannot be empty")
 	}
-	return r.contextWindows.GetContextWindow(ctx, id)
+	return store.GetContextWindow(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetLatestContextWindow(ctx context.Context, threadID string) (*ContextWindow, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.GetLatestContextWindow(ctx, threadID)
+	return store.GetLatestContextWindow(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) GetContextWindowBySequence(ctx context.Context, threadID string, sequence int) (*ContextWindow, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.GetContextWindowBySequence(ctx, threadID, sequence)
+	return store.GetContextWindowBySequence(ctx, r.ORM(), threadID, sequence)
 }
 
 func (r *Repo) ListForkedThreadIDs(ctx context.Context, threadIDs []string) ([]string, error) {
 	if len(threadIDs) == 0 {
 		return nil, nil
 	}
-	return r.contextWindows.ListForkedThreadIDs(ctx, threadIDs)
+	return store.ListForkedThreadIDs(ctx, r.ORM(), threadIDs)
 }
 
 func (r *Repo) GetContextWindowWithThread(ctx context.Context, id string) (*ContextWindow, string, *string, *string, error) {
 	if id == "" {
 		return nil, "", nil, nil, fmt.Errorf("context window ID cannot be empty")
 	}
-	return r.contextWindows.GetContextWindowWithThread(ctx, id)
+	return store.GetContextWindowWithThread(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListContextWindowsByThread(ctx context.Context, threadID string) ([]*ContextWindow, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.ListContextWindowsByThread(ctx, threadID)
+	return store.ListContextWindowsByThread(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) GetMaxSequenceForThread(ctx context.Context, threadID string) (int, error) {
 	if threadID == "" {
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.GetMaxSequenceForThread(ctx, threadID)
+	return store.GetMaxSequenceForThread(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) SetCompactionSummaryMessage(ctx context.Context, cwID, messageID string) (*ContextWindow, error) {
 	if cwID == "" {
 		return nil, fmt.Errorf("context window ID cannot be empty")
 	}
-	return r.contextWindows.SetCompactionSummaryMessage(ctx, cwID, messageID)
+	return store.SetCompactionSummaryMessage(ctx, r.ORM(), cwID, messageID)
 }
 
 func (r *Repo) DeleteContextWindow(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("context window ID cannot be empty")
 	}
-	return r.contextWindows.DeleteContextWindow(ctx, id)
+	return store.RemoveContextWindow(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeleteContextWindowsByThread(ctx context.Context, threadID string) error {
 	if threadID == "" {
 		return fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.DeleteContextWindowsByThread(ctx, threadID)
+	return store.DeleteContextWindowsByThread(ctx, r.ORM(), threadID)
 }
 
 // ==================== Workflow Drafts ==
@@ -3832,31 +3821,9 @@ func (r *Repo) CreateQuestion(ctx context.Context, question *Question) error {
 	if question.ID == "" {
 		return fmt.Errorf("question ID cannot be empty")
 	}
-
-	query := `INSERT INTO questions (id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	query = r.bindQuery(query)
-
-	_, err := r.DB.DB(ctx).ExecContext(ctx, query,
-		question.ID,
-		question.ChatID,
-		question.WorkflowID,
-		question.TemporalWorkflowID,
-		question.ThreadID,
-		question.StepID,
-		question.LoopNodeID,
-		question.LoopIteration,
-		question.Status,
-		question.Metadata,
-		question.ResponseData,
-		question.CreatedAt,
-		question.ResolvedAt,
-		question.ToolCallID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create question: %w", err)
+	if err := store.InsertQuestion(ctx, r.ORM(), question); err != nil {
+		return err
 	}
-
 	_ = r.emitChatActivityIfChanged(ctx, question.ChatID)
 	return nil
 }
@@ -3865,88 +3832,26 @@ func (r *Repo) GetQuestionByID(ctx context.Context, id string) (*Question, error
 	if id == "" {
 		return nil, fmt.Errorf("question ID cannot be empty")
 	}
-
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
-		FROM questions WHERE id = ?`
-	query = r.bindQuery(query)
-
-	var q Question
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, id).Scan(
-		&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
-		&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
-		&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get question: %w", err)
-	}
-	return &q, nil
+	return store.GetQuestion(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetPendingQuestionByChatID(ctx context.Context, chatID string) (*Question, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
-		FROM questions WHERE chat_id = ? AND status = 1 ORDER BY created_at DESC LIMIT 1`
-	query = r.bindQuery(query)
-
-	var q Question
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, chatID).Scan(
-		&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
-		&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
-		&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get pending question: %w", err)
-	}
-	return &q, nil
+	return store.GetPendingQuestionByChatID(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error) {
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
-		FROM questions WHERE workflow_id = ? AND step_id = ? AND loop_iteration = ?`
-	query = r.bindQuery(query)
-
-	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, workflowID, stepID, iteration)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get questions by workflow step iteration: %w", err)
-	}
-	defer rows.Close()
-
-	var questions []*Question
-	for rows.Next() {
-		var q Question
-		if err := rows.Scan(
-			&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
-			&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
-			&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan question: %w", err)
-		}
-		questions = append(questions, &q)
-	}
-	return questions, rows.Err()
+	return store.ListQuestionsByWorkflowStepIteration(ctx, r.ORM(), workflowID, stepID, iteration)
 }
 
 func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
 	if id == "" {
 		return fmt.Errorf("question ID cannot be empty")
 	}
-
-	now := time.Now().UTC()
-	query := `UPDATE questions SET status = 2, response_data = ?, resolved_at = ? WHERE id = ?`
-	query = r.bindQuery(query)
-
-	_, err := r.DB.DB(ctx).ExecContext(ctx, query, responseData, now, id)
-	if err != nil {
-		return fmt.Errorf("failed to resolve question: %w", err)
+	if err := store.ResolveQuestion(ctx, r.ORM(), id, responseData, time.Now().UTC()); err != nil {
+		return err
 	}
 
 	// Emit activity change
@@ -4017,18 +3922,5 @@ func (r *Repo) ValidateAPIKeysSealedConstraint(ctx context.Context) error {
 // ListUserIDsWithProviderAccount returns every user holding an account for provider, without
 // opening (decrypting) any of them.
 func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
-	rows, err := r.DB.QueryContext(ctx, "SELECT DISTINCT user_id FROM provider_accounts WHERE provider = $1 ORDER BY user_id", provider)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
+	return r.accounts.ListUserIDsWithProviderAccount(ctx, provider)
 }
