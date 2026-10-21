@@ -109,7 +109,6 @@ type Repo struct {
 	planTasks       core.PlanTaskStore
 	chats           core.ChatStore
 	runs            core.RunStore
-	messages        core.MessageStore
 	approvals       core.ApprovalStore
 	agentMessages   core.AgentMessageStore
 	projects        core.ProjectStore
@@ -125,7 +124,6 @@ type Repo struct {
 	triggers        core.TriggerStore
 	inbox           core.InboxStore
 	runEvents       core.RunEventStore
-	tokenCounts     tokenCountStore
 
 	// session is the DatabaseConfig.DirectURL pool, for work that needs a
 	// Postgres session to itself. Nil means DB already has session
@@ -170,10 +168,6 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 	q := &WrappedDBTX{db: db, orm: client}
 	pgQueries := pgdb.New(q)
 
-	tokenCounts := newSQLTokenCountStore(q, func(query string) string {
-		return (&Repo{driver: driver}).bindQuery(query)
-	})
-
 	return &Repo{
 		DB:            q,
 		driver:        driver,
@@ -181,7 +175,6 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 		planTasks:     postgresstore.NewPlanTaskStore(pgQueries),
 		chats:         postgresstore.NewChatStore(pgQueries, q),
 		runs:          postgresstore.NewRunStore(pgQueries),
-		messages:      postgresstore.NewMessageStore(pgQueries, q),
 		approvals:     postgresstore.NewApprovalStore(pgQueries),
 		agentMessages: postgresstore.NewAgentMessageStore(pgQueries, q),
 		projects:      postgresstore.NewProjectStore(pgQueries),
@@ -198,7 +191,6 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 		triggers:        postgresstore.NewTriggerStore(pgQueries),
 		inbox:           postgresstore.NewInboxStore(pgQueries),
 		runEvents:       postgresstore.NewRunEventStore(pgQueries),
-		tokenCounts:     tokenCounts,
 	}, nil
 }
 
