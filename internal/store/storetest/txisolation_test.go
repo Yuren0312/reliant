@@ -3,6 +3,7 @@ package storetest_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -63,6 +64,11 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			_, err := p.Repo.MutateChatSelection(ctx, "chat-iso", func(cur *chatselection.Selection) (*chatselection.Selection, error) { return cur, nil })
 			return err
 		}},
+		// An upsert plus a stale-row delete; the 40001 retry is harmless
+		// (no effect outside the database).
+		{"Repo.ReplaceIntegrationAccess", serializable, func(ctx context.Context) error {
+			return p.Repo.ReplaceIntegrationAccess(ctx, storetest.SeedUserID, "github", "", now, nil)
+		}},
 
 		// READ COMMITTED: correctness from row/advisory locks or a single
 		// allocating statement, never from snapshot isolation.
@@ -99,6 +105,15 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			}
 			return err
 		}},
+		// The connection store (connectionTx), which also never retries: the
+		// secrets lock refreshes a token over the network.
+		{"store.SoftDeleteConnection (connectionTx)", readCommitted, func(ctx context.Context) error {
+			err := store.SoftDeleteConnection(ctx, p.ORM, storetest.SeedUserID, "conn-none", core.ConnectionEvent{Kind: "deleted", Actor: "test", At: now})
+			if errors.Is(err, core.ErrConnectionNotFound) {
+				return nil // the transaction was begun; there was just nothing to delete
+			}
+			return err
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -124,6 +139,22 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		}
 		if got := p.Isolations(); !slices.Equal(got, []string{serializable}) {
 			t.Fatalf("began %v, want only the outer [serializable]", got)
+		}
+	})
+
+	// The write ledger never joins: inside a transaction it commits on a
+	// detached READ COMMITTED one of its own.
+	t.Run("the write ledger inside Repo.RunTx detaches at read committed", func(t *testing.T) {
+		p.Reset()
+		err := p.Repo.RunTx(context.Background(), func(ctx context.Context) error {
+			_, err := p.Repo.IntegrationWrites().PruneIntegrationWrites(ctx, now.Add(-time.Hour))
+			return err
+		})
+		if err != nil {
+			t.Fatalf("Repo.RunTx: %v", err)
+		}
+		if got := p.Isolations(); !slices.Equal(got, []string{serializable, readCommitted}) {
+			t.Fatalf("began %v, want the outer [serializable] then the ledger's own [read committed]", got)
 		}
 	})
 }
