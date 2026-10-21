@@ -85,13 +85,6 @@ func ListConnectionEvents(ctx context.Context, db orm.Context, userID, id string
 	return out, nil
 }
 
-func deref(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
-}
-
 // ConnectionEventExtra carries fields on ConnectionEvent that are NOT columns — computed
 // values, transient state, anything derived rather than stored. ConnectionEvent is
 // embedded on ConnectionEventExtra (see connection_event_orm.go), so a field added here is a field on
