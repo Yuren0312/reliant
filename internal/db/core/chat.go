@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"time"
@@ -311,11 +310,4 @@ type PausedForMachineChat struct {
 type WaitingForMachineRun struct {
 	ChatID     string
 	WorkflowID string
-}
-
-// ChatStore is what remains of the sqlc chat store: the chat_updates insert,
-// which ports with the stream lane (P5b L1a). Every chats query is in
-// internal/store (P5b L1b).
-type ChatStore interface {
-	CreateChatUpdate(ctx context.Context, update ChatUpdate) error
 }
