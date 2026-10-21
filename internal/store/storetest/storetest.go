@@ -14,6 +14,8 @@
 // The database is a clone of a template built once per migration set
 // (forge pgtest.NewFromTemplate), so a test pays a CREATE DATABASE … TEMPLATE,
 // not a migration replay. pgtest opens pgx, production's driver.
+//
+//forge:exclude-contract: test harness over a real database, imported only by tests; nothing to fake behind it
 package storetest
 
 import (
