@@ -22,7 +22,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
@@ -280,8 +279,8 @@ func NewAPIListener(d APIListenerDeps) (*grpcserver.APIListener, error) {
 }
 
 // APIDebugServer is the api-server's localhost-only diagnostics listener on
-// PPROF_PORT (debugserver), the worker's twin with the api's own port.
-type APIDebugServer struct{ *debugserver.Server }
+// PPROF_PORT (DebugServer), the worker's twin with the api's own port.
+type APIDebugServer struct{ *DebugServer }
 
 // APIDebugServerDeps is the diagnostics port (PPROF_PORT).
 type APIDebugServerDeps struct {
@@ -293,12 +292,9 @@ type APIDebugServerDeps struct {
 //
 //forge:root-only api
 func NewAPIDebugServer(d APIDebugServerDeps) (*APIDebugServer, error) {
-	if err := CheckPprofPort(d.Port); err != nil {
+	s, err := NewDebugServer(DebugServerDeps(d))
+	if err != nil || s == nil {
 		return nil, err
-	}
-	s := debugserver.New(int(d.Port))
-	if s == nil {
-		return nil, nil
 	}
 	return &APIDebugServer{s}, nil
 }

@@ -29,7 +29,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
-	"github.com/reliant-labs/reliant/internal/debugserver"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
@@ -304,7 +303,7 @@ func (g *Graph) newSystem() (*system.Service, error) {
 	})
 }
 
-func (g *Graph) newDebugServer() (*debugserver.Server, error) {
+func (g *Graph) newDebugServer() (*DebugServer, error) {
 	return NewDebugServer(DebugServerDeps{
 		Port: g.WorkerConfig.GetPprofPort(),
 	})

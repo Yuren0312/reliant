@@ -25,8 +25,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -256,20 +259,55 @@ func NewPprof(d PprofDeps) (*serverkit.Pprof, error) {
 	return serverkit.NewPprof(d.ServerCfg, d.Logger), nil
 }
 
+// DebugServer is the localhost-only diagnostics listener (debugserver: pprof,
+// the DB write-queue gauges, metrics) as a node: it serves until the stop
+// walk reaches it.
+type DebugServer struct {
+	addr string
+	srv  *http.Server
+}
+
 // DebugServerDeps is the diagnostics port (PPROF_PORT).
 type DebugServerDeps struct {
 	Port int32
 }
 
-// NewDebugServer is the localhost-only diagnostics listener (pprof, the DB
-// write-queue gauges, metrics) on 127.0.0.1:PPROF_PORT. PPROF_PORT=0 serves
+// NewDebugServer is the listener on 127.0.0.1:PPROF_PORT. PPROF_PORT=0 serves
 // none: the node is absent.
-func NewDebugServer(d DebugServerDeps) (*debugserver.Server, error) {
+func NewDebugServer(d DebugServerDeps) (*DebugServer, error) {
 	if err := CheckPprofPort(d.Port); err != nil {
 		return nil, err
 	}
-	return debugserver.New(int(d.Port)), nil
+	if d.Port == 0 {
+		logging.Info("Debug server (pprof) disabled", "pprof_port", 0)
+		return nil, nil
+	}
+	addr := debugserver.Addr(int(d.Port))
+	return &DebugServer{addr: addr, srv: &http.Server{Addr: addr, Handler: debugserver.Handler(), ReadHeaderTimeout: 10 * time.Second}}, nil
 }
+
+// Run serves until ctx ends. A bind failure is logged, not returned: a
+// process without a profiler still does its job, and failing it over one
+// would be the wrong trade.
+func (s *DebugServer) Run(ctx context.Context) error {
+	ln, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		logging.ErrorContext(ctx, "debug server failed", "address", s.addr, "error", err)
+		<-ctx.Done()
+		return nil
+	}
+	logging.InfoContext(ctx, "Starting debug server (pprof)", "address", s.addr)
+	stop := context.AfterFunc(ctx, func() { _ = s.srv.Close() })
+	defer stop()
+	if err := s.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logging.ErrorContext(ctx, "debug server failed", "address", s.addr, "error", err)
+	}
+	return nil
+}
+
+// Close stops the listener. A profile in flight is cut off: nothing here is
+// worth holding the process's stop for.
+func (s *DebugServer) Close(context.Context) error { return s.srv.Close() }
 
 // IntegrationSettingsDeps is the shared integrations config.
 type IntegrationSettingsDeps struct {

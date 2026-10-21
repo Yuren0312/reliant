@@ -2,7 +2,6 @@
 package debugserver
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -65,44 +64,4 @@ func nonLoopbackIP(t *testing.T) string {
 	}
 	t.Skip("no non-loopback IPv4 address to probe")
 	return ""
-}
-
-// As a supervised node, the listener serves until its context ends and is
-// gone after; PPROF_PORT=0 is no listener at all.
-func TestServerRunsUntilItsContextEnds(t *testing.T) {
-	if New(0) != nil {
-		t.Fatal("PPROF_PORT=0 built a listener")
-	}
-	port := freePort(t)
-	s := New(port)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() { done <- s.Run(ctx) }()
-
-	url := fmt.Sprintf("http://127.0.0.1:%d/debug/db", port)
-	var err error
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-		var res *http.Response
-		if res, err = http.Get(url); err == nil {
-			_ = res.Body.Close()
-			break
-		}
-	}
-	if err != nil {
-		t.Fatalf("debug server never answered: %v", err)
-	}
-
-	cancel()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("Run = %v, want nil", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("Run did not return after its context ended")
-	}
-	if res, err := http.Get(url); err == nil {
-		_ = res.Body.Close()
-		t.Fatal("the listener still answers after Run returned")
-	}
 }

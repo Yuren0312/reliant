@@ -22,7 +22,7 @@ import (
 // The integration access and write-ledger ports (P5b lane L5). Each ext query
 // is written through one layer and read back through the other (env.Repo is
 // the Repository, which delegates to these functions once ported), and pins
-// the rows the sqlc twin returned.
+// the rows the queries are specified to return.
 
 func accessGrants(t *testing.T, env *storetest.Env, userID, integrationID string) map[string]store.IntegrationEventAccess {
 	t.Helper()
@@ -312,4 +312,43 @@ func writeIDs(ws []*core.IntegrationWrite) []string {
 		out = append(out, w.ID)
 	}
 	return out
+}
+
+// The access snapshot is also where the platform keeps who a user is on
+// GitHub: automations compare a sender with it. It is trusted only while
+// fresh, is the user's own, and goes with the grants when they are cleared.
+func TestGetIntegrationAccessSubject(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	fresh := now.Add(-time.Minute)
+
+	subject := func(userID, integration string, freshAfter time.Time) string {
+		t.Helper()
+		got, err := env.Repo.GetIntegrationAccessSubject(ctx, userID, integration, freshAfter)
+		require.NoError(t, err)
+		return got
+	}
+	assert.Empty(t, subject("alice", "github", fresh), "a user never refreshed has no identity")
+
+	require.NoError(t, env.Repo.ReplaceIntegrationAccess(ctx, "alice", "github", "225976313", now, []core.IntegrationAccessGrant{
+		{AccountKey: "100", ResourceKey: "1"}, {AccountKey: "100", ResourceKey: "2"},
+	}))
+	require.NoError(t, env.Repo.ReplaceIntegrationAccess(ctx, "bob", "github", "22", now, []core.IntegrationAccessGrant{{AccountKey: "100", ResourceKey: "1"}}))
+
+	assert.Equal(t, "225976313", subject("alice", "github", fresh))
+	assert.Equal(t, "22", subject("bob", "github", fresh), "each user reads their own")
+	assert.Empty(t, subject("carol", "github", fresh), "never another user's")
+	assert.Empty(t, subject("alice", "slack", fresh), "scoped to the integration")
+	assert.Empty(t, subject("alice", "github", now.Add(time.Minute)), "a snapshot older than the freshness bound is not trusted")
+
+	// The identity changes (they reconnect another account): the next refresh
+	// replaces it, so there is no stale copy to outlive the change.
+	require.NoError(t, env.Repo.ReplaceIntegrationAccess(ctx, "alice", "github", "555", now.Add(time.Minute), []core.IntegrationAccessGrant{{AccountKey: "100", ResourceKey: "1"}}))
+	assert.Equal(t, "555", subject("alice", "github", fresh))
+
+	// A refresh that finds the credential gone clears the grants and with them
+	// the identity: it is read fresh, never cached.
+	require.NoError(t, env.Repo.ReplaceIntegrationAccess(ctx, "alice", "github", "", now.Add(2*time.Minute), nil))
+	assert.Empty(t, subject("alice", "github", fresh))
 }

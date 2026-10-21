@@ -11,71 +11,39 @@
 package debugserver
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	_ "net/http/pprof" //nolint:gosec // G108: registered on DefaultServeMux, served only on 127.0.0.1 below
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 )
 
-// Start serves the diagnostics endpoints on 127.0.0.1:port in the background
-// (New, run until the process exits).
+// Start serves the diagnostics endpoints on 127.0.0.1:port in the background.
+// A bind failure is logged, not returned: a process without a profiler still
+// does its job, and failing startup over one would be the wrong trade. Port 0
+// (PPROF_PORT=0) serves nothing: the listener is off, not on a random port.
 func Start(port int) {
-	if s := New(port); s != nil {
-		go func() { _ = s.Run(context.Background()) }()
-	}
-}
-
-// Server is the diagnostics listener as a supervised component: Run serves
-// until its context ends, Close stops it.
-type Server struct {
-	addr string
-	srv  *http.Server
-}
-
-// New is the diagnostics listener on 127.0.0.1:port. Port 0 (PPROF_PORT=0)
-// serves nothing, and New returns nil: the listener is off, not on a random
-// port.
-func New(port int) *Server {
 	if port == 0 {
 		logging.Info("Debug server (pprof) disabled", "pprof_port", 0)
-		return nil
+		return
 	}
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	return &Server{addr: addr, srv: &http.Server{Addr: addr, Handler: handler(), ReadHeaderTimeout: 10 * time.Second}}
+	addr := Addr(port)
+	go func() {
+		logging.Info("Starting debug server (pprof)", "address", addr)
+		//nolint:gosec // G114: localhost-only diagnostics, no timeouts needed
+		if err := http.ListenAndServe(addr, Handler()); err != nil {
+			logging.Error("debug server failed", "address", addr, "error", err)
+		}
+	}()
 }
 
-// Run serves until ctx ends. A bind failure is logged, not returned: a
-// process without a profiler still does its job, and failing it over one
-// would be the wrong trade.
-func (s *Server) Run(ctx context.Context) error {
-	ln, err := net.Listen("tcp", s.addr)
-	if err != nil {
-		logging.Error("debug server failed", "address", s.addr, "error", err)
-		<-ctx.Done()
-		return nil
-	}
-	logging.Info("Starting debug server (pprof)", "address", s.addr)
-	stop := context.AfterFunc(ctx, func() { _ = s.srv.Close() })
-	defer stop()
-	if err := s.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		logging.Error("debug server failed", "address", s.addr, "error", err)
-	}
-	return nil
-}
+// Addr is the diagnostics listener's address for port: loopback only.
+func Addr(port int) string { return fmt.Sprintf("127.0.0.1:%d", port) }
 
-// Close stops the listener. A profile in flight is cut off: nothing here is
-// worth holding the process's stop for.
-func (s *Server) Close(context.Context) error { return s.srv.Close() }
-
-// handler is the diagnostics endpoints.
-func handler() http.Handler {
+// Handler is the diagnostics endpoints.
+func Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/debug/pprof/", http.DefaultServeMux.ServeHTTP)
 	mux.HandleFunc("/debug/db", func(w http.ResponseWriter, r *http.Request) {
