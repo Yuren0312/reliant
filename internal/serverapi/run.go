@@ -530,7 +530,7 @@ func Run(ctx context.Context, opts Options) error {
 		Database:            repo,
 		SQL:                 repo.DB.SQLDB(),
 		ORM:                 repo.ORM(),
-		ConnectorGrants:     connectorgrant.NewSQLStore(repo.DB.SQLDB()),
+		ConnectorGrants:     connectorgrant.NewSQLStore(connectorgrant.Deps{DB: repo.ORM()}),
 		ToolsFactory:        toolsFactory,
 		TemporalClient:      temporalClient,
 		StreamingHub:        streamingHub,
@@ -572,7 +572,7 @@ func Run(ctx context.Context, opts Options) error {
 	// for it when one of the user's machines connects, and deliver the ones
 	// whose run already ended. The reconciler sweeps for connects this misses
 	// and continues the message of a run it ends as wedged.
-	queued := queueddelivery.New(queueddelivery.Deps{Store: repo, Machines: daemonRouter, Deliverer: api.ChatService(), Signaler: temporalClient})
+	queued := queueddelivery.NewInstrumented(queueddelivery.Deps{Store: repo, Machines: daemonRouter, Deliverer: api.ChatService(), Signaler: temporalClient})
 	reconciler.SetQueuedDelivery(queued)
 
 	scheduleSyncer := triggers.NewSyncer(
