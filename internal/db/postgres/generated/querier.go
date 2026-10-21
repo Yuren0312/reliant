@@ -72,12 +72,6 @@ type Querier interface {
 	// holds it and the last attempt is older than due_before. One row per pair;
 	// the insert covers a pair never refreshed.
 	ClaimIntegrationAccessRefresh(ctx context.Context, arg ClaimIntegrationAccessRefreshParams) (int64, error)
-	// The launcher adopts an inbound event the receiver recorded: the row moves
-	// from pending to launched (chat attached later in the same transaction) and
-	// takes the launch's start record as its payload. The outcome predicate is
-	// what makes two concurrent fires of one event launch it once: the loser
-	// updates zero rows.
-	ClaimPendingTriggerEvent(ctx context.Context, arg ClaimPendingTriggerEventParams) (int64, error)
 	// Atomically take every still-queued HUMAN message for a thread and return
 	// the rows that were actually taken. This is the "flush the queue back into
 	// the composer" primitive behind Send now / Send all.
@@ -108,11 +102,6 @@ type Querier interface {
 	// Settles an intent row. Only an intent row settles: a ledger entry is never
 	// rewritten after the fact, so a duplicate completion is a no-op.
 	CompleteIntegrationWrite(ctx context.Context, arg CompleteIntegrationWriteParams) (int64, error)
-	// Chats the user launched through this kind of event whose ROOT run is still
-	// live: pending (1), active (2), or stopped-because-paused (state 3, stop
-	// reason 3). The inner joins drop events whose chat was deleted or never got a
-	// root workflow, neither of which can be running.
-	CountLiveLaunchedRuns(ctx context.Context, arg CountLiveLaunchedRunsParams) (int64, error)
 	// True total message count for a chat, so a bounded snapshot can report an
 	// honest `total` rather than the length of the window it happened to send.
 	CountMessagesByChat(ctx context.Context, chatID string) (int64, error)
@@ -165,12 +154,6 @@ type Querier interface {
 	CreateRunEvent(ctx context.Context, arg CreateRunEventParams) (int64, error)
 	CreateStepExecution(ctx context.Context, arg CreateStepExecutionParams) (StepExecution, error)
 	CreateThread(ctx context.Context, arg CreateThreadParams) (Thread, error)
-	CreateTrigger(ctx context.Context, arg CreateTriggerParams) error
-	// DO NOTHING rather than DO UPDATE: the first row for a (kind, dedupe_key) is
-	// the authoritative record of intent, and a retry must not overwrite its
-	// outcome. The affected-row count is what tells the caller whether it won the
-	// race (1) or a prior firing already exists (0).
-	CreateTriggerEvent(ctx context.Context, arg CreateTriggerEventParams) (int64, error)
 	CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) (Workflow, error)
 	// Workflow Drafts - Simplified user-owned workflows
 	// Workflows are owned by users and available across all projects
@@ -200,8 +183,6 @@ type Querier interface {
 	DeleteStepExecutionsForWorkflow(ctx context.Context, workflowID string) error
 	DeleteThread(ctx context.Context, id string) error
 	DeleteThreadsByConversation(ctx context.Context, chatID string) error
-	DeleteTrigger(ctx context.Context, id string) error
-	DeleteTriggerRegistration(ctx context.Context, triggerID string) error
 	// Removes a row that was never read: its thread's loop exited before a drain
 	// reached it. A repeat of the send that wrote it is a fresh send, and has to
 	// be able to take its id; a queued or delivered row is never touched.
@@ -347,10 +328,6 @@ type Querier interface {
 	// the root issued, 2 for one a top-level spawn issued, and so on. The walk is
 	// bounded so a malformed parent cycle cannot recurse forever.
 	GetLatestSpawnRunForThread(ctx context.Context, arg GetLatestSpawnRunForThreadParams) (GetLatestSpawnRunForThreadRow, error)
-	// The overlap check ("is this trigger's previous run still going?") asks for
-	// the latest 'launched' event; the detail view asks for the latest of any
-	// outcome. A NULL outcome means no filter.
-	GetLatestTriggerEvent(ctx context.Context, arg GetLatestTriggerEventParams) (TriggerEvent, error)
 	// The role of the latest TURN in a thread: its newest message that is not a
 	// system note (role 3). Notes the server posts about a run, and the hidden
 	// "params changed" note a send can write after the user's message, are not
@@ -507,20 +484,6 @@ type Querier interface {
 	// Branched chats included — an inherited message keeps its id, and so does
 	// the call record pointing at it.
 	GetToolCallResultForMessage(ctx context.Context, arg GetToolCallResultForMessageParams) (ToolCallResult, error)
-	// Joins the display names so a trigger can be shown without a second lookup.
-	// LEFT JOINs: a daemon id is not a foreign key, and an absent name must not
-	// hide the trigger.
-	GetTrigger(ctx context.Context, id string) (GetTriggerRow, error)
-	// The event that launched a chat. The oldest wins: a chat is launched once, and
-	// a later row naming it can only be a replay. Served by idx_trigger_events_chat.
-	GetTriggerEventByChat(ctx context.Context, arg GetTriggerEventByChatParams) (TriggerEvent, error)
-	// The chat's launch event: the earliest event that references it. Served by
-	// idx_trigger_events_chat.
-	GetTriggerEventByChatID(ctx context.Context, chatID sql.NullString) (TriggerEvent, error)
-	GetTriggerEventByDedupe(ctx context.Context, arg GetTriggerEventByDedupeParams) (TriggerEvent, error)
-	GetTriggerRegistration(ctx context.Context, triggerID string) (TriggerRegistration, error)
-	// Only the webhook receiver reads these. They are never rendered.
-	GetTriggerWebhookCredentials(ctx context.Context, id string) (GetTriggerWebhookCredentialsRow, error)
 	// Get a usable workflow by slug (for runtime loading)
 	GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWorkflowBySlugParams) (GetUsableWorkflowBySlugRow, error)
 	GetVisibilityOverride(ctx context.Context, arg GetVisibilityOverrideParams) (bool, error)
@@ -564,10 +527,6 @@ type Querier interface {
 	// owner's live one; one with no connection (a delegated authority, e.g.
 	// GitHub via control-plane) is routed on access alone.
 	ListAccessRoutedTriggers(ctx context.Context, arg ListAccessRoutedTriggersParams) ([]ListAccessRoutedTriggersRow, error)
-	// Every user's triggers. Only the schedule syncer's reconciliation calls this.
-	ListAllTriggers(ctx context.Context) ([]Trigger, error)
-	// Every activation of a declared trigger, for the periodic reconcile.
-	ListAllWorkflowTriggerActivations(ctx context.Context) ([]Trigger, error)
 	// List archived chats with worktree info. Reads chats_with_activity (not chats)
 	// so the root workflow state and last_message_at come back like every other
 	// chat read; falls back to project name if worktree name is unavailable.
@@ -614,17 +573,6 @@ type Querier interface {
 	ListContextWindowsByThread(ctx context.Context, threadID string) ([]ContextWindow, error)
 	// Which of the candidate item ids this user has dismissed.
 	ListDismissedInboxItemIDs(ctx context.Context, arg ListDismissedInboxItemIDsParams) ([]string, error)
-	// Every firing of each named trigger after its newest SUCCESS (a launched
-	// firing whose run completed), newest first, capped at per_trigger rows. A
-	// trigger with no success returns its whole history up to the cap. This is
-	// the failure episode: Go reads its length and its oldest failure from it, so
-	// the episode is not truncated at the 10-firing health window. Same run
-	// columns and display-state table as ListRecentTriggerFirings.
-	//
-	// "Completed" is the run the trigger fired (run_status), not whatever turn
-	// the chat is on now — the same rule triggers.resolveFiring applies — so a
-	// person's later reply in the chat neither ends nor extends the episode.
-	ListFiringsSinceLastSuccess(ctx context.Context, arg ListFiringsSinceLastSuccessParams) ([]ListFiringsSinceLastSuccessRow, error)
 	// Which of the given threads are forks: their initial (sequence 0) context
 	// window links to a parent window. One round trip for a whole chat, where
 	// GetContextWindowBySequence(thread, 0) cost one per workflow.
@@ -663,12 +611,6 @@ type Querier interface {
 	// The users with at least one enabled trigger of an integration: whose
 	// access the periodic refresher keeps fresh.
 	ListIntegrationTriggerOwners(ctx context.Context, integration string) ([]string, error)
-	// Every ENABLED integration trigger for one integration, with its
-	// connection's routing identity. The inner join drops triggers whose
-	// connection is gone, revoked or belongs to someone else: an event can only
-	// reach a trigger through its own owner's live connection. Status is returned
-	// rather than filtered so a caller can tell needs_reauth apart.
-	ListIntegrationTriggers(ctx context.Context, integration string) ([]ListIntegrationTriggersRow, error)
 	// Every background spawn issued anywhere inside one root execution that is
 	// still open: tool_calls.status = 6 (backgrounded) and no terminal report in
 	// its parent's mailbox. A background spawn is a goroutine inside the ROOT's
@@ -742,12 +684,6 @@ type Querier interface {
 	// and fork threads), bounded so a node-heavy chat cannot balloon the payload.
 	// Returned DESC so the LIMIT keeps the newest rows; callers reverse.
 	ListRecentTranscriptSiblingMessages(ctx context.Context, arg ListRecentTranscriptSiblingMessagesParams) ([]Message, error)
-	// The newest per_trigger firings of each named trigger, with their runs, in ONE
-	// query. This is what health and last_event are computed from, so listing N
-	// triggers costs one extra query rather than N. Same run_display_state table as
-	// ListTriggerEvents above. run_display_state is meaningful only when
-	// run_chat_id is set.
-	ListRecentTriggerFirings(ctx context.Context, arg ListRecentTriggerFiringsParams) ([]ListRecentTriggerFiringsRow, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]Repo, error)
 	ListRootWorkflows(ctx context.Context, chatID string) ([]Workflow, error)
 	// List root workflows (parent_id IS NULL) at a specific lifecycle.
@@ -831,10 +767,6 @@ type Querier interface {
 	// Measured on the busiest real chat: 60 rows in 1.9ms via
 	// idx_tool_calls_child_workflow_id, against 10,622 tool calls.
 	ListSpawnToolCallIDsByChildThread(ctx context.Context, chatID string) ([]ListSpawnToolCallIDsByChildThreadRow, error)
-	// Inbound events recorded but not yet settled, older than the cutoff: the
-	// fire workflow for them was never started (the receiver crashed between the
-	// insert and the start) or died. The redriver restarts their fires.
-	ListStalePendingTriggerEvents(ctx context.Context, arg ListStalePendingTriggerEventsParams) ([]TriggerEvent, error)
 	// The full record of a chat's steps — inputs, output and error included — for
 	// ChatService/ListStepExecutions, which the builder's Run tab reads when the
 	// author inspects one step of a run.
@@ -934,21 +866,6 @@ type Querier interface {
 	// the grants exactly as the workflow keys them. Ordered so the merge is
 	// deterministic.
 	ListToolGrantsForChat(ctx context.Context, chatID string) ([]ListToolGrantsForChatRow, error)
-	// Newest first, keyset on (occurred_at, id) so a firing recorded mid-pagination
-	// can neither repeat nor be skipped; two fires can share an occurred_at, and id
-	// breaks the tie. Served by idx_trigger_events_trigger_occurred_id.
-	//
-	// Each launched firing carries its run. run_display_state is the SAME table as
-	// queries/runs.sql (ListRuns) — keep the two in step; a test pins them equal.
-	// user_id scopes the rows even though the handler already checked ownership.
-	ListTriggerEvents(ctx context.Context, arg ListTriggerEventsParams) ([]ListTriggerEventsRow, error)
-	// The named triggers' registrations, for health, in ONE query. Joined through
-	// triggers so only the caller's own appear.
-	ListTriggerRegistrations(ctx context.Context, arg ListTriggerRegistrationsParams) ([]TriggerRegistration, error)
-	// Always scoped to one user; project_id narrows further. The unscoped listing
-	// is ListAllTriggers, a separate query so "no user" can never be reached by
-	// passing an empty string.
-	ListTriggers(ctx context.Context, arg ListTriggersParams) ([]ListTriggersRow, error)
 	ListVisibilityOverrides(ctx context.Context, arg ListVisibilityOverridesParams) ([]ListVisibilityOverridesRow, error)
 	// List all workflows for a user, ordered by most recently updated
 	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]ListWorkflowDraftsByUserRow, error)
@@ -956,10 +873,6 @@ type Querier interface {
 	ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) ([]WorkflowScenario, error)
 	// List all scenarios for a user
 	ListWorkflowScenariosByUser(ctx context.Context, userID string) ([]WorkflowScenario, error)
-	// One user's activations of a workflow's declared triggers. The workflow is
-	// matched as stored on the row (the slug or builtin:// ref the activation
-	// named).
-	ListWorkflowTriggerActivations(ctx context.Context, arg ListWorkflowTriggerActivationsParams) ([]Trigger, error)
 	ListWorkflowsByChat(ctx context.Context, chatID string) ([]Workflow, error)
 	// List all workflows at a specific lifecycle (e.g. ACTIVE, or STOPPED/PAUSED).
 	// Used for startup recovery to restart workers for active workflows.
@@ -986,9 +899,6 @@ type Querier interface {
 	// run already blocked?" check across concurrent approval and question
 	// creations in the same chat.
 	LockChatForRunEvent(ctx context.Context, id string) (string, error)
-	// Row lock on the trigger for the rest of the transaction. Serializes the
-	// overlap check with the launch it guards across concurrent fires.
-	LockTrigger(ctx context.Context, id string) (string, error)
 	// Conditional on status = 1, and returns the ids it actually moved.
 	//
 	// Both halves matter, for the same reason every other statement in this file
@@ -1236,24 +1146,10 @@ type Querier interface {
 	// of two that race exactly one sees the row change.
 	SetChatQueuedForMachine(ctx context.Context, arg SetChatQueuedForMachineParams) (int64, error)
 	SetCompactionSummaryMessage(ctx context.Context, arg SetCompactionSummaryMessageParams) (ContextWindow, error)
-	// Records how the run a trigger fired ended, on the chat's launch event (the
-	// same earliest-event rule as GetTriggerEventByChatID).
-	SetLaunchEventRunStatus(ctx context.Context, arg SetLaunchEventRunStatusParams) (int64, error)
 	// Records forge's name for a project (forge.yaml `name`) and marks it a forge
 	// project. A no-op — zero rows, no updated_at churn — when both already hold,
 	// so callers can run it on every successful forge read.
 	SetProjectForgeName(ctx context.Context, arg SetProjectForgeNameParams) (int64, error)
-	SetTriggerEnabled(ctx context.Context, arg SetTriggerEnabledParams) (int64, error)
-	// Refreshes an activation's projection of its workflow's declaration: the
-	// config and filter routing and the schedule syncer read. The kind is not
-	// here: an activation whose declaration changed kind is broken (its
-	// connection or webhook token belongs to the old kind), never re-projected.
-	SetTriggerProjection(ctx context.Context, arg SetTriggerProjectionParams) (int64, error)
-	// NULL clears the HMAC secret. Sealed by the caller under the owner's tenant.
-	SetTriggerWebhookSecret(ctx context.Context, arg SetTriggerWebhookSecretParams) (int64, error)
-	// The token hash has its own write path: no definition update can touch it,
-	// and rotating it is one statement.
-	SetTriggerWebhookTokenHash(ctx context.Context, arg SetTriggerWebhookTokenHashParams) (int64, error)
 	SetVisibilityOverride(ctx context.Context, arg SetVisibilityOverrideParams) error
 	SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDraftHiddenParams) (SetWorkflowDraftHiddenRow, error)
 	// Move a draft between 'draft' and 'complete'. The caller validates before
@@ -1264,9 +1160,6 @@ type Querier interface {
 	// a graph that routes to its `failed` node is a COMPLETED Temporal execution,
 	// so the verdict has nowhere else to live.
 	SetWorkflowOutcome(ctx context.Context, arg SetWorkflowOutcomeParams) (Workflow, error)
-	// Records the verdict on an inbound event that did NOT launch. Conditional on
-	// pending, so it can never overwrite a launch that won a race.
-	SettlePendingTriggerEvent(ctx context.Context, arg SettlePendingTriggerEventParams) (int64, error)
 	TouchProject(ctx context.Context, arg TouchProjectParams) error
 	UnarchiveWorktree(ctx context.Context, id string) error
 	UpdateChat(ctx context.Context, arg UpdateChatParams) error
@@ -1288,12 +1181,6 @@ type Querier interface {
 	// when moving a thread back to running.
 	UpdateThreadStatus(ctx context.Context, arg UpdateThreadStatusParams) (Thread, error)
 	UpdateThreadWorkflow(ctx context.Context, arg UpdateThreadWorkflowParams) (Thread, error)
-	// Identity columns (id, user_id, kind) are not updatable: changing the owner
-	// would silently re-point which identity the run executes as, and changing
-	// the kind would leave Config describing a source that no longer applies.
-	UpdateTrigger(ctx context.Context, arg UpdateTriggerParams) (int64, error)
-	UpdateTriggerEventOutcome(ctx context.Context, arg UpdateTriggerEventOutcomeParams) (int64, error)
-	UpdateTriggerEventPayload(ctx context.Context, arg UpdateTriggerEventPayloadParams) (int64, error)
 	UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDraftParams) (UpdateWorkflowDraftRow, error)
 	UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateWorkflowDraftDefinitionParams) (UpdateWorkflowDraftDefinitionRow, error)
 	// Set or update the forked_from origin
@@ -1363,9 +1250,6 @@ type Querier interface {
 	// replacing it, a repair) replaces what the call granted, so the grants
 	// always describe the result the model reads.
 	UpsertToolCallResult(ctx context.Context, arg UpsertToolCallResultParams) (int64, error)
-	// status_since moves only when status changes, so it is the start of the
-	// current status episode however often the source is polled.
-	UpsertTriggerRegistration(ctx context.Context, arg UpsertTriggerRegistrationParams) error
 	// Workflow position checkpoints (resume-at-position support).
 	// One row per workflow ID. Written at cheap boundaries: top-level node entry
 	// and per loop iteration for top-level loop nodes.
