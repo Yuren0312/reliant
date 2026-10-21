@@ -111,7 +111,6 @@ type Repo struct {
 	accounts        *postgresstore.AccountStore
 	workflows       core.WorkflowStore
 	workflowCatalog core.WorkflowCatalogStore
-	triggers        core.TriggerStore
 	runEvents       core.RunEventStore
 
 	// session is the DatabaseConfig.DirectURL pool, for work that needs a
@@ -167,7 +166,6 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 		}),
 		workflows:       postgresstore.NewWorkflowStore(client),
 		workflowCatalog: postgresstore.NewWorkflowCatalogStore(client),
-		triggers:        postgresstore.NewTriggerStore(pgQueries),
 		runEvents:       postgresstore.NewRunEventStore(client),
 	}, nil
 }
