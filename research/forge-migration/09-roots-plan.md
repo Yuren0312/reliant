@@ -369,8 +369,8 @@ Your order (a)→(b)→(c)→(d)→(e) holds with **three changes**:
   rather than `runRoot` policy, so the reach sees their config), ProcessRuntime (key
   provider + healer, analytics, Sentry), PayloadStore, TemporalClient (the first dial
   retries like NATS; `/ready` names `temporal` meanwhile), StreamingHub, ChatUpdateHub,
-  RepoUpdateFeed, Vault, PauseService, TriggerPollers, DebugServer
-  (`debugserver.Server`, now a node with Run/Close). The worker's own are in
+  RepoUpdateFeed, Vault, PauseService, TriggerPollers, DebugServer (debugserver's
+  handler as a node with Run/Close). The worker's own are in
   `providers_worker.go` (with `serverworker/connections.go` and its tests); its variants
   are distinct types marked `//forge:root-only worker` (WorkerDaemonRouter,
   WorkerChat/Run/Trigger, WorkerToolsFactory, WorkerCatalogSearch,
@@ -382,7 +382,11 @@ Your order (a)→(b)→(c)→(d)→(e) holds with **three changes**:
   `LIVENESS_PATHS`/`READINESS_PATHS`; the probe address is `:HEALTH_PORT` (the worker
   has no BIND_ADDRESS). `runRoot` flushes Sentry before OTel for every root. The shared
   config conversions (integrations, LLM, preview, analytics, Sentry, Temporal) moved from
-  `cmd` to `internal/app/server_config.go`.
+  `cmd` to `internal/app/server_config.go`. Re-pinned to forge `2472900c` (#1095, and
+  #1096: what `runRoot` reads is each root's reach, so `ROOTS` now carries the
+  observability vars and the worker's HEALTH_PORT; `//forge:group server` in
+  `internal/app/roots.go` is the `server` command's help, so `mergeServerRoles` only
+  adds `server api`).
 
 ### R5: (d) api root *(needs R3; develop in parallel with R4, land after it)*
 - Everything in §1.4. `internal/grpc/server.go`'s `NewAPI`, `Config`, `validate` and

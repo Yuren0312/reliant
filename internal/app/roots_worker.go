@@ -3,7 +3,6 @@
 package app
 
 import (
-	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/workersetup"
@@ -68,7 +67,7 @@ type Worker struct {
 	Feed *RepoUpdateFeed
 	// Debug is off with PPROF_PORT=0; it stops after NATS, so a profile can
 	// be taken through the drain.
-	Debug    *debugserver.Server
+	Debug    *DebugServer
 	Runtime  *ProcessRuntime
 	Settings *ProcessSettings
 }

@@ -19,12 +19,10 @@ import (
 
 // mergeServerRoles completes the generated `server` command (roots_gen.go:
 // the gateway and worker roots' parent, with ServerProcessConfig's and
-// DatabaseConfig's flags persistent on it) with its help text and the role
-// that is not a root yet, `server api`.
+// DatabaseConfig's flags persistent on it, and its help from
+// internal/app/roots.go's //forge:group) with the role that is not a root
+// yet, `server api`.
 func mergeServerRoles(cmd *cobra.Command) {
-	cmd.Short = "Run cloud server components"
-	cmd.Long = `Run Reliant cloud server components. Each subcommand starts a specific
-server role for split-deployment mode.`
 	cmd.AddCommand(newServerAPICmd())
 }
 
