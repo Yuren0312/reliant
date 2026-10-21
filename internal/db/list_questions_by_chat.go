@@ -3,8 +3,9 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+
+	"github.com/reliant-labs/forge/pkg/observe/dbtrace"
 
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -21,7 +22,7 @@ func OpenReadOnlyRepo(url string) (*Repo, error) {
 	if url == "" {
 		return nil, fmt.Errorf("database URL is required")
 	}
-	sqlDB, err := sql.Open("pgx", url)
+	sqlDB, err := dbtrace.Open("pgx", url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open postgres database: %w", err)
 	}
