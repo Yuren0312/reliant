@@ -130,7 +130,7 @@ type localModelProber struct {
 
 func newLocalModelProber() *localModelProber {
 	return &localModelProber{
-		probes:    localprobe.New(localprobe.Deps{}),
+		probes:    localprobe.NewInstrumented(localprobe.Deps{}),
 		wellKnown: defaultWellKnownLocalEndpoints(),
 		loadCfg:   loadLocalModelsConfig,
 		showCache: localprobe.NewShowCache(),
