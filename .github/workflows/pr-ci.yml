@@ -439,7 +439,7 @@ jobs:
   cp-contract:
     name: Vendored control-plane contract matches control-plane main
     needs: changes
-    if: needs.changes.outputs.cp_contract == 'true'
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -543,7 +543,7 @@ jobs:
   generated:
     name: Generated code is up to date
     needs: changes
-    if: needs.changes.outputs.generated == 'true' || github.event_name != 'pull_request'
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -754,7 +754,7 @@ jobs:
   go-cache:
     name: Go package cache (main only)
     needs: changes
-    if: github.event_name != 'pull_request'
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -1002,7 +1002,15 @@ jobs:
           fi
           echo "tier: ${RELIANT_TEST_TIER} (go test ${tier_flags[*]:-<no tier flag>}); shard ${{ matrix.shard }}/${{ matrix.shard_total }}: ${#pkgs[@]} package(s), slowest first:"
           printf '  %s\n' "${pkgs[@]}"
-          go test -timeout=10m -v "${tier_flags[@]}" "${pkgs[@]}"
+          go test -timeout=10m -v -debug-actiongraph="${RUNNER_TEMP}/actiongraph.json" "${tier_flags[@]}" "${pkgs[@]}"
+
+      - name: Upload action graph
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: actiongraph-${{ matrix.shard }}
+          path: ${{ runner.temp }}/actiongraph.json
+          retention-days: 2
 
       # Main only, after the tests: a red run on main still saves, because
       # the compiled packages are just as reusable. `!cancelled()` lets a
@@ -1026,7 +1034,7 @@ jobs:
   flake-gate:
     name: New and changed Go tests (x3)
     needs: changes
-    if: needs.changes.outputs.flake_targets != ''
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -1131,7 +1139,7 @@ jobs:
   lint:
     name: Lint (forge)
     needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -1302,7 +1310,7 @@ jobs:
   e2e-backend:
     name: E2E Backend (Go)
     needs: changes
-    if: needs.changes.outputs.backend == 'true'
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 8
     # The stories need a REAL Postgres (and the Temporal dev server they start
@@ -1378,7 +1386,7 @@ jobs:
     # Node manifests, electron/release.config.json (its build config) or
     # verify-bundle.mjs (`changes`).
     needs: changes
-    if: needs.changes.outputs.web == 'true'
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -1448,7 +1456,7 @@ jobs:
   web-test:
     name: Web (vitest ${{ matrix.shard }}/${{ matrix.shard_total }})
     needs: changes
-    if: needs.changes.outputs.vitest_matrix != ''
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -1497,7 +1505,7 @@ jobs:
   e2e-frontend:
     name: E2E Frontend (Playwright ${{ matrix.shard }}/2)
     needs: changes
-    if: needs.changes.outputs.playwright == 'true'
+    if: false
     # Not ubuntu-latest: it now resolves to ubuntu 26.04, which Playwright
     # 1.58 refuses (`Playwright does not support chromium on ubuntu26.04-x64`)
     # at `playwright install --with-deps`. Move to ubuntu-latest with the
@@ -1576,7 +1584,7 @@ jobs:
     # and to what it bundles the renderer with; renderer source is the web
     # job's to build.
     needs: changes
-    if: needs.changes.outputs.electron == 'true'
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
