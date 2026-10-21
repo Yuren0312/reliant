@@ -13,6 +13,8 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver
 	"github.com/spf13/cobra"
 
+	"github.com/reliant-labs/forge/pkg/observe/dbtrace"
+
 	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -72,11 +74,11 @@ refused with nothing applied. ` + "`db migrate status`" + ` previews which.`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.LoadDbMigrateUpConfig(cmd)
+			cfg, err := config.LoadDatabaseConfig(cmd)
 			if err != nil {
 				return err
 			}
-			migrationURL := migrationURL(cfg.GetDatabase())
+			migrationURL := migrationURL(cfg)
 
 			out := cmd.OutOrStdout()
 			// The goose bridge logs its progress while it runs (goose prints
@@ -95,7 +97,7 @@ refused with nothing applied. ` + "`db migrate status`" + ` previews which.`,
 			// different set than this binary embeds — a mismatch worth failing
 			// the Job over, because every waiter is about to block on exactly
 			// this set.
-			sqlDB, err := sql.Open("pgx", migrationURL)
+			sqlDB, err := dbtrace.Open("pgx", migrationURL)
 			if err != nil {
 				return fmt.Errorf("verify schema after migrate: %w", err)
 			}
@@ -121,8 +123,6 @@ refused with nothing applied. ` + "`db migrate status`" + ` previews which.`,
 			return nil
 		},
 	}
-	// DATABASE_URL, DATABASE_DIRECT_URL, --db-driver: proto/config/v1 DbMigrateUpConfig.
-	config.RegisterDbMigrateUpConfigFlags(upCmd)
 	migrateCmd.AddCommand(upCmd)
 
 	statusCmd := &cobra.Command{
@@ -142,15 +142,15 @@ very deadlock the schema wait produces.`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.LoadDbMigrateStatusConfig(cmd)
+			cfg, err := config.LoadDatabaseConfig(cmd)
 			if err != nil {
 				return err
 			}
-			migrationURL := migrationURL(cfg.GetDatabase())
+			migrationURL := migrationURL(cfg)
 
 			// Deliberately NOT ConnectWithConfig: both of its policies act on
 			// the schema (apply, or block until current).
-			sqlDB, err := sql.Open("pgx", migrationURL)
+			sqlDB, err := dbtrace.Open("pgx", migrationURL)
 			if err != nil {
 				return fmt.Errorf("open database: %w", err)
 			}
@@ -166,8 +166,6 @@ very deadlock the schema wait produces.`,
 			return nil
 		},
 	}
-	// DATABASE_URL, DATABASE_DIRECT_URL, --db-driver: proto/config/v1 DbMigrateStatusConfig.
-	config.RegisterDbMigrateStatusConfigFlags(statusCmd)
 	migrateCmd.AddCommand(statusCmd)
 
 	forceCmd := &cobra.Command{
@@ -190,11 +188,11 @@ records it without checking that the schema is the one it builds.`,
 			if err != nil || version < -1 {
 				return fmt.Errorf("force: %q is not a migration version (an integer, or -1 for none)", args[0])
 			}
-			cfg, err := config.LoadDbMigrateForceConfig(cmd)
+			cfg, err := config.LoadDatabaseConfig(cmd)
 			if err != nil {
 				return err
 			}
-			migrationURL := migrationURL(cfg.GetDatabase())
+			migrationURL := migrationURL(cfg)
 			if err := db.Force(migrationURL, version); err != nil {
 				return err
 			}
@@ -203,10 +201,12 @@ records it without checking that the schema is the one it builds.`,
 			return nil
 		},
 	}
-	// DATABASE_URL, DATABASE_DIRECT_URL, --db-driver: proto/config/v1 DbMigrateForceConfig.
-	config.RegisterDbMigrateForceConfigFlags(forceCmd)
 	migrateCmd.AddCommand(forceCmd)
 
+	// DATABASE_URL, DATABASE_DIRECT_URL, --db-driver: proto/config/v1
+	// DatabaseConfig, the one the server roles load, persistent here so every
+	// migrate command inherits the flag.
+	config.RegisterDatabaseConfigFlags(migrateCmd)
 	dbCmd.AddCommand(migrateCmd)
 	return dbCmd
 }
