@@ -53,21 +53,3 @@ func TriggerFromRow(row pgdb.Trigger) (*core.Trigger, error) {
 		WorkflowTrigger:  nullStringToPtr(row.WorkflowTrigger),
 	}, nil
 }
-
-// triggerMapToJSON always produces a jsonb OBJECT, never a JSON null: a nil Go
-// map marshals to `null`, which reads back as a nil map and would force every
-// consumer to nil-check a field the schema declares NOT NULL with a '{}'
-// default. run_event_store.go's payloads share it.
-func triggerMapToJSON[V any](m map[string]V) (json.RawMessage, error) {
-	if m == nil {
-		return json.RawMessage(`{}`), nil
-	}
-	return json.Marshal(m)
-}
-
-func triggerJSONToMap(raw json.RawMessage, out any) error {
-	if len(raw) == 0 {
-		return nil
-	}
-	return json.Unmarshal(raw, out)
-}
