@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // The daemons table is a read replica of the control plane's daemon set for
@@ -28,14 +30,7 @@ import (
 // (MACHINE_LIST_BUGS_2026-10-07).
 
 // DaemonIdentity is what the control plane knows about a daemon's existence.
-type DaemonIdentity struct {
-	DaemonID   string
-	UserID     string
-	Name       string
-	DaemonType string
-	// CreatedAt is the control plane's creation time. Zero means "now".
-	CreatedAt time.Time
-}
+type DaemonIdentity = core.DaemonIdentity
 
 // RegistrySnapshotApply is one owner's authoritative daemon set, as applied by
 // ApplyDaemonRegistrySnapshot.
