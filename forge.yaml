@@ -50,7 +50,8 @@ lint:
         # observe.NewHTTPClient, Connect clients through observe.NewClientStack.
         # raw-sql-open is done: every pool opens through dbtrace (or
         # serverkit.OpenDB); the test-only provisioning pools carry reasons.
-        forge-tracing-contract-uninstrumented: warn
+        # contract-uninstrumented is done: every construction outside
+        # compose.go calls the package's generated NewInstrumented.
     tracing:
         # internal/logging's ctx-less helpers write through slog without the
         # request's context, so their lines carry no trace_id. Listing them
