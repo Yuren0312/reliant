@@ -108,8 +108,13 @@ func GetConnectionSecrets(ctx context.Context, db orm.Context, userID, id string
 // WithConnectionSecretsLock runs fn with the user's live connection row and
 // its secret rows locked (SELECT … FOR UPDATE) inside one transaction,
 // serializing token refreshes across worker processes. The connection row is
-// locked too: a connection with no secret rows still needs a lock target.
-func WithConnectionSecretsLock(ctx context.Context, db orm.Context, userID, id string, fn func(core.SecretsTx) error) error {
+// locked too: a connection with no secret rows still needs a lock target. fn
+// receives the ctx carrying that transaction; the writes it makes through
+// ReplaceConnectionSecrets, MarkConnectionStatus and AppendConnectionEvent
+// join it only when given that ctx.
+func WithConnectionSecretsLock(ctx context.Context, db orm.Context, userID, id string,
+	fn func(txCtx context.Context, conn *core.Connection, secrets map[string]core.ConnectionSecret) error,
+) error {
 	return connectionTx(ctx, db, func(txCtx context.Context) error {
 		conn, err := selectConnection(txCtx, db, true, whereConnection(ConnectionFieldID, id), whereUserOwned(userID))
 		if err != nil {
@@ -119,60 +124,39 @@ func WithConnectionSecretsLock(ctx context.Context, db orm.Context, userID, id s
 		if err != nil {
 			return err
 		}
-		return fn(&secretsTx{txCtx: txCtx, db: db, conn: conn, secrets: secrets})
+		return fn(txCtx, conn, secrets)
 	})
 }
 
-// secretsTx is the locked view WithConnectionSecretsLock hands its callback.
-// Its statements run in that transaction: txCtx carries it. The ctx each
-// method takes is the callback's own, which does not, so it bounds nothing
-// here — the transaction is already bounded by the ctx it was opened with.
-type secretsTx struct {
-	txCtx   context.Context //nolint:containedctx // the locked transaction's ctx, scoped to the callback
-	db      orm.Context
-	conn    *core.Connection
-	secrets map[string]core.ConnectionSecret
-}
-
-func (t *secretsTx) Connection() *core.Connection              { return t.conn }
-func (t *secretsTx) Secrets() map[string]core.ConnectionSecret { return t.secrets }
-
-// Replace rewrites the given fields and bumps their generation, but only if
-// the access_token row is still at expectedGeneration. The rewrite outlives a
+// ReplaceConnectionSecrets rewrites the given sealed fields of a connection
+// (bumping their generations) and its access expiry. The rewrite outlives a
 // cancelled caller: a refreshed token the provider has already issued must
 // not be lost.
-func (t *secretsTx) Replace(_ context.Context, expectedGeneration int64, secrets []core.ConnectionSecret, accessExpiresAt *time.Time) error {
-	cur, ok := t.secrets[core.SecretFieldAccessToken]
-	if !ok || cur.Generation != expectedGeneration {
-		return core.ErrGenerationConflict
-	}
+func ReplaceConnectionSecrets(ctx context.Context, db orm.Context, connectionID string, secrets []core.ConnectionSecret, accessExpiresAt *time.Time) error {
 	for _, sec := range secrets {
-		sec.ConnectionID = t.conn.ID
-		if err := upsertConnectionSecret(context.WithoutCancel(t.txCtx), t.db, sec); err != nil {
+		sec.ConnectionID = connectionID
+		if err := upsertConnectionSecret(context.WithoutCancel(ctx), db, sec); err != nil {
 			return err
 		}
 	}
-	_, err := t.db.Bun().NewUpdate().Model((*Connection)(nil)).
+	_, err := db.Bun().NewUpdate().Model((*Connection)(nil)).
 		Set("? = ?", bun.Ident(ConnectionFieldAccessExpiresAt), accessExpiry(accessExpiresAt)).
 		Set("? = now()", bun.Ident(ConnectionFieldUpdatedAt)).
-		Where("? = ?", bun.Ident(ConnectionFieldID), t.conn.ID).
-		Exec(t.txCtx)
+		Where("? = ?", bun.Ident(ConnectionFieldID), connectionID).
+		Exec(ctx)
 	return err
 }
 
-func (t *secretsTx) MarkStatus(_ context.Context, status, reason string) error {
-	_, err := t.db.Bun().NewUpdate().Model((*Connection)(nil)).
+// MarkConnectionStatus sets a connection's status and its reason (empty
+// clears it).
+func MarkConnectionStatus(ctx context.Context, db orm.Context, connectionID, status, reason string) error {
+	_, err := db.Bun().NewUpdate().Model((*Connection)(nil)).
 		Set("? = ?", bun.Ident(ConnectionFieldStatus), status).
 		Set("? = ?", bun.Ident(ConnectionFieldStatusReason), emptyToNil(reason)).
 		Set("? = now()", bun.Ident(ConnectionFieldUpdatedAt)).
-		Where("? = ?", bun.Ident(ConnectionFieldID), t.conn.ID).
-		Exec(t.txCtx)
+		Where("? = ?", bun.Ident(ConnectionFieldID), connectionID).
+		Exec(ctx)
 	return err
-}
-
-func (t *secretsTx) AppendEvent(_ context.Context, ev core.ConnectionEvent) error {
-	ev.ConnectionID = t.conn.ID
-	return AppendConnectionEvent(t.txCtx, t.db, ev)
 }
 
 func connectionSecretsToCore(rows []*ConnectionSecret) map[string]core.ConnectionSecret {

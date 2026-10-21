@@ -71,7 +71,44 @@ func (s connectionStore) GetSecrets(ctx context.Context, userID, id string) (map
 }
 
 func (s connectionStore) WithSecretsLock(ctx context.Context, userID, id string, fn func(core.SecretsTx) error) error {
-	return store.WithConnectionSecretsLock(ctx, s.db, userID, id, fn)
+	return store.WithConnectionSecretsLock(ctx, s.db, userID, id,
+		func(txCtx context.Context, conn *core.Connection, secrets map[string]core.ConnectionSecret) error {
+			return fn(&secretsTx{txCtx: txCtx, db: s.db, conn: conn, secrets: secrets})
+		})
+}
+
+// secretsTx is the locked view WithSecretsLock hands its callback. Its
+// statements run in the lock's transaction, which txCtx carries. The ctx each
+// method takes is the callback's own, which does not carry it — run there, a
+// write would wait on the very row the lock holds — so it is not used; the
+// transaction is bounded by the ctx it was opened with.
+type secretsTx struct {
+	txCtx   context.Context //nolint:containedctx // the lock's transaction, scoped to the callback
+	db      orm.Context
+	conn    *core.Connection
+	secrets map[string]core.ConnectionSecret
+}
+
+func (t *secretsTx) Connection() *core.Connection              { return t.conn }
+func (t *secretsTx) Secrets() map[string]core.ConnectionSecret { return t.secrets }
+
+// Replace rewrites the given fields and bumps their generation, but only if
+// the access_token row is still at expectedGeneration.
+func (t *secretsTx) Replace(_ context.Context, expectedGeneration int64, secrets []core.ConnectionSecret, accessExpiresAt *time.Time) error {
+	cur, ok := t.secrets[core.SecretFieldAccessToken]
+	if !ok || cur.Generation != expectedGeneration {
+		return core.ErrGenerationConflict
+	}
+	return store.ReplaceConnectionSecrets(t.txCtx, t.db, t.conn.ID, secrets, accessExpiresAt)
+}
+
+func (t *secretsTx) MarkStatus(_ context.Context, status, reason string) error {
+	return store.MarkConnectionStatus(t.txCtx, t.db, t.conn.ID, status, reason)
+}
+
+func (t *secretsTx) AppendEvent(_ context.Context, ev core.ConnectionEvent) error {
+	ev.ConnectionID = t.conn.ID
+	return store.AppendConnectionEvent(t.txCtx, t.db, ev)
 }
 
 func (s connectionStore) CreateOAuthFlow(ctx context.Context, f *core.OAuthFlow) error {

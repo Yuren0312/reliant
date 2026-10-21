@@ -215,14 +215,24 @@ func TestConnectionSecretsLock(t *testing.T) {
 	require.NoError(t, twin.CreateConnection(ctx, c, []core.ConnectionSecret{secret(core.SecretFieldAccessToken, "t1")}, event(core.ConnectionEventCreated, "alice")))
 
 	exp := time.Now().UTC().Add(time.Hour).Truncate(time.Microsecond)
-	// The callback runs its statements with its own ctx, which does not
-	// carry the transaction: they must still land in it (or they would block
-	// on the row the lock holds).
-	err := store.WithConnectionSecretsLock(ctx, env.ORM, "alice", c.ID, func(tx core.SecretsTx) error {
+	// The store half: fn gets the locked row and the ctx carrying the lock's
+	// transaction, and its writes join it.
+	err := store.WithConnectionSecretsLock(ctx, env.ORM, "alice", c.ID,
+		func(txCtx context.Context, conn *core.Connection, secrets map[string]core.ConnectionSecret) error {
+			assert.Equal(t, c.ID, conn.ID)
+			assert.EqualValues(t, 1, secrets[core.SecretFieldAccessToken].Generation)
+			return store.ReplaceConnectionSecrets(txCtx, env.ORM, c.ID, []core.ConnectionSecret{secret(core.SecretFieldAccessToken, "t2")}, &exp)
+		})
+	require.NoError(t, err)
+
+	// The adapter half (core.SecretsTx): the callback runs its statements
+	// with its own ctx, which does not carry the transaction, and they must
+	// still land in it (or they would block on the row the lock holds).
+	err = twin.WithSecretsLock(ctx, "alice", c.ID, func(tx core.SecretsTx) error {
 		assert.Equal(t, c.ID, tx.Connection().ID)
 		access := tx.Secrets()[core.SecretFieldAccessToken]
 		require.ErrorIs(t, tx.Replace(ctx, access.Generation+1, nil, nil), core.ErrGenerationConflict)
-		if err := tx.Replace(ctx, access.Generation, []core.ConnectionSecret{secret(core.SecretFieldAccessToken, "t2")}, &exp); err != nil {
+		if err := tx.Replace(ctx, access.Generation, []core.ConnectionSecret{secret(core.SecretFieldAccessToken, "t3")}, &exp); err != nil {
 			return err
 		}
 		if err := tx.MarkStatus(ctx, core.ConnectionStatusNeedsReauth, "invalid_grant"); err != nil {
@@ -238,7 +248,8 @@ func TestConnectionSecretsLock(t *testing.T) {
 	assert.True(t, got.AccessExpiresAt.Equal(exp))
 	secrets, err := store.GetConnectionSecrets(ctx, env.ORM, "alice", c.ID)
 	require.NoError(t, err)
-	assert.EqualValues(t, 2, secrets[core.SecretFieldAccessToken].Generation)
+	assert.EqualValues(t, 3, secrets[core.SecretFieldAccessToken].Generation)
+	assert.Equal(t, []byte("t3"), secrets[core.SecretFieldAccessToken].Ciphertext)
 
 	// A failed callback rolls back everything it wrote.
 	require.Error(t, twin.WithSecretsLock(ctx, "alice", c.ID, func(tx core.SecretsTx) error {
@@ -249,7 +260,8 @@ func TestConnectionSecretsLock(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, core.ConnectionStatusNeedsReauth, got.Status)
 
-	require.ErrorIs(t, store.WithConnectionSecretsLock(ctx, env.ORM, "bob", c.ID, func(core.SecretsTx) error { return nil }), core.ErrConnectionNotFound)
+	require.ErrorIs(t, store.WithConnectionSecretsLock(ctx, env.ORM, "bob", c.ID,
+		func(context.Context, *core.Connection, map[string]core.ConnectionSecret) error { return nil }), core.ErrConnectionNotFound)
 }
 
 func TestConnectionEventsPage(t *testing.T) {
