@@ -157,13 +157,11 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 	pgQueries := pgdb.New(q)
 
 	return &Repo{
-		DB:       q,
-		driver:   driver,
-		accounts: postgresstore.NewProviderAccountStore(client),
-		runs:     postgresstore.NewRunStore(client),
-		settings: postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
-			return (&Repo{driver: DriverPostgres}).bindQuery(query)
-		}),
+		DB:              q,
+		driver:          driver,
+		accounts:        postgresstore.NewProviderAccountStore(client),
+		runs:            postgresstore.NewRunStore(client),
+		settings:        postgresstore.NewSettingStore(pgQueries, client),
 		workflows:       postgresstore.NewWorkflowStore(client),
 		workflowCatalog: postgresstore.NewWorkflowCatalogStore(client),
 		runEvents:       postgresstore.NewRunEventStore(client),
