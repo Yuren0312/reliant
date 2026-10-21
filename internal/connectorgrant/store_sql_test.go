@@ -20,7 +20,7 @@ import (
 
 // setupStore returns a store over the migrated test database, plus a daemon id
 // the grants can reference (connector_grants.daemon_id is a foreign key).
-func setupStore(t *testing.T) (*connectorgrant.SQLStore, *sql.DB, string) {
+func setupStore(t *testing.T) (connectorgrant.Store, *sql.DB, string) {
 	t.Helper()
 
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
@@ -33,7 +33,7 @@ func setupStore(t *testing.T) (*connectorgrant.SQLStore, *sql.DB, string) {
 	)
 	require.NoError(t, err)
 
-	return connectorgrant.NewSQLStore(repo.ORM()), rawDB, daemonID
+	return connectorgrant.NewSQLStore(connectorgrant.Deps{DB: repo.ORM()}), rawDB, daemonID
 }
 
 func newGrant(daemonID string) *connectorgrant.Grant {

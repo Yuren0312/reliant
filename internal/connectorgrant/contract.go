@@ -128,7 +128,7 @@ type AuditRecord struct {
 
 // Store persists grants and audit records.
 //
-//forge:lint-disable-next-line forgeconv-internal-package-contract-names: forge#1040: the rule skips forge:not-a-component packages once reliant re-pins forge; until then this package passed only while it declared two private scan-helper interfaces
+//forge:contract
 type Store interface {
 	// SetTokenPrefix records the display prefix of a grant's credential.
 	SetTokenPrefix(ctx context.Context, id, prefix string) error

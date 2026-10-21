@@ -22,13 +22,13 @@ import (
 // connectorgrant.SQLStore — the hand-SQL store they replaced, and now the
 // mapping layer over them — and through the generated rows.
 
-func connectorFixture(t *testing.T) (*storetest.Env, *connectorgrant.SQLStore, string) {
+func connectorFixture(t *testing.T) (*storetest.Env, connectorgrant.Store, string) {
 	t.Helper()
 	env := storetest.New(t)
 	daemonID := "daemon-" + uuid.NewString()
 	_, err := env.SQL.Exec(`INSERT INTO daemons (id, user_id, created_at, updated_at) VALUES ($1, $2, NOW(), NOW())`, daemonID, "user-1")
 	require.NoError(t, err)
-	return env, connectorgrant.NewSQLStore(env.ORM), daemonID
+	return env, connectorgrant.NewSQLStore(connectorgrant.Deps{DB: env.ORM}), daemonID
 }
 
 func connectorGrant(daemonID string) *connectorgrant.Grant {
