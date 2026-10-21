@@ -57,19 +57,14 @@ import (
 // resource) the user's own credential can see now, all stamped with the same
 // refreshed_at. Three parallel arrays are zipped by position (one unnest
 // each, joined on ordinality).
-//
-// forge#1027: it runs through the raw passthrough with bound $N, not NewRaw.
-// bun would format the three arrays into the text, so every refresh would be
-// a new, large prepared statement under pgx's statement cache (SCHEMA.md,
-// "A hot hand-tuned statement binds its values").
 const upsertIntegrationAccessSQL = `
 INSERT INTO integration_event_access (
     user_id, integration_id, account_key, resource_key, resource_label, subject_id, refreshed_at
 )
-SELECT $1::text, $2::text, a.v, r.v, l.v, $3::text, $4::timestamptz
-FROM unnest($5::text[]) WITH ORDINALITY AS a(v, i)
-JOIN unnest($6::text[]) WITH ORDINALITY AS r(v, i) ON r.i = a.i
-JOIN unnest($7::text[]) WITH ORDINALITY AS l(v, i) ON l.i = a.i
+SELECT ?0::text, ?1::text, a.v, r.v, l.v, ?2::text, ?3::timestamptz
+FROM unnest(?4::text[]) WITH ORDINALITY AS a(v, i)
+JOIN unnest(?5::text[]) WITH ORDINALITY AS r(v, i) ON r.i = a.i
+JOIN unnest(?6::text[]) WITH ORDINALITY AS l(v, i) ON l.i = a.i
 ON CONFLICT (user_id, integration_id, account_key, resource_key) DO UPDATE SET
     resource_label = EXCLUDED.resource_label,
     subject_id = EXCLUDED.subject_id,
@@ -100,8 +95,8 @@ func ReplaceIntegrationAccess(ctx context.Context, db orm.Context, userID, integ
 	at = at.UTC()
 	return db.RunTx(ctx, func(ctx context.Context) error {
 		if len(grants) > 0 {
-			if _, err := db.Exec(ctx, upsertIntegrationAccessSQL,
-				userID, integrationID, subjectID, at, accounts, resources, labels); err != nil {
+			if _, err := db.Bun().NewRaw(upsertIntegrationAccessSQL,
+				userID, integrationID, subjectID, at, orm.Arg(accounts), orm.Arg(resources), orm.Arg(labels)).Exec(ctx); err != nil {
 				return fmt.Errorf("record integration access: %w", err)
 			}
 		}

@@ -54,20 +54,19 @@ func (s *SQLStore) CreateGrant(ctx context.Context, g *Grant) error {
 		return fmt.Errorf("encode exec allowlist: %w", err)
 	}
 
+	now := time.Now().UTC()
 	if g.CreatedAt.IsZero() {
-		g.CreatedAt = time.Now().UTC()
+		g.CreatedAt = now
 	}
+	g.UpdatedAt = now
 	row := &store.ConnectorGrant{
 		ID: g.ID, UserID: g.UserID, DaemonID: g.DaemonID, Name: g.Name, TokenPrefix: g.TokenPrefix,
 		AllowedTools: tools, PathRoot: g.PathRoot, ExecMode: string(g.ExecMode), ExecAllowlist: allowlist,
-		ExpiresAt: g.ExpiresAt, CreatedAt: g.CreatedAt,
+		ExpiresAt: g.ExpiresAt, CreatedAt: g.CreatedAt, UpdatedAt: g.UpdatedAt,
 	}
 	if err := store.CreateConnectorGrant(ctx, s.db, row); err != nil {
 		return fmt.Errorf("create connector grant: %w", err)
 	}
-	// forge#1029: the generated Create stamps updated_at itself; read the
-	// stored stamps back so g matches the row.
-	g.CreatedAt, g.UpdatedAt = row.CreatedAt, row.UpdatedAt
 	return nil
 }
 
@@ -135,8 +134,6 @@ func (s *SQLStore) GetGrantByID(ctx context.Context, id string) (*Grant, error) 
 
 // ListGrantsByUser returns a user's grants, newest first.
 func (s *SQLStore) ListGrantsByUser(ctx context.Context, userID string) ([]*Grant, error) {
-	// forge#1029: List caps an unlimited read at 10k rows; one user's
-	// connectors never approach it.
 	rows, err := store.ListConnectorGrant(ctx, s.db,
 		orm.WhereEq(store.ConnectorGrantFieldUserID, userID),
 		orm.WithOrderBy(store.ConnectorGrantFieldCreatedAt, orm.Desc))

@@ -61,7 +61,7 @@ func CompleteConnectorAudit(ctx context.Context, db orm.Context, id, status stri
 	_, err := db.Bun().NewUpdate().Model((*ConnectorAuditLog)(nil)).
 		Set("? = ?", bun.Ident(ConnectorAuditLogFieldStatus), status).
 		Set("? = ?", bun.Ident(ConnectorAuditLogFieldErrorMessage), errMsg).
-		Set("? = ?", bun.Ident(ConnectorAuditLogFieldDurationMs), durationMS).
+		Set("? = ?", bun.Ident(ConnectorAuditLogFieldDurationMs), orm.Arg(durationMS)).
 		Set("? = (? = 'denied')", bun.Ident(ConnectorAuditLogFieldDenied), status).
 		Where("? = ?", bun.Ident(ConnectorAuditLogFieldID), id).
 		Where("? = 'started'", bun.Ident(ConnectorAuditLogFieldStatus)).

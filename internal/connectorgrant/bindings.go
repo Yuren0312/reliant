@@ -88,8 +88,6 @@ func (s *SQLStore) DeleteBinding(ctx context.Context, userID, clientID string) (
 // ListBindingsByUser returns the clients a user has authorized, so the
 // settings UI can show what is connected and what a revocation would cut off.
 func (s *SQLStore) ListBindingsByUser(ctx context.Context, userID string) ([]*ClientBinding, error) {
-	// forge#1029: List caps an unlimited read at 10k rows; one user's
-	// authorized clients never approach it.
 	rows, err := store.ListConnectorClientBinding(ctx, s.db,
 		orm.WhereEq(store.ConnectorClientBindingFieldUserID, userID),
 		orm.WithOrderBy(store.ConnectorClientBindingFieldCreatedAt, orm.Desc))
