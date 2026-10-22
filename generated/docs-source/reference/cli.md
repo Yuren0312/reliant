@@ -57,6 +57,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge cloud`](#reliant-forge-cloud) | Talk to the hosted control plane an environment declares |
 | [`reliant forge cloud identity`](#reliant-forge-cloud-identity) | Inspect managed identity and administer its users |
 | [`reliant forge cloud identity delete`](#reliant-forge-cloud-identity-delete) | Delete a user's account (org admin; asks first) |
+| [`reliant forge cloud identity export`](#reliant-forge-cloud-identity-export) | Export the identity's users now and print a short-lived download URL (identity:manage) |
 | [`reliant forge cloud identity invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and issue a password-set code (org admin) |
 | [`reliant forge cloud identity lock`](#reliant-forge-cloud-identity-lock) | Block a user from signing in (org admin) |
 | [`reliant forge cloud identity reset`](#reliant-forge-cloud-identity-reset) | Issue a user a one-time password-set code (org admin) |
@@ -166,6 +167,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge fix composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`reliant forge fix config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v0.1.47) |
 | [`reliant forge fix connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
+| [`reliant forge fix harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v0.1.47) |
 | [`reliant forge fix narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge fix operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
 | [`reliant forge fix tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47) |
@@ -1500,8 +1502,8 @@ Inspect managed identity and administer its users
 Manage the identity an environment declares in KCL, using its control plane.
 
 Reads (status, users) need identity:read; every verb that changes a user
-(invite, set-roles, reset, lock, unlock, delete, revoke-sessions) needs
-identity:manage and an org admin. Under Reliant, or after forge login, nothing
+(invite, set-roles, reset, lock, unlock, delete, revoke-sessions) and export
+need identity:manage and an org admin. Under Reliant, or after forge login, nothing
 extra is needed: when the control plane answers that the credential lacks one of
 those scopes, forge trades it for the scope on demand (an hour, and only while
 the person behind the session holds the grant), as deploy does for deploy:read.
@@ -1530,6 +1532,7 @@ reliant forge cloud identity
 | Command | Description |
 |---------|-------------|
 | [`delete`](#reliant-forge-cloud-identity-delete) | Delete a user's account (org admin; asks first) |
+| [`export`](#reliant-forge-cloud-identity-export) | Export the identity's users now and print a short-lived download URL (identity:manage) |
 | [`invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and issue a password-set code (org admin) |
 | [`lock`](#reliant-forge-cloud-identity-lock) | Block a user from signing in (org admin) |
 | [`reset`](#reliant-forge-cloud-identity-reset) | Issue a user a one-time password-set code (org admin) |
@@ -1561,6 +1564,35 @@ reliant forge cloud identity delete <env> --user <id|email> [flags]
 | `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
 | `--user` | `string` | - | The user, by user id or exact email address (required) |
 | `--yes`, `-y` | `bool` | - | Delete without asking |
+
+---
+
+#### reliant forge cloud identity export
+
+Export the identity's users now and print a short-lived download URL (identity:manage)
+
+Ask the control plane to export the environment's identity instance — every
+user, password hashes included, in Zitadel's import format — and print a signed
+download URL valid for minutes. Requests within the same 15 minutes share one
+export. For a withdrawn identity the URL is for the export written when it was
+withdrawn.
+
+The URL is a credential: anyone holding it can download every user's password
+hash until it expires. It is printed once and never logged; do not paste it
+into a ticket or a chat. Needs identity:manage and, for a person, an org admin
+holding the identity:manage grant. Refused where export is not enabled for the
+control plane, or the instance is not ready.
+
+```
+reliant forge cloud identity export <env> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
 
 ---
 
@@ -5541,6 +5573,12 @@ WHAT ONE ENV'S REPORT CARRIES:
     missing / untagged / unreachable. A hosted env is read through its
     control plane's observer, because forge cannot read a hosted cluster;
   * the ROLLOUT PHASE per workload, as the control plane computes it;
+  * IDENTITY — a hosted env that declares forge.ManagedIdentity gets one line,
+    "identity: ready / provisioning / failed: <reason>", as its control plane
+    reports it. It never changes the exit code here; --wait (and env deploy)
+    waits on it: a release whose rollout succeeded is WAITING ON IDENTITY until
+    the identity is ready (1 if it failed, the timed-out code if it was still
+    provisioning at the deadline);
   * RUNTIME HEALTH — every host service and frontend with its URL, log file
     and whether a listener is accepting right now, plus the compose infra,
     the app's /healthz + /readyz, pprof and the telemetry backends;
@@ -5851,6 +5889,7 @@ reliant forge fix
 | [`composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v0.1.47) |
 | [`connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
+| [`harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v0.1.47) |
 | [`narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
 | [`tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47) |
@@ -6023,6 +6062,51 @@ reliant forge fix connect-errors [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-dirty` | `bool` | - | Run over uncommitted changes |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+| `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
+#### reliant forge fix harness-mocks
+
+Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v0.1.47)
+
+Point your handler tests at the forge mock the test harness now installs.
+
+forge v0.1.47 stops synthesizing a Stub<Field> in helpers_gen_test.go for a Deps
+field whose interface forge already mocks in a mock_gen.go — the declaring
+package's (contract.go or a forge:deps deps.go), or the handler's own. The
+harness installs that mock instead:
+
+  Deps.Pause runs.PauseController   StubPause → runs.MockPauseController
+  Deps.Narrow Narrow (deps.go)      StubNarrow → MockNarrow
+  Deps.Estimates db.EstimateStore   StubEstimates → MockEstimateStore
+                                    (the handler's Deps-discovered mock)
+
+Both doubles have the same fields (<Method>Func, an embedded
+contractkit.Recorder), so this renames the type in every test file of the
+handler, qualifying it the way the file already reaches the package, and adds
+the declaring package's import where a file lacks it. A test struct that embeds
+a stub has its embedded field renamed with it (StubPause: → MockPauseController:,
+w.StubPause → w.MockPauseController). Stub<Field> stays for
+an interface no mock_gen.go has (a third-party or standard-library one).
+
+One behaviour moves with the name: an unset method returns
+contractkit.MockNotSet ("MockPauseController.PauseFunc not set") instead of
+testkit.StubNotConfigured ("StubPause.PauseFunc not set: forge test stub not
+configured ..."). Both are a non-nil error from every error-returning method;
+a test that asserts on the old text is listed for you, not rewritten.
+
+The rest of the v0.1.47 story is the migration skill: `forge skill load migrations/v0.1.47`.
+
+```
+reliant forge fix harness-mocks [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
 | `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 | `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
 
