@@ -80,7 +80,7 @@ const PR_WEB = jobBlock(read(".github", "workflows", "pr-ci.yml"), "web");
 const RELEASE_PREPARE = jobBlock(read(".github", "workflows", "release.yml"), "prepare");
 
 const EXPORT = `jq -er '.vite | to_entries[] | "\\(.key)=\\(.value)"' electron/release.config.json >> "$GITHUB_ENV"`;
-const BUILD = /working-directory: web\n\s+run: NODE_ENV=production npm run build\n/;
+const BUILD = /working-directory: frontends\/web\n\s+run: NODE_ENV=production npm run build\n/;
 const VERIFY_STEP = "run: node .github/scripts/verify-bundle.mjs --dist frontends/web/dist\n";
 
 for (const [name, block] of [
