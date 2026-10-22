@@ -44,14 +44,16 @@ func (c *atomicityTestTemporalClient) ExecuteWorkflow(
 	return &fakeWorkflowRun{id: options.ID, runID: "test-run-" + options.ID}, nil
 }
 
-// failAfterUserUpdateRepo wraps db.Repository so it satisfies the whole
-// interface, but fails the CreateUserUpdate call — the last write inside
+// failAfterUserUpdateRepo wraps the real repository behind the chat
+// Repository role, but fails the CreateUserUpdate call — the last write inside
 // StartChat's transaction — so the test can assert that nothing earlier in
 // the transaction (chat row, workflow, thread, messages) survives the abort.
 type failAfterUserUpdateRepo struct {
-	db.Repository
+	Repository
 	shouldFail bool
 }
+
+var _ Repository = (*failAfterUserUpdateRepo)(nil)
 
 func (r *failAfterUserUpdateRepo) CreateUserUpdate(ctx context.Context, update *db.UserUpdate) error {
 	if r.shouldFail {
