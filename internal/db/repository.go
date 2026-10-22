@@ -526,11 +526,6 @@ type Repository interface {
 	// Question methods
 	CreateQuestion(ctx context.Context, question *Question) error
 	GetQuestionByID(ctx context.Context, id string) (*Question, error)
-	// GetPendingQuestionByChatID returns the chat's NEWEST pending question
-	// from any thread: a chat-wide "is anything waiting on the user?" check.
-	// It cannot say which thread asked, so anything shown to or answered by a
-	// user reads ListPendingQuestionsByChat instead.
-	GetPendingQuestionByChatID(ctx context.Context, chatID string) (*Question, error)
 	// ListPendingQuestionsByChat returns every pending question in a chat,
 	// oldest first, each with the thread that asked it.
 	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error)
@@ -751,7 +746,10 @@ type Repository interface {
 	// DB: 288 threads stranded this way (see
 	// dev-docs/incidents/2026-08-12-spawn-history-cap.md), which also makes their
 	// own orphaned mailboxes invisible to ListThreadsWithOrphanedAgentMessages
-	// (it only matches threads already in a terminal status).
+	// (it only matches threads already in a terminal status). A subtree that
+	// completed or was cancelled has its pending questions closed with its
+	// threads (question_close.go), as UpdateThreadStatus and
+	// ReapOrphanedThreads do for the same statuses.
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason WorkflowStopReason) error
 	// ReapOrphanedThreads ends every running/paused thread whose workflow is
 	// already terminal, at the workflow's own status, and returns the rows it
