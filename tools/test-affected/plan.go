@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -44,7 +45,7 @@ type GoPlan struct {
 // WebPlan is the vitest lane: `vitest run <Tests...>`.
 type WebPlan struct {
 	LaneFull
-	// Tests are the test files to run, relative to web/.
+	// Tests are the test files to run, relative to frontends/web/.
 	Tests []string          `json:"tests"`
 	Why   map[string]string `json:"why,omitempty"`
 }
@@ -61,7 +62,7 @@ type ForgeGenPlan struct {
 }
 
 // DocGenPlan is the docs-generate lane (all or nothing): every docs
-// generator (the Makefile's DOCGEN_TARGETS) must leave the tree as it found it.
+// generator (Taskfile.yml's generate:docs) must leave the tree as it found it.
 type DocGenPlan struct {
 	LaneFull
 }
@@ -123,8 +124,11 @@ type classifier struct {
 	// docGenDeps maps every module package a docs generator compiles to the
 	// first generator (tools/docgen/<name>) that does.
 	docGenDeps map[string]string
+	// hookGenDeps is the same for forge.yaml's generate hooks
+	// (forgeHookGenerators).
+	hookGenDeps map[string]string
 
-	web       *reasons // web test file (relative to web/) -> why
+	web       *reasons // web test file (relative to frontends/web/) -> why
 	webTouch  bool     // a non-test web module changed
 	elecReads []string // why the electron lane runs, from tests naming a changed file
 }
@@ -136,8 +140,9 @@ func Classify(changes []Change, g *Graph) *Plan {
 		pl:   &Plan{},
 		full: map[lane][]string{},
 		code: newReasons(), embed: newReasons(), testOnly: newReasons(), dbSel: newReasons(),
-		web:        newReasons(),
-		docGenDeps: docGenDeps(g),
+		web:         newReasons(),
+		docGenDeps:  generatorDeps(g, func(dir string) bool { return strings.HasPrefix(dir+"/", docGenDir) }),
+		hookGenDeps: generatorDeps(g, func(dir string) bool { return slices.Contains(forgeHookGenerators, dir) }),
 	}
 	for _, ch := range changes {
 		c.attribute(ch)
@@ -178,9 +183,9 @@ func (c *classifier) attribute(ch Change) {
 		}
 	}
 	c.attributeToReaders(ch)
-	if isForgeInput(ch.Path) {
+	if why, ok := c.forgeGenInput(ch); ok {
 		rep.Rules = append(rep.Rules, "forge-input")
-		c.full[laneForgeGen] = append(c.full[laneForgeGen], ch.Path+": forge generate reads or writes it")
+		c.full[laneForgeGen] = append(c.full[laneForgeGen], ch.Path+": "+why)
 	}
 	if why, ok := c.docGenInput(ch); ok {
 		rep.Rules = append(rep.Rules, "docgen-input")
@@ -212,14 +217,19 @@ func (c *classifier) attribute(ch Change) {
 // docGenDir is where the docs generators live: every package under it is one.
 const docGenDir = "tools/docgen/"
 
-// docGenDeps is the union of the build deps of every docs generator package.
-func docGenDeps(g *Graph) map[string]string {
+// generatorDeps is the union of the build deps of every generator package
+// (a package whose directory isGen accepts), each mapped to the first
+// generator that compiles it.
+func generatorDeps(g *Graph, isGen func(dir string) bool) map[string]string {
 	deps := map[string]string{}
 	for _, dir := range sortedKeys(g.DirPkg) {
-		if !strings.HasPrefix(dir+"/", docGenDir) {
+		if !isGen(dir) {
 			continue
 		}
 		gen := g.DirPkg[dir]
+		if _, ok := deps[gen]; !ok {
+			deps[gen] = dir
+		}
 		for _, p := range sortedKeys(g.BuildDeps[gen]) {
 			if _, ok := deps[p]; !ok {
 				deps[p] = dir
@@ -236,12 +246,28 @@ func (c *classifier) docGenInput(ch Change) (string, bool) {
 	if isDocGenPath(ch.Path) {
 		return "a docs generator reads or writes it", true
 	}
+	return c.compiledBy(ch, c.docGenDeps, "")
+}
+
+// forgeGenInput is docGenInput for the forge-generate lane: a path in
+// forgeInputs, or code a forge.yaml generate hook's generator compiles.
+func (c *classifier) forgeGenInput(ch Change) (string, bool) {
+	if isForgeInput(ch.Path) {
+		return "forge generate reads or writes it", true
+	}
+	return c.compiledBy(ch, c.hookGenDeps, "the forge.yaml generate hook ")
+}
+
+// compiledBy reports whether ch is built code (or an embedded file) of a
+// package in deps, or a .proto whose generated package is, naming the
+// generator that compiles it.
+func (c *classifier) compiledBy(ch Change, deps map[string]string, label string) (string, bool) {
 	compiled := func(pkg string) (string, bool) {
-		gen, ok := c.docGenDeps[pkg]
+		gen, ok := deps[pkg]
 		if !ok {
 			return "", false
 		}
-		return fmt.Sprintf("%s compiles %s", gen, rel(c.g.Module, pkg)), true
+		return fmt.Sprintf("%s%s compiles %s", label, gen, rel(c.g.Module, pkg)), true
 	}
 	if fi, ok := c.g.Files[ch.Path]; ok {
 		if fi.Kind != KindCode {
@@ -324,9 +350,9 @@ func (c *classifier) applyRule(ch Change, r *rule, rep *FileReport) bool {
 			c.full[laneGo] = append(c.full[laneGo], fmt.Sprintf("%s: no generated Go package under gen/ for this proto (fail-safe)", ch.Path))
 		}
 		if w := c.g.Web; w != nil {
-			gen := "web/" + webGenPath(ch.Path)
+			gen := "frontends/web/" + webGenPath(ch.Path)
 			for _, t := range w.Reach[gen] {
-				c.web.add(strings.TrimPrefix(t, "web/"), ch.Path+" regenerates "+path.Base(gen))
+				c.web.add(strings.TrimPrefix(t, "frontends/web/"), ch.Path+" regenerates "+path.Base(gen))
 			}
 			c.webTouch = true
 		}
@@ -350,7 +376,7 @@ func (c *classifier) attributeToWeb(ch Change) {
 		return
 	}
 	if IsWebTestFile(ch.Path) {
-		c.web.add(strings.TrimPrefix(ch.Path, "web/"), "the test itself changed")
+		c.web.add(strings.TrimPrefix(ch.Path, "frontends/web/"), "the test itself changed")
 		return
 	}
 	c.webTouch = true
@@ -359,7 +385,7 @@ func (c *classifier) attributeToWeb(ch Change) {
 		return
 	}
 	for _, t := range w.Reach[ch.Path] {
-		c.web.add(strings.TrimPrefix(t, "web/"), "imports "+path.Base(ch.Path))
+		c.web.add(strings.TrimPrefix(t, "frontends/web/"), "imports "+path.Base(ch.Path))
 	}
 }
 
@@ -370,7 +396,7 @@ func (c *classifier) attributeToElectron(ch Change) {
 }
 
 // attributeToReaders selects the tests that name this file: Go packages whose
-// sources spell its path, and web/electron tests whose text names it.
+// sources spell its path, and web or electron tests whose text names it.
 func (c *classifier) attributeToReaders(ch Change) {
 	for _, pkg := range sortedKeys(c.g.Readers) {
 		if readsPath(c.g.Readers[pkg], ch.Path) {
@@ -380,7 +406,7 @@ func (c *classifier) attributeToReaders(ch Change) {
 	if w := c.g.Web; w != nil {
 		for _, t := range sortedKeys(w.Text) {
 			if t != ch.Path && namesFile(w.Text[t], ch.Path) {
-				c.web.add(strings.TrimPrefix(t, "web/"), "reads "+ch.Path)
+				c.web.add(strings.TrimPrefix(t, "frontends/web/"), "reads "+ch.Path)
 			}
 		}
 	}
@@ -436,7 +462,7 @@ func (c *classifier) selectWeb() {
 	wp.Why = map[string]string{}
 	if w := c.g.Web; w != nil && c.webTouch {
 		for _, t := range w.Walkers {
-			c.web.add(strings.TrimPrefix(t, "web/"), "reads whole directories of web/")
+			c.web.add(strings.TrimPrefix(t, "frontends/web/"), "reads whole directories of frontends/web/")
 		}
 	}
 	for _, f := range sortedKeys(c.web.m) {
@@ -517,7 +543,7 @@ func protoToGen(g *Graph, p string) (string, bool) {
 	return "", false
 }
 
-// webGenPath maps a .proto to its generated TypeScript client, relative to web/.
+// webGenPath maps a .proto to its generated TypeScript client, relative to frontends/web/.
 func webGenPath(p string) string {
 	name := strings.TrimSuffix(path.Base(p), ".proto") + "_pb.ts"
 	switch {

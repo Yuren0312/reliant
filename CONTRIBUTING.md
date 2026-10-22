@@ -5,7 +5,7 @@
 - Go (the version in `go.mod`; code generation downloads it if yours differs)
 - Node.js 20.19+
 - Make, and Python 3 for the generated docs pages
-- Go dev tools: [air](https://github.com/air-verse/air) (hot reload), [goose](https://github.com/pressly/goose) (migrations)
+- Go dev tools: [air](https://github.com/air-verse/air) (hot reload)
 
 ## Development Setup
 
@@ -48,7 +48,7 @@ To check that a rebuilt CLI is the one on your `PATH`, run `reliant --version`.
 
 ## Code generation
 
-Everything generated is committed: protobuf code (`gen/`, `web/src/gen/`), the
+Everything generated is committed: protobuf code (`gen/`, `frontends/web/src/gen/`), the
 forge ORM projection (`internal/store/*_gen.go`), and the reference docs (`generated/docs-source/`, `docs/reference/`,
 the workflow-builder skill). CI's **Generated code is up to date** job runs
 `make generate-all` on every PR that can move a generator input (anything but a
