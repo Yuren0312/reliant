@@ -9,7 +9,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/graphkit"
 	"github.com/stretchr/testify/require"
 
-	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -89,10 +89,10 @@ func TestAPIOmitsAbsentLoops(t *testing.T) {
 			require.Contains(t, supervised, "db_repo")
 			if tc.want {
 				require.Contains(t, supervised, "reliant_key_sweep")
-				require.Contains(t, supervised, "git_hub_access_loop")
+				require.Contains(t, supervised, "github_access_loop")
 			} else {
 				require.NotContains(t, supervised, "reliant_key_sweep")
-				require.NotContains(t, supervised, "git_hub_access_loop")
+				require.NotContains(t, supervised, "github_access_loop")
 			}
 		})
 	}
