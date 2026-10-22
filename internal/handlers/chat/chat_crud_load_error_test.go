@@ -38,7 +38,7 @@ func TestLoadMessagesError(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			err := messagesReadError(tc.ctx, tc.err)
-			assert.Equal(t, tc.want, connect.CodeOf(err))
+			assert.Equal(t, tc.want, svcerr.Code(err))
 			assert.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
 		})
 	}

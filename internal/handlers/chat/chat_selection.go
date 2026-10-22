@@ -243,11 +243,11 @@ func (s *Service) UpdateChatProviderPolicy(
 ) (*connect.Response[reliantv1.UpdateChatProviderPolicyResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 	policy := policyFromProto(req.Msg.ProviderPolicy)
 	if err := validatePolicy(policy); err != nil {

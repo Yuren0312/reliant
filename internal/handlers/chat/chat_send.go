@@ -198,7 +198,7 @@ func inputValidationError(validationErrors []error) error {
 	for i, e := range validationErrors {
 		errMsgs[i] = e.Error()
 	}
-	return svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("workflow input validation failed: %s", strings.Join(errMsgs, "; "))))
+	return svcerr.InvalidArgument(fmt.Sprintf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
 }
 
 // applyRequestPresets makes a send's preset selection the chat's, in memory
@@ -466,7 +466,7 @@ func (s *Service) resurrectGhostWorkflow(
 	workflowRun, err := s.deps.Temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
 		logging.ErrorContext(ctx, "[Ghost Recovery] Failed to start workflow", "error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to resurrect workflow"))
+		return nil, svcerr.Internal("failed to resurrect workflow")
 	}
 
 	runID := workflowRun.GetRunID()
@@ -505,7 +505,7 @@ func (s *Service) SendMessage(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Extract user and system messages from input
@@ -513,7 +513,7 @@ func (s *Service) SendMessage(
 
 	// Require at least one user message or attachments
 	if !hasUserContent && len(req.Msg.Attachments) == 0 {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("at least one user message or attachment is required"))
+		return nil, svcerr.InvalidArgument("at least one user message or attachment is required")
 	}
 
 	clientID, err := parseClientMessageID(req.Msg.GetClientMessageId())
@@ -525,7 +525,7 @@ func (s *Service) SendMessage(
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get chat", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// A repeat of a send whose message has already been read is answered
@@ -684,7 +684,7 @@ func (s *Service) SendMessage(
 				// Never started (a branch awaiting its first send). The first
 				// send is StartChat's, which records the launch exactly once;
 				// letting SendMessage start it would bypass that.
-				return nil, svcerr.ToConnect(svcerr.FailedPrecondition("chat has not started; call StartChat"))
+				return nil, svcerr.FailedPrecondition("chat has not started; call StartChat")
 
 			case db.Paused():
 				// Refuse bad params before anything is written; see
@@ -974,7 +974,7 @@ func (s *Service) SendMessage(
 					return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to check workflow status: %w", inspectErr))
 				}
 				if inspection.Stuck {
-					return nil, svcerr.ToConnect(svcerr.FailedPrecondition("this conversation experienced a workflow error and cannot be resumed - use the branch feature to start a new conversation from any previous message"))
+					return nil, svcerr.FailedPrecondition("this conversation experienced a workflow error and cannot be resumed - use the branch feature to start a new conversation from any previous message")
 				}
 
 				// Both recoveries below save the message before they know
@@ -1135,13 +1135,13 @@ func (s *Service) SendMessage(
 	// StartChat's.
 	workflowID := chat.MainThreadID()
 	if workflowID == "" {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("chat has not started; call StartChat"))
+		return nil, svcerr.FailedPrecondition("chat has not started; call StartChat")
 	}
 
 	// A started chat's workflow is fixed. Switching is only possible while a
 	// chat is pending, and StartChat owns that.
 	if req.Msg.Workflow != nil && *req.Msg.Workflow != "" && *req.Msg.Workflow != workflowName {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("cannot change workflow after chat has started - use Branch to create a new chat with a different workflow"))
+		return nil, svcerr.FailedPrecondition("cannot change workflow after chat has started - use Branch to create a new chat with a different workflow")
 	}
 
 	// The request's presets replace the chat's. Applied in memory here, and
@@ -1272,7 +1272,7 @@ func (s *Service) SendMessage(
 	workflowRun, err := s.deps.Temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to start workflow", "error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to start workflow"))
+		return nil, svcerr.Internal("failed to start workflow")
 	}
 
 	runID := workflowRun.GetRunID()
@@ -1318,13 +1318,13 @@ func (s *Service) SendAgentMessage(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 	if req.Msg.ThreadId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("thread_id is required"))
+		return nil, svcerr.InvalidArgument("thread_id is required")
 	}
 	if strings.TrimSpace(req.Msg.Message) == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("message is required"))
+		return nil, svcerr.InvalidArgument("message is required")
 	}
 	clientID, err := parseClientMessageID(req.Msg.GetClientMessageId())
 	if err != nil {
@@ -1336,19 +1336,19 @@ func (s *Service) SendAgentMessage(
 	// an arbitrary thread in someone else's chat.
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil || chat == nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	target, err := s.deps.Repo.GetThread(ctx, req.Msg.ThreadId)
 	if err != nil || target == nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("thread"))
+		return nil, svcerr.NotFound("thread")
 	}
 	if target.ChatID != req.Msg.ChatId {
 		// Deliberately the same NotFound the chat-ownership check above
 		// returns, rather than a distinguishable error: revealing that a
 		// thread ID exists but belongs to a different chat is an
 		// enumeration leak we don't need to offer.
-		return nil, svcerr.ToConnect(svcerr.NotFound("thread"))
+		return nil, svcerr.NotFound("thread")
 	}
 
 	// A repeat of a send whose message the agent already read is answered with
@@ -1775,10 +1775,10 @@ func (s *Service) ListQueuedAgentMessages(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 	if req.Msg.ThreadId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("thread_id is required"))
+		return nil, svcerr.InvalidArgument("thread_id is required")
 	}
 
 	// Ownership check: mirrors SendAgentMessage exactly -- the chat must
@@ -1786,21 +1786,21 @@ func (s *Service) ListQueuedAgentMessages(
 	// returning the same NotFound so thread IDs can't be enumerated.
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil || chat == nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	target, err := s.deps.Repo.GetThread(ctx, req.Msg.ThreadId)
 	if err != nil || target == nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("thread"))
+		return nil, svcerr.NotFound("thread")
 	}
 	if target.ChatID != req.Msg.ChatId {
-		return nil, svcerr.ToConnect(svcerr.NotFound("thread"))
+		return nil, svcerr.NotFound("thread")
 	}
 
 	queued, err := s.deps.Repo.ListQueuedAgentMessagesForThread(ctx, req.Msg.ThreadId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to list queued agent messages", "error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to list queued messages"))
+		return nil, svcerr.Internal("failed to list queued messages")
 	}
 
 	messages := make([]*reliantv1.QueuedAgentMessage, len(queued))
@@ -1835,10 +1835,10 @@ func (s *Service) CancelQueuedAgentMessage(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 	if req.Msg.MessageId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("message_id is required"))
+		return nil, svcerr.InvalidArgument("message_id is required")
 	}
 
 	// Ownership check: the chat must belong to the caller. The DELETE
@@ -1847,13 +1847,13 @@ func (s *Service) CancelQueuedAgentMessage(
 	// them from cancelling it.
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil || chat == nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	cancelled, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, req.Msg.MessageId, req.Msg.ChatId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to cancel queued agent message", "error", err, "chatID", req.Msg.ChatId, "messageID", req.Msg.MessageId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to cancel message"))
+		return nil, svcerr.Internal("failed to cancel message")
 	}
 
 	if !cancelled {

@@ -45,10 +45,10 @@ func (s *Service) RunNow(
 	userID := auth.MustGetUserID(ctx)
 	msg := req.Msg
 	if strings.TrimSpace(msg.GetProjectId()) == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 	if strings.TrimSpace(msg.GetWorkflow()) == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("workflow is required"))
+		return nil, svcerr.InvalidArgument("workflow is required")
 	}
 
 	message := strings.TrimSpace(msg.GetMessage())

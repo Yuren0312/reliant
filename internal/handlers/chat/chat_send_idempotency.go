@@ -47,7 +47,7 @@ func parseClientMessageID(raw string) (string, error) {
 	}
 	id, err := uuid.Parse(raw)
 	if err != nil {
-		return "", svcerr.ToConnect(svcerr.InvalidArgument("client_message_id must be a UUID"))
+		return "", svcerr.InvalidArgument("client_message_id must be a UUID")
 	}
 	return id.String(), nil
 }
