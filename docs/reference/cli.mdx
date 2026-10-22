@@ -2371,8 +2371,11 @@ reliant forge component
 Install components into your project
 
 Install one or more components from the library into your project's
-src/components/ui/ directory. If --dir is not specified, the command
-auto-detects the nearest frontend directory.
+src/components/ui/ directory — or the directory the frontend's package.json
+names in "forge": `{"components_dir": "..."}.` If --dir is not specified, the
+command auto-detects the nearest frontend directory. A component whose file
+name differs only in case from one already there (button.tsx beside
+Button.tsx) is refused: on macOS and Windows that is one file.
 
 ```
 reliant forge component install <component-names...> [flags]
@@ -5979,6 +5982,8 @@ and rewrites what points at them:
   proto/config/v1, gen/config/v1      as paths in the project's own protos, Go,
                                       TS/JS, KCL, YAML, shell and Make files
                                       (TS imports of the generated _pb modules too)
+  proto/config                        the config tree as a whole path, the same
+                                      files (a buf.yaml lint/breaking ignore)
 
 Generated and forge-owned files (gen/, *_gen.go, a forge:hash marker) are not
 touched: forge generate rewrites them.
@@ -6146,6 +6151,16 @@ that passes the value on still type-checks. A field whose value also leaves as
 `any`, a concrete type or a return value is left alone (what it needs is
 not all visible here), as is one it never uses (delete it) and an interface
 the package already declares (edit that one).
+
+The generated code is goimports-clean for the project (stdlib, third-party,
+then the module — or the local-prefixes of its golangci config). A narrowed
+interface still wider than the project's interfacebloat limit (read from its
+golangci config; golangci's default is 10) is reported, with the remedy. When
+the project's config runs interfacebloat, the type is also written with a
+reasoned //nolint:interfacebloat rather than split into embedded roles to fit:
+the lint counts an embedded interface as one entry, so a split would pass the
+count with the dependency exactly as wide. The interface is what the package
+calls; to shrink it, split the package.
 
 ```
 reliant forge fix narrow-deps <package-dir>
