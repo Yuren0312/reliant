@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
-	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -149,8 +148,6 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 		clientOptions = append(clientOptions, option.WithRequestTimeout(10*time.Second))
 	}
 
-	clientOptions = append(clientOptions,
-		option.WithMiddleware(ratelimit.Middleware("claude-code", ratelimit.ParseAnthropic)))
 	base := newBase(opts, clientOptions)
 	base.wireToolPrefix = mcpToolPrefix
 	return &ClaudeCodeClient{baseClient: base}
@@ -398,7 +395,7 @@ func (t *lowercaseHeaderTransport) RoundTrip(req *http.Request) (*http.Response,
 
 // Name returns the driver name
 func (c *ClaudeCodeClient) Name() string {
-	return string(ClaudeFamily)
+	return "claude-code"
 }
 
 // mcpToolName returns the name a tool is presented under in the request, which
@@ -580,8 +577,8 @@ func (c *ClaudeCodeClient) SendMessages(ctx context.Context, prompts []string, m
 	anthropicResponse, err := c.client.Messages.New(ctx, preparedMessages)
 	if err != nil {
 		logging.Error("Error in ClaudeCode API call", "error", err)
-		observability.LLMRequestsTotal.WithLabelValues(string(ClaudeFamily), "error").Inc()
-		observability.LLMRequestDuration.WithLabelValues(string(ClaudeFamily)).Observe(time.Since(start).Seconds())
+		observability.LLMRequestsTotal.WithLabelValues("claude-code", "error").Inc()
+		observability.LLMRequestDuration.WithLabelValues("claude-code").Observe(time.Since(start).Seconds())
 		return nil, err
 	}
 
@@ -604,21 +601,21 @@ func (c *ClaudeCodeClient) SendMessages(ctx context.Context, prompts []string, m
 	if err != nil {
 		// MalformedJSONError indicates transient streaming corruption
 		logging.Warn("ClaudeCode SendMessages: Tool call JSON validation failed (will retry)", "error", err)
-		observability.LLMRequestsTotal.WithLabelValues(string(ClaudeFamily), "error").Inc()
-		observability.LLMRequestDuration.WithLabelValues(string(ClaudeFamily)).Observe(time.Since(start).Seconds())
+		observability.LLMRequestsTotal.WithLabelValues("claude-code", "error").Inc()
+		observability.LLMRequestDuration.WithLabelValues("claude-code").Observe(time.Since(start).Seconds())
 		return nil, err
 	}
 
 	usage := c.usage(*anthropicResponse)
 
 	// Record metrics
-	observability.LLMRequestsTotal.WithLabelValues(string(ClaudeFamily), "success").Inc()
-	observability.LLMRequestDuration.WithLabelValues(string(ClaudeFamily)).Observe(time.Since(start).Seconds())
+	observability.LLMRequestsTotal.WithLabelValues("claude-code", "success").Inc()
+	observability.LLMRequestDuration.WithLabelValues("claude-code").Observe(time.Since(start).Seconds())
 	if usage.InputTokens > 0 {
-		observability.LLMTokensTotal.WithLabelValues(string(ClaudeFamily), "input").Add(float64(usage.InputTokens))
+		observability.LLMTokensTotal.WithLabelValues("claude-code", "input").Add(float64(usage.InputTokens))
 	}
 	if usage.OutputTokens > 0 {
-		observability.LLMTokensTotal.WithLabelValues(string(ClaudeFamily), "output").Add(float64(usage.OutputTokens))
+		observability.LLMTokensTotal.WithLabelValues("claude-code", "output").Add(float64(usage.OutputTokens))
 	}
 
 	return &llm.DriverResponse{
@@ -669,4 +666,9 @@ func (c *ClaudeCodeClient) ValidateKey(ctx context.Context) error {
 
 	_, err := validationClient.SendMessages(ctx, []string{}, testMessages, []toolsPkg.Tool{})
 	return err
+}
+
+// IsClaudeCodeKey returns true if the API key is a Claude Code key (sk-ant-oat prefix)
+func IsClaudeCodeKey(apiKey string) bool {
+	return strings.HasPrefix(apiKey, "sk-ant-oat")
 }

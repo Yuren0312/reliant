@@ -53,7 +53,7 @@ const PROVIDERS = [
   {
     id: "claude" as const,
     modelProvider: "anthropic" as ModelProvider,
-    name: "Claude subscription",
+    name: "Claude Code",
     docsUrl: "https://claude.ai",
     keyFormat: "",
     usesOAuth: "claude" as const,
@@ -89,7 +89,7 @@ const PROVIDERS = [
   {
     id: "anthropic" as const,
     modelProvider: "anthropic" as ModelProvider,
-    name: "Anthropic API",
+    name: "Anthropic",
     docsUrl: "https://console.anthropic.com/settings/keys",
     keyFormat: "sk-ant-...",
     usesOAuth: false as const,

@@ -12,7 +12,6 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,7 +65,7 @@ func TestClaudeCodeStreamSurfacesUsageLimitInsteadOfSleepingInTheSDK(t *testing.
 		}
 	}
 	require.Error(t, limitErr, "the usage limit must surface as an error event")
-	var tooLong *ratelimit.UsageLimitError
+	var tooLong *RetryAfterTooLongError
 	require.ErrorAs(t, limitErr, &tooLong)
 	kind, _, found := chatmarkers.Extract(limitErr.Error())
 	require.True(t, found, "the chat routes on the marker; without it the turn is retried as a generic error")

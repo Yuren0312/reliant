@@ -95,9 +95,7 @@ const (
 	// chat pauses with this error rather than looking active for hours.
 	// Payload is the reset time, RFC 3339 UTC, or empty when unknown.
 	// The human-readable message starts with ProviderUsageLimitLead.
-	// Producer: internal/llm/ratelimit (UsageLimitError), raised by the anthropic,
-	// codex and openai drivers on an explicit usage-window signal or a Retry-After
-	// past the in-request wait cap.
+	// Producer: internal/llm/drivers/anthropic (RetryAfterTooLongError).
 	KindProviderUsageLimit Kind = "RELIANT_PROVIDER_USAGE_LIMIT"
 )
 

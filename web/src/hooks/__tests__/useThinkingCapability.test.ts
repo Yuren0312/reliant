@@ -21,7 +21,7 @@ const models = [
 ];
 
 const tiers = {
-  flagship: { modelId: "claude-5.5-opus@anthropic", thinkingLevel: "high" },
+  flagship: { modelId: "claude-5.5-opus@anthropic", thinkingLevel: "xhigh" },
 };
 
 describe("resolveThinkingCapabilityForSelector", () => {

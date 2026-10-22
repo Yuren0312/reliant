@@ -105,12 +105,13 @@ func TestNoDriverRegistersAnUnmappedModel(t *testing.T) {
 // of the reported failure, exercised through the real resolution path rather
 // than the mapping table directly.
 func TestFable51ResolvesOnAConnectedAnthropicDriver(t *testing.T) {
-	// A connected Claude subscription: BuildAvailableDrivers registers the
-	// sk-ant-oat token under the "claude" driver id.
+	// A connected Claude Code subscription: BuildAvailableDrivers registers
+	// the sk-ant-oat token under the "anthropic" driver id, and the anthropic
+	// factory routes oat keys to the Claude Code client.
 	connected := models.AvailableDrivers{
 		Drivers: map[models.DriverID]models.DriverConfig{
-			models.DriverID("claude"): {
-				DriverID: models.DriverID("claude"),
+			models.DriverID("anthropic"): {
+				DriverID: models.DriverID("anthropic"),
 				APIKey:   "sk-ant-oat01-test",
 				Enabled:  true,
 			},
@@ -121,7 +122,7 @@ func TestFable51ResolvesOnAConnectedAnthropicDriver(t *testing.T) {
 	require.True(t, found,
 		"claude-5.1-fable must resolve when Anthropic is connected; "+
 			"this is the failure the user reported")
-	assert.Equal(t, models.DriverID("claude"), config.DriverID)
+	assert.Equal(t, models.DriverID("anthropic"), config.DriverID)
 }
 
 // catalogModelsByDriver inverts the catalog into driver -> declared model ids.

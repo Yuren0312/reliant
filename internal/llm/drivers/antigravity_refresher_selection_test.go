@@ -63,13 +63,10 @@ func TestTokenRefresherForDriver_AntigravitySelectsItsOwn(t *testing.T) {
 func TestTokenRefresherForDriver_ExistingProvidersUnchanged(t *testing.T) {
 	assert.Contains(t, refresherIdentityError(t, models.DriverID("codex")),
 		"codex token refresh failed")
-	// The Claude subscription is the "claude" driver; an Anthropic API key
-	// ("anthropic") has no OAuth refresher.
-	assert.Contains(t, refresherIdentityError(t, models.DriverID("claude")),
+	// Claude's OAuth credential registers under the driver id "anthropic",
+	// not "claude" — provider name is not driver id.
+	assert.Contains(t, refresherIdentityError(t, models.DriverID("anthropic")),
 		"claude token refresh failed")
-	refresher, reloader := tokenRefresherForDriver(context.Background(), models.DriverID("anthropic"), "user")
-	assert.Nil(t, refresher)
-	assert.Nil(t, reloader)
 }
 
 // TestTokenRefresherForDriver_UnknownDriverGetsNothing pins the property that

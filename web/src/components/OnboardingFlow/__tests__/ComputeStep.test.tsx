@@ -509,7 +509,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/10 small-machine-hours/),
+        screen.getByText(/600 machine minutes \(10 hours\)/),
       ).toBeInTheDocument();
     });
     expect(mockRefetchCloudEligibility).toHaveBeenCalled();

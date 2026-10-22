@@ -10,10 +10,10 @@ import (
 )
 
 // providerDisplayNames are the names a user sees in Settings → Providers, keyed
-// by driver id.
+// by driver id. "anthropic" serves both a Claude Code sign-in and an Anthropic
+// API key, so it names both.
 var providerDisplayNames = map[string]string{
-	"anthropic":   "Anthropic API",
-	"claude":      "Claude subscription",
+	"anthropic":   "Anthropic (Claude)",
 	"antigravity": "Antigravity",
 	"codex":       "Codex (ChatGPT)",
 	"copilot":     "GitHub Copilot",

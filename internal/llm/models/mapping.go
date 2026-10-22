@@ -41,9 +41,12 @@ var (
 	DriverMapping = map[Family][]ModelID{}
 
 	// catalogDrivers maps a driver family to the provider name it reads in
-	// models.yaml (the same string). Membership is explicit rather than a
-	// fallback for unknown drivers, so a misspelled driver name resolves to
-	// nothing and is noticed instead of silently matching the whole catalog.
+	// models.yaml. Usually those are the same string; they differ when two
+	// families serve one provider's models over different transports (the
+	// claude-code family serves the anthropic mappings using a subscription
+	// token). Membership is explicit rather than a fallback for unknown
+	// drivers, so a misspelled driver name resolves to nothing and is noticed
+	// instead of silently matching the whole catalog.
 	catalogDrivers = map[Family]string{}
 )
 
@@ -55,9 +58,21 @@ var (
 // models arrive that way (SetGlobalRegistry), and a snapshot would leave them
 // unservable for the same reason the catalog drift did.
 func RegisterCatalogDriver(driver Family) {
+	RegisterCatalogDriverAs(driver, driver)
+}
+
+// RegisterCatalogDriverAs declares that a driver serves the models mapped to a
+// DIFFERENT provider name in models.yaml.
+//
+// This exists for one real case: a second transport onto the same provider's
+// models. The claude-code family reaches the Anthropic model set with an
+// sk-ant-oat subscription token, so it reads the `anthropic` mappings rather
+// than requiring every model to carry a duplicate `claude-code` entry that
+// could fall out of step with the one beside it.
+func RegisterCatalogDriverAs(driver Family, catalogProvider Family) {
 	mappingMu.Lock()
 	defer mappingMu.Unlock()
-	catalogDrivers[driver] = string(driver)
+	catalogDrivers[driver] = string(catalogProvider)
 }
 
 // RegisterDriverModels registers an explicit model list for a driver whose

@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "./ui";
-import { formatCentsAsDollars } from "./billingUtils";
-import { hourlyPriceShort, MACHINE_BILLING_POLICY, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
+import { formatCentsAsDollars, formatOverageRate } from "./billingUtils";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,7 +39,7 @@ export interface ComputeOverageControlProps {
   /** Current stored cap in cents; undefined or 0 both mean uncapped. */
   budgetCents?: bigint;
   /** Plan's overage rate, server-supplied. 0 means the plan has no overage. */
-  pricing?: DaemonPricingLike;
+  overageCentsPerMinute: number;
   /**
    * Overage spend so far this period, in cents, or null when the server did
    * not measure usage.
@@ -85,6 +84,15 @@ export function suggestedLimitCents(monthlyPriceCents: number | null): number {
   return Math.round(monthlyPriceCents / 2);
 }
 
+/** How many extra minutes a limit buys at the plan's rate. */
+export function limitAsMinutes(
+  limitCents: number,
+  overageCentsPerMinute: number,
+): number | null {
+  if (!(overageCentsPerMinute > 0) || !(limitCents > 0)) return null;
+  return Math.floor(limitCents / overageCentsPerMinute);
+}
+
 function parseDollarsToCents(input: string): number | null {
   const trimmed = input.trim();
   if (trimmed === "") return null;
@@ -96,7 +104,7 @@ function parseDollarsToCents(input: string): number | null {
 export function ComputeOverageControl({
   enabled,
   budgetCents,
-  pricing,
+  overageCentsPerMinute,
   overageSpentCents,
   monthlyPriceCents,
   disabled = false,
@@ -124,7 +132,16 @@ export function ComputeOverageControl({
   }, [storedChoice, budgetCents]);
 
   const parsedLimitCents = parseDollarsToCents(limitInput);
-  const rateLabel = pricing?.sizes.map((s) => `${s.size}: ${hourlyPriceShort(pricing, s.size)}`).join(" · ") || "prices unavailable";
+  const rateLabel = formatOverageRate(overageCentsPerMinute);
+  const planHasOverage = overageCentsPerMinute > 0;
+
+  const extraMinutes = useMemo(
+    () =>
+      parsedLimitCents === null
+        ? null
+        : limitAsMinutes(parsedLimitCents, overageCentsPerMinute),
+    [parsedLimitCents, overageCentsPerMinute],
+  );
 
   // A capped choice needs a real ceiling. 0 is rejected HERE, in the form,
   // rather than sent: the server would store it and read it back as uncapped,
@@ -149,6 +166,14 @@ export function ComputeOverageControl({
     if (parsedLimitCents === null || parsedLimitCents <= 0) return;
     onSave({ enabled: true, budgetCents: BigInt(parsedLimitCents) });
   };
+
+  if (!planHasOverage) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        This plan doesn&apos;t offer extra time beyond its included hours.
+      </p>
+    );
+  }
 
   const spentAgainstCap =
     storedChoice === "capped" && budgetCents !== undefined
@@ -195,7 +220,7 @@ export function ComputeOverageControl({
           checked={choice === "off"}
           onSelect={() => setChoice("off")}
           label="Stop at my included hours"
-          description={`Machines pause when included hours run out. ${MACHINE_BILLING_POLICY}`}
+          description="Machines won't start once your included hours are used. Nothing extra is charged."
         />
 
         <OverageOption
@@ -230,7 +255,11 @@ export function ComputeOverageControl({
               />
               <span className="text-sm text-muted-foreground">/mo</span>
             </div>
-
+            {extraMinutes !== null && (
+              <span className="text-xs text-muted-foreground">
+                ≈ {extraMinutes} extra minutes at {rateLabel}
+              </span>
+            )}
           </div>
           {limitInvalid && (
             <p className="text-xs text-destructive-ink">

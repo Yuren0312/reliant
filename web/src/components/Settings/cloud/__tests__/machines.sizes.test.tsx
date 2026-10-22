@@ -323,8 +323,7 @@ describe("no invented per-size price", () => {
     const { modal } = await openCreateModal(user);
 
     // $0.0047/min — a value no hardcoded tier table ever held.
-    expect(within(modal).queryByText(/\$0\.005\/min/)).not.toBeInTheDocument();
-    expect(within(modal).getByText(/Machine prices unavailable/)).toBeInTheDocument();
+    expect(within(modal).getByText(/\$0\.005\/min/)).toBeInTheDocument();
   });
 });
 

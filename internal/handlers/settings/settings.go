@@ -912,12 +912,12 @@ func (s *Service) GetProviderStatuses(ctx context.Context, req *connect.Request[
 	}
 
 	providerDisplayNames := map[models.Family]string{
-		"claude":             "Claude subscription",
+		"claude":             "Claude Code",
 		"codex":              "Codex (ChatGPT)",
 		"copilot":            "GitHub Copilot",
 		antigravity.DriverID: "Antigravity",
 		"openrouter":         "OpenRouter",
-		"anthropic":          "Anthropic API",
+		"anthropic":          "Anthropic",
 		"openai":             "OpenAI",
 		"gemini":             "Google Gemini",
 	}

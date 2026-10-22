@@ -312,6 +312,11 @@ export function formatAllowedSizes(sizes: string[]): string {
   return labeled.join(", ");
 }
 
+export function formatOverageRate(centsPerMinute: number): string {
+  if (!(centsPerMinute > 0)) return "—";
+  return `$${(centsPerMinute / 100).toFixed(3)}/min`;
+}
+
 /**
  * Did this subscription's plan detail fail to reach us?
  *

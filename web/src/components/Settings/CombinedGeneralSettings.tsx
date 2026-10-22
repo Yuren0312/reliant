@@ -81,7 +81,7 @@ export const VISIBLE_PROVIDERS = [
 
 export const providerConfigs = {
   claude: {
-    name: "Claude subscription",
+    name: "Claude Code",
     docsUrl: "https://claude.ai",
     keyFormat: "",
     description:
@@ -126,7 +126,7 @@ export const providerConfigs = {
     usesOAuth: false,
   },
   anthropic: {
-    name: "Anthropic API",
+    name: "Anthropic",
     docsUrl: "https://console.anthropic.com/settings/keys",
     keyFormat: "sk-ant-...",
     description: "Claude 3.5, Claude 3, and other Anthropic models",

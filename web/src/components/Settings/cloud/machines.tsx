@@ -75,6 +75,7 @@ import {
   PortAccessMode,
   deleteDaemon,
   describeError,
+  getComputeSubscription,
   getDaemon,
   growDaemonDisk,
   listPortAccessRules,
@@ -109,14 +110,9 @@ import {
   hourlyPriceShort,
   sizeFacts,
   suspendedFeeLabel,
-  provisionedDiskGib,
-  diskAllowanceGib,
-  MACHINE_BILLING_POLICY,
-  MACHINE_PRICING_NOTE,
   type DaemonPricingLike,
 } from "@/components/Billing/daemonUsage";
 import { formatMachineSpec } from "@/components/Billing/machineSpecs";
-import { MachineCost } from "@/components/Billing/MachineCost";
 import { CardInset } from "@/components/forge-ui/card";
 import { MachineDiskCard } from "./MachineDiskCard";
 import { DiskGrowNotice, GrowDiskModal, type GrowStage } from "./GrowDiskModal";
@@ -132,7 +128,7 @@ import { useAccountGate } from "@/hooks/useAccountGate";
 import { MachineAccess, activeGrantCounts, appCountLabel, useConnectors } from "./machineAccess";
 // The overage formatter, shared with the billing purchase grid so the two
 // surfaces cannot disagree about how a rate is written.
-
+import { formatOverageRate } from "./billingUtils";
 
 // The GitHub repo picker shared with onboarding and the project picker's Clone
 // dialog. Loaded when the user opens it: most machines are created without a
@@ -332,7 +328,16 @@ const accessModeLabel: Record<number, string> = {
   [PortAccessMode.UNSPECIFIED]: "Unspecified",
 };
 
-// Existing-machine costs read provisioning detail, not a tier's standard disk.
+/**
+ * A suspended machine's monthly disk fee: its size's disk (the one storage
+ * number, from the server's price list) × the per-GiB-month fee. Null when
+ * the server sent no price list or the size is unknown to it.
+ */
+function suspendedFeeOf(d: Daemon, pricing?: DaemonPricingLike): string | null {
+  const name = SIZE_TIERS.find((t) => t.name === d.size)?.name;
+  const row = name ? pricing?.sizes.find((s) => s.size === name) : undefined;
+  return row ? suspendedFeeLabel(pricing, Number(row.storageGib)) : null;
+}
 
 // ── Date helpers ────────────────────────────────────────────────────────────
 function fmtTimestamp(ts?: Timestamp): string {
@@ -562,6 +567,19 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
   // would just move the denial to after the click.
   const canCreate = Boolean(eligibilityQ.data?.eligible) && allowedSizes.length > 0;
 
+  // Not part of the gate — the per-minute overage rate is a display fact that
+  // only an active subscription states, and the eligibility response
+  // deliberately carries no price. A coupon-funded user has no subscription
+  // and therefore no rate to show, which is the truthful answer rather than a
+  // zero standing in for one.
+  const computeSubQ = useQuery({
+    queryKey: QK.computeSub,
+    queryFn: () => getComputeSubscription(),
+    staleTime: 30_000,
+    enabled: cloud,
+  });
+  const plan = computeSubQ.data?.plan;
+
   const invalidate = () => qc.invalidateQueries({ queryKey: QK.daemons });
 
   const suspendMut = useMutation({
@@ -675,6 +693,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
                 onSuspend={(id) => suspendMut.mutate(id)}
                 onResume={(id) => resumeMut.mutate(id)}
                 busy={suspendMut.isPending || resumeMut.isPending}
+                pricing={daemonPricing}
               />
             </div>
           )}
@@ -700,6 +719,9 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
         onClose={() => setCreateOpen(false)}
         allowedSizes={allowedSizes}
         pricing={daemonPricing}
+        overageCentsPerMinute={
+          plan?.structuredLimits?.daemonOveragePerMinuteCents ?? 0
+        }
         onCreated={() => { setCreateOpen(false); invalidate(); }}
       />
 
@@ -739,6 +761,7 @@ function ManagedMachinesTable({
   onSuspend,
   onResume,
   busy,
+  pricing,
 }: {
   daemons: Daemon[];
   appCounts: Map<string, number>;
@@ -840,7 +863,11 @@ function ManagedMachinesTable({
                     {/* A suspended machine still holds its disk, and the disk is
                         billed (design §5.1). Shown beside Delete because Delete
                         is the only thing that stops it. */}
-                    {cloud && <MachineCost daemonId={d.daemonId} size={d.size} suspended={isSuspended} />}
+                    {isSuspended && suspendedFeeOf(d, pricing) && (
+                      <span className="text-xs text-muted-foreground" data-testid="machine-suspended-fee">
+                        {suspendedFeeOf(d, pricing)} while suspended
+                      </span>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1009,6 +1036,7 @@ function CreateEnvironmentModal({
   onClose,
   allowedSizes,
   pricing,
+  overageCentsPerMinute,
   onCreated,
 }: {
   open: boolean;
@@ -1025,6 +1053,7 @@ function CreateEnvironmentModal({
    * per-size price list (an older control plane), as the one rate it does
    * state.
    */
+  overageCentsPerMinute: number;
   onCreated: () => void;
 }) {
   const formId = useId();
@@ -1185,8 +1214,7 @@ function CreateEnvironmentModal({
           {tiers.map((t) => {
             const selected = effectiveSize === t.value;
             const price = hourlyPriceShort(pricing, t.name);
-            const facts = sizeFacts(pricing, t.name);
-            const burn = facts?.burnRateLabel;
+            const burn = sizeFacts(pricing, t.name)?.burnRateLabel;
             const labelId = `${formId}-size-${t.name}`;
             const detailId = `${labelId}-detail`;
             return (
@@ -1221,7 +1249,6 @@ function CreateEnvironmentModal({
                   {burn && (
                     <div className="mt-0.5 text-xs text-muted-foreground first-letter:uppercase">{burn}</div>
                   )}
-                  {facts && <div className="mt-0.5 text-xs text-muted-foreground">{facts.diskLabel} · {facts.suspendedFeeLabel} while suspended</div>}
                 </div>
               </button>
             );
@@ -1241,11 +1268,20 @@ function CreateEnvironmentModal({
             while the prices are being finalised, and says to say so. */}
         {priced && (
           <p className="mt-2 text-xs text-muted-foreground" data-testid="size-pricing-note">
-            {MACHINE_PRICING_NOTE} {MACHINE_BILLING_POLICY}
+            Included hours are shared across your machines, and larger sizes
+            use them faster. Past them, a machine is billed at its size&apos;s
+            hourly price.
             {pricing?.placeholder && " These prices are provisional."}
           </p>
         )}
-        {!priced && <p className="mt-2 text-xs text-muted-foreground">Machine prices unavailable. {MACHINE_BILLING_POLICY}</p>}
+        {/* An older control plane sends no per-size list; its flat plan
+            rate is then the one rate it states. */}
+        {!priced && tiers.length > 0 && overageCentsPerMinute > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Included hours are shared across machines. Beyond them, usage is
+            billed at {formatOverageRate(overageCentsPerMinute)}.
+          </p>
+        )}
       </Field>
 
       <Field
@@ -1439,7 +1475,7 @@ function RestartMachineModal({
 function ResizeMachineModal({
   target,
   currentSize,
-  targetDisk,
+  storageSize,
   running,
   allowedSizes,
   sizesLoading,
@@ -1453,7 +1489,8 @@ function ResizeMachineModal({
 }: {
   target: Daemon | null;
   currentSize: DaemonSize | undefined;
-  targetDisk?: { capacityGib: number; includedGib: number };
+  /** The machine's current data disk, e.g. "80Gi", for the downsize note. */
+  storageSize?: string;
   running: boolean;
   allowedSizes: DaemonSize[];
   sizesLoading: boolean;
@@ -1504,12 +1541,7 @@ function ResizeMachineModal({
           const choosable = !isCurrent && allowed && !sizesLoading && !isPending;
           const isSelected = selected === t.value;
           const price = hourlyPriceShort(pricing, t.name);
-          const facts = sizeFacts(pricing, t.name);
-          const held = target ? provisionedDiskGib(pricing, target.size, targetDisk) : null;
-          const standard = pricing?.sizes.find((s) => s.size === t.name);
-          const resizedGib = held !== null && standard ? Math.max(held, Number(standard.storageGib)) : null;
-          const fee = resizedGib === null ? null : suspendedFeeLabel(pricing, resizedGib);
-          const burn = facts?.burnRateLabel;
+          const burn = sizeFacts(pricing, t.name)?.burnRateLabel;
           const labelId = `${groupId}-size-${t.name}`;
           const detailId = `${labelId}-detail`;
           return (
@@ -1533,8 +1565,15 @@ function ResizeMachineModal({
             >
               <div className="flex items-baseline justify-between gap-2">
                 <span id={labelId} className="text-sm font-semibold text-foreground">{t.label}</span>
-                {isCurrent && <Badge label="Current" variant="neutral" />}
-                {price && <span className="whitespace-nowrap text-sm font-semibold tabular-nums text-foreground">{price}</span>}
+                {isCurrent ? (
+                  <Badge label="Current" variant="neutral" />
+                ) : (
+                  price && (
+                    <span className="whitespace-nowrap text-sm font-semibold tabular-nums text-foreground">
+                      {price}
+                    </span>
+                  )
+                )}
               </div>
               <div id={detailId}>
                 <div className="mt-1 whitespace-nowrap text-xs text-muted-foreground">{t.specs}</div>
@@ -1543,15 +1582,12 @@ function ResizeMachineModal({
                 ) : (
                   burn && <div className="mt-0.5 text-xs text-muted-foreground first-letter:uppercase">{burn}</div>
                 )}
-                <div className="mt-0.5 text-xs text-muted-foreground">{resizedGib === null ? "Disk cost unavailable" : `${resizedGib} GiB disk · ${fee} while suspended`}</div>
-                {resizedGib !== null && standard && resizedGib > Number(standard.storageGib) && <div className="text-xs text-muted-foreground">{suspendedFeeLabel(pricing, resizedGib - Number(standard.storageGib))} extra disk while running</div>}
               </div>
             </button>
           );
         })}
       </div>
 
-      <p className="mt-2 text-xs text-muted-foreground">{MACHINE_PRICING_NOTE} {MACHINE_BILLING_POLICY}</p>
       {sizesLoading && <p className="mt-2 text-xs text-muted-foreground">Checking which sizes your plan includes…</p>}
       {someDisallowed && (
         <p className="mt-2 text-xs text-muted-foreground">
@@ -1569,7 +1605,8 @@ function ResizeMachineModal({
           a surprise on the bill. */}
       {shrinking && (
         <CardInset className="mt-4 text-sm text-muted-foreground" data-testid="resize-disk-note">
-          The disk doesn&apos;t shrink. Disk above the new size&apos;s standard is billed while running too.
+          The disk doesn&apos;t shrink: this machine keeps its current
+          {storageSize ? ` ${storageSize}` : ""} disk, and is billed for it at that size.
         </CardInset>
       )}
 
@@ -1839,7 +1876,7 @@ function EnvironmentDetail({
     () => sizeTiersFromWire(eligibilityQ.data?.allowedDaemonSizes ?? []),
     [eligibilityQ.data?.allowedDaemonSizes],
   );
-  const pricing = usePlans({ enabled: cloud }).data?.daemonPricing;
+  const pricing = usePlans({ enabled: cloud && (resizeOpen || growOpen) }).data?.daemonPricing;
   const disk = spec?.disk;
   const maxDiskGib = eligibilityQ.data?.maxDaemonStorageGib ?? 0;
   // Offered only where the plan grows disks at all. A machine already at
@@ -1875,8 +1912,7 @@ function EnvironmentDetail({
   // would be live: not on a FAILED machine, nor one still starting.
   const restartPlan = daemon ? lifecyclePlan(daemon, null) : null;
   const restartable = Boolean(restartPlan?.offer.includes("restart") && restartPlan.disabledReason === null);
-  const allowance = daemon && disk ? diskAllowanceGib(pricing, daemon.size, disk.includedGib) : null;
-  const growNotice = allowance === null ? null : diskGrowStatus(disk, daemon ? daemon.status !== DaemonStatus.SUSPENDED : false, allowance);
+  const growNotice = diskGrowStatus(disk, daemon ? daemon.status !== DaemonStatus.SUSPENDED : false);
   // The registry list is what proves the machine exists; the control-plane
   // spec is an extra half that only a cloud build has.
   const loading = listQ.isLoading || (cloud && daemonQ.isLoading);
@@ -2018,13 +2054,12 @@ function EnvironmentDetail({
                   ) : (
                     <>
                       <InfoRow label="Size" value={SIZE_TIERS.find((t) => t.value === currentSize)?.label ?? "Custom"} />
-                      <InfoRow label="Cost" value={<MachineCost daemonId={daemon.daemonId} size={daemon.size} />} />
                       <InfoRow
                         label="Storage"
                         value={
                           (disk?.requestedGib || spec?.storageSize) && (
                             <span className="inline-flex items-baseline gap-2">
-                              {provisionedDiskGib(pricing, daemon.size, disk) !== null ? `${provisionedDiskGib(pricing, daemon.size, disk)} GiB disk` : "Disk size unavailable"}
+                              {disk?.requestedGib ? `${disk.requestedGib} GiB` : spec?.storageSize}
                               {canGrowDisk && (
                                 <button
                                   type="button"
@@ -2109,7 +2144,7 @@ function EnvironmentDetail({
           <ResizeMachineModal
             target={resizeOpen ? daemon : null}
             currentSize={currentSize}
-            targetDisk={disk}
+            storageSize={spec?.storageSize}
             running={daemon.status !== DaemonStatus.SUSPENDED}
             allowedSizes={resizeAllowed}
             sizesLoading={eligibilityQ.isLoading}
@@ -2127,10 +2162,7 @@ function EnvironmentDetail({
               open={growOpen}
               machineName={daemonDisplayName(daemon)}
               currentGib={disk.requestedGib}
-              provisionedGib={provisionedDiskGib(pricing, daemon.size, disk)}
               includedGib={disk.includedGib}
-              allowanceGib={diskAllowanceGib(pricing, daemon.size, disk.includedGib)}
-              hourlyLabel={hourlyPriceShort(pricing, daemon.size)}
               maxGib={maxDiskGib}
               limitLoading={eligibilityQ.isLoading}
               running={daemon.status !== DaemonStatus.SUSPENDED}

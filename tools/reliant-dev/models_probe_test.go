@@ -134,9 +134,8 @@ func TestServedElsewhere(t *testing.T) {
 		{"copilot", "copilot", false},
 		{"copilot", "anthropic", true},
 		{"copilot", "antigravity", true},
-		{"claude", "claude", false},
-		{"anthropic", "claude", true}, // the subscription is not the API key
-		{"codex", "claude", true},
+		{"anthropic", "claude-code", false}, // Claude OAuth runs on the anthropic driver id
+		{"codex", "claude-code", true},
 		{"copilot", "", false}, // nothing recorded: nothing to judge
 		{"", "copilot", false},
 	}

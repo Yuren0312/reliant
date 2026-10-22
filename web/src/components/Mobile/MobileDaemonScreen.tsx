@@ -12,7 +12,6 @@
  * in either state produces a call that fails or duplicates work.
  */
 
-import { MachineCost } from "@/components/Billing/MachineCost";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { AlertTriangle, ChevronLeft, Loader2, Pause, Play, Trash2 } from "lucide-react";
@@ -99,7 +98,6 @@ function LifecycleActions({ daemon }: { daemon: DaemonInfo }) {
 
   return (
     <div className="space-y-3">
-      <MachineCost daemonId={daemon.daemonId} size={daemon.size} />
       <div className="grid gap-2">
         {canResume(daemon) && (
           <button

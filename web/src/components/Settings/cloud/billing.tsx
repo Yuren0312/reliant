@@ -55,6 +55,7 @@ import {
   formatCentsAsDollars,
   formatCurrencyFromWalletFields,
   formatDayLabel,
+  formatOverageRate,
   formatTimestampDate,
   getWalletBalanceState,
   getWalletWarning,
@@ -510,7 +511,6 @@ function OverviewTab({
   onGoToPlans: () => void;
   onGoToUsage: () => void;
 }) {
-  const plansQ = usePlans();
   const subQ = useComputeSubscription();
   const walletQ = useWalletOverview();
   const usageQ = useComputeUsage("current");
@@ -669,7 +669,7 @@ function OverviewTab({
             ? `${(sdhUsed / 3600).toFixed(1)} small-daemon-hours`
             : `${(usedMinutes / 60).toFixed(1)} h`,
       allowedSizesLabel: degraded ? null : formatAllowedSizes(d.allowedSizes),
-      overageRateLabel: "Varies by machine size",
+      overageRateLabel: formatOverageRate(d.overageCentsPerMinute),
       capacity:
         degraded || usageFailed
           ? null
@@ -936,7 +936,7 @@ function OverviewTab({
               <ComputeOverageControl
                 enabled={computeUi.overageEnabled}
                 budgetCents={computeUi.budgetCents}
-                pricing={plansQ.data?.daemonPricing}
+                overageCentsPerMinute={computeUi.overageCentsPerMinute}
                 overageSpentCents={computeUi.overageSpentCents}
                 monthlyPriceCents={computeUi.monthlyPriceCents}
                 disabled={disabled}
@@ -1284,7 +1284,17 @@ function PlansTab() {
             onSelect={(option) => setCheckoutPlanId(option.planId)}
           />
 
-          {/* Base plan allowance; each row states its own allowance and rate. */}
+          {/* Everything true of EVERY machine, said once, beneath the list.
+          
+              Neither varies by size — the allowance is 9600 minutes at every
+              rung of the catalog's ladder — and a per-row copy of a uniform
+              fact implies it varies. PlanTiles.tsx carries the long version:
+              a per-row hours figure shipped once, read four different stale
+              numbers off a lagging dev database, and taught users that a
+              bigger machine buys more time. It buys a bigger machine.
+              
+              Sized from a real row so the figures still track the catalog
+              rather than being written down here a second time. */}
           {planOptions.length > 0 && (
             <div className="space-y-2 border-t border-border pt-4">
               <p
@@ -1311,7 +1321,14 @@ function PlansTab() {
                   cost.
                 </p>
               )}
-              {/* Hourly rates belong to machine sizes, not plan minute rates. */}
+              {/* What happens at the end of the hours.
+              
+                  `rateVariesBySize` because it does: the hours are uniform
+                  across the catalog but the overage RATE is priced per plan,
+                  so quoting one machine's rate beneath four would assert a
+                  uniformity the catalog does not have. The policy is stated
+                  here; the number appears in the checkout, where exactly one
+                  machine is selected. */}
               <PlanFinePrint plan={planOptions[0]} rateVariesBySize />
               <p className="text-xs text-muted-foreground">
                 Payment opens on this page — you won&apos;t leave Reliant.

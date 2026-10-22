@@ -18,7 +18,6 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
-	"github.com/reliant-labs/reliant/internal/llm/ratelimit"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -38,8 +37,7 @@ func (c *AnthropicClient) Name() string {
 // NewAnthropicClient creates a new Anthropic API client
 func NewAnthropicClient(opts llm.DriverOptions) *AnthropicClient {
 	clientOptions := []option.RequestOption{}
-	clientOptions = append(clientOptions, option.WithAPIKey(opts.ApiKey),
-		option.WithMiddleware(ratelimit.Middleware("anthropic", ratelimit.ParseAnthropic)))
+	clientOptions = append(clientOptions, option.WithAPIKey(opts.ApiKey))
 
 	if opts.UseBedrock {
 		clientOptions = append(clientOptions, bedrock.WithLoadDefaultConfig(context.Background()))

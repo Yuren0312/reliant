@@ -780,7 +780,6 @@ func (e *InlineLoopExecutor) buildParallelIterationInputs(
 	propagateUnattended(e.workflowInputs, iterInputs)
 	propagateActingIdentity(e.workflowInputs, iterInputs)
 	propagateTrigger(e.workflowInputs, iterInputs)
-	propagateProviderPreference(e.workflowInputs, iterInputs)
 	iterInputs["loop"] = map[string]interface{}{"iteration": index}
 	iterInputs["iter"] = model.BuildParallelIterContext(index, item, key)
 	return iterInputs, nil

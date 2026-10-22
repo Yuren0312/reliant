@@ -8,29 +8,36 @@ import (
 )
 
 const (
-	// Family is the driver family for the metered Anthropic API (an API key).
+	// Family is the driver family for standard Anthropic API
 	Family models.Family = "anthropic"
-	// ClaudeFamily is the driver family for a Claude subscription (Claude
-	// Code OAuth). It is the one id the subscription goes by everywhere: the
-	// stored provider, the DriverID, the models.yaml mapping, a
-	// `<model>@claude` pin and the client's Name().
-	ClaudeFamily models.Family = "claude"
+	// ClaudeCodeFamily is the driver family for Claude Code API (sk-ant-oat keys)
+	ClaudeCodeFamily models.Family = "claude-code"
 )
 
-// createAnthropicClient is the driver factory for the Anthropic API.
+// createAnthropicClient is the driver factory for standard Anthropic API
 func createAnthropicClient(opts *llm.DriverOptions) (registry.Client, error) {
+	// Route to Claude Code client if using sk-ant-oat key
+	if IsClaudeCodeKey(opts.ApiKey) {
+		return NewClaudeCodeClient(*opts), nil
+	}
 	return NewAnthropicClient(*opts), nil
 }
 
-// createClaudeCodeClient is the driver factory for a Claude subscription.
+// createClaudeCodeClient is the driver factory for Claude Code API
 func createClaudeCodeClient(opts *llm.DriverOptions) (registry.Client, error) {
 	return NewClaudeCodeClient(*opts), nil
 }
 
 func init() {
+	// Both families serve whatever models.yaml maps to `anthropic`. The Claude
+	// Code family is the same Anthropic model set reached with an sk-ant-oat
+	// subscription token rather than an API key, so it reads the same mappings
+	// instead of keeping a second list that could fall behind.
 	models.RegisterCatalogDriver(Family)
+	// Register the Anthropic driver factory (auto-routes to Claude Code for sk-ant-oat keys)
 	registry.RegisterDriver(Family, createAnthropicClient)
 
-	models.RegisterCatalogDriver(ClaudeFamily)
-	registry.RegisterDriver(ClaudeFamily, createClaudeCodeClient)
+	// Register Claude Code as a separate driver family (explicit selection)
+	models.RegisterCatalogDriverAs(ClaudeCodeFamily, Family)
+	registry.RegisterDriver(ClaudeCodeFamily, createClaudeCodeClient)
 }
