@@ -325,7 +325,7 @@ func TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed(t *testing.T) {
 // daemon gateway (tools_daemon) over ConnectDaemon and returns the stream
 // once the gateway has acknowledged the registration, for the test to send
 // what a daemon sends.
-func dialToolsDaemon(t *testing.T, repo *db.Repo, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+func dialToolsDaemon(t *testing.T, repo tools_daemon.Repository, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
 	gateway, err := tools_daemon.New(tools_daemon.Deps{
 		Logger: slog.New(slog.DiscardHandler),
