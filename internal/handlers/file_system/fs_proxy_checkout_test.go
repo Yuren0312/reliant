@@ -41,8 +41,8 @@ func (r *fsMissingDirRouter) ResolveDaemonID(context.Context, string) (string, e
 
 func checkoutMissingDetail(t *testing.T, err error) *reliantv1.ProjectCheckoutMissing {
 	t.Helper()
-	var cerr *connect.Error
-	require.True(t, errors.As(err, &cerr), "want a connect error, got %v", err)
+	cerr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	require.True(t, cerr != nil, "want a connect error, got %v", err)
 	for _, d := range cerr.Details() {
 		v, verr := d.Value()
 		if verr != nil {
@@ -113,8 +113,8 @@ func TestFileSystemProxy_GetFileTree_MissingSubdirStaysAsItWas(t *testing.T) {
 	svc := newProxy(t, &fsMissingDirRouter{daemonID: "2aab1465"}, repo)
 	_, err := svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Path: "pkg"}))
 	require.Error(t, err)
-	var cerr *connect.Error
-	require.True(t, errors.As(err, &cerr))
+	cerr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	require.True(t, cerr != nil)
 	assert.Empty(t, cerr.Details(), "a missing subdirectory must not be reported as a missing checkout")
 	// ...but it is still the state of the user's disk, not a server fault:
 	// as INTERNAL it was reported to Sentry by the server and the browser.

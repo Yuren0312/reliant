@@ -561,7 +561,7 @@ func TestForgeService_ListSecrets_ErrorCarriesNoReportText(t *testing.T) {
 	// text alone — re-classifying it must not widen what it carries.
 	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Equal(t, "daemon command forge.secret_list failed: forge command failed: exit 1",
-		err.(*connect.Error).Message())
+		svcerr.ToConnect(err).Message())
 }
 
 // THE DAEMON SENDS AN OBJECT, NOT A STRING, and this pins that contract.

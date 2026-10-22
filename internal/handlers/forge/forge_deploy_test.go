@@ -291,8 +291,8 @@ func TestForgeService_StartDeploy_RefusesChangedDeclaredContext(t *testing.T) {
 
 	// The structured detail is what makes this recoverable without a blind retry
 	// against production.
-	var connectErr *connect.Error
-	require.ErrorAs(t, err, &connectErr)
+	connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	require.NotNil(t, connectErr)
 	details := connectErr.Details()
 	require.Len(t, details, 1, "the refusal must travel as a structured detail")
 	msg, detailErr := details[0].Value()
@@ -333,8 +333,8 @@ func TestForgeService_StartDeploy_RefusesChangedBoundRelease(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 
-	var connectErr *connect.Error
-	require.ErrorAs(t, err, &connectErr)
+	connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	require.NotNil(t, connectErr)
 	require.Len(t, connectErr.Details(), 1)
 	msg, detailErr := connectErr.Details()[0].Value()
 	require.NoError(t, detailErr)
@@ -407,8 +407,8 @@ func TestForgeService_StartDeploy_RefusalReasonsAreDistinguishable(t *testing.T)
 			require.Error(t, err, "every refusal must fail the RPC")
 			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 
-			var connectErr *connect.Error
-			require.ErrorAs(t, err, &connectErr)
+			connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+			require.NotNil(t, connectErr)
 			require.Len(t, connectErr.Details(), 1)
 			msg, detailErr := connectErr.Details()[0].Value()
 			require.NoError(t, detailErr)

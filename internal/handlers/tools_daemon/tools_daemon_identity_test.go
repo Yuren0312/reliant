@@ -162,8 +162,8 @@ func TestConnectDaemonForeignRefusalCarriesStableReasonAndNoOwner(t *testing.T) 
 
 	err := registerAs(t, svc, "user-B", daemonID)
 
-	var connectErr *connect.Error
-	require.ErrorAs(t, err, &connectErr)
+	connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	require.NotNil(t, connectErr)
 	require.Equal(t, connect.CodePermissionDenied, connectErr.Code())
 	require.Equal(t, "daemon_id_owned_by_another_user", connectErr.Meta().Get("x-forge-error-reason"),
 		"the refusal must carry a stable machine-readable reason")
