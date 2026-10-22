@@ -46,9 +46,12 @@ func TestSkillToolReadsSkillsThroughTheConfigProvider(t *testing.T) {
 	}))
 
 	repo := h.Repo()
-	spy := &fullConfigRowReads{Repository: repo}
+	spy := &fullConfigRowReads{Repo: repo}
 	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(spy), repo, cfgpkg.DefaultParsedConfigCacheBytes)
-	activity := NewExecuteToolsActivity(spy, serverToolExecutor(spy)).WithConfigProvider(provider)
+	// The tools factory is composition and takes the concrete *db.Repo, so the
+	// spy watches the activity's and the provider's reads; no tool reads the
+	// config row itself (the skill tool asks the provider).
+	activity := NewExecuteToolsActivity(spy, serverToolExecutor(repo)).WithConfigProvider(provider)
 
 	for i := 0; i < 3; i++ {
 		callID := fmt.Sprintf("call-skill-%d", i)
