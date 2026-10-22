@@ -184,6 +184,7 @@ type toolStore interface {
 	listRunsStore
 	listScenariosStore
 	listTasksStore
+	listPendingQuestionsStore
 	listWorkflowsStore
 	readAttachmentStore
 	removeDependencyStore
@@ -197,6 +198,7 @@ type toolStore interface {
 	updatePlanStore
 	updateTaskStore
 	viewScenarioStore
+	withdrawQuestionStore
 	workflowWriteStore
 	worktreeStore
 	writeScenarioStore
@@ -425,12 +427,12 @@ func (f *ToolsFactory) ListReadyTasks() Tool {
 // ListPendingQuestions lists the caller's and its sub-agents' unanswered
 // ask_user questions.
 func (f *ToolsFactory) ListPendingQuestions() Tool {
-	return NewListPendingQuestionsTool(f.opts.Repo)
+	return NewListPendingQuestionsTool(f.store())
 }
 
 // WithdrawQuestion withdraws an async question in the caller's subtree.
 func (f *ToolsFactory) WithdrawQuestion() Tool {
-	return NewWithdrawQuestionTool(f.opts.Repo)
+	return NewWithdrawQuestionTool(f.store())
 }
 
 // Spawn observability/messaging tools
