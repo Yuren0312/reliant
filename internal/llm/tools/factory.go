@@ -26,7 +26,15 @@ type ToolsOptions struct {
 	// tools (netguard.ForDeployment): a hosted deployment's shared worker must
 	// not reach its own network; a self-hosted one is the user's machine.
 	ControlPlaneURL string
-	// Repository
+	// Repo is the database the tools read and write. The factory is
+	// composition: it hands Repo to each tool as the role that tool declares
+	// (deps.go). Optional: nil means every database-backed tool reports that
+	// it is unavailable here (the daemon runtime, catalog listings).
+	//
+	// It becomes *db.Repo once no caller passes a db.Repository (P6). That
+	// change must keep an absent repo a nil role in each tool: a nil *db.Repo
+	// handed to a role is a non-nil interface, which every tool's "requires a
+	// database connection" check would miss.
 	Repo db.Repository
 	// Skills are injected from the config sync pipeline (daemon → DB → provider).
 	// The skill tool operates on this slice exclusively — no filesystem access.
@@ -156,14 +164,6 @@ func (f *ToolsFactory) GetMCPToolSet(runtime MCPRuntime) MCPToolSet {
 		return MCPToolSet{Tools: []Tool{}, Source: MCPToolsUnrequested}
 	}
 	return f.mcpProvider.GetToolSet(runtime)
-}
-
-// GetRepo returns the repository dependency used by this factory.
-func (f *ToolsFactory) GetRepo() db.Repository {
-	if f.opts == nil {
-		return nil
-	}
-	return f.opts.Repo
 }
 
 // cloneOpts copies this factory's options so a With* helper can override one
@@ -605,19 +605,25 @@ func (f *ToolsFactory) ListAvailableTools() []string {
 // AskUser returns the ask_user schema-only tool.
 // The ask_user tool lets the LLM ask the user questions. Execution is intercepted
 // by the workflow runtime's splitProtoToolCalls → executeAskUserInline, not by
-// the normal tool execution path.
+// the normal tool execution path. With async: true the question is posted
+// without waiting and the answer arrives later as a user message
+// (research/ASYNC_ASK_USER.md).
 func (f *ToolsFactory) AskUser() Tool {
 	return NewSchemaOnlyTool(
 		ToolAskUser,
-		`Ask the user one or more questions and wait for their responses. Use this when you need to:
+		`Ask the user one or more questions. By default you stop and wait for their responses. Use this when you need to:
 1. Clarify ambiguous instructions
 2. Get user preferences or decisions
 3. Offer choices about implementation direction
 4. Confirm before taking significant actions
 
+Blocking (default) vs async:
+- Blocking: use when you cannot sensibly proceed without the answer — the instructions are ambiguous in a way that changes the work, or the next action is significant or hard to undo.
+- async: true: use when you can proceed on a reasonable default and the answer would only refine the work — an FYI, a preference, or a decision where you will go with your recommended option unless told otherwise. The question is posted to the user (in the chat and their inbox) and the tool returns at once; keep working on your default. If the user answers, the answer arrives later as a message from the user; adjust then. Do not ask the same question again while waiting.
+
 Usage notes:
 - The user will always have an option to provide freetext input in addition to any predefined options.
-- If you recommend a specific option, list it first and add "(Recommended)" to the label.
+- If you recommend a specific option, list it first and add "(Recommended)" to the label. With async: true, say in the question which option you are proceeding with.
 - Use allow_multiple: true when choices are not mutually exclusive.
 - Group related questions in a single call (up to 4 questions).`,
 		map[string]interface{}{
@@ -669,6 +675,11 @@ Usage notes:
 						"required":             []string{"question", "options"},
 						"additionalProperties": false,
 					},
+				},
+				"async": map[string]interface{}{
+					"type":        "boolean",
+					"description": "If true, post the questions without waiting: the tool returns at once and you keep working on your best default; the user's answer, if any, arrives later as a message. Default is false (stop and wait for the answer).",
+					"default":     false,
 				},
 			},
 			"required":             []string{"questions"},

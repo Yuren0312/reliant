@@ -26,6 +26,11 @@ type Deps struct {
 	Repo Repository
 	// Signals delivers a resolved question to the workflow parked on it.
 	Signals Signaler
+	// Messages delivers the answer to an async question to the thread that
+	// asked it, as a message from the user. It is the chat service: taking
+	// its send paths rather than rebuilding them is what makes the answer
+	// behave exactly like a message the user typed to that thread.
+	Messages Messenger
 }
 
 // Repository is the slice of db.Repository the question handlers use.
@@ -34,6 +39,8 @@ type Repository interface {
 	GetQuestionByID(ctx context.Context, id string) (*db.Question, error)
 	ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
 	ListAnswerablePendingQuestionsByUser(ctx context.Context, userID string) ([]*db.Question, error)
+	ListAsyncQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
+	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	SaveMessageToThread(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*db.Message, error)
@@ -43,6 +50,14 @@ type Repository interface {
 // signal still lands. *workflow.PauseService implements it.
 type Signaler interface {
 	SignalWithRecovery(ctx context.Context, workflowID, signalName string, signalData interface{}, inputUpdate map[string]interface{}) error
+}
+
+// Messenger sends a user's message to a chat's thread: SendMessage for the
+// main thread, SendAgentMessage for a sub-agent's. *chat.Service implements
+// it.
+type Messenger interface {
+	SendMessage(ctx context.Context, req *connect.Request[pb.SendMessageRequest]) (*connect.Response[pb.SendMessageResponse], error)
+	SendAgentMessage(ctx context.Context, req *connect.Request[pb.SendAgentMessageRequest]) (*connect.Response[pb.SendAgentMessageResponse], error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
@@ -59,6 +74,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Signals == nil {
 		return fmt.Errorf("question: Deps.Signals is required")
+	}
+	if d.Messages == nil {
+		return fmt.Errorf("question: Deps.Messages is required")
 	}
 	return nil
 }
