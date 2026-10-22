@@ -283,7 +283,7 @@ func (s *Service) forgeProjectPath(ctx context.Context, projectID, userID string
 // owns it.
 func (s *Service) forgeProject(ctx context.Context, projectID, userID string) (*db.Project, error) {
 	if strings.TrimSpace(projectID) == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
@@ -334,7 +334,7 @@ func (s *Service) rememberForgeProjectName(ctx context.Context, project *db.Proj
 func forgeEnvArg(env string) (string, error) {
 	trimmed := strings.TrimSpace(env)
 	if trimmed == "" {
-		return "", svcerr.ToConnect(svcerr.InvalidArgument("env is required"))
+		return "", svcerr.InvalidArgument("env is required")
 	}
 	return trimmed, nil
 }
@@ -802,7 +802,7 @@ type forgePromoteReply struct {
 func forgeReleaseArg(release string) (string, error) {
 	trimmed := strings.TrimSpace(release)
 	if trimmed == "" {
-		return "", svcerr.ToConnect(svcerr.InvalidArgument("release is required"))
+		return "", svcerr.InvalidArgument("release is required")
 	}
 	return trimmed, nil
 }
@@ -899,12 +899,12 @@ func (s *Service) ApplyPromote(
 	expected := strings.TrimSpace(req.Msg.ExpectedCurrentRelease)
 	switch {
 	case req.Msg.ExpectUnbound && expected != "":
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("expect_unbound and expected_current_release %q are contradictory: assert either "+
-			"that the environment was unbound or which release it was bound to", expected)))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("expect_unbound and expected_current_release %q are contradictory: assert either "+
+			"that the environment was unbound or which release it was bound to", expected))
 	case !req.Msg.ExpectUnbound && expected == "":
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("expected_current_release is required (or set expect_unbound for a first promote): "+
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("expected_current_release is required (or set expect_unbound for a first promote): "+
 			"promoting overwrites %q's binding irrecoverably, so the request must state the release it "+
-			"expects to replace", env)))
+			"expects to replace", env))
 	}
 
 	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
@@ -1327,10 +1327,10 @@ func (s *Service) StartDeploy(
 	// operator never saw is the accident this whole path is built around.
 	expectedContext := strings.TrimSpace(req.Msg.ExpectedDeclaredContext)
 	if expectedContext == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("expected_declared_context is required: deploying to %q applies manifests to a "+
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("expected_declared_context is required: deploying to %q applies manifests to a "+
 			"live cluster, and forge applies to the context the environment DECLARES — which can "+
 			"change between a preview and this confirmation — so the request must state the "+
-			"cluster the operator saw named", env)))
+			"cluster the operator saw named", env))
 	}
 
 	// And the release claim, in the same three-way shape promote uses: an unset
@@ -1338,13 +1338,13 @@ func (s *Service) StartDeploy(
 	expectedRelease := strings.TrimSpace(req.Msg.ExpectedCurrentRelease)
 	switch {
 	case req.Msg.ExpectUnbound && expectedRelease != "":
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("expect_unbound and expected_current_release %q are contradictory: assert "+
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("expect_unbound and expected_current_release %q are contradictory: assert "+
 			"either that the environment had no release binding or which release it was bound to",
-			expectedRelease)))
+			expectedRelease))
 	case !req.Msg.ExpectUnbound && expectedRelease == "":
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("expected_current_release is required (or set expect_unbound for an "+
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("expected_current_release is required (or set expect_unbound for an "+
 			"environment with no binding): the token states the binding the operator "+
-			"reviewed for %q, so the request must name it", env)))
+			"reviewed for %q, so the request must name it", env))
 	}
 
 	// THE CONTENT CLAIM, which is what the target token above could never
@@ -1353,21 +1353,21 @@ func (s *Service) StartDeploy(
 	// runs rather than the change set a human read.
 	approveDigest := strings.TrimSpace(req.Msg.ApproveDigest)
 	if approveDigest == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("approve_digest is required: deploying %q ships a change set, and the "+
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("approve_digest is required: deploying %q ships a change set, and the "+
 			"request must name the one a human reviewed. Compute it with StartDeployPlan "+
-			"and send that plan's digest", env)))
+			"and send that plan's digest", env))
 	}
 	releaseVersion := strings.TrimSpace(req.Msg.ReleaseVersion)
 	if releaseVersion == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("release_version is required: it is the release the plan was computed " +
+		return nil, svcerr.InvalidArgument("release_version is required: it is the release the plan was computed " +
 			"for, and deploying it by name is what ships those artifacts. Without it the " +
 			"deploy would build and cut a second release, whose plan the approved digest " +
-			"could not match"))
+			"could not match")
 	}
 	for _, code := range req.Msg.AcknowledgedFindings {
 		if strings.TrimSpace(code) == "" {
-			return nil, svcerr.ToConnect(svcerr.InvalidArgument("acknowledged_findings must not contain an empty value: each entry " +
-				"names one destructive change from the approved plan"))
+			return nil, svcerr.InvalidArgument("acknowledged_findings must not contain an empty value: each entry " +
+				"names one destructive change from the approved plan")
 		}
 	}
 
@@ -1465,7 +1465,7 @@ func (s *Service) GetDeployStatus(
 	}
 	handle := strings.TrimSpace(req.Msg.Handle)
 	if handle == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("handle is required"))
+		return nil, svcerr.InvalidArgument("handle is required")
 	}
 	// The project is resolved even though the daemon keys jobs by handle alone:
 	// it is what enforces that the caller owns the project whose daemon is being

@@ -104,7 +104,7 @@ func (s *Service) GetDaemon(
 		return nil, svcerr.ErrUnauthenticated
 	}
 	if req.Msg.GetDaemonId() == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id is required"))
+		return nil, svcerr.InvalidArgument("daemon_id is required")
 	}
 
 	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.GetDaemonId())
@@ -112,7 +112,7 @@ func (s *Service) GetDaemon(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
 	}
 	if daemon.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("daemon"))
+		return nil, svcerr.NotFound("daemon")
 	}
 
 	attached, err := s.attachedDaemonSet(ctx, userID)
@@ -147,7 +147,7 @@ func (s *Service) ClearMachineCaches(
 ) (*connect.Response[reliantv1.ClearMachineCachesResponse], error) {
 	daemonID := req.Msg.GetDaemonId()
 	if len(req.Msg.GetKinds()) == 0 {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("kinds is required"))
+		return nil, svcerr.InvalidArgument("kinds is required")
 	}
 	userID, router, err := s.ownedOnlineDaemon(ctx, daemonID)
 	if err != nil {
@@ -207,24 +207,24 @@ func (s *Service) ownedOnlineDaemon(ctx context.Context, daemonID string) (userI
 		return "", nil, svcerr.ErrUnauthenticated
 	}
 	if daemonID == "" {
-		return "", nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id is required"))
+		return "", nil, svcerr.InvalidArgument("daemon_id is required")
 	}
 	daemon, err := s.deps.Repo.GetDaemon(ctx, daemonID)
 	if err != nil {
 		return "", nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
 	}
 	if daemon == nil || daemon.UserID != userID {
-		return "", nil, svcerr.ToConnect(svcerr.NotFound("daemon"))
+		return "", nil, svcerr.NotFound("daemon")
 	}
 	attached, err := s.attachedDaemonSet(ctx, userID)
 	if err != nil {
 		return "", nil, err
 	}
 	if attached[daemon.ID] == nil {
-		return "", nil, svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf("daemon %s is offline", daemonID)))
+		return "", nil, svcerr.Unavailable(fmt.Sprintf("daemon %s is offline", daemonID))
 	}
 	if s.deps.Router == nil {
-		return "", nil, svcerr.ToConnect(svcerr.Unavailable("no daemon router configured"))
+		return "", nil, svcerr.Unavailable("no daemon router configured")
 	}
 	return userID, s.deps.Router, nil
 }
@@ -351,7 +351,7 @@ func (s *Service) ResumeDaemon(
 	}
 
 	if req.Msg.DaemonId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id is required"))
+		return nil, svcerr.InvalidArgument("daemon_id is required")
 	}
 
 	// Verify ownership.
@@ -360,7 +360,7 @@ func (s *Service) ResumeDaemon(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
 	}
 	if daemon.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("daemon"))
+		return nil, svcerr.NotFound("daemon")
 	}
 
 	// If the daemon currently has a fresh attachment row, it's already routable.

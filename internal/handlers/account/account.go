@@ -46,11 +46,11 @@ var retainedElsewhere = []string{
 // mirrors TokenService.CreateToken, for the same reason.
 func (s *Service) callerIdentity(ctx context.Context, authHeader string) (userID, email string, err error) {
 	if _, isMachine := auth.MachineTokenFromContext(ctx); isMachine || auth.IsAccessTokenFormat(auth.BearerToken(authHeader)) {
-		return "", "", svcerr.ToConnect(svcerr.Unauthenticated("account deletion requires an interactive session"))
+		return "", "", svcerr.Unauthenticated("account deletion requires an interactive session")
 	}
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return "", "", svcerr.ToConnect(svcerr.Unauthenticated("no authenticated user"))
+		return "", "", svcerr.Unauthenticated("no authenticated user")
 	}
 	email, _ = auth.GetUserEmailFromContext(ctx)
 	return userID, email, nil
@@ -121,7 +121,7 @@ func (s *Service) DeleteAccount(
 		got := strings.ToLower(strings.TrimSpace(req.Msg.GetConfirmEmail()))
 		want := strings.ToLower(strings.TrimSpace(email))
 		if got != want {
-			return nil, svcerr.ToConnect(svcerr.InvalidArgument("confirmation does not match your email address"))
+			return nil, svcerr.InvalidArgument("confirmation does not match your email address")
 		}
 	}
 
