@@ -33,6 +33,7 @@ type Repository interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetQuestionByID(ctx context.Context, id string) (*db.Question, error)
 	ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
+	ListAnswerablePendingQuestionsByUser(ctx context.Context, userID string) ([]*db.Question, error)
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	SaveMessageToThread(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*db.Message, error)

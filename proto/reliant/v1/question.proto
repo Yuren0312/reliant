@@ -33,7 +33,9 @@ message ResolveQuestionResponse {
 }
 
 message ListPendingQuestionsRequest {
-  string chat_id = 1;
+  // Filter: unset lists the caller's pending questions in every chat they own;
+  // set limits it to that chat (which must exist and be theirs).
+  optional string chat_id = 1;
 }
 
 message ListPendingQuestionsResponse {

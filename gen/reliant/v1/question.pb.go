@@ -178,8 +178,10 @@ func (x *ResolveQuestionResponse) GetSuccess() bool {
 }
 
 type ListPendingQuestionsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ChatId        string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Filter: unset lists the caller's pending questions in every chat they own;
+	// set limits it to that chat (which must exist and be theirs).
+	ChatId        *string `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -215,8 +217,8 @@ func (*ListPendingQuestionsRequest) Descriptor() ([]byte, []int) {
 }
 
 func (x *ListPendingQuestionsRequest) GetChatId() string {
-	if x != nil {
-		return x.ChatId
+	if x != nil && x.ChatId != nil {
+		return *x.ChatId
 	}
 	return ""
 }
@@ -382,9 +384,11 @@ const file_reliant_v1_question_proto_rawDesc = "" +
 	"\rresponse_data\x18\x03 \x01(\tH\x00R\fresponseData\x88\x01\x01B\x10\n" +
 	"\x0e_response_data\"3\n" +
 	"\x17ResolveQuestionResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"6\n" +
-	"\x1bListPendingQuestionsRequest\x12\x17\n" +
-	"\achat_id\x18\x01 \x01(\tR\x06chatId\"V\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"G\n" +
+	"\x1bListPendingQuestionsRequest\x12\x1c\n" +
+	"\achat_id\x18\x01 \x01(\tH\x00R\x06chatId\x88\x01\x01B\n" +
+	"\n" +
+	"\b_chat_id\"V\n" +
 	"\x1cListPendingQuestionsResponse\x126\n" +
 	"\tquestions\x18\x01 \x03(\v2\x18.reliant.v1.QuestionInfoR\tquestions\"\x84\x02\n" +
 	"\fQuestionInfo\x12\x1f\n" +
@@ -449,6 +453,7 @@ func file_reliant_v1_question_proto_init() {
 		return
 	}
 	file_reliant_v1_question_proto_msgTypes[0].OneofWrappers = []any{}
+	file_reliant_v1_question_proto_msgTypes[2].OneofWrappers = []any{}
 	file_reliant_v1_question_proto_msgTypes[4].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
