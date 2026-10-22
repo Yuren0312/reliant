@@ -43,10 +43,10 @@ func (s *Service) SearchCatalog(ctx context.Context, req *connect.Request[relian
 		return nil, err
 	}
 	if s.deps.Search == nil {
-		return nil, svcerr.ToConnect(svcerr.Unimplemented("integration catalog search is not configured"))
+		return nil, svcerr.Unimplemented("integration catalog search is not configured")
 	}
 	if req.Msg.GetPageSize() < 0 {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("page_size must not be negative"))
+		return nil, svcerr.InvalidArgument("page_size must not be negative")
 	}
 	q := catalogindex.Query{
 		Text: req.Msg.GetQuery(), Category: req.Msg.GetCategory(), Integration: req.Msg.GetIntegration(),
@@ -55,7 +55,7 @@ func (s *Service) SearchCatalog(ctx context.Context, req *connect.Request[relian
 	for _, k := range req.Msg.GetKinds() {
 		kind, ok := catalogKindFromProto(k)
 		if !ok {
-			return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("kinds: %s is not a catalog entry kind", k)))
+			return nil, svcerr.InvalidArgument(fmt.Sprintf("kinds: %s is not a catalog entry kind", k))
 		}
 		q.Kinds = append(q.Kinds, kind)
 	}
@@ -84,10 +84,10 @@ func (s *Service) GetCatalogEntry(ctx context.Context, req *connect.Request[reli
 		return nil, err
 	}
 	if s.deps.Search == nil {
-		return nil, svcerr.ToConnect(svcerr.Unimplemented("integration catalog search is not configured"))
+		return nil, svcerr.Unimplemented("integration catalog search is not configured")
 	}
 	if req.Msg.GetRef() == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("ref is required"))
+		return nil, svcerr.InvalidArgument("ref is required")
 	}
 	e, connected, err := s.deps.Search.Get(ctx, userID, req.Msg.GetRef())
 	if err != nil {
@@ -113,10 +113,10 @@ func (s *Service) ListCatalogIntegrations(ctx context.Context, req *connect.Requ
 		return nil, err
 	}
 	if s.deps.Search == nil {
-		return nil, svcerr.ToConnect(svcerr.Unimplemented("integration catalog search is not configured"))
+		return nil, svcerr.Unimplemented("integration catalog search is not configured")
 	}
 	if req.Msg.GetPageSize() < 0 {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("page_size must not be negative"))
+		return nil, svcerr.InvalidArgument("page_size must not be negative")
 	}
 	q := catalogindex.IntegrationQuery{
 		Category: req.Msg.GetCategory(), PageSize: int(req.Msg.GetPageSize()), PageToken: req.Msg.GetPageToken(),
@@ -124,7 +124,7 @@ func (s *Service) ListCatalogIntegrations(ctx context.Context, req *connect.Requ
 	for _, k := range req.Msg.GetKinds() {
 		kind, ok := catalogKindFromProto(k)
 		if !ok {
-			return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("kinds: %s is not a catalog entry kind", k)))
+			return nil, svcerr.InvalidArgument(fmt.Sprintf("kinds: %s is not a catalog entry kind", k))
 		}
 		q.Kinds = append(q.Kinds, kind)
 	}
