@@ -45,8 +45,7 @@ func TestSkillToolReadsSkillsThroughTheConfigProvider(t *testing.T) {
 		ProjectID: project.ID, DaemonID: "daemon-1", ProjectSkillsJSON: &skillsJSON,
 	}))
 
-	repo, ok := h.Repo().(*db.Repo)
-	require.True(t, ok, "the helper's repository is %T", h.Repo())
+	repo := h.Repo()
 	spy := &fullConfigRowReads{Repository: repo}
 	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(spy), repo, cfgpkg.DefaultParsedConfigCacheBytes)
 	activity := NewExecuteToolsActivity(spy, serverToolExecutor(spy)).WithConfigProvider(provider)

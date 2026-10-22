@@ -91,7 +91,7 @@ func (r *machineStateRouter) MachineState(context.Context, string, *toolexec.Dae
 
 // chatActivity is the chat's activity as the chat list reads it
 // (chats_with_activity).
-func chatActivity(t *testing.T, repo db.Repository, chatID string) reliantv1.ChatActivity {
+func chatActivity(t *testing.T, repo *db.Repo, chatID string) reliantv1.ChatActivity {
 	t.Helper()
 	chat, err := repo.GetChat(context.Background(), chatID)
 	require.NoError(t, err)
