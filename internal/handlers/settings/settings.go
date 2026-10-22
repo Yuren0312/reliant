@@ -3,7 +3,6 @@ package settings
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -59,7 +58,8 @@ func settingToProto(s *db.Setting) *reliantv1.Setting {
 func (s *Service) upsertSetting(ctx context.Context, userID string, projectID *string, key, value string) error {
 	setting, err := s.deps.Repo.GetSetting(ctx, userID, projectID, key)
 	if err != nil {
-		if !isSettingNotFoundError(err) {
+		// The store says "unset" as its NotFound; anything else is a failure.
+		if !svcerr.IsNotFound(err) {
 			return err
 		}
 
@@ -81,16 +81,6 @@ func (s *Service) upsertSetting(ctx context.Context, userID string, projectID *s
 	setting.Value = value
 	setting.UpdatedAt = time.Now().UTC()
 	return s.deps.Repo.UpdateSetting(ctx, setting)
-}
-
-func isSettingNotFoundError(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, sql.ErrNoRows) {
-		return true
-	}
-	return strings.Contains(strings.ToLower(err.Error()), "setting not found")
 }
 
 // ============================================================================
@@ -1249,7 +1239,7 @@ func (s *Service) TrackPageVisited(ctx context.Context, req *connect.Request[rel
 // 		analytics.EventOnboardingSkipped:       true,
 // 	}
 // 	if !validTypes[eventType] {
-// 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid onboarding event type: %s", req.Msg.EventType))
+// 		return nil, svcerr.InvalidArgument(fmt.Sprintf("invalid onboarding event type: %s", req.Msg.EventType))
 // 	}
 //
 // 	metrics := analytics.OnboardingMetrics{
