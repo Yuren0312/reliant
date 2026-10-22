@@ -3,7 +3,6 @@ package catalog
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"connectrpc.com/connect"
@@ -62,7 +61,7 @@ func (s *Service) SearchCatalog(ctx context.Context, req *connect.Request[relian
 	}
 	res, err := s.deps.Search.Search(ctx, userID, q)
 	if err != nil {
-		return nil, catalogSearchError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("catalog search failed"))
 	}
 	out := &reliantv1.SearchCatalogResponse{
 		Entries:        make([]*reliantv1.CatalogEntrySummary, 0, len(res.Hits)),
@@ -92,11 +91,11 @@ func (s *Service) GetCatalogEntry(ctx context.Context, req *connect.Request[reli
 	}
 	e, connected, err := s.deps.Search.Get(ctx, userID, req.Msg.GetRef())
 	if err != nil {
-		return nil, catalogSearchError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("catalog search failed"))
 	}
 	entry, err := CatalogEntryToProto(e, connected)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.Internal("catalog entry schema could not be encoded"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("catalog entry schema could not be encoded"))
 	}
 	var methods *connections.Integration
 	if s.deps.IntegrationMethods != nil {
@@ -131,7 +130,7 @@ func (s *Service) ListCatalogIntegrations(ctx context.Context, req *connect.Requ
 	}
 	res, err := s.deps.Search.ListIntegrations(ctx, userID, q)
 	if err != nil {
-		return nil, catalogSearchError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("catalog search failed"))
 	}
 	out := &reliantv1.ListCatalogIntegrationsResponse{
 		Integrations:   make([]*reliantv1.CatalogIntegrationListing, 0, len(res.Integrations)),
@@ -148,20 +147,6 @@ func (s *Service) ListCatalogIntegrations(ctx context.Context, req *connect.Requ
 		out.CategoryFacets = append(out.CategoryFacets, &reliantv1.CatalogFacet{Value: f.Value, Count: int32(f.Count)})
 	}
 	return connect.NewResponse(out), nil
-}
-
-func catalogSearchError(err error) error {
-	switch {
-	case errors.Is(err, catalogindex.ErrNotFound):
-		return connect.NewError(connect.CodeNotFound, err)
-	case errors.Is(err, catalogindex.ErrInvalidPageToken), errors.Is(err, catalogindex.ErrQueryTooLong):
-		return connect.NewError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, context.Canceled):
-		return connect.NewError(connect.CodeCanceled, err)
-	case errors.Is(err, context.DeadlineExceeded):
-		return connect.NewError(connect.CodeDeadlineExceeded, err)
-	}
-	return svcerr.ToConnect(svcerr.Internal("catalog search failed"))
 }
 
 func catalogKindFromProto(k reliantv1.CatalogEntryKind) (catalogindex.Kind, bool) {

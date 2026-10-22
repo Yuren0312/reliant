@@ -569,13 +569,11 @@ func sameWorkflowRef(a, b string) bool {
 	return ka != "" && ka == kb
 }
 
-// connectMessage is the text of a handler's error as a person reads it.
+// connectMessage is the text of a handler's error as a person reads it: what
+// the svcerr interceptor would send, so an unclassified error's own text stays
+// withheld here too.
 func connectMessage(err error) string {
-	var ce *connect.Error
-	if errors.As(err, &ce) {
-		return ce.Message()
-	}
-	return err.Error()
+	return svcerr.ToConnect(err).Message()
 }
 
 // RetireDeletedTriggers stops what outlives the rows of triggers already

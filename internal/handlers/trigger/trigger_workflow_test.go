@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -439,7 +440,7 @@ func TestEnableWorkflowOverridesOneTrigger(t *testing.T) {
 		r.Overrides = []*reliantv1.WorkflowTriggerOverride{{Trigger: "nope"}}
 	})))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func withUser(ctx context.Context, userID string) context.Context {
@@ -452,15 +453,15 @@ func TestEnableWorkflowRefusals(t *testing.T) {
 
 	_, err := env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.Workflow = "plain" })))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "a workflow with no triggers has nothing to enable")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "a workflow with no triggers has nothing to enable")
 
 	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.Workflow = "missing" })))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 
 	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.ProjectId = "" })))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 // A machine the project cannot run on refuses the lot, like any activation.

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -111,7 +112,7 @@ func TestPauseResumeDeleteFollowTheReceiver(t *testing.T) {
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
 	require.NoError(t, err)
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: true}))
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "%v", err)
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "%v", err)
 	stored, err := env.repo.GetTrigger(context.Background(), id)
 	require.NoError(t, err)
 	assert.False(t, stored.Enabled, "an enabled trigger nothing delivers to looks working and is not")
@@ -166,5 +167,5 @@ func TestAdHocWebhookCannotNameASource(t *testing.T) {
 			d.Source = &reliantv1.TriggerDefinition_Webhook{Webhook: &reliantv1.WebhookSource{Source: "alerting"}}
 		}),
 	}))
-	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "%v", err)
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "%v", err)
 }
