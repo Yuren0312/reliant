@@ -20,6 +20,8 @@
 // Receive returns an error, the goroutine reading it exits, and the handler
 // can join it before it returns. Mount every handler that uses Abort through
 // Handler; Installed reports whether the request a context belongs to was.
+//
+//forge:exclude-contract: HTTP edge primitive (a request-body wrapper and context marker); no I/O seam to fake and no second implementation
 package streamabort
 
 import (
