@@ -233,12 +233,6 @@ func validatePolicy(p chatselection.ProviderPolicy) error {
 	return nil
 }
 
-// versionConflictError is the refusal for an edit made against a selection that
-// has since changed: ABORTED, so the client refetches and decides again.
-func versionConflictError() error {
-	return svcerr.ToConnect(svcerr.Aborted("the chat's selection changed since it was read; reload and try again"))
-}
-
 // UpdateChatProviderPolicy stores what the chat does when its provider is
 // rate-limited, and hands it to the chat's live root run (see
 // signalProviderPolicy), so the next limit the run meets follows it. The run's
@@ -266,11 +260,7 @@ func (s *Service) UpdateChatProviderPolicy(
 	before, _ := s.selections().Get(ctx, chat.ID)
 	sel, err := s.selections().SetPolicy(ctx, chat.ID, userID, workflowName, policy, req.Msg.GetExpectedVersion())
 	if err != nil {
-		if errors.Is(err, chatselection.ErrVersionConflict) {
-			return nil, versionConflictError()
-		}
-		logging.ErrorContext(ctx, "Failed to store the chat's provider policy", "error", err, "chatID", chat.ID)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to update provider policy"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update provider policy"))
 	}
 	if sel != nil && (before == nil || before.Version != sel.Version) {
 		s.announceSelection(ctx, userID, chat, sel)

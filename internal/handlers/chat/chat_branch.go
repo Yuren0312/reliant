@@ -172,7 +172,7 @@ func (s *Service) BranchChat(
 	if noMachine {
 		mainWorktreeID, err := s.launcher().ResolveChatWorktreeID(ctx, sourceChat.ProjectID, nil)
 		if err != nil {
-			return nil, launchErrorToConnect(err)
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the project's main worktree"))
 		}
 		worktreeID = mainWorktreeID
 	}
@@ -259,7 +259,7 @@ func (s *Service) BranchChat(
 	// leave a branch whose first send is bound to fail.
 	if noMachine {
 		if err := s.launcher().ValidateNoMachine(ctx, userID, workflowName, sourceChat.ProjectID); err != nil {
-			return nil, launchErrorToConnect(err)
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check the workflow can run without a machine"))
 		}
 	}
 

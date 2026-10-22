@@ -197,10 +197,7 @@ func (s *Service) startChat(
 
 	result, err := s.launcher().Launch(ctx, event, spec)
 	if err != nil {
-		if errors.Is(err, launch.ErrClientMessageReused) {
-			return nil, errClientMessageReused()
-		}
-		return nil, launchErrorToConnect(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to start chat"))
 	}
 
 	return connect.NewResponse(&reliantv1.StartChatResponse{
@@ -718,8 +715,7 @@ func (s *Service) ListMessages(
 
 		messages, hasMore, err = s.listThreadMessages(ctx, threadsSvc, threadID, beforeSeq, recentLimit)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to load thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
-			return nil, loadMessagesError(ctx, err)
+			return nil, messagesReadError(ctx, err)
 		}
 		// The display count, not the LLM one: listThreadMessages reads the
 		// transcript (which crosses compaction boundaries), so a total that
@@ -727,8 +723,7 @@ func (s *Service) ListMessages(
 		// the one being returned.
 		totalCount, err = threadsSvc.CountDisplayMessages(ctx, threadID)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to count thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
-			return nil, loadMessagesError(ctx, err)
+			return nil, messagesReadError(ctx, err)
 		}
 		if len(messages) > 0 {
 			oldestSeq = messages[0].Seq
@@ -738,8 +733,7 @@ func (s *Service) ListMessages(
 		messages, totalCount, oldestSeq, hasMore, err = s.listMessagesBounded(
 			ctx, threadsSvc, req.Msg.ChatId, mainThreadID, beforeSeq, recentLimit)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to load bounded messages", "error", err, "chatID", req.Msg.ChatId)
-			return nil, loadMessagesError(ctx, err)
+			return nil, messagesReadError(ctx, err)
 		}
 	default:
 		// No page size given: the caller wants the whole chat (e.g. the cold
@@ -747,8 +741,7 @@ func (s *Service) ListMessages(
 		// thread's full history and hand it to paginateBySeq unbounded.
 		messages, totalCount, err = s.listMessagesUnbounded(ctx, threadsSvc, req.Msg.ChatId, mainThreadID)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to resolve messages", "error", err, "chatID", req.Msg.ChatId)
-			return nil, loadMessagesError(ctx, err)
+			return nil, messagesReadError(ctx, err)
 		}
 
 		var page messagePage
@@ -766,8 +759,7 @@ func (s *Service) ListMessages(
 	}
 	allBlocks, err := s.deps.Repo.ListContentBlocksForMessages(ctx, messageIDs)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to batch list content blocks", "error", err, "chatID", req.Msg.ChatId)
-		return nil, loadMessagesError(ctx, err)
+		return nil, messagesReadError(ctx, err)
 	}
 	blocksByMessageID := make(map[string][]*db.MessageContentBlock, len(messages))
 	for _, block := range allBlocks {
@@ -898,22 +890,14 @@ func (s *Service) TerminateChat(
 
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	if err := s.runs.Terminate(ctx, req.Msg.ChatId); err != nil {
-		switch {
-		case errors.Is(err, runs.ErrNoWorkflow):
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
-		case errors.Is(err, runs.ErrChatNotFound):
-			return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
-		default:
-			logging.ErrorContext(ctx, "Failed to terminate workflow", "error", err, "chatID", req.Msg.ChatId)
-			return nil, svcerr.ToConnect(svcerr.Internal("failed to terminate workflow"))
-		}
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to terminate workflow"))
 	}
 
 	return connect.NewResponse(&reliantv1.TerminateChatResponse{
@@ -1809,17 +1793,12 @@ func paginateBySeq(messages []*db.Message, beforeSeq int64, recentLimit int, mai
 	}
 }
 
-// loadMessagesError maps a failed message read to its rpc error. A read the
-// client abandoned (tab closed, page resumed, navigation) fails with the
-// request's own cancellation; that is the caller's doing, not a server fault,
-// and reporting it as internal made every phone-browser suspend look like an
-// outage.
-func loadMessagesError(ctx context.Context, err error) error {
-	switch {
-	case errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled):
-		return svcerr.ToConnect(svcerr.Canceled("request canceled"))
-	case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return svcerr.ToConnect(svcerr.DeadlineExceeded("loading messages timed out"))
-	}
-	return svcerr.ToConnect(svcerr.Internal("failed to load messages"))
+// messagesReadError is a failed message read as the client reads it. A read
+// the client abandoned (tab closed, page resumed, navigation) fails with the
+// request's own cancellation or deadline even when the driver's error does not
+// say so; that is the caller's doing, not a server fault, and reporting it as
+// internal made every phone-browser suspend look like an outage. So the
+// request's end, when it has ended, is part of the error.
+func messagesReadError(ctx context.Context, err error) error {
+	return svcerr.WrapOr(errors.Join(ctx.Err(), err), svcerr.Internal("failed to load messages"))
 }

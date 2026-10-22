@@ -116,7 +116,7 @@ func (s *Service) UpdateWorkflowParams(
 	}
 	sel, err := s.recordSelection(ctx, userID, chat, workflowName, req.Msg.Params, stateUpdate, moves, req.Msg.GetExpectedVersion())
 	if err != nil {
-		return nil, versionConflictError()
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record the chat's selection"))
 	}
 	if sel == nil {
 		sel, _ = s.selections().Get(ctx, chat.ID)

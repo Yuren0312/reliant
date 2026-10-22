@@ -535,7 +535,7 @@ func (s *Service) SendMessage(
 	// without the run-control lock because "read" never un-happens; every
 	// other outcome is decided under the lock, below.
 	if early, err := s.findPriorSend(ctx, chat, clientID, userContent, req.Msg.Attachments); err != nil {
-		return nil, asConnectError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check for an earlier send"))
 	} else if early != nil && early.settled {
 		return replayResponse(chat, early), nil
 	}
@@ -869,8 +869,7 @@ func (s *Service) SendMessage(
 					// (the wake below is what the first may not have reached).
 					queued, _, err := s.enqueueHumanMessage(ctx, queuedMsg, clientID != "")
 					if err != nil {
-						logging.ErrorContext(ctx, "Failed to queue message for running workflow", "error", err)
-						return nil, asConnectError(connect.CodeInternal, fmt.Errorf("failed to save message: %w", err))
+						return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save message"))
 					}
 					queuedMsg = queued
 				}
@@ -1360,11 +1359,11 @@ func (s *Service) SendAgentMessage(
 	if clientID != "" {
 		prior, err := s.deps.Repo.GetAgentMessage(ctx, clientID)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check for an earlier send: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check for an earlier send"))
 		}
 		if prior != nil {
 			if !humanMessageIs(prior, chat.ID, req.Msg.Message, req.Msg.Attachments) {
-				return nil, errClientMessageReused()
+				return nil, launch.ErrClientMessageReused
 			}
 			if prior.Status == core.AgentMessageStatusDelivered {
 				return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
@@ -1504,11 +1503,7 @@ func (s *Service) SendAgentMessage(
 	// queued twice.
 	queued, inserted, err := s.enqueueHumanMessage(ctx, msg, clientID != "")
 	if err != nil {
-		if connect.CodeOf(err) != connect.CodeUnknown {
-			return nil, err
-		}
-		logging.ErrorContext(ctx, "Failed to queue agent message", "error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to queue message"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to queue message"))
 	}
 	msg = queued
 	if !inserted && msg.Status != core.AgentMessageStatusQueued {
