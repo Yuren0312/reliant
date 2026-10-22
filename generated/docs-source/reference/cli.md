@@ -6898,6 +6898,14 @@ fix that leaves one failing is taken back and reported. Under --scope it
 touches only files inside the scope, and naming Go package paths (forge lint
 --fix ./internal/x/...) likewise confines the fixers to those packages.
 
+SEVERITY IS ONE DIAL: forge.yaml lint.rules maps a rule ID — the [rule] each
+finding prints — to error, warn or off, and it grades every forge lane the same
+way in every mode: lint.rules: {forge-config-deps: error} makes the advisory
+config-deps lane gate; {forgeconv-handler-file-size: warn} lets a gating rule
+be adopted gradually; "*" sets every forge rule. Another tool's linters keep
+their own config (.golangci.yml, buf.yaml, eslint), and a key forge does not
+grade — a typo, another tool's rule, a lane's could-not-run — is a lint error.
+
 Examples:
   forge lint                     # Report only: print the diffs, write nothing
   forge lint --fix               # Apply the mechanical fixes, then gate
@@ -6996,7 +7004,8 @@ Examples:
                                  # skipped and named in the verdict, so run an
                                  # unscoped 'forge lint' before merging
 
-The three advisory rules above are warnings only — they never fail the build.
+The advisory rules above are warnings by default — they fail the build only
+when lint.rules sets them to error.
 
 Additional maintainer/debug flags exist (forge-repo internals, wiring
 audits, suggest-* helpers); run 'forge lint --help-dev' to list them.
@@ -7014,7 +7023,7 @@ reliant forge lint [paths...] [flags]
 | `--closed-sets` | `bool` | - | Fail when a CHECK declared forge:closed-set <set> does not list exactly that Go set, and print the migration that fixes it |
 | `--column-markers` | `bool` | - | Fail on a COMMENT ON TABLE/VIEW/COLUMN/CONSTRAINT carrying a forge: marker that object does not read |
 | `--computed-fields` | `bool` | - | Flag a forge:computed field that no non-generated Go file assigns — nothing populates it, so the insert takes the column default. FAILS the build, except while the service still holds forge-scaffolded unwired rpc stubs (then a warning naming them) |
-| `--config-deps` | `bool` | - | Flag scalar Deps fields — scalars are configuration; declare a <Component>Config block in proto/<project>/config/v1 and take it as a typed field (warnings only) |
+| `--config-deps` | `bool` | - | Flag scalar Deps fields — scalars are configuration; declare a <Component>Config block in proto/<project>/config/v1 and take it as a typed field (warnings by default, lint.rules forge-config-deps: error gates them) |
 | `--config-reach` | `bool` | - | Flag config fields that no binary and no frontend loads — with per-binary configs, an unbound config message generates but is never loaded (warnings only) |
 | `--contract` | `bool` | - | Run contract interface enforcement linter |
 | `--conventions` | `bool` | - | Run forge convention rules on proto files |
@@ -7032,7 +7041,7 @@ reliant forge lint [paths...] [flags]
 | `--json` | `bool` | - | Output findings as JSON (see lint_json.go header for the schema; exit code matches text mode) |
 | `--migration-safety` | `bool` | - | Run SQL migration safety checks |
 | `--no-fix` | `bool` | - | Same as --check: write nothing, print the diff each fix would apply, and fail if any is pending |
-| `--optional-deps-guard` | `bool` | - | Flag unguarded derefs of // forge:optional-dep Deps fields (warnings only; suppress with // forge:optional-checked on the deref line) |
+| `--optional-deps-guard` | `bool` | - | Flag unguarded derefs of // forge:optional-dep Deps fields (warnings by default, lint.rules forge-optional-deps-guard: error gates them; suppress a confirmed-safe site with // forge:optional-checked on the deref line) |
 | `--proto-markers` | `bool` | - | Flag .proto comments containing forge: that match no known proto marker — a misspelled marker is inert and warns nowhere (warnings only) |
 | `--proto-options` | `bool` | - | Flag (forge.v1.*) annotation fields this forge binary's descriptors do not define — a retired or misspelled option field compiles under buf and is read by nothing (warnings only) |
 | `--quiet`, `-q` | `bool` | - | Print only what failed: a one-line summary per failing linter, its error findings, and the verdict as the LAST line (a clean run is one line). With --fix, fixes are applied silently; combines with the targeted flags and --scope |
