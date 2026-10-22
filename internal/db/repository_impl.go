@@ -23,9 +23,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
-// Ensure *Repo implements Repository interface at compile time
-var _ Repository = (*Repo)(nil)
-
 // ==================== Chats ====================
 
 func (r *Repo) CreateChat(ctx context.Context, chat *Chat) error {
@@ -83,6 +80,7 @@ func (r *Repo) ListArchivedChats(ctx context.Context, userID string) ([]*Archive
 	return store.ListArchivedChats(ctx, r.ORM(), userID)
 }
 
+// ListRuns is the cross-cutting run list, scoped to filters.UserID.
 func (r *Repo) ListRuns(ctx context.Context, filters RunListFilters) ([]*RunListItem, bool, error) {
 	return store.ListRuns(ctx, r.ORM(), filters)
 }
@@ -171,6 +169,17 @@ func int32DisplayStyleToProto(value *int32) *reliantv1.DisplayStyle {
 	return &displayStyle
 }
 
+// SaveMessageToThread atomically creates a message with text and optional image content blocks.
+// This is the PREFERRED method for saving messages outside of workflow activities.
+// It automatically handles:
+//   - Getting the next ordinal for the thread
+//   - Determining the correct context_sequence (including fork inheritance)
+//   - Creating content blocks atomically
+//   - Creating chat_update for frontend streaming
+//
+// Use this instead of CreateMessage directly to avoid context_sequence bugs.
+// attachmentIDs are optional - if provided, image blocks are created for each attachment.
+// displayStyle is optional - if provided, sets the UI display style (info/warning/success/hidden).
 func (r *Repo) SaveMessageToThread(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*Message, error) {
 	return r.SaveMessageToThreadWithID(ctx, chatID, thread, role, content, workflowID, attachmentIDs, displayStyle, "")
 }
@@ -502,6 +511,12 @@ func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageList
 	return store.ListMessages(ctx, r.ORM(), chatID, opts)
 }
 
+// ListRecentTranscriptSiblingMessages returns, ascending, the newest
+// `limit` messages with seq >= fromSeq on threads other than mainThreadID
+// that are not spawn threads, bounded in SQL. The chat snapshot reads its
+// sibling rows through this: node and fork threads render inline in the
+// transcript, while a spawn renders as a tool-call card that fetches its
+// own thread (ListMessages with thread_id) when expanded.
 func (r *Repo) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*Message, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
@@ -513,6 +528,7 @@ func (r *Repo) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, 
 	return store.ListRecentTranscriptSiblingMessages(ctx, r.ORM(), chatID, mainThreadID, fromSeq, limit)
 }
 
+// CountMessagesInChat returns the true message count for a chat.
 func (r *Repo) CountMessagesInChat(ctx context.Context, chatID string) (int, error) {
 	if chatID == "" {
 		return 0, fmt.Errorf("chat ID cannot be empty")
@@ -521,6 +537,8 @@ func (r *Repo) CountMessagesInChat(ctx context.Context, chatID string) (int, err
 	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldChatID, chatID))
 }
 
+// CountMessagesByContextWindow returns the row count of a single context
+// window, for CW-chain-aware totals that don't require fetching rows.
 func (r *Repo) CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int, error) {
 	if contextWindowID == "" {
 		return 0, fmt.Errorf("context window ID cannot be empty")
@@ -529,6 +547,9 @@ func (r *Repo) CountMessagesByContextWindow(ctx context.Context, contextWindowID
 	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldContextWindowID, contextWindowID))
 }
 
+// CountMessagesByContextWindowUpToSeq counts messages in a context window
+// with seq <= maxSeq -- the count-only mirror of the fork filter used
+// when resolving inherited messages.
 func (r *Repo) CountMessagesByContextWindowUpToSeq(ctx context.Context, contextWindowID string, maxSeq int64) (int, error) {
 	if contextWindowID == "" {
 		return 0, fmt.Errorf("context window ID cannot be empty")
@@ -537,6 +558,9 @@ func (r *Repo) CountMessagesByContextWindowUpToSeq(ctx context.Context, contextW
 	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldContextWindowID, contextWindowID), orm.WhereLte(store.MessageFieldSeq, maxSeq))
 }
 
+// ListRecentMessagesInContextWindowBeforeSeq returns the newest `limit`
+// messages in a single context window strictly before beforeSeq (0 means
+// unbounded), ascending, bounded in SQL.
 func (r *Repo) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*Message, error) {
 	if contextWindowID == "" {
 		return nil, fmt.Errorf("context window ID cannot be empty")
@@ -545,6 +569,8 @@ func (r *Repo) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, c
 	return store.ListRecentMessagesInContextWindowBeforeSeq(ctx, r.ORM(), contextWindowID, beforeSeq, limit)
 }
 
+// HasMessagesBeforeInContextWindow reports whether any message in this
+// context window precedes beforeSeq.
 func (r *Repo) HasMessagesBeforeInContextWindow(ctx context.Context, contextWindowID string, beforeSeq int64) (bool, error) {
 	if contextWindowID == "" {
 		return false, fmt.Errorf("context window ID cannot be empty")
@@ -553,6 +579,9 @@ func (r *Repo) HasMessagesBeforeInContextWindow(ctx context.Context, contextWind
 	return store.HasMessagesBeforeInContextWindow(ctx, r.ORM(), contextWindowID, beforeSeq)
 }
 
+// ListMessagesInContextWindowRange returns messages in a single context
+// window with seq >= fromSeq, ascending. toSeq is an exclusive upper
+// bound, or nil for unbounded above.
 func (r *Repo) ListMessagesInContextWindowRange(ctx context.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*Message, error) {
 	if contextWindowID == "" {
 		return nil, fmt.Errorf("context window ID cannot be empty")
@@ -569,6 +598,9 @@ func (r *Repo) GetLatestMessageInThread(ctx context.Context, threadID string) (*
 	return store.LatestMessageInThread(ctx, r.ORM(), threadID)
 }
 
+// ThreadAwaitsReply reports whether a thread's latest turn — its newest
+// message that is not a system note — is a user message no reply has
+// followed.
 func (r *Repo) ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error) {
 	if threadID == "" {
 		return false, fmt.Errorf("thread ID cannot be empty")
@@ -989,6 +1021,8 @@ func (r *Repo) UpdateProject(ctx context.Context, project *Project, userID strin
 	return store.ReplaceProject(ctx, r.ORM(), project, userID)
 }
 
+// SetProjectForgeName records forge's name for a project (forge.yaml
+// `name`) and marks it a forge project. Reports whether the row changed.
 func (r *Repo) SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error) {
 	if id == "" {
 		return false, fmt.Errorf("project ID cannot be empty")
@@ -1592,6 +1626,8 @@ func (r *Repo) GetWorktreeByPath(ctx context.Context, path string) (*Worktree, e
 	return store.GetWorktreeByPath(ctx, r.ORM(), path)
 }
 
+// GetWorktreeByIdempotencyKey returns a prior create's worktree for this
+// key, or (nil, nil) when there is none.
 func (r *Repo) GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error) {
 	// An empty key means the caller opted out of idempotency, not that it is
 	// asking about the rows that happen to have no key.
@@ -1601,6 +1637,8 @@ func (r *Repo) GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key s
 	return store.GetWorktreeByIdempotencyKey(ctx, r.ORM(), projectID, key)
 }
 
+// GetLiveWorktreeByName returns the project's unarchived worktree called
+// name, or (nil, nil). At most one exists.
 func (r *Repo) GetLiveWorktreeByName(ctx context.Context, projectID, name string) (*Worktree, error) {
 	if projectID == "" || name == "" {
 		return nil, nil
@@ -1608,6 +1646,8 @@ func (r *Repo) GetLiveWorktreeByName(ctx context.Context, projectID, name string
 	return store.GetLiveWorktreeByName(ctx, r.ORM(), projectID, name)
 }
 
+// ListWorktreesByBranch returns every row of the project recorded against
+// the branch, archived ones included.
 func (r *Repo) ListWorktreesByBranch(ctx context.Context, projectID, branch string) ([]*Worktree, error) {
 	if projectID == "" || branch == "" {
 		return nil, nil
@@ -2854,6 +2894,7 @@ func (r *Repo) ListAllTriggers(ctx context.Context) ([]*core.Trigger, error) {
 	return store.ListAllTriggers(ctx, r.ORM())
 }
 
+// LockTrigger row-locks the trigger until the surrounding transaction ends.
 func (r *Repo) LockTrigger(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
@@ -2896,6 +2937,11 @@ func (r *Repo) ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.T
 	return store.ListAllWorkflowTriggerActivations(ctx, r.ORM())
 }
 
+// CreateTriggerEvent records one firing. The insert is ON CONFLICT
+// (kind, dedupe_key) DO NOTHING, so created=false means a firing for that
+// key already existed and nothing was written. That constraint is what
+// makes "a chat starts exactly once" and "a retried scheduled fire cannot
+// launch twice" database guarantees rather than client conventions.
 func (r *Repo) CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (bool, error) {
 	if ev == nil {
 		return false, fmt.Errorf("trigger event cannot be nil")
@@ -2923,6 +2969,8 @@ func (r *Repo) GetTriggerEventByChatID(ctx context.Context, chatID string) (*cor
 	return store.GetTriggerEventByChatID(ctx, r.ORM(), chatID)
 }
 
+// GetTriggerEventByChat returns the event of the given kind that launched
+// chatID (core.ErrTriggerEventNotFound when none did).
 func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
@@ -2930,6 +2978,8 @@ func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEvent
 	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
 }
 
+// CountLiveLaunchedRuns counts the user's chats launched by this kind of
+// event whose root run is still live (pending, active or paused).
 func (r *Repo) CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error) {
 	if userID == "" {
 		return 0, fmt.Errorf("user ID cannot be empty")
@@ -2944,6 +2994,8 @@ func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome
 	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
 }
 
+// SetLaunchEventRunStatus records how the run a trigger fired ended, on
+// the chat's launch event (core.TriggerEvent.RunStatus).
 func (r *Repo) SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error {
 	if chatID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
@@ -2958,6 +3010,8 @@ func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload
 	return store.UpdateTriggerEventPayload(ctx, r.ORM(), id, payload)
 }
 
+// ListTriggerEvents returns one page of the trigger's firings newest first,
+// each with the run it launched, and whether more follow.
 func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error) {
 	if f.TriggerID == "" {
 		return nil, false, fmt.Errorf("trigger ID cannot be empty")
@@ -2968,6 +3022,8 @@ func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters
 	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
 }
 
+// ListInboxPending, ListDismissedInboxItemIDs, DismissInboxItems and
+// RestoreInboxItems back the Inbox. Each is scoped by an explicit user id.
 func (r *Repo) ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
@@ -2996,6 +3052,8 @@ func (r *Repo) RestoreInboxItems(ctx context.Context, userID string, itemIDs []s
 	return store.RestoreInboxItems(ctx, r.ORM(), userID, itemIDs)
 }
 
+// CreateRunEvent inserts the event, doing nothing when its DedupeKey
+// already exists. created=false means the transition was already recorded.
 func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
 	if ev == nil {
 		return false, fmt.Errorf("run event cannot be nil")
@@ -3008,6 +3066,7 @@ func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, err
 	return store.InsertRunEvent(ctx, r.ORM(), ev)
 }
 
+// GetRunEvent returns ErrRunEventNotFound on a miss.
 func (r *Repo) GetRunEvent(ctx context.Context, id string) (*core.RunEvent, error) {
 	if id == "" {
 		return nil, fmt.Errorf("run event ID cannot be empty")
@@ -3015,6 +3074,7 @@ func (r *Repo) GetRunEvent(ctx context.Context, id string) (*core.RunEvent, erro
 	return store.LoadRunEvent(ctx, r.ORM(), id)
 }
 
+// GetRunEventByDedupe returns ErrRunEventNotFound on a miss.
 func (r *Repo) GetRunEventByDedupe(ctx context.Context, dedupeKey string) (*core.RunEvent, error) {
 	if dedupeKey == "" {
 		return nil, fmt.Errorf("run event dedupe key cannot be empty")
@@ -3022,6 +3082,8 @@ func (r *Repo) GetRunEventByDedupe(ctx context.Context, dedupeKey string) (*core
 	return store.LoadRunEventByDedupe(ctx, r.ORM(), dedupeKey)
 }
 
+// HasEnabledTriggerOfKind reports whether the user owns an enabled trigger
+// of the kind.
 func (r *Repo) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
 	if userID == "" {
 		return false, fmt.Errorf("user ID cannot be empty")
@@ -3029,6 +3091,7 @@ func (r *Repo) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind 
 	return store.HasEnabledTriggerOfKind(ctx, r.ORM(), userID, kind)
 }
 
+// LockChatForRunEvent row-locks the chat until the transaction ends.
 func (r *Repo) LockChatForRunEvent(ctx context.Context, chatID string) error {
 	if chatID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
@@ -3036,6 +3099,8 @@ func (r *Repo) LockChatForRunEvent(ctx context.Context, chatID string) error {
 	return store.LockChatForRunEvent(ctx, r.ORM(), chatID)
 }
 
+// CountOtherPendingBlockers counts the chat's pending approvals and
+// questions other than excludeID.
 func (r *Repo) CountOtherPendingBlockers(ctx context.Context, chatID, excludeID string) (int, error) {
 	if chatID == "" {
 		return 0, fmt.Errorf("chat ID cannot be empty")
@@ -3043,6 +3108,7 @@ func (r *Repo) CountOtherPendingBlockers(ctx context.Context, chatID, excludeID 
 	return store.CountOtherPendingBlockers(ctx, r.ORM(), chatID, excludeID)
 }
 
+// ClaimRunEvents leases up to max undispatched events until leaseUntil.
 func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, max int) ([]*core.RunEvent, error) {
 	if max <= 0 {
 		return nil, nil
@@ -3050,6 +3116,7 @@ func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, ma
 	return store.ClaimRunEvents(ctx, r.ORM(), now, leaseUntil, max)
 }
 
+// MarkRunEventDispatched records that the event's dispatch has started.
 func (r *Repo) MarkRunEventDispatched(ctx context.Context, id string, at time.Time) error {
 	if id == "" {
 		return fmt.Errorf("run event ID cannot be empty")
@@ -3057,10 +3124,14 @@ func (r *Repo) MarkRunEventDispatched(ctx context.Context, id string, at time.Ti
 	return store.MarkRunEventDispatched(ctx, r.ORM(), id, at)
 }
 
+// DeleteDispatchedRunEventsBefore prunes dispatched events older than
+// cutoff, returning how many were removed.
 func (r *Repo) DeleteDispatchedRunEventsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
 	return store.DeleteDispatchedRunEventsBefore(ctx, r.ORM(), cutoff)
 }
 
+// RecentTriggerFirings returns each trigger's newest perTrigger firings in
+// one query. Used to compute health and last_event for a list of triggers.
 func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
@@ -3068,6 +3139,8 @@ func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerI
 	return store.RecentTriggerFirings(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
+// FiringsSinceLastSuccess returns each trigger's firings since its newest
+// success, newest first, capped at perTrigger: the current failure episode.
 func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
@@ -3075,6 +3148,8 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
+// GetLatestTriggerEvent returns the trigger's latest firing, optionally
+// filtered by outcome, and (nil, nil) when it has never fired.
 func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
 	if triggerID == "" {
 		return nil, fmt.Errorf("trigger ID cannot be empty")
@@ -3165,6 +3240,8 @@ func (r *Repo) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*
 	return store.ListChatStepExecutions(ctx, r.ORM(), chatID, model.InternalActivities)
 }
 
+// ListStepExecutionRecordsForChat returns full step rows (inputs, output,
+// error), newest first, optionally scoped to one node and what ran inside it.
 func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error) {
 	return store.ListStepExecutionRecordsForChat(ctx, r.ORM(), chatID, nodePath, limit)
 }
@@ -3225,6 +3302,10 @@ func (r *Repo) UpdateWorkflowWorkerStopped(ctx context.Context, workflowID strin
 // ==================== Threads ====================
 // First-class entity for thread hierarchy and fork relationships
 
+// CreateThread inserts the thread. Thread.Origin (main/spawn/fork/node) is a
+// stored column, not re-derived
+// at read time from a workflow row's spawned_by_node_id sentinel -- see
+// core.ThreadOrigin and 20260729000000_add_origin_to_threads.sql.
 func (r *Repo) CreateThread(ctx context.Context, thread *Thread) (*Thread, error) {
 	if thread == nil {
 		return nil, fmt.Errorf("thread cannot be nil")
