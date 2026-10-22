@@ -80,13 +80,11 @@ func (s *Service) ListInbox(
 
 	pending, err := s.deps.Repo.ListInboxPending(ctx, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list inbox", "error", err)
-		return nil, svcerr.Internal("failed to list inbox")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
 	failing, err := s.failingAutomations(ctx, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to compute failing automations for inbox", "error", err)
-		return nil, svcerr.Internal("failed to list inbox")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
 
 	items := make([]*reliantv1.InboxItem, 0, len(pending)+len(failing))
@@ -109,8 +107,7 @@ func (s *Service) ListInbox(
 
 	items, err = s.dropDismissed(ctx, userID, items)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to filter dismissed inbox items", "error", err)
-		return nil, svcerr.Internal("failed to list inbox")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
 
 	resp := &reliantv1.ListInboxResponse{}
@@ -181,8 +178,7 @@ func (s *Service) DismissInboxItem(
 		return nil, err
 	}
 	if err := s.deps.Repo.DismissInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds), time.Now().UTC()); err != nil {
-		logging.ErrorContext(ctx, "Failed to dismiss inbox items", "error", err, "count", len(req.Msg.ItemIds))
-		return nil, svcerr.Internal("failed to dismiss inbox item")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to dismiss inbox item"))
 	}
 	return connect.NewResponse(&reliantv1.DismissInboxItemResponse{}), nil
 }
@@ -200,8 +196,7 @@ func (s *Service) RestoreInboxItem(
 		return nil, err
 	}
 	if err := s.deps.Repo.RestoreInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds)); err != nil {
-		logging.ErrorContext(ctx, "Failed to restore inbox items", "error", err, "count", len(req.Msg.ItemIds))
-		return nil, svcerr.Internal("failed to restore inbox item")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to restore inbox item"))
 	}
 	return connect.NewResponse(&reliantv1.RestoreInboxItemResponse{}), nil
 }
@@ -636,6 +631,9 @@ func (s *Service) CleanupStorage(
 	// projects the caller owns, but naming a stranger's daemon is rejected
 	// outright rather than quietly doing nothing.
 	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.DaemonId)
+	if err != nil && !svcerr.IsNotFound(err) {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get machine"))
+	}
 	if err != nil || daemon == nil || daemon.UserID != userID {
 		return nil, svcerr.NotFound("machine")
 	}
@@ -645,8 +643,7 @@ func (s *Service) CleanupStorage(
 		return nil, svcerr.FailedPrecondition("that machine is offline; reconnect it and try again")
 	}
 	if err != nil {
-		logging.ErrorContext(ctx, "Storage cleanup failed to start", "error", err, "daemonID", req.Msg.DaemonId)
-		return nil, svcerr.Internal("storage cleanup failed")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("storage cleanup failed"))
 	}
 
 	s.storageCache.Delete(userID)
