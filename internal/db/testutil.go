@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"net/url"
 	"sort"
 	"sync"
@@ -180,9 +179,9 @@ func newTestDatabase(tb testing.TB) (*sql.DB, string, func()) {
 		tb.Fatalf("test template key: %v", err)
 	}
 	return cloneTestTemplate(tb, key, func(dsn string, build *sql.DB) error {
-		// Migrate is the path a server boots on (the goose bridge, then
-		// forge's migrator); it opens and closes its own connections.
-		if _, err := Migrate(context.Background(), dsn, slog.New(slog.DiscardHandler)); err != nil {
+		// Migrate is the path a server boots on; it opens and closes its
+		// own connections.
+		if _, err := Migrate(context.Background(), dsn); err != nil {
 			return fmt.Errorf("migrate: %w", err)
 		}
 		if _, err := build.Exec(testSeedSQL); err != nil {
