@@ -467,7 +467,11 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 }
 
 func (r *runner) goSteps(pl *Plan) []step {
-	base := []string{"go", "test", "-buildvcs=false", "-short", "-timeout", "60s"}
+	// -timeout is per package binary: the DB-backed packages run hundreds of
+	// serial tests under -short, so their budget is PR CI's short tier's (10m),
+	// not one sized for a package of hermetic unit tests (Taskfile.yml,
+	// test:short).
+	base := []string{"go", "test", "-buildvcs=false", "-short", "-timeout", "10m"}
 	if r.goP > 0 {
 		base = append(base, "-p", fmt.Sprint(r.goP))
 	}

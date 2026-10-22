@@ -277,14 +277,18 @@ tasks:
     #                 -short, or this tier can report a stale pass.
     #   no -race      the race detector rebuilds every package under its own
     #                 cache key and slows tests 2-10x; `task test` keeps it on.
-    #   -timeout 60s  a test that needs longer under -short wants a
-    #                 testing.Short() gate, not a bigger budget.
+    #   -timeout 10m  per package BINARY, not per test, and the budget PR CI's
+    #                 short tier has always used. The DB-backed packages are
+    #                 hundreds of serial ~0.3s tests (internal/db: 426), so
+    #                 their total, not any one test, is what takes minutes on
+    #                 a loaded machine. A single test that needs seconds under
+    #                 -short still wants a testing.Short() gate.
     #   no stop       nothing here stops another agent's environment.
     #
     # Go only — web and electron run in `task test` / `task test:web`.
     desc: "Inner-loop Go tests: -short, cached, no race. Scope it: task test:short -- ./internal/foo/..."
     cmds:
-      - go test -short -timeout 60s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+      - go test -short -timeout 10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
 
   test:
     # Everything after `--` REPLACES the default `./...`, so it takes both
