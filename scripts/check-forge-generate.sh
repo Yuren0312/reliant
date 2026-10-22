@@ -10,8 +10,8 @@
 # an input that is not followed by the pinned `forge generate` leaves main with
 # output that no longer matches its inputs, and the next contributor to run
 # generate inherits someone else's diff (or a mock that no longer compiles).
-# `make generate-all` does not run forge, so CI's "Generated code is up to
-# date" job cannot see this; this check does.
+# `task generate` runs forge generate too; this is the check that it changed
+# nothing.
 #
 # ── What it judges ───────────────────────────────────────────────────────
 #
@@ -34,12 +34,21 @@
 # protoc-gen-es and pins the Go toolchain, exactly as `task generate` does.
 #
 # Usage:
-#   scripts/check-forge-generate.sh            # human-readable
-#   scripts/check-forge-generate.sh --github   # also ::error annotations for CI
+#   scripts/check-forge-generate.sh              # human-readable
+#   scripts/check-forge-generate.sh --github     # also ::error annotations for CI
+#   scripts/check-forge-generate.sh --pins-only  # only the forge.yaml == go.mod
+#                                                # check (the gate's pin-coherence)
 set -euo pipefail
 
 github=0
-if [ "${1:-}" = "--github" ]; then github=1; fi
+pins_only=0
+for arg in "$@"; do
+  case "${arg}" in
+    --github) github=1 ;;
+    --pins-only) pins_only=1 ;;
+    *) echo "usage: $0 [--github] [--pins-only]" >&2; exit 2 ;;
+  esac
+done
 
 cd "$(git rev-parse --show-toplevel)"
 
@@ -54,7 +63,11 @@ pin="$(sed -n 's/^forge_version:[[:space:]]*//p' forge.yaml | head -1)"
 [ -n "${pin}" ] || fail "no forge_version in forge.yaml" "forge.yaml must pin the forge that generates this repo."
 mod="$(sed -n 's|^[[:space:]]*github.com/reliant-labs/forge[[:space:]]\{1,\}\(v[^[:space:]]*\).*|\1|p' go.mod | head -1)"
 if [ "${mod}" != "${pin}" ]; then
-  fail "forge.yaml and go.mod pin different forges" "forge.yaml forge_version is ${pin}, go.mod requires ${mod:-nothing}. Re-pin both with scripts/pin-forge.sh."
+  fail "forge.yaml and go.mod pin different forges" "forge.yaml forge_version is ${pin}, go.mod requires ${mod:-nothing}. Re-pin both with task pin:forge."
+fi
+if [ "${pins_only}" = 1 ]; then
+  echo "forge.yaml and go.mod pin the same forge (${pin})."
+  exit 0
 fi
 
 if [ -n "${FORGE:-}" ]; then
@@ -114,4 +127,4 @@ if [ "${github}" = 1 ]; then
   echo "--- diff (tracked files) ---"
   git --no-pager diff -- "${changed[@]}" || true
 fi
-fail "forge generate is not a no-op" "Run the pinned forge generate (make forge-generate-check, or: go run github.com/reliant-labs/forge/cmd/forge@${pin} generate) and commit what it writes, in the change that caused it."
+fail "forge generate is not a no-op" "Run the pinned forge generate (task generate:check, or: go run github.com/reliant-labs/forge/cmd/forge@${pin} generate) and commit what it writes, in the change that caused it."
