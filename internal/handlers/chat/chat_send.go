@@ -426,8 +426,7 @@ func (s *Service) resurrectGhostWorkflow(
 	// left there: the resurrected run's first call_llm delivers it.
 	savedMessageID, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 	if err != nil {
-		logging.ErrorContext(ctx, "[Ghost Recovery] Failed to save messages", "error", err, "chatID", req.Msg.ChatId)
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save messages"))
 	}
 	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
 		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
@@ -465,8 +464,7 @@ func (s *Service) resurrectGhostWorkflow(
 	// Step 5: Start fresh Temporal execution
 	workflowRun, err := s.deps.Temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
-		logging.ErrorContext(ctx, "[Ghost Recovery] Failed to start workflow", "error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
-		return nil, svcerr.Internal("failed to resurrect workflow")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resurrect workflow"))
 	}
 
 	runID := workflowRun.GetRunID()
@@ -524,8 +522,7 @@ func (s *Service) SendMessage(
 	// Get chat with ownership check (defense-in-depth via single query)
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get chat", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.NotFound("chat")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	// A repeat of a send whose message has already been read is answered
@@ -569,7 +566,7 @@ func (s *Service) SendMessage(
 	// for completed/failed/cancelled workflows (see status switch below).
 
 	if err := launch.ValidateWorkflowParamStructure(req.Msg.WorkflowParams); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 
 	// Resume-at-position state, populated when the prior run for this chat was
@@ -641,12 +638,7 @@ func (s *Service) SendMessage(
 				temporalState, temporalErr := s.runs.State(ctx, workflowID)
 				if temporalErr != nil {
 					// Temporal query failed - this is an error we should surface
-					logging.ErrorContext(ctx, "Failed to query Temporal for workflow status",
-						"error", temporalErr,
-						"chatID", req.Msg.ChatId,
-						"workflowID", workflowID,
-					)
-					return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to check workflow status: %w", temporalErr))
+					return nil, svcerr.WrapOr(temporalErr, svcerr.Unavailable("failed to check workflow status"))
 				}
 
 				if !temporalState.Exists {
@@ -739,9 +731,7 @@ func (s *Service) SendMessage(
 				if err != nil {
 					// The message itself failed to save — there is nothing to
 					// resume the workflow FOR, so this really is fatal.
-					logging.ErrorContext(ctx, "Failed to save messages while resuming paused workflow",
-						"error", err, "workflowID", workflowID, "chatID", req.Msg.ChatId)
-					return nil, connect.NewError(connect.CodeInternal, err)
+					return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save messages"))
 				}
 
 				// Get RunID from chat (workflow struct doesn't have it)
@@ -759,10 +749,7 @@ func (s *Service) SendMessage(
 					// shows work in progress, and nothing is executing. Report
 					// it instead — the user's message is already durable, so a
 					// retry resumes from exactly here.
-					logging.ErrorContext(ctx, "Failed to resume paused workflow",
-						"error", resumeErr, "workflowID", workflowID, "chatID", req.Msg.ChatId)
-					return nil, connect.NewError(connect.CodeInternal,
-						fmt.Errorf("failed to resume paused workflow: %w", resumeErr))
+					return nil, svcerr.WrapOr(resumeErr, svcerr.Internal("failed to resume paused workflow"))
 				}
 				if outcome.Kind != runs.OutcomeResumed {
 					logging.WarnContext(ctx, "Paused workflow could not be resumed in place during SendMessage - resuming at position with a new run",
@@ -833,8 +820,7 @@ func (s *Service) SendMessage(
 				for _, sysMsg := range systemMessages {
 					_, err := s.deps.Repo.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle))
 					if err != nil {
-						logging.ErrorContext(ctx, "Failed to save system message to running workflow", "error", err)
-						return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save system message: %w", err))
+						return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save system message"))
 					}
 				}
 
@@ -970,8 +956,7 @@ func (s *Service) SendMessage(
 				// cannot be restarted - user must branch to continue.
 				inspection, inspectErr := s.runs.Inspect(ctx, req.Msg.ChatId)
 				if inspectErr != nil {
-					logging.ErrorContext(ctx, "Failed to inspect run", "error", inspectErr, "chatID", req.Msg.ChatId)
-					return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to check workflow status: %w", inspectErr))
+					return nil, svcerr.WrapOr(inspectErr, svcerr.Unavailable("failed to check workflow status"))
 				}
 				if inspection.Stuck {
 					return nil, svcerr.FailedPrecondition("this conversation experienced a workflow error and cannot be resumed - use the branch feature to start a new conversation from any previous message")
@@ -1064,14 +1049,14 @@ func (s *Service) SendMessage(
 					// thread still belongs ahead of the new message.
 					presavedID, saveErr := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 					if saveErr != nil {
-						return nil, connect.NewError(connect.CodeInternal, saveErr)
+						return nil, svcerr.WrapOr(saveErr, svcerr.Internal("failed to save messages"))
 					}
 					resumeMessagesSaved = true
 					resumePresavedMessageID = presavedID
 
 					outcome, resumeErr := s.runs.ResumeInterrupted(ctx, req.Msg.ChatId, inputUpdate)
 					if resumeErr != nil {
-						return nil, connect.NewError(connect.CodeInternal, resumeErr)
+						return nil, svcerr.WrapOr(resumeErr, svcerr.Internal("failed to resume the interrupted run"))
 					}
 					if outcome.Kind == runs.OutcomeResumed {
 						s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
@@ -1231,8 +1216,7 @@ func (s *Service) SendMessage(
 
 		saved, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to save messages for new workflow", "error", err, "chatID", req.Msg.ChatId)
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save messages"))
 		}
 		savedMessageID = saved
 	}
@@ -1271,8 +1255,7 @@ func (s *Service) SendMessage(
 
 	workflowRun, err := s.deps.Temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to start workflow", "error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
-		return nil, svcerr.Internal("failed to start workflow")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to start workflow"))
 	}
 
 	runID := workflowRun.GetRunID()
@@ -1335,12 +1318,18 @@ func (s *Service) SendAgentMessage(
 	// thread.ChatID check below, this is what stops a user from addressing
 	// an arbitrary thread in someone else's chat.
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
-	if err != nil || chat == nil {
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+	}
+	if chat == nil {
 		return nil, svcerr.NotFound("chat")
 	}
 
 	target, err := s.deps.Repo.GetThread(ctx, req.Msg.ThreadId)
-	if err != nil || target == nil {
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get thread"))
+	}
+	if target == nil {
 		return nil, svcerr.NotFound("thread")
 	}
 	if target.ChatID != req.Msg.ChatId {
@@ -1785,12 +1774,18 @@ func (s *Service) ListQueuedAgentMessages(
 	// belong to the caller, and the thread must belong to that chat, both
 	// returning the same NotFound so thread IDs can't be enumerated.
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
-	if err != nil || chat == nil {
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+	}
+	if chat == nil {
 		return nil, svcerr.NotFound("chat")
 	}
 
 	target, err := s.deps.Repo.GetThread(ctx, req.Msg.ThreadId)
-	if err != nil || target == nil {
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get thread"))
+	}
+	if target == nil {
 		return nil, svcerr.NotFound("thread")
 	}
 	if target.ChatID != req.Msg.ChatId {
@@ -1799,8 +1794,7 @@ func (s *Service) ListQueuedAgentMessages(
 
 	queued, err := s.deps.Repo.ListQueuedAgentMessagesForThread(ctx, req.Msg.ThreadId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list queued agent messages", "error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
-		return nil, svcerr.Internal("failed to list queued messages")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list queued messages"))
 	}
 
 	messages := make([]*reliantv1.QueuedAgentMessage, len(queued))
@@ -1846,14 +1840,16 @@ func (s *Service) CancelQueuedAgentMessage(
 	// a message ID from another chat, this ownership check is what stops
 	// them from cancelling it.
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
-	if err != nil || chat == nil {
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+	}
+	if chat == nil {
 		return nil, svcerr.NotFound("chat")
 	}
 
 	cancelled, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, req.Msg.MessageId, req.Msg.ChatId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to cancel queued agent message", "error", err, "chatID", req.Msg.ChatId, "messageID", req.Msg.MessageId)
-		return nil, svcerr.Internal("failed to cancel message")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to cancel message"))
 	}
 
 	if !cancelled {

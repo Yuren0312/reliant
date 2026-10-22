@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -225,10 +224,10 @@ func policyFromProto(p *reliantv1.ProviderPolicy) chatselection.ProviderPolicy {
 // with no fallback, or a fallback with nothing to fall back to.
 func validatePolicy(p chatselection.ProviderPolicy) error {
 	if p.FallbackModel != "" && p.OnLimit != chatselection.OnLimitFallback {
-		return fmt.Errorf("fallback_model is only meaningful with on_limit FALLBACK")
+		return svcerr.InvalidArgument("fallback_model is only meaningful with on_limit FALLBACK")
 	}
 	if p.OnLimit == chatselection.OnLimitFallback && !strings.Contains(p.FallbackModel, "@") {
-		return fmt.Errorf("on_limit FALLBACK needs a fallback_model of the form <model>@<driver>")
+		return svcerr.InvalidArgument("on_limit FALLBACK needs a fallback_model of the form <model>@<driver>")
 	}
 	return nil
 }
@@ -247,11 +246,11 @@ func (s *Service) UpdateChatProviderPolicy(
 	}
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
-		return nil, svcerr.NotFound("chat")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	policy := policyFromProto(req.Msg.ProviderPolicy)
 	if err := validatePolicy(policy); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	workflowName := ""
 	if chat.WorkflowName != nil {
