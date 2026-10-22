@@ -400,7 +400,8 @@ func TestTaskCRUD(t *testing.T) {
 			t.Fatalf("CreateTask: %v", err)
 		}
 
-		if err := store.UpdateTaskStatus(ctx, repo.ORM(), task.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
+		now := time.Now()
+		if err := store.UpdateTaskStatus(ctx, repo.ORM(), task.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), &now); err != nil {
 			t.Fatalf("UpdateTaskStatus: %v", err)
 		}
 
