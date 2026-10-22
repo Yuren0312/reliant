@@ -15,8 +15,10 @@
 # pass through the environment, as before.
 #
 # TASK is the task on PATH, else go-task built from source at a fixed version
-# (CI runners have no `task` until its workflows install one).
+# (CI runners have no `task` until its workflows install one). It is exported
+# for the scripts a task runs that run task again (check-docs-generate.sh).
 TASK ?= $(shell command -v task 2>/dev/null || echo 'env GOWORK=off GOFLAGS=-trimpath go run github.com/go-task/task/v3/cmd/task@v3.52.0')
+export TASK
 
 .DEFAULT_GOAL := default
 .PHONY: default build build-dev-cli build-all install deps clean \
