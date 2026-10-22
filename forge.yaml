@@ -76,6 +76,11 @@ lint:
             - call: github.com/reliant-labs/reliant/internal/logging.Trace
             - call: github.com/reliant-labs/reliant/internal/logging.Log
 database:
+    # Prod's Postgres major (Cloud SQL reliant-pg is POSTGRES_16). forge's
+    # pgtest boots its embedded test server at this major, so a test run
+    # proves the SQL on the server it ships to, and checks a
+    # FORGE_TEST_POSTGRES_URL server's major against it.
+    postgres_version: "16"
     migration_safety:
         # Every migration after the baseline says whether the previous
         # release keeps working on the schema it leaves:

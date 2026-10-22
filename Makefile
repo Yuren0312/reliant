@@ -375,14 +375,11 @@ generate proto-generate: export GOTOOLCHAIN := $(GEN_GOTOOLCHAIN)
 generate-% proto-generate-%: export GOWORK := off
 generate-% proto-generate-%: export GOTOOLCHAIN := $(GEN_GOTOOLCHAIN)
 
-BUF_VERSION := v1.57.0
-BUF_BIN := $(HOME)/go/bin/buf-$(BUF_VERSION)
-
-$(BUF_BIN):
-	@echo "$(YELLOW)Installing buf $(BUF_VERSION) → $(BUF_BIN)...$(NC)"
-	@mkdir -p "$(dir $(BUF_BIN))" && tmp=$$(mktemp -d) && \
-		GOBIN=$$tmp $(GOCMD) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) && \
-		mv "$$tmp/buf" "$(BUF_BIN)" && rmdir "$$tmp"
+# buf is go.mod's `tool github.com/bufbuild/buf/cmd/buf` line (the one pin
+# forge reads too). `go run pkg@version` builds it in its own module graph,
+# as forge does: reliant's newer protovalidate does not build buf v1.57.0, so
+# `go tool buf` cannot run it.
+BUF = GOWORK=off $(GOCMD) run github.com/bufbuild/buf/cmd/buf@$(shell GOWORK=off $(GOCMD) list -m -f '{{.Version}}' github.com/bufbuild/buf)
 
 # npm ci rewrites node_modules/.package-lock.json, so it doubles as the stamp:
 # a lockfile edit (a version bump) reinstalls, an unchanged one is a no-op.
@@ -398,15 +395,15 @@ proto-generate: proto-generate-reliant proto-generate-controlplane
 	@echo "$(GREEN)✅ Protobuf code generated$(NC)"
 
 ## proto-generate-reliant: Generate only reliant's own protos (proto/ -> gen/, web/src/gen/) via buf.gen.yaml
-proto-generate-reliant: $(BUF_BIN) $(PROTOC_GEN_ES)
+proto-generate-reliant: $(PROTOC_GEN_ES)
 	@echo "$(YELLOW)Generating code from protobuf definitions...$(NC)"
-	@$(BUF_BIN) generate
+	@$(BUF) generate
 
 ## proto-generate-go: Generate only Go code from protobuf definitions
 ## (also regenerates the control-plane client, Go + TS, from proto-vendor/)
-proto-generate-go: $(BUF_BIN) $(PROTOC_GEN_ES)
+proto-generate-go: $(PROTOC_GEN_ES)
 	@echo "$(YELLOW)Generating Go code from protobuf definitions...$(NC)"
-	@$(BUF_BIN) generate --template buf.gen-go-only.yaml
+	@$(BUF) generate --template buf.gen-go-only.yaml
 	@$(MAKE) --no-print-directory proto-generate-controlplane
 	@echo "$(GREEN)✅ Go protobuf code generated$(NC)"
 
@@ -415,19 +412,19 @@ proto-generate-go: $(BUF_BIN) $(PROTOC_GEN_ES)
 ## contract. To pull a new contract first: node .github/scripts/sync-controlplane-proto.mjs
 ## Both output dirs are replaced wholesale (pruning stale files), but only after
 ## buf succeeds — a failed generate leaves the existing code in place.
-proto-generate-controlplane: $(BUF_BIN) $(PROTOC_GEN_ES)
-	@BUF="$(BUF_BIN)" scripts/proto-generate-atomic.sh buf.gen.controlplane.yaml gen/controlplane web/src/gen/controlplane
+proto-generate-controlplane: $(PROTOC_GEN_ES)
+	@scripts/proto-generate-atomic.sh buf.gen.controlplane.yaml gen/controlplane web/src/gen/controlplane
 
 ## proto-lint: Lint protobuf files
-proto-lint: $(BUF_BIN)
+proto-lint:
 	@echo "$(YELLOW)Linting protobuf files...$(NC)"
-	@$(BUF_BIN) lint
+	@$(BUF) lint
 	@echo "$(GREEN)✅ Protobuf lint complete$(NC)"
 
 ## proto-format: Format protobuf files
-proto-format: $(BUF_BIN)
+proto-format:
 	@echo "$(YELLOW)Formatting protobuf files...$(NC)"
-	@$(BUF_BIN) format -w
+	@$(BUF) format -w
 	@echo "$(GREEN)✅ Protobuf formatting complete$(NC)"
 
 ## pin-forge: Pin forge to forge's current origin/main commit
@@ -458,8 +455,8 @@ generate-all: proto-generate generate
 # `make test-affected` runs it when the diff touches a forge input.
 forge-generate-check: export GOWORK := off
 forge-generate-check: export GOTOOLCHAIN := $(GEN_GOTOOLCHAIN)
-forge-generate-check: $(BUF_BIN) $(PROTOC_GEN_ES)
-	@BUF="$(BUF_BIN)" ./scripts/check-forge-generate.sh $(FORGE_CHECK_FLAGS)
+forge-generate-check: $(PROTOC_GEN_ES)
+	@./scripts/check-forge-generate.sh $(FORGE_CHECK_FLAGS)
 
 ## generate-go: Run Go code generators only (protobuf Go + Go reference files)
 generate-go: proto-generate-go generate-yaml-bindings generate-tool-catalog generate-manifest-schema generate-integrations generate-schema generate-refcheck generate-cel-reference generate-nodes

@@ -28,8 +28,10 @@
 # same version. go.mod must require the same forge, or the forge that lints
 # and the forge that generates are two different programs.
 #
-# Run it through `make forge-generate-check`, which supplies the pinned buf
-# ($BUF), protoc-gen-es and Go toolchain, exactly as for `make generate-all`.
+# buf is go.mod's `tool github.com/bufbuild/buf/cmd/buf` line: forge reads
+# that pin and runs that buf (forge #1187), so nothing here supplies one. Run
+# it through `task generate:check`, which also installs the pinned
+# protoc-gen-es and pins the Go toolchain, exactly as `task generate` does.
 #
 # Usage:
 #   scripts/check-forge-generate.sh            # human-readable
@@ -68,14 +70,6 @@ else
   # pkg@version` refuses a repo-level -mod setting, and an empty one would drop
   # -trimpath under a toolchain switched by go.mod (see the Makefile's GOFLAGS).
   forge=(env GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}" GOFLAGS=-trimpath go run "github.com/reliant-labs/forge/cmd/forge@${pin}")
-fi
-
-# buf is resolved from PATH by forge; BUF names the Makefile's pinned build.
-if [ -n "${BUF:-}" ]; then
-  bufdir="$(mktemp -d)"
-  trap 'rm -rf "${bufdir}"' EXIT
-  ln -s "$(cd "$(dirname "${BUF}")" && pwd)/$(basename "${BUF}")" "${bufdir}/buf"
-  export PATH="${bufdir}:${PATH}"
 fi
 
 # A check must not rewrite the clone's git config (forge's merge driver).
