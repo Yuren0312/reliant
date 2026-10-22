@@ -7,8 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +14,7 @@ import (
 	"github.com/pressly/goose/v3"
 	"github.com/reliant-labs/forge/pkg/migratekit"
 	"github.com/reliant-labs/forge/pkg/migratekit/compat"
+	"github.com/reliant-labs/forge/pkg/pgtest"
 	"github.com/stretchr/testify/require"
 
 	forgedb "github.com/reliant-labs/reliant/db"
@@ -43,41 +42,15 @@ func migrationState(t *testing.T, db *sql.DB) migratekit.State {
 	return state
 }
 
-// testDSN is the DSN of the named database on the test server.
-func testDSN(t *testing.T, name string) string {
-	t.Helper()
-	u, err := url.Parse(resolveTestDSN(t))
-	require.NoError(t, err)
-	u.Path = "/" + name
-	return u.String()
-}
-
 // newEmptyTestDB creates an EMPTY database (no migrations, no seed) owned by
 // this test and returns its DSN. Per-test databases normally copy the migrated
 // template; these tests need to watch the migrator build or adopt one.
 func newEmptyTestDB(t *testing.T) string {
 	t.Helper()
-	return newTestDBFrom(t, "")
-}
-
-// newTestDBFrom creates a database owned by this test, copied from template
-// (empty when template is ""), and returns its DSN.
-func newTestDBFrom(t *testing.T, template string) string {
-	t.Helper()
-	// Opens the process-wide admin pool the CREATE/DROP DDL goes through.
-	if err := ensureTemplateDB(resolveTestDSN(t)); err != nil {
-		t.Fatalf("prepare test template database: %v", err)
-	}
-	name := fmt.Sprintf("%st%d_%d", testDBPrefix, os.Getpid(), testDBSeq.Add(1))
-	stmt := fmt.Sprintf(`CREATE DATABASE %s`, quoteIdent(name))
-	if template != "" {
-		stmt += " TEMPLATE " + quoteIdent(template)
-	}
-	if _, err := adminDB.Exec(stmt); err != nil {
-		t.Fatalf("create test database: %v", err)
-	}
-	t.Cleanup(func() { dropTestDB(name) })
-	return testDSN(t, name)
+	dsn, cleanup, err := pgtest.NewURL()
+	require.NoError(t, err, "create an empty test database")
+	t.Cleanup(cleanup)
+	return dsn
 }
 
 func openTestDSN(t *testing.T, dsn string) *sql.DB {
@@ -112,68 +85,49 @@ func gooseVersions(t *testing.T) []int64 {
 	return baseline(t).Adopts.Versions
 }
 
-var (
-	gooseAtMu        sync.Mutex
-	gooseAtTemplates = map[int64]string{}
-)
-
 // gooseDBAt returns the DSN of a new database goose migrated up to and
 // including version, from the frozen files — what a goose release whose newest
 // migration was version left behind — with seedRows' rows in it. Each version
-// is built once per process, as a template, and copied.
+// is built once, as a template, and copied.
 func gooseDBAt(t *testing.T, version int64) string {
 	t.Helper()
-	// Skips (under -short, or with no database) before the lock is taken: a
-	// skip is runtime.Goexit, and a lock it left held would hang every later
-	// test.
-	resolveTestDSN(t)
-	tpl := gooseTemplateAt(t, version)
-	return newTestDBFrom(t, tpl)
-}
-
-func gooseTemplateAt(t *testing.T, version int64) string {
-	t.Helper()
-	gooseAtMu.Lock()
-	defer gooseAtMu.Unlock()
-	tpl, ok := gooseAtTemplates[version]
-	if !ok {
-		dsn := newEmptyTestDB(t)
-		tpl = fmt.Sprintf("%stplgv%d_%d", testDBPrefix, version, os.Getpid())
-		db, err := sql.Open("pgx", dsn)
-		require.NoError(t, err)
-		require.NoError(t, initGoose())
-		require.NoError(t, goose.UpTo(db, migrationsDir, version, goose.WithAllowMissing()))
-		seedRows(t, db)
-		require.NoError(t, db.Close())
-		u, err := url.Parse(dsn)
-		require.NoError(t, err)
-		built := strings.TrimPrefix(u.Path, "/")
-		// Rename the built database into a template that outlives this test;
-		// the reaper collects it once the process is gone.
-		_, err = adminDB.Exec(fmt.Sprintf(`ALTER DATABASE %s RENAME TO %s`, quoteIdent(built), quoteIdent(tpl)))
-		require.NoError(t, err)
-		gooseAtTemplates[version] = tpl
-	}
-	return tpl
+	key, err := gooseTemplateKey()
+	require.NoError(t, err)
+	key = strings.Replace(key, "reliant_goose_", fmt.Sprintf("reliant_goose_v%d_", version), 1)
+	_, dsn, cleanup := cloneTestTemplate(t, key, func(_ string, build *sql.DB) error {
+		if err := initGoose(); err != nil {
+			return err
+		}
+		if err := goose.UpTo(build, migrationsDir, version, goose.WithAllowMissing()); err != nil {
+			return fmt.Errorf("goose up to %d: %w", version, err)
+		}
+		return seedRows(build)
+	})
+	t.Cleanup(cleanup)
+	return dsn
 }
 
 // seedRows writes a project and a chat the way the release that built the
 // database would have: the chat's state was text before 20260223000000 turned
 // it into an enum.
-func seedRows(t *testing.T, db *sql.DB) {
-	t.Helper()
-	_, err := db.Exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active)
-		VALUES ('seeded-project', 'seed-user', 'Seeded before the upgrade', '/seeded', now(), now(), now())`)
-	require.NoError(t, err)
+func seedRows(db *sql.DB) error {
+	if _, err := db.Exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active)
+		VALUES ('seeded-project', 'seed-user', 'Seeded before the upgrade', '/seeded', now(), now(), now())`); err != nil {
+		return fmt.Errorf("seed project: %w", err)
+	}
 	var stateType string
-	require.NoError(t, db.QueryRow(`SELECT data_type FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'state'`).Scan(&stateType))
+	if err := db.QueryRow(`SELECT data_type FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'state'`).Scan(&stateType); err != nil {
+		return fmt.Errorf("read chats.state's type: %w", err)
+	}
 	state := any(2)
 	if stateType == "text" {
 		state = "idle"
 	}
-	_, err = db.Exec(`INSERT INTO chats (id, title, project_id, user_id, state, created_at, updated_at, last_active)
-		VALUES ('seeded-chat', 'Seeded chat', 'seeded-project', 'seed-user', $1, now(), now(), now())`, state)
-	require.NoError(t, err)
+	if _, err := db.Exec(`INSERT INTO chats (id, title, project_id, user_id, state, created_at, updated_at, last_active)
+		VALUES ('seeded-chat', 'Seeded chat', 'seeded-project', 'seed-user', $1, now(), now(), now())`, state); err != nil {
+		return fmt.Errorf("seed chat: %w", err)
+	}
+	return nil
 }
 
 // requireSeededRows asserts seedRows' rows survived, in today's shape.

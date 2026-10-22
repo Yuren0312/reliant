@@ -19,11 +19,7 @@ import (
 // block the USER saw nothing but an id in a wall of tool-result text. These
 // tests pin the block that closes that gap.
 //
-// They drive buildToolContentBlocks through a fake repository rather than the
-// package's Postgres harness. That harness t.Skip()s when DATABASE_URL is
-// unset, and a skipped test that reports "ok" is indistinguishable from a
-// passing one — every assertion below would silently vanish on a machine with
-// no database, which is exactly the machine this was written on.
+// They drive buildToolContentBlocks through a fake repository.
 //
 // The builder RETURNS blocks rather than writing them — every block for a
 // message now goes in through one atomic statement so concurrent writers cannot

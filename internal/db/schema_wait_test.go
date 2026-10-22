@@ -3,8 +3,6 @@ package db
 
 import (
 	"database/sql"
-	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -125,22 +123,9 @@ func singleConnCopy(t *testing.T, db *sql.DB) *sql.DB {
 func dsnForOpenDB(t *testing.T, db *sql.DB) string {
 	t.Helper()
 
-	var name string
-	if err := db.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
+	dsn, err := testDSNOf(db)
+	if err != nil {
 		t.Fatalf("resolve current database: %v", err)
 	}
-
-	base := strings.TrimSpace(os.Getenv("DATABASE_URL"))
-	if base == "" {
-		// SetupTestDB hands out a database only when DATABASE_URL is set, so
-		// this is unreachable — and guessing a server here would open a pool
-		// on one nobody chose.
-		t.Fatal("DATABASE_URL is unset, yet a test database is open")
-	}
-	u, err := url.Parse(base)
-	if err != nil {
-		t.Fatalf("parse DATABASE_URL: %v", err)
-	}
-	u.Path = "/" + name
-	return u.String()
+	return dsn
 }
