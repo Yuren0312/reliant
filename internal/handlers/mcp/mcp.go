@@ -19,7 +19,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/cmdutil"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -1166,20 +1165,24 @@ func (s *Service) preflightMCPServer(ctx context.Context, name string, cfg confi
 
 	switch cfg.Type {
 	case config.MCPStdio:
+		// Whether the command exists is a question about the user's machine,
+		// which the daemon answers when it launches the server. This process
+		// has neither the user's PATH nor any business running a lookup on a
+		// user-supplied command name.
 		if strings.TrimSpace(cfg.Command) == "" {
 			return fmt.Errorf("stdio server requires a command")
-		}
-		finder := cmdutil.NewCommandFinder(cfg.Command)
-		if _, err := finder.Find(); err != nil {
-			return fmt.Errorf("command %q not found on PATH", cfg.Command)
 		}
 	case config.MCPSse, config.MCPHTTP:
 		if strings.TrimSpace(cfg.URL) == "" {
 			return fmt.Errorf("http/sse server requires a URL")
 		}
-		u, err := url.Parse(cfg.URL)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-			return fmt.Errorf("invalid sse URL %q (must start with http:// or https://)", cfg.URL)
+		// A URL built from ${VAR} references is only a URL once the daemon
+		// resolves them, so only a literal one can be checked here.
+		if !strings.Contains(cfg.URL, "$") {
+			u, err := url.Parse(cfg.URL)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+				return fmt.Errorf("invalid sse URL %q (must start with http:// or https://)", cfg.URL)
+			}
 		}
 	default:
 		return fmt.Errorf("unsupported MCP transport type: %s", cfg.Type)
