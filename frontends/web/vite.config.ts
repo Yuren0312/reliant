@@ -7,13 +7,13 @@ import { versionJson } from "./vite-plugin-version-json";
 import { cspPlugin } from "./vite-plugin-csp";
 import { speedscopeStatic } from "./vite-plugin-speedscope";
 
-// Get worktree name from parent directory
-// When Vite runs, cwd is the 'web' directory, so we need to go up one level
+// Get worktree name from the checkout root
+// When Vite runs, cwd is frontends/web, so the checkout is two levels up
 function getWorktreeName(): string {
   try {
     const cwd = process.cwd();
-    const parentDir = path.dirname(cwd);
-    return path.basename(parentDir);
+    const checkoutDir = path.dirname(path.dirname(cwd));
+    return path.basename(checkoutDir);
   } catch (error) {
     console.warn('[Vite] Failed to get worktree name:', error);
     return 'dev';
@@ -58,8 +58,8 @@ export default defineConfig({
   // and copies it into the build — the Profiles view iframes it, so none of it
   // enters the JS bundle. See vite-plugin-speedscope.ts.
   plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic()],
-  // Load .env files from project root instead of web directory
-  envDir: path.resolve(__dirname, ".."),
+  // Load .env files from the checkout root instead of frontends/web
+  envDir: path.resolve(__dirname, "../.."),
   // Define global constants available in the app
   define: {
     __WORKTREE_NAME__: JSON.stringify(getWorktreeName()),

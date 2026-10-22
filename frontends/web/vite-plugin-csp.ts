@@ -48,7 +48,7 @@ const STRIPE_SCRIPT = "https://js.stripe.com";
 const STRIPE_FRAMES = ["https://js.stripe.com", "https://hooks.stripe.com"];
 
 /**
- * Monaco is loaded from jsDelivr by `web/src/lib/monacoManager.ts`, which
+ * Monaco is loaded from jsDelivr by `frontends/web/src/lib/monacoManager.ts`, which
  * points the AMD loader at `cdn.jsdelivr.net/npm/monaco-editor@…/min/vs`.
  *
  * NOTE the loader probes `new Function("true")` inside a try/catch to decide

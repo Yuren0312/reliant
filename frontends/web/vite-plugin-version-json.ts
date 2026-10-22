@@ -62,8 +62,8 @@ import { UNKNOWN, type BuildInfo } from "./src/lib/releaseIdentity";
 /** Path of the emitted asset, relative to the bundle root. */
 export const VERSION_JSON_FILE = "version.json";
 
-/** The reliant checkout this web/ directory belongs to. */
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+/** The reliant checkout this frontends/web/ directory belongs to. */
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /** The one identity resolver (see its header). */
 export const RELEASE_IDENTITY_SCRIPT = path.join(REPO_ROOT, "scripts", "release-identity.sh");

@@ -547,7 +547,7 @@ describe("Workflow Serializer Round-Trip", () => {
   describe("Real Workflow YAML Round-Trip", () => {
     const workflowDir = path.resolve(
       __dirname,
-      "../../../../internal/workflow/builtin",
+      "../../../../../internal/workflow/builtin",
     );
 
     function testRoundTrip(filename: string) {

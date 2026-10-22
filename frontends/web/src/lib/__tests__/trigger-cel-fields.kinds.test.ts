@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest'
 
 import { TRIGGER_CEL_FIELDS, TRIGGER_KINDS, TRIGGER_SENDER_KINDS } from '../trigger-cel-fields'
 
-const GO_TRIGGER_KINDS = resolve(process.cwd(), '../internal/db/core/trigger.go')
+const GO_TRIGGER_KINDS = resolve(process.cwd(), '../../internal/db/core/trigger.go')
 
 /** Every `TriggerEventKindX TriggerEventKind = "x"` constant, in order. */
 function goTriggerEventKinds(): string[] {

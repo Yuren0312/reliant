@@ -35,7 +35,7 @@ test.describe.serial('Workflow Builder Final Validation', () => {
       // Don't wait for networkidle - it may never resolve due to gRPC streaming
       await page.waitForLoadState('domcontentloaded');
       await page.waitForTimeout(4000);
-      await page.screenshot({ path: 'web/e2e/screenshots/00-initial-load.png', fullPage: true });
+      await page.screenshot({ path: 'frontends/web/e2e/screenshots/00-initial-load.png', fullPage: true });
 
       // Select the "builder" project from the welcome screen
       const builderProject = page.locator('button:has-text("builder")').first();
@@ -44,7 +44,7 @@ test.describe.serial('Workflow Builder Final Validation', () => {
         await builderProject.click();
         await page.waitForTimeout(4000);
       }
-      await page.screenshot({ path: 'web/e2e/screenshots/00b-after-project-select.png', fullPage: true });
+      await page.screenshot({ path: 'frontends/web/e2e/screenshots/00b-after-project-select.png', fullPage: true });
 
       // ========================================
       // STEP 1: Navigate to one-ring workflow
@@ -81,14 +81,14 @@ test.describe.serial('Workflow Builder Final Validation', () => {
       }
 
       await page.waitForTimeout(3000);
-      await page.screenshot({ path: 'web/e2e/screenshots/01-workflows-list.png', fullPage: true });
+      await page.screenshot({ path: 'frontends/web/e2e/screenshots/01-workflows-list.png', fullPage: true });
 
       // Click "one-ring" workflow
       const oneRingLink = page.locator('text=one-ring').first();
       await expect(oneRingLink).toBeVisible({ timeout: 10000 });
       await oneRingLink.click();
       await page.waitForTimeout(4000);
-      await page.screenshot({ path: 'web/e2e/screenshots/02-one-ring-workflow.png', fullPage: true });
+      await page.screenshot({ path: 'frontends/web/e2e/screenshots/02-one-ring-workflow.png', fullPage: true });
 
       // Count nodes
       const nodes = page.locator('.react-flow__node');
@@ -142,7 +142,7 @@ test.describe.serial('Workflow Builder Final Validation', () => {
       }
 
       await page.waitForTimeout(2500);
-      await page.screenshot({ path: 'web/e2e/screenshots/03-planning-expanded.png', fullPage: true });
+      await page.screenshot({ path: 'frontends/web/e2e/screenshots/03-planning-expanded.png', fullPage: true });
 
       const inlineNodes = page.locator('.react-flow__node');
       const inlineCount = await inlineNodes.count();
@@ -166,7 +166,7 @@ test.describe.serial('Workflow Builder Final Validation', () => {
         console.log('  Pressed Escape');
       }
       await page.waitForTimeout(2000);
-      await page.screenshot({ path: 'web/e2e/screenshots/04-back-to-parent.png', fullPage: true });
+      await page.screenshot({ path: 'frontends/web/e2e/screenshots/04-back-to-parent.png', fullPage: true });
 
       // ========================================
       // STEP 3: Config panel
@@ -176,7 +176,7 @@ test.describe.serial('Workflow Builder Final Validation', () => {
       if (await planningNode2.isVisible().catch(() => false)) {
         await planningNode2.click();
         await page.waitForTimeout(2000);
-        await page.screenshot({ path: 'web/e2e/screenshots/05-config-panel.png', fullPage: true });
+        await page.screenshot({ path: 'frontends/web/e2e/screenshots/05-config-panel.png', fullPage: true });
 
         const configText = await page.locator('body').innerText();
         const hasInline = configText.includes('Inline');
@@ -206,7 +206,7 @@ test.describe.serial('Workflow Builder Final Validation', () => {
       if (await paramsBtn.isVisible().catch(() => false)) {
         await paramsBtn.click();
         await page.waitForTimeout(1500);
-        await page.screenshot({ path: 'web/e2e/screenshots/06-parameters.png', fullPage: true });
+        await page.screenshot({ path: 'frontends/web/e2e/screenshots/06-parameters.png', fullPage: true });
 
         const pText = await page.locator('body').innerText();
         const hasMaxRetries = pText.includes('max_retries');
@@ -237,7 +237,7 @@ test.describe.serial('Workflow Builder Final Validation', () => {
         await backBtn2.click();
         await page.waitForTimeout(2000);
       }
-      await page.screenshot({ path: 'web/e2e/screenshots/07-workflows-list-2.png', fullPage: true });
+      await page.screenshot({ path: 'frontends/web/e2e/screenshots/07-workflows-list-2.png', fullPage: true });
 
       // Look for agent workflow
       const agentLink = page.locator('text=/my-agent/i').first();
@@ -246,7 +246,7 @@ test.describe.serial('Workflow Builder Final Validation', () => {
         console.log(`  Found agent link: "${lt}"`);
         await agentLink.click();
         await page.waitForTimeout(3000);
-        await page.screenshot({ path: 'web/e2e/screenshots/08-agent-workflow.png', fullPage: true });
+        await page.screenshot({ path: 'frontends/web/e2e/screenshots/08-agent-workflow.png', fullPage: true });
 
         const nodeTexts = await page.locator('.react-flow__node').allInnerTexts();
         const hasLoop = nodeTexts.some(t => t.includes('agent_loop'));
@@ -256,7 +256,7 @@ test.describe.serial('Workflow Builder Final Validation', () => {
         if (await yamlBtn.isVisible().catch(() => false)) {
           await yamlBtn.click();
           await page.waitForTimeout(2000);
-          await page.screenshot({ path: 'web/e2e/screenshots/09-yaml-view.png', fullPage: true });
+          await page.screenshot({ path: 'frontends/web/e2e/screenshots/09-yaml-view.png', fullPage: true });
 
           const yamlText = await page.locator('body').innerText();
           const hasCharArray = yamlText.includes('[a, g, e, n, t');
