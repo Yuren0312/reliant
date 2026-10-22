@@ -180,7 +180,10 @@ func (s *Service) signalParamUpdate(ctx context.Context, workflowID, runID strin
 // A thread that finished has no next run for them to apply to.
 func (s *Service) threadAcceptsParamUpdate(ctx context.Context, chat *db.Chat, threadID string) error {
 	wf, err := s.deps.Repo.GetWorkflowByThread(ctx, chat.ID, threadID)
-	if err != nil || wf == nil {
+	if err != nil {
+		return svcerr.WrapOr(err, svcerr.Internal("failed to get the thread's workflow"))
+	}
+	if wf == nil {
 		return svcerr.WithMessage(svcerr.ErrNotFound, "no workflow found for thread")
 	}
 	if wf.Status == db.Active() {
@@ -397,7 +400,7 @@ func (s *Service) GetThreadWorkflowInputs(
 	// Look up the workflow record for this thread
 	wf, err := s.deps.Repo.GetWorkflowByThread(ctx, req.Msg.ChatId, req.Msg.ThreadId)
 	if err != nil {
-		return nil, svcerr.WithMessage(svcerr.ErrNotFound, "no workflow found for thread")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get the thread's workflow"))
 	}
 	if wf == nil {
 		return nil, svcerr.WithMessage(svcerr.ErrNotFound, "no workflow found for thread")
