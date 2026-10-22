@@ -50,8 +50,8 @@ func (r *Repo) ListQuestionsByChat(ctx context.Context, chatID string) ([]*Quest
 	return store.ListQuestionsByChat(ctx, r.ORM(), chatID)
 }
 
-// ListPendingQuestionsByChat returns every PENDING question in a chat, oldest
-// first. Each carries its thread_id: a chat with several spawned threads can
+// ListPendingQuestionsByChat returns every PENDING blocking question in a
+// chat, oldest first — not the async ones, which no thread waits on. Each carries its thread_id: a chat with several spawned threads can
 // have one question parked per thread, and only the thread id says which
 // agent a question belongs to.
 //
@@ -67,6 +67,18 @@ func (r *Repo) ListPendingQuestionsByChat(ctx context.Context, chatID string) ([
 	return store.ListPendingQuestionsByChat(ctx, r.ORM(), chatID)
 }
 
+// ListAsyncQuestionsByChat returns every async question in a chat — asked
+// with ask_user async: true, so its thread carried on — pending and resolved
+// alike, oldest first. None of them is a gate, so ListPendingQuestionsByChat
+// leaves them out; the chat timeline renders them from this.
+func (r *Repo) ListAsyncQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+
+	return store.ListAsyncQuestionsByChat(ctx, r.ORM(), chatID)
+}
+
 // ListAnswerablePendingQuestionsByChat is ListPendingQuestionsByChat minus the
 // questions nobody can answer any more: those whose asking run completed or
 // was cancelled (the inbox's rule; see store.ListAnswerablePendingQuestionsByChat).
@@ -79,6 +91,17 @@ func (r *Repo) ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID 
 	}
 
 	return store.ListAnswerablePendingQuestionsByChat(ctx, r.ORM(), chatID)
+}
+
+// ListAnswerablePendingQuestionsByUser is ListAnswerablePendingQuestionsByChat
+// across every chat the user owns: the unfiltered form of the UI's pending
+// question list.
+func (r *Repo) ListAnswerablePendingQuestionsByUser(ctx context.Context, userID string) ([]*Question, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+
+	return store.ListAnswerablePendingQuestionsByUser(ctx, r.ORM(), userID)
 }
 
 // PendingQuestionsByThread returns each thread's newest PENDING question for a

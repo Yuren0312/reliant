@@ -208,6 +208,16 @@ type QuestionUpdate struct {
 	StepID   string `json:"step_id"`
 	Status   string `json:"status"`
 	Metadata string `json:"metadata,omitempty"`
+	// Async marks a question asked without waiting: no thread is parked on
+	// it, so a client must not treat it as the chat's or a thread's pending
+	// gate (the composer, the pill), only as an answerable timeline card.
+	Async bool `json:"async,omitempty"`
+	// ToolCallID is the ask_user tool call that raised the question, when
+	// one did: the timeline card it belongs to.
+	ToolCallID string `json:"tool_call_id,omitempty"`
+	// WithdrawnReason is set on the "resolved" update of a question its
+	// agent withdrew: the timeline card shows it instead of an answer.
+	WithdrawnReason string `json:"withdrawn_reason,omitempty"`
 }
 
 func (u QuestionUpdate) Type() UpdateType { return UpdateTypeQuestion }

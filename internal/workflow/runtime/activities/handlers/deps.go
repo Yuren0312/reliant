@@ -317,13 +317,16 @@ type PreflightDaemonCheckStore interface {
 }
 
 // QuestionCreateStore is what QuestionCreateActivity reads and writes; the
-// blocked run event goes through runevents.EmitBlocked.
+// blocked run event goes through runevents.EmitBlocked, and an async question
+// is announced to the owner's inbox instead (GetChat comes with
+// runevents.Store).
 type QuestionCreateStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID string, stepID string, iteration int) ([]*db.Question, error)
 	CreateQuestion(ctx context.Context, question *db.Question) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
+	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	runevents.Store
 }
 

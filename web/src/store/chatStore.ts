@@ -121,8 +121,7 @@ import { QUEUED_SENDER_KIND_HUMAN } from "../api/chat-grpc";
 import {
   approvalKeys,
   upsertApprovalInCache,
-  upsertPendingQuestionInCache,
-  removePendingQuestionFromCache,
+  applyQuestionUpdate,
   resolvePendingQuestion,
 } from "../hooks/approval-queries";
 import {
@@ -981,10 +980,11 @@ interface ChatStoreState {
   // sequence to replay from, or 0n for a full snapshot.
   recordChatStreamCursor: (chatId: string, sequence: bigint) => void;
   resumeChatStreamFrom: (chatId: string) => bigint;
-  // The chat whose cached content is on screen while its sync for the current
-  // subscription is still outstanding (null: none). Drives the transcript's
-  // syncing indicator. Never set for a chat with no cached content — the
-  // ordinary loading state covers that.
+  // The chat whose initial sync for the current stream subscription (a
+  // snapshot, or a replay from its cached cursor) has not ended with the
+  // server's chat_caught_up yet (null: none). A reconnect of an already
+  // caught-up subscription does not reopen it. Drives the timeline's
+  // catch-up overlay (lib/timelineCatchUp).
   chatSyncPendingId: string | null;
   setChatSyncPending: (chatId: string | null) => void;
 
@@ -3453,22 +3453,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // Question updates patch the chat's pending-question list (server
         // data), read via usePendingQuestions. A "pending" event adds that
         // question; "resolved" removes THAT question only — other threads'
-        // questions are still waiting on the user.
+        // questions are still waiting on the user. An async question (asked
+        // without waiting) patches the timeline's async list instead.
         for (const qu of questionUpdates) {
-          if (qu.status === "pending") {
-            upsertPendingQuestionInCache(chatId, {
-              question_id: qu.question_id,
-              chat_id: qu.chat_id,
-              workflow_id: qu.workflow_id,
-              thread_id: qu.thread_id ?? "",
-              step_id: qu.step_id,
-              status: qu.status,
-              created_at: "",
-              metadata: qu.metadata,
-            });
-          } else if (qu.status === "resolved") {
-            removePendingQuestionFromCache(chatId, qu.question_id);
-          }
+          applyQuestionUpdate(chatId, qu);
         }
 
         // Thread updates live in threadActivityStore (not chatStore). Merge
@@ -3624,12 +3612,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   setChatSyncPending: (chatId: string | null) => {
-    // Only cached content needs the indicator: a chat with nothing on screen
-    // shows its ordinary loading state instead.
-    const next =
-      chatId !== null && getMessagesFromCache(chatId).length > 0 ? chatId : null;
-    if (get().chatSyncPendingId === next) return;
-    set({ chatSyncPendingId: next });
+    // Recorded as the stream reports it, whatever is cached: whether the
+    // timeline has anything to cover is the timeline's call, and it changes
+    // as the cache fills (lib/timelineCatchUp).
+    if (get().chatSyncPendingId === chatId) return;
+    set({ chatSyncPendingId: chatId });
   },
 
   // Cancel chat - cancels all sessions in the chat
