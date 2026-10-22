@@ -2,15 +2,15 @@
 reliant's own `dev` environment: the whole product on THIS machine, as host
 processes, with no control plane and no container runtime.
 
-    forge env up dev      # migrate, then api + worker + gateway + web
+    forge env up dev      # migrate, then api + worker + gateway, and the web app
     forge env down dev    # stops this checkout's stack only
 
 WHAT RUNS. The three server roles (`reliant server api|worker|gateway`, the
 same entrypoints prod runs) under air, so each one rebuilds and restarts when
-a .go file changes; a `reliant db migrate up` job that gates them; and the Vite
-dev server for web/. Underneath, forge runs the infrastructure as supervised
-host processes (`forge.HostInfra`): postgres 16 (prod's major), NATS with
-JetStream, and the Temporal dev server. Nothing here needs docker or k3d, so
+a .go file changes; a `reliant db migrate up` job that gates them; and the
+frontends/web Vite dev server. Underneath, forge runs the infrastructure as
+supervised host processes (`forge.HostInfra`): postgres 16 (prod's major),
+NATS with JetStream, and the Temporal dev server. Nothing here needs docker or k3d, so
 it runs in a sandboxed cloud workspace and in a public clone that has no
 control-plane checkout.
 
@@ -51,10 +51,10 @@ worktrees never share a database, and `forge env down dev` stops only the
 checkout it runs in. `forge env devstack list` shows the blocks; `forge env
 devstack prune` reclaims a deleted worktree's.
 
-LOGS. `.forge/logs/dev/<workload>.log` in this checkout, named as in
-control-plane's stack: reliant-api-server.log, reliant-temporal-worker.log,
-daemon-gateway.log, reliant-web.log. Host infra logs to its data dir
-(.forge/hostinfra/<name>/<engine>.log).
+LOGS. `.forge/logs/dev/<workload>.log` in this checkout: reliant-api-server.log,
+reliant-temporal-worker.log and daemon-gateway.log (named as in
+control-plane's stack), and frontend_web.log (browser console included). Host
+infra logs to its data dir (.forge/hostinfra/<name>/<engine>.log).
 """
 
 import forge
@@ -97,44 +97,32 @@ _env = lambda w: fw.Workload -> {str:} {
 }
 
 # ── The web app ──────────────────────────────────────────────────────────────
-# The web app's directory, stated once: P9 moves it to frontends/web.
-#
-# It runs as a host PROCESS (`npm run dev`), not as a `forge.Frontend`. A
-# forge.Frontend at an in-tree path is also a forge CODEGEN target, and
-# `forge generate` would write forge's hooks, UI kit and buf template into
-# web/ — the adoption P9 does deliberately (`git mv web frontends/web`, R0).
-# Until then this stack only serves it. What that costs: forge's browser-
-# console mirror and its npm-install freshness check, which the
-# reliant-web-deps job below stands in for.
-_web_path = "web"
+# frontends/web, the forge-adopted Vite app: `forge env up` dev-serves it
+# (`npm run dev` on `port`), installs its node_modules when they are missing or
+# older than the lockfile, and mirrors its browser console into
+# .forge/logs/dev/frontend_web.log. Its name and path are the ones forge
+# already discovers on disk (`forge project frontends`), so this declaration
+# adds a runtime and a port, not a second identity for the same directory.
 _web_origin = "http://localhost:${ports.web}"
 
-_web_deps = fw.Workload {
-    name = "reliant-web-deps"
-    kind = "job"
-    command = ["npm", "install", "--no-audit", "--no-fund", "--loglevel=error"]
-    before = ["reliant-web"]
-    runtime = forge.OnHost {working_dir = _web_path}
-}
-
-_web = fw.Workload {
-    name = "reliant-web"
-    kind = "service"
-    command = ["npm", "run", "dev", "--", "--strictPort"]
-    runtime = forge.OnHost {working_dir = _web_path, listen_ports = [ports.web]}
-    env = {
-        # vite.config.ts reads PORT before FRONTEND_PORT.
-        PORT = str(ports.web)
-        # Vite proxies /reliant.v1.* and the terminal WebSocket here.
-        VITE_API_URL = "http://localhost:${ports.api}"
+_web = forge.Frontend {
+    name = "web"
+    type = "vite"
+    path = "frontends/web"
+    dev_runner = "npm"
+    port = ports.web
+    runtime = forge.OnHost {}
+    env_vars = [
+        # Vite proxies /reliant.v1.*, /health and the terminal WebSocket here.
+        forge.EnvVar {name = "VITE_API_URL", value = "http://localhost:${ports.api}"}
         # What the onboarding's `reliant daemon start` command dials.
-        VITE_GATEWAY_URL = "http://localhost:${ports.gateway}"
-        VITE_DISABLE_TLS = "true"
-        VITE_APP_URL = _web_origin
+        forge.EnvVar {name = "VITE_GATEWAY_URL", value = "http://localhost:${ports.gateway}"}
+        forge.EnvVar {name = "VITE_DISABLE_TLS", value = "true"}
+        forge.EnvVar {name = "VITE_APP_URL", value = _web_origin}
         # VITE_CONTROL_PLANE_API_URL is deliberately unset: the web app's one
         # control-plane gate (src/services/controlPlane/config.ts) then takes
         # its self-hosted path.
-    }
+    ]
 }
 
 # ── Bindings ─────────────────────────────────────────────────────────────────
@@ -170,7 +158,8 @@ _bundle = forge.Bundle {
     # This machine's own stack: forge creates everything it runs, so it may
     # hold plaintext dev secrets (FileSecrets).
     lifecycle = "local"
-    workloads = [_migrate, _api, _worker, _gateway, _web_deps, _web]
+    workloads = [_migrate, _api, _worker, _gateway]
+    frontends = [_web]
     infra = [
         forge.HostInfra {
             name = "postgres"
