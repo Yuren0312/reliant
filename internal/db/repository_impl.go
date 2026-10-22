@@ -114,24 +114,6 @@ func (r *Repo) CreateMessage(ctx context.Context, msg *Message) error {
 	return store.InsertMessage(ctx, r.ORM(), msg)
 }
 
-// CreateMessageIfNotExists creates a message record if it doesn't already exist (INSERT OR IGNORE).
-//
-// WARNING: Same caveats as CreateMessage - prefer SaveMessageToThread for most cases.
-// This is primarily for idempotent workflow activity implementations.
-func (r *Repo) CreateMessageIfNotExists(ctx context.Context, msg *Message) error {
-	if msg == nil {
-		return fmt.Errorf("message cannot be nil")
-	}
-	if msg.ID == "" {
-		return fmt.Errorf("message ID cannot be empty")
-	}
-	if msg.ChatID == "" {
-		return fmt.Errorf("message ChatID cannot be empty")
-	}
-	_, err := store.InsertMessageOnce(ctx, r.ORM(), msg)
-	return err
-}
-
 // CreateMessageOnce creates a message record unless a row already holds its id,
 // and reports which happened. Unlike CreateMessageIfNotExists the caller is
 // told, because a caller that lost the race must not go on to write the rest
@@ -260,7 +242,7 @@ func (r *Repo) saveMessageToThread(ctx context.Context, chatID, thread string, r
 		// Get the current context_sequence for the thread
 		// This ensures user messages are saved at the same context_sequence as other messages
 		// (important after compaction when context_sequence > 0)
-		contextSequence, err := r.GetMaxContextSequenceInThread(txCtx, thread)
+		contextSequence, err := r.getMaxContextSequenceInThread(txCtx, thread)
 		if err != nil {
 			return fmt.Errorf("failed to get context sequence: %w", err)
 		}
@@ -493,9 +475,12 @@ func (r *Repo) GetNextOrdinal(ctx context.Context, threadID string) (int64, erro
 	return store.NextOrdinalInThread(ctx, r.ORM(), threadID)
 }
 
-// GetNextSeq returns the next chat-global seq for a chat. See
-// 20260802000000_add_message_seq.sql for what seq is and why it exists
-// alongside the per-thread Ordinal.
+// GetNextSeq returns the next chat-global seq for a message being written to
+// threadID in chatID. threadID is required because a branched chat displays
+// inherited history it does not own; the allocator has to clear that
+// history's seqs or the branch restarts at 0 and new messages sort beneath
+// everything shown above them. See 20260802000000_add_message_seq.sql for
+// what seq is and why it exists alongside the per-thread Ordinal.
 func (r *Repo) GetNextSeq(ctx context.Context, chatID, threadID string) (int64, error) {
 	if chatID == "" {
 		return 0, fmt.Errorf("chat ID cannot be empty")
@@ -612,7 +597,7 @@ func (r *Repo) ThreadAwaitsReply(ctx context.Context, threadID string) (bool, er
 	return turn != nil && turn.Role == reliantv1.MessageRole_MESSAGE_ROLE_USER, nil
 }
 
-func (r *Repo) GetMaxContextSequenceInThread(ctx context.Context, threadID string) (int, error) {
+func (r *Repo) getMaxContextSequenceInThread(ctx context.Context, threadID string) (int, error) {
 	if threadID == "" {
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
@@ -797,32 +782,11 @@ func (r *Repo) ListContentBlocksForMessages(ctx context.Context, messageIDs []st
 	return store.ListContentBlocksForMessages(ctx, r.ORM(), messageIDs)
 }
 
-func (r *Repo) UpdateContentBlock(ctx context.Context, block *MessageContentBlock) error {
-	if block == nil {
-		return fmt.Errorf("content block cannot be nil")
-	}
-	if block.ID == "" {
-		return fmt.Errorf("content block ID cannot be empty")
-	}
-	return store.UpdateContentBlockBody(ctx, r.ORM(), block)
-}
-
 func (r *Repo) AppendToContentBlock(ctx context.Context, blockID string, delta string) error {
 	if blockID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
 	}
 	return store.AppendToContentBlock(ctx, r.ORM(), blockID, delta)
-}
-
-// AppendContentBlockDelta appends text delta to a content block's content field
-func (r *Repo) AppendContentBlockDelta(ctx context.Context, chatID string, blockID string, delta string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	if blockID == "" {
-		return fmt.Errorf("content block ID cannot be empty")
-	}
-	return store.AppendContentDelta(ctx, r.ORM(), blockID, delta)
 }
 
 // AppendToolInputDelta appends JSON delta to a content block's tool_input field
@@ -836,7 +800,7 @@ func (r *Repo) AppendToolInputDelta(ctx context.Context, chatID string, blockID 
 	return store.AppendToolInputDelta(ctx, r.ORM(), blockID, delta)
 }
 
-// UpdateMessage updates a message (implements Repository interface)
+// UpdateMessage updates a message.
 func (r *Repo) UpdateMessage(ctx context.Context, msg *Message) error {
 	if msg == nil {
 		return fmt.Errorf("message cannot be nil")
@@ -846,34 +810,6 @@ func (r *Repo) UpdateMessage(ctx context.Context, msg *Message) error {
 	}
 
 	return store.UpdateMessageUsage(ctx, r.ORM(), msg.ID, msg.TokenCount, msg.Cost)
-}
-
-// UpdateMessageFields updates a message with the provided map of field updates
-func (r *Repo) UpdateMessageFields(ctx context.Context, messageID string, updates map[string]interface{}) error {
-	if messageID == "" {
-		return fmt.Errorf("message ID cannot be empty")
-	}
-	return store.UpdateMessageFields(ctx, r.ORM(), messageID, updates)
-}
-
-// MarkMessageBlocksComplete marks all content blocks for a message as complete
-// This is called when streaming finishes to update timestamps
-// Note: streaming_state field has been removed - state is now computed from content blocks
-func (r *Repo) MarkMessageBlocksComplete(ctx context.Context, messageID string) error {
-	if messageID == "" {
-		return fmt.Errorf("message ID cannot be empty")
-	}
-
-	blocks, err := store.TouchMessageBlocks(ctx, r.ORM(), messageID)
-	if err != nil {
-		return fmt.Errorf("failed to mark blocks complete: %w", err)
-	}
-	if blocks > 0 {
-		logging.DebugContext(ctx, "Marked message blocks as complete",
-			"messageID", messageID,
-			"blocksUpdated", blocks)
-	}
-	return nil
 }
 
 // DeleteMessage deletes a message and cascades to content blocks (ON DELETE CASCADE)
@@ -1520,6 +1456,9 @@ func (r *Repo) ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment
 }
 
 // ListAllDaemonAttachments returns every attachment row regardless of source.
+// Used by the gateway's /flow-health endpoint, which cross-checks the rows
+// against the streams it actually holds — the rows alone cannot say whether a
+// daemon is still expected to be there.
 func (r *Repo) ListAllDaemonAttachments(ctx context.Context) ([]*DaemonAttachment, error) {
 	return store.ListAllDaemonAttachments(ctx, r.ORM())
 }
@@ -1571,7 +1510,9 @@ func (r *Repo) GetProjectConfigRecord(ctx context.Context, projectID string) (*P
 
 // GetProjectWorkflowsJSON reads one column of the project config record: the
 // synced .reliant/workflows. It returns sql.ErrNoRows, unwrapped, when the
-// project has no record.
+// project has no record. Prefer it (and GetProjectPresetsJSON) to
+// GetProjectConfigRecord whenever that column is all a caller needs: the full
+// row carries every indexed skill body and can run to tens of MB.
 func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
@@ -1775,16 +1716,6 @@ func (r *Repo) ListReposByProject(ctx context.Context, projectID string) ([]*cor
 	return store.ListReposByProject(ctx, r.ORM(), projectID)
 }
 
-func (r *Repo) UpdateRepo(ctx context.Context, repo *core.Repo) error {
-	if repo == nil {
-		return fmt.Errorf("repo cannot be nil")
-	}
-	if repo.ID == "" {
-		return fmt.Errorf("repo ID cannot be empty")
-	}
-	return store.ReplaceRepo(ctx, r.ORM(), repo)
-}
-
 func (r *Repo) DeleteRepo(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("repo ID cannot be empty")
@@ -1859,19 +1790,7 @@ func (r *Repo) DeleteSetting(ctx context.Context, id string) error {
 
 // ==================== Settings Helper Methods ====================
 
-func (r *Repo) GetStringOrDefault(ctx context.Context, userID string, projectID *string, key, defaultVal string) (string, error) {
-	setting, err := r.GetSetting(ctx, userID, projectID, key)
-	if err != nil {
-		// If setting not found, return default
-		if svcerr.IsNotFound(err) {
-			return defaultVal, nil
-		}
-		return "", err
-	}
-	return setting.Value, nil
-}
-
-func (r *Repo) GetBoolOrDefault(ctx context.Context, userID string, projectID *string, key string, defaultVal bool) (bool, error) {
+func (r *Repo) getBoolOrDefault(ctx context.Context, userID string, projectID *string, key string, defaultVal bool) (bool, error) {
 	setting, err := r.GetSetting(ctx, userID, projectID, key)
 	if err != nil {
 		// If setting not found, return default
@@ -1887,52 +1806,12 @@ func (r *Repo) GetBoolOrDefault(ctx context.Context, userID string, projectID *s
 	return val, nil
 }
 
-func (r *Repo) GetIntOrDefault(ctx context.Context, userID string, projectID *string, key string, defaultVal int) (int, error) {
-	setting, err := r.GetSetting(ctx, userID, projectID, key)
-	if err != nil {
-		// If setting not found, return default
-		if svcerr.IsNotFound(err) {
-			return defaultVal, nil
-		}
-		return 0, err
-	}
-	val, err := strconv.Atoi(setting.Value)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse int value: %w", err)
-	}
-	return val, nil
-}
-
-func (r *Repo) GetFloatOrDefault(ctx context.Context, userID string, projectID *string, key string, defaultVal float64) (float64, error) {
-	setting, err := r.GetSetting(ctx, userID, projectID, key)
-	if err != nil {
-		// If setting not found, return default
-		if svcerr.IsNotFound(err) {
-			return defaultVal, nil
-		}
-		return 0, err
-	}
-	val, err := strconv.ParseFloat(setting.Value, 64)
-	if err != nil {
-		return 0, fmt.Errorf("failed to parse float value: %w", err)
-	}
-	return val, nil
-}
-
 func (r *Repo) SetString(ctx context.Context, userID string, projectID *string, key, value string) error {
 	return r.upsertSetting(ctx, userID, projectID, key, value, "string")
 }
 
-func (r *Repo) SetBool(ctx context.Context, userID string, projectID *string, key string, value bool) error {
+func (r *Repo) setBool(ctx context.Context, userID string, projectID *string, key string, value bool) error {
 	return r.upsertSetting(ctx, userID, projectID, key, strconv.FormatBool(value), "bool")
-}
-
-func (r *Repo) SetInt(ctx context.Context, userID string, projectID *string, key string, value int) error {
-	return r.upsertSetting(ctx, userID, projectID, key, strconv.Itoa(value), "int")
-}
-
-func (r *Repo) SetFloat(ctx context.Context, userID string, projectID *string, key string, value float64) error {
-	return r.upsertSetting(ctx, userID, projectID, key, strconv.FormatFloat(value, 'f', -1, 64), "float")
 }
 
 func (r *Repo) upsertSetting(ctx context.Context, userID string, projectID *string, key, value, valueType string) error {
@@ -2026,21 +1905,6 @@ func (r *Repo) SetVisibilityOverride(ctx context.Context, userID string, itemTyp
 	return store.SetVisibilityOverride(ctx, r.ORM(), userID, reliantv1.HiddenItemType(itemType), slug, isVisible)
 }
 
-// DeleteVisibilityOverride removes a user's visibility override, reverting to default.
-func (r *Repo) DeleteVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string) error {
-	if userID == "" {
-		return fmt.Errorf("user_id cannot be empty")
-	}
-	if itemType != 1 && itemType != 2 { // HIDDEN_ITEM_TYPE_WORKFLOW=1, HIDDEN_ITEM_TYPE_PRESET=2
-		return fmt.Errorf("item_type must be WORKFLOW (1) or PRESET (2)")
-	}
-	if slug == "" {
-		return fmt.Errorf("slug cannot be empty")
-	}
-
-	return store.RemoveVisibilityOverride(ctx, r.ORM(), userID, reliantv1.HiddenItemType(itemType), slug)
-}
-
 // GetItemDefault returns the system default visibility for an item.
 func (r *Repo) GetItemDefault(ctx context.Context, itemType int32, slug string) (*ItemDefault, error) {
 	if itemType != 1 && itemType != 2 { // HIDDEN_ITEM_TYPE_WORKFLOW=1, HIDDEN_ITEM_TYPE_PRESET=2
@@ -2060,28 +1924,6 @@ func (r *Repo) ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]st
 	}
 
 	return store.ListHiddenItemDefaults(ctx, r.ORM(), itemType)
-}
-
-// IsItemVisible determines if an item should be visible to a user.
-// Priority: user override > system default > visible (if no default exists)
-func (r *Repo) IsItemVisible(ctx context.Context, userID string, itemType int32, slug string) (bool, error) {
-	// Check user override first
-	override, err := r.GetVisibilityOverride(ctx, userID, itemType, slug)
-	if err != nil {
-		return false, err
-	}
-	if override != nil {
-		return *override, nil
-	}
-
-	// Check system default
-	itemDefault, err := r.GetItemDefault(ctx, itemType, slug)
-	if err == nil && itemDefault != nil {
-		return !itemDefault.IsHidden, nil
-	}
-
-	// No override or default = visible
-	return true, nil
 }
 
 // GetDefaultPresetAssignments returns the default preset assignments for a workflow.
@@ -2140,14 +1982,6 @@ func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, e
 	return store.ListPlansByChatID(ctx, r.ORM(), chatID)
 }
 
-func (r *Repo) ListPlansByProject(ctx context.Context, projectID string) ([]*Plan, error) {
-	if projectID == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-
-	return store.ListPlansByProject(ctx, r.ORM(), projectID)
-}
-
 func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
 	if plan == nil {
 		return fmt.Errorf("plan cannot be nil")
@@ -2157,14 +1991,6 @@ func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
 	}
 
 	return store.ReplacePlan(ctx, r.ORM(), plan)
-}
-
-func (r *Repo) UpdatePlanStatus(ctx context.Context, id string, status int32, completedAt *time.Time) error {
-	if id == "" {
-		return fmt.Errorf("plan ID cannot be empty")
-	}
-
-	return store.UpdatePlanStatus(ctx, r.ORM(), id, status, completedAt)
 }
 
 func (r *Repo) DeletePlan(ctx context.Context, id string) error {
@@ -2222,36 +2048,6 @@ func (r *Repo) ListTasksByPlan(ctx context.Context, planID string) ([]*Task, err
 	return store.ListTasksByPlan(ctx, r.ORM(), planID)
 }
 
-func (r *Repo) ListTasksByParent(ctx context.Context, parentID string) ([]*Task, error) {
-	if parentID == "" {
-		return nil, fmt.Errorf("parent ID cannot be empty")
-	}
-
-	// We need to get all tasks and filter by parent
-	// This is inefficient but works without a custom query
-	return nil, fmt.Errorf("ListTasksByParent not implemented - needs custom query or plan ID")
-}
-
-func (r *Repo) ListRootTasksByPlan(ctx context.Context, planID string) ([]*Task, error) {
-	if planID == "" {
-		return nil, fmt.Errorf("plan ID cannot be empty")
-	}
-
-	// Get all tasks and filter for root tasks (no parent)
-	allTasks, err := r.ListTasksByPlan(ctx, planID)
-	if err != nil {
-		return nil, err
-	}
-
-	rootTasks := []*Task{}
-	for _, task := range allTasks {
-		if task.ParentTaskID == nil {
-			rootTasks = append(rootTasks, task)
-		}
-	}
-	return rootTasks, nil
-}
-
 func (r *Repo) GetTaskStatsByPlan(ctx context.Context, planID string) (*TaskStats, error) {
 	if planID == "" {
 		return nil, fmt.Errorf("plan ID cannot be empty")
@@ -2297,20 +2093,6 @@ func (r *Repo) UpdateTask(ctx context.Context, task *Task) error {
 	}
 
 	return store.ReplaceTask(ctx, r.ORM(), task)
-}
-
-func (r *Repo) UpdateTaskStatus(ctx context.Context, id string, status int32, completedAt *time.Time) error {
-	if id == "" {
-		return fmt.Errorf("task ID cannot be empty")
-	}
-
-	// If marking as completed, set completedAt if not provided
-	if completedAt == nil && status == int32(TaskStatusCompleted) {
-		now := time.Now()
-		completedAt = &now
-	}
-
-	return store.UpdateTaskStatus(ctx, r.ORM(), id, status, completedAt)
 }
 
 func (r *Repo) DeleteTask(ctx context.Context, id string) error {
@@ -2363,13 +2145,6 @@ func (r *Repo) ListDependenciesByPlan(ctx context.Context, planID string) ([]*Ta
 	return store.ListDependenciesByPlan(ctx, r.ORM(), planID)
 }
 
-func (r *Repo) DeleteTaskDependency(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("dependency ID cannot be empty")
-	}
-	return store.RemoveTaskDependency(ctx, r.ORM(), id)
-}
-
 func (r *Repo) DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTaskID string, depType int32) error {
 	if fromTaskID == "" || toTaskID == "" || depType == 0 {
 		return fmt.Errorf("from_task_id, to_task_id, and dependency_type are required")
@@ -2414,13 +2189,6 @@ func (r *Repo) UpdateBackgroundProcessStatus(ctx context.Context, id string, sta
 		return fmt.Errorf("process ID cannot be empty")
 	}
 	return store.SetBackgroundProcessStatus(ctx, r.ORM(), id, status, exitCode, endedAt)
-}
-
-func (r *Repo) UpdateBackgroundProcessPID(ctx context.Context, id string, pid int, signature string) error {
-	if id == "" {
-		return fmt.Errorf("process ID cannot be empty")
-	}
-	return store.SetBackgroundProcessPID(ctx, r.ORM(), id, pid, signature)
 }
 
 func (r *Repo) GetRunningBackgroundProcesses(ctx context.Context) ([]*BackgroundProcess, error) {
@@ -2531,7 +2299,7 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 	}
 
 	// Get current context sequence for the thread
-	contextSeq, err := r.GetMaxContextSequenceInThread(ctx, thread)
+	contextSeq, err := r.getMaxContextSequenceInThread(ctx, thread)
 	if err != nil {
 		logging.WarnContext(ctx, "[GetThreadTokenCount] Error getting context sequence",
 			"thread", thread,
@@ -2595,7 +2363,7 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 func (r *Repo) getThreadTokenCountDirect(ctx context.Context, chatID, thread string, maxSeq *int64) (int64, error) {
 	_ = chatID // kept for API compatibility
 
-	contextSeq, err := r.GetMaxContextSequenceInThread(ctx, thread)
+	contextSeq, err := r.getMaxContextSequenceInThread(ctx, thread)
 	if err != nil {
 		contextSeq = 0
 	}
@@ -2623,7 +2391,7 @@ func (r *Repo) GetContextUsage(ctx context.Context, chatID, thread string) (*Con
 	}
 
 	// Get current context sequence
-	contextSeq, err := r.GetMaxContextSequenceInThread(ctx, thread)
+	contextSeq, err := r.getMaxContextSequenceInThread(ctx, thread)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get max context sequence: %w", err)
 	}
@@ -2646,7 +2414,7 @@ func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread stri
 		return models.UnknownModelCompactionFloor
 	}
 
-	contextSeq, err := r.GetMaxContextSequenceInThread(ctx, thread)
+	contextSeq, err := r.getMaxContextSequenceInThread(ctx, thread)
 	if err != nil {
 		contextSeq = 0
 	}
@@ -2807,25 +2575,47 @@ func (r *Repo) UpdateWorkflowName(ctx context.Context, id string, workflowName s
 	return store.RenamePendingWorkflow(ctx, r.ORM(), id, workflowName)
 }
 
-// CascadeTerminalStatusToDescendants moves every descendant workflow record
-// owned by a parent to the terminal status the parent itself reached. Called
-// when a workflow ends, to drain the children (spawn children, thread records,
-// etc.) that are still running or paused.
+// CascadeTerminalStatusToDescendants moves every running/paused descendant
+// workflow record owned by a parent to the terminal status the parent itself
+// reached. Called when a workflow ends, to drain the children (spawn
+// children, thread records, etc.) that are still running or paused. The
+// caller passes what actually happened: a descendant of a cancelled run is
+// cancelled, not completed, and a supervision surface that counts completed
+// units must not be handed a terminated subtree to count.
 func (r *Repo) CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason WorkflowStopReason) error {
 	return store.CascadeTerminalStatusToDescendants(ctx, r.ORM(), parentWorkflowID, reason)
 }
 
-// ReapOrphanedWorkflowDescendants ends running/paused workflows whose parent is
-// already terminal, at the terminal ancestor's status, returning the rows
-// repaired. See the Repository interface for why the backstop is needed.
+// ReapOrphanedWorkflowDescendants ends every running/paused workflow whose
+// parent is already terminal — at the terminal ancestor's own status — and
+// returns the rows it moved. The backstop for a write path that reached
+// a terminal status without cascading (every TerminateWorkflow path does: a
+// hard kill skips the workflow's own completion handler). Nothing else
+// revisits those rows — the reconciler skips workflows with a parent_id — so
+// without this they are reported as running forever.
 func (r *Repo) ReapOrphanedWorkflowDescendants(ctx context.Context) ([]ReapedWorkflow, error) {
 	return store.ReapOrphanedWorkflowDescendants(ctx, r.ORM())
 }
 
-// ReviveSubtreeLiveAt brings a reset-and-replayed run's subtree back to life:
-// every descendant workflow row that was live at the reset point, the threads
-// those rows own, and the root's own thread. See the Repository interface for
-// why a resume has to do this, and internal/store/workflow_repo_ext.go
+// ReviveSubtreeLiveAt is the inverse of the two terminal cascades for a
+// subtree that is coming BACK: after a reset-and-replay, every descendant
+// workflow row that was live at the reset point returns to active, along with
+// the threads those rows own and the root's own thread. Returns how many of
+// each it moved.
+//
+// A resume must revive what it resumes. Sub-agents run INLINE in the root's
+// single Temporal execution but own their own rows, so killing the root
+// stamped them failed — and replay rebuilds those same sub-agents WITHOUT
+// re-running the "started" activity that is the only other write which moves
+// a row back to running (it is in the replayed history). Without this call
+// the chat resumes with live agents whose rows read failed, and the
+// reconciler's stranded-spawn sweep then writes false "the parent had already
+// exited" reports against them. Measured: six of each,
+// dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
+//
+// `at` is the reset point's event time; it is what separates work the new run
+// will redo from work it will only replay. Paused rows are out of scope
+// (ResumeWorkflowsByChat owns those). See internal/store/workflow_repo_ext.go
 // (reviveSubtreeLiveAtSQL) for the predicate and for why both halves are a
 // single atomic statement.
 func (r *Repo) ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, at time.Time) (workflowsRevived, threadsRevived int64, err error) {
@@ -2851,14 +2641,6 @@ func (r *Repo) ResumeWorkflowsByChat(ctx context.Context, chatID string) error {
 		}
 		return r.emitChatActivityIfChanged(txCtx, chatID)
 	})
-}
-
-func (r *Repo) DeleteWorkflow(ctx context.Context, id string) error {
-	return store.RemoveWorkflow(ctx, r.ORM(), id)
-}
-
-func (r *Repo) DeleteWorkflowsByChat(ctx context.Context, chatID string) error {
-	return store.RemoveChatWorkflows(ctx, r.ORM(), chatID)
 }
 
 // ==================== Triggers ====================
@@ -3250,20 +3032,8 @@ func (r *Repo) GetStepExecutionsByWorkflow(ctx context.Context, workflowID strin
 	return store.ListWorkflowStepExecutions(ctx, r.ORM(), workflowID)
 }
 
-func (r *Repo) GetStepExecutionsByStep(ctx context.Context, workflowID, stepID string) ([]*StepExecution, error) {
-	return store.ListStepExecutionsByStep(ctx, r.ORM(), workflowID, stepID)
-}
-
-func (r *Repo) DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error {
-	return store.RemoveWorkflowStepExecutions(ctx, r.ORM(), workflowID)
-}
-
 func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error) {
 	return store.ListWorkflowsByStatus(ctx, r.ORM(), status)
-}
-
-func (r *Repo) ListRootWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error) {
-	return store.ListRootWorkflowsByStatus(ctx, r.ORM(), status)
 }
 
 // ==================== Workflow Checkpoints ====================
@@ -3285,18 +3055,6 @@ func (r *Repo) GetWorkflowCheckpoint(ctx context.Context, workflowID string) (*W
 
 func (r *Repo) DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error {
 	return store.ClearWorkflowCheckpoint(ctx, r.ORM(), workflowID)
-}
-
-// UpdateWorkflowWorkerStarted records when a worker was started for a workflow.
-// This is used by the reconciler to skip stuck-check for recently started workers.
-func (r *Repo) UpdateWorkflowWorkerStarted(ctx context.Context, workflowID string) error {
-	return store.MarkWorkflowWorkerStarted(ctx, r.ORM(), workflowID)
-}
-
-// UpdateWorkflowWorkerStopped records when a worker was stopped for a workflow.
-// This tracks the worker lifecycle for pause/resume scenarios.
-func (r *Repo) UpdateWorkflowWorkerStopped(ctx context.Context, workflowID string) error {
-	return store.MarkWorkflowWorkerStopped(ctx, r.ORM(), workflowID)
 }
 
 // ==================== Threads ====================
@@ -3324,13 +3082,6 @@ func (r *Repo) GetThread(ctx context.Context, id string) (*Thread, error) {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 	return store.GetThread(ctx, r.ORM(), id)
-}
-
-func (r *Repo) GetThreadByWorkflow(ctx context.Context, workflowID string) (*Thread, error) {
-	if workflowID == "" {
-		return nil, fmt.Errorf("workflow ID cannot be empty")
-	}
-	return store.GetThreadByWorkflow(ctx, r.ORM(), workflowID)
 }
 
 func (r *Repo) GetRootThread(ctx context.Context, chatID string) (*Thread, error) {
@@ -3368,13 +3119,6 @@ func (r *Repo) UpdateThreadWorkflow(ctx context.Context, threadID, workflowID st
 	return store.UpdateThreadWorkflow(ctx, r.ORM(), threadID, workflowID)
 }
 
-func (r *Repo) UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtMessageID *string) (*Thread, error) {
-	if threadID == "" {
-		return nil, fmt.Errorf("thread ID cannot be empty")
-	}
-	return store.UpdateThreadForkPoint(ctx, r.ORM(), threadID, forkAtMessageID)
-}
-
 func (r *Repo) UpdateThreadStatus(ctx context.Context, threadID string, status ThreadStatus, completedAt *time.Time) (*Thread, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
@@ -3391,8 +3135,15 @@ func (r *Repo) UpdateThreadStatus(ctx context.Context, threadID string, status T
 }
 
 // ReviveThread moves a terminal thread back to running because a new run has
-// started on it. See the Repository interface for why a reused main thread
-// needs the inverse of the terminal cascade.
+// started on it, and clears the completed_at of the turn that ended. The
+// inverse of CascadeTerminalStatusToThreadSubtree, and the missing half of
+// the thread lifecycle: a chat's main thread is reused for every turn, so the
+// "started" write that revives the WORKFLOW row must revive the THREAD row
+// with it. Without this, every chat from its second turn onward ran with a
+// live workflow behind a thread still reading completed — which is what made
+// SendAgentMessage refuse a working agent with "This agent has already
+// finished". Returns the number of rows moved; 0 means the thread was not
+// terminal (a no-op, not an error).
 func (r *Repo) ReviveThread(ctx context.Context, threadID string) (int64, error) {
 	if threadID == "" {
 		return 0, fmt.Errorf("thread ID cannot be empty")
@@ -3402,10 +3153,21 @@ func (r *Repo) ReviveThread(ctx context.Context, threadID string) (int64, error)
 
 // CascadeTerminalStatusToThreadSubtree closes every thread owned by
 // workflowID or any of its descendants to the terminal status the workflow
-// subtree just reached. See the Repository interface for why this exists
-// alongside CascadeTerminalStatusToDescendants. Takes the same stop reason
-// those callers pass to CascadeTerminalStatusToDescendants — the two calls are
-// meant to travel together at every site.
+// subtree just reached — the thread-lifecycle counterpart of
+// CascadeTerminalStatusToDescendants. threads.status is otherwise written
+// ONLY by ThreadStatusActivity on the live path, so a workflow ending
+// abnormally (terminate, reap, any write path that forgets this call) leaves
+// its thread at running (2) forever. Measured on the live DB: 288 threads
+// stranded this way (see dev-docs/incidents/2026-08-12-spawn-history-cap.md),
+// which also makes their own orphaned mailboxes invisible to
+// ListThreadsWithOrphanedAgentMessages (it only matches threads already in a
+// terminal status). A subtree that completed or was cancelled has its pending
+// questions closed with its threads (question_close.go), as
+// UpdateThreadStatus and ReapOrphanedThreads do for the same statuses.
+//
+// It takes the same stop reason the callers pass to
+// CascadeTerminalStatusToDescendants — the two calls are meant to travel
+// together at every site.
 //
 // A non-terminal reason (PAUSED) is a no-op: a parked run's threads must keep
 // reading as live, or message delivery into them starts being refused.
@@ -3431,9 +3193,11 @@ func (r *Repo) CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflo
 	return nil
 }
 
-// ReapOrphanedThreads ends running/paused threads whose workflow is already
-// terminal, at the workflow's own status, returning the rows repaired. See
-// the Repository interface for why the backstop is needed.
+// ReapOrphanedThreads ends every running/paused thread whose workflow is
+// already terminal, at the workflow's own status, and returns the rows it
+// moved. The backstop for a write path that reached a terminal workflow
+// status without cascading to the thread — it mirrors
+// ReapOrphanedWorkflowDescendants for the same reason.
 func (r *Repo) ReapOrphanedThreads(ctx context.Context) ([]ReapedThread, error) {
 	reaped, err := store.ReapOrphanedThreads(ctx, r.ORM())
 	if err != nil || len(reaped) == 0 {
@@ -3458,20 +3222,6 @@ func (r *Repo) ListThreadsByOrigin(ctx context.Context, conversationID string, o
 		return nil, fmt.Errorf("conversation ID cannot be empty")
 	}
 	return store.ListThreadsByOrigin(ctx, r.ORM(), conversationID, origin)
-}
-
-func (r *Repo) DeleteThread(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("thread ID cannot be empty")
-	}
-	return store.RemoveThread(ctx, r.ORM(), id)
-}
-
-func (r *Repo) DeleteThreadsByConversation(ctx context.Context, chatID string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.DeleteThreadsByConversation(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) CountThreadsInConversation(ctx context.Context, chatID string) (int64, error) {
@@ -3551,20 +3301,6 @@ func (r *Repo) SetCompactionSummaryMessage(ctx context.Context, cwID, messageID 
 		return nil, fmt.Errorf("context window ID cannot be empty")
 	}
 	return store.SetCompactionSummaryMessage(ctx, r.ORM(), cwID, messageID)
-}
-
-func (r *Repo) DeleteContextWindow(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("context window ID cannot be empty")
-	}
-	return store.RemoveContextWindow(ctx, r.ORM(), id)
-}
-
-func (r *Repo) DeleteContextWindowsByThread(ctx context.Context, threadID string) error {
-	if threadID == "" {
-		return fmt.Errorf("thread ID cannot be empty")
-	}
-	return store.DeleteContextWindowsByThread(ctx, r.ORM(), threadID)
 }
 
 // ==================== Workflow Drafts ==
@@ -3682,10 +3418,6 @@ func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) 
 	return store.FindWorkflowDraftByName(ctx, r.ORM(), userID, name)
 }
 
-func (r *Repo) GetWorkflowDraftBySourcePath(ctx context.Context, userID, sourcePath string) (*WorkflowDraft, error) {
-	return store.FindWorkflowDraftBySourcePath(ctx, r.ORM(), userID, sourcePath)
-}
-
 // GetUsableWorkflowBySlug returns the runnable (complete, visible) workflow
 // with this slug, or (nil, nil) when there is none. A visible DRAFT with the
 // slug is reported as *WorkflowDraftNotRunnableError rather than hidden behind
@@ -3762,22 +3494,6 @@ func (r *Repo) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden b
 	return saved, nil
 }
 
-// DeleteWorkflowDraft publishes {"deleted": true} with the deleted draft's
-// id/slug/last version, built from DELETE ... RETURNING so the read and the
-// delete are one atomic statement. Deleting a missing draft is a silent no-op.
-func (r *Repo) DeleteWorkflowDraft(ctx context.Context, id string) error {
-	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		deleted, err := store.RemoveWorkflowDraft(txCtx, r.ORM(), id)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		return r.publishWorkflowDraftUpdated(txCtx, deleted, true)
-	})
-}
-
 func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
 		deleted, err := store.RemoveWorkflowDraftBySlug(txCtx, r.ORM(), userID, slug)
@@ -3793,10 +3509,6 @@ func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug strin
 
 func (r *Repo) WorkflowSlugExists(ctx context.Context, userID, slug string) (bool, error) {
 	return store.WorkflowSlugExists(ctx, r.ORM(), userID, slug)
-}
-
-func (r *Repo) CountWorkflowDraftsByUser(ctx context.Context, userID string) (int64, error) {
-	return store.CountUserWorkflowDrafts(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*WorkflowDraft, error) {
@@ -3861,14 +3573,6 @@ func (r *Repo) DeletePreset(ctx context.Context, id string) error {
 	return store.RemovePreset(ctx, r.ORM(), id)
 }
 
-func (r *Repo) DeletePresetBySlug(ctx context.Context, userID, slug string) error {
-	return store.DeletePresetBySlug(ctx, r.ORM(), userID, slug)
-}
-
-func (r *Repo) DeletePresetBySlugAndProject(ctx context.Context, userID, slug, projectID string) error {
-	return store.DeletePresetBySlugAndProject(ctx, r.ORM(), userID, slug, projectID)
-}
-
 // ==================== Workflow Scenario Repository ====================
 
 func (r *Repo) CreateWorkflowScenario(ctx context.Context, scenario *WorkflowScenario) error {
@@ -3890,10 +3594,6 @@ func (r *Repo) ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID
 	return store.ListDraftWorkflowScenarios(ctx, r.ORM(), workflowDraftID)
 }
 
-func (r *Repo) ListWorkflowScenariosByUser(ctx context.Context, userID string) ([]*WorkflowScenario, error) {
-	return store.ListUserWorkflowScenarios(ctx, r.ORM(), userID)
-}
-
 func (r *Repo) UpdateWorkflowScenario(ctx context.Context, scenario *WorkflowScenario) error {
 	if scenario == nil {
 		return fmt.Errorf("scenario cannot be nil")
@@ -3907,10 +3607,6 @@ func (r *Repo) UpdateWorkflowScenarioResult(ctx context.Context, id string, stat
 
 func (r *Repo) DeleteWorkflowScenario(ctx context.Context, id string) error {
 	return store.RemoveWorkflowScenario(ctx, r.ORM(), id)
-}
-
-func (r *Repo) DeleteWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) error {
-	return store.RemoveDraftWorkflowScenarios(ctx, r.ORM(), workflowDraftID)
 }
 
 // ==================== Command Favorites ====================
@@ -3986,19 +3682,19 @@ func (r *Repo) EnableCredentialSealing(sealer CredentialSealer) {
 	r.accounts.SetSealer(sealer)
 }
 
-// BackfillAPIKeys seals legacy plaintext api_keys rows. Idempotent; returns the
+// backfillAPIKeys seals legacy plaintext api_keys rows. Idempotent; returns the
 // number of rows sealed. Requires EnableCredentialSealing.
-func (r *Repo) BackfillAPIKeys(ctx context.Context, batch int) (int, error) {
+func (r *Repo) backfillAPIKeys(ctx context.Context, batch int) (int, error) {
 	return r.apiKeys.BackfillAPIKeys(ctx, batch)
 }
 
-// CountUnsealedAPIKeys returns count(api_keys WHERE api_key_sealed IS NULL).
-func (r *Repo) CountUnsealedAPIKeys(ctx context.Context) (int64, error) {
+// countUnsealedAPIKeys returns count(api_keys WHERE api_key_sealed IS NULL).
+func (r *Repo) countUnsealedAPIKeys(ctx context.Context) (int64, error) {
 	return r.apiKeys.CountUnsealedAPIKeys(ctx)
 }
 
-// ValidateAPIKeysSealedConstraint validates the api_key_sealed NOT NULL check.
-func (r *Repo) ValidateAPIKeysSealedConstraint(ctx context.Context) error {
+// validateAPIKeysSealedConstraint validates the api_key_sealed NOT NULL check.
+func (r *Repo) validateAPIKeysSealedConstraint(ctx context.Context) error {
 	return r.apiKeys.ValidateAPIKeysSealedConstraint(ctx)
 }
 
