@@ -504,7 +504,9 @@ func TestDisableWorkflowReportsAFailureAndPausesTheRest(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Failed, 2)
 	for _, f := range resp.Msg.Failed {
-		assert.Contains(t, f.Message, "temporal")
+		// The schedule backend's own text is server-side: the person reads
+		// what failed, and the log reads why.
+		assert.Equal(t, "the schedule backend is unavailable", f.Message)
 		assert.NotEmpty(t, f.TriggerId)
 	}
 	require.Len(t, resp.Msg.Paused, 1, "the webhook pauses though the others could not")
