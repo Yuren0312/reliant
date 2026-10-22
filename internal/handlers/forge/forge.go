@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemoncmd"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/version"
 )
 
@@ -286,10 +287,9 @@ func (s *Service) forgeProject(ctx context.Context, projectID, userID string) (*
 	}
 	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
-			return nil, svcerr.ToConnect(svcerr.NotFound("project"))
-		}
-		return nil, svcerr.ToConnect(svcerr.Internal("database error"))
+		// The store's NotFound (core.ErrProjectNotFound) covers a project that
+		// does not exist and one that is someone else's alike.
+		return nil, svcerr.WrapOr(err, svcerr.Internal("database error"))
 	}
 	return project, nil
 }
@@ -405,42 +405,50 @@ func (s *Service) forgeDispatch(
 // and a reader files a bug against us for what is almost always a project the
 // user can fix. FailedPrecondition is gRPC's "do not retry until the system's
 // state has been fixed", which is exactly the situation, and it is the same
-// call daemonerr.OutdatedConnectError makes for version skew. Unavailable, the old
+// call daemonerr.Outdated makes for version skew. Unavailable, the old
 // answer, was the worst of the three: the UI read it as "your daemon is
 // offline" and retried a failure that retrying cannot change.
 //
-// It is applied in THIS package rather than taught to daemonerr.DispatchConnectError
+// It is applied in THIS package rather than taught to daemonerr
 // because the markers are forge's wire contract with its own daemon commands
 // (see the constants above); the shared mapper stays ignorant of every command
 // family's prefixes. Every forge dispatch — the shared envelope and the three
 // that dispatch directly — routes through here, so the classification cannot
 // differ between RPCs of the same surface.
 //
-// The message is carried over verbatim from the shared mapper's error. It was
-// built from the daemon's text alone, and on the secret path the daemon has
-// already withheld forge's stderr, so re-classifying adds nothing to it.
+// The message is carried over verbatim from the shared mapper's: what a client
+// reads of err (svcerr.ToConnect), which is the daemon's text and never the
+// router's. On the secret path the daemon has already withheld forge's stderr,
+// so re-classifying adds nothing to it. err stays the logged cause.
 func remapForgeDispatchError(commandType string, err error) error {
-	if connect.CodeOf(err) != connect.CodeUnavailable {
+	if svcerr.Code(err) != connect.CodeUnavailable {
 		return err
 	}
-	text := err.Error()
-	message := text
-	var connectErr *connect.Error
-	if errors.As(err, &connectErr) {
-		message = connectErr.Message()
-	}
+	text := forgeDaemonText(err)
+	message := svcerr.ToConnect(err).Message()
 	switch {
 	case strings.Contains(text, forgeErrProjectDirNotExistMarker):
-		return svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("forge project path not found on the daemon: %s", commandType)))
+		return svcerr.WithCause(svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("forge project path not found on the daemon: %s", commandType)), err)
 	case strings.Contains(text, forgeErrCommandTimedOutMarker):
 		// The daemon answered: forge ran out of this command's budget. Not
 		// an outage (Unavailable reads as "daemon offline") and not a
 		// project defect (FailedPrecondition): a deadline.
-		return connect.NewError(connect.CodeDeadlineExceeded, errors.New(message))
+		return svcerr.WithCause(svcerr.DeadlineExceeded(message), err)
 	case strings.Contains(text, forgeErrCommandFailedMarker):
-		return connect.NewError(connect.CodeFailedPrecondition, errors.New(message))
+		return svcerr.WithCause(svcerr.FailedPrecondition(message), err)
 	}
 	return err
+}
+
+// forgeDaemonText is the text forge's markers are matched in: the daemon's own
+// report when the router carried one (toolexec.DaemonReportedText), else err's
+// text. The markers are the daemon's words, so they survive either way, and
+// the router's words around them never decide a class.
+func forgeDaemonText(err error) string {
+	if text, ok := toolexec.DaemonReportedText(err); ok {
+		return text
+	}
+	return err.Error()
 }
 
 // isForgeClusterReadTimeout reports whether a dispatch failure was a timeout or
@@ -449,14 +457,19 @@ func remapForgeDispatchError(commandType string, err error) error {
 // Deliberately narrow. A missing project directory, an unregistered command or
 // a malformed reply are all real errors and must keep failing loudly — only a
 // deadline, which carries no information about the cluster's actual state, is
-// eligible to be reinterpreted as "unknown". Matching is by substring because
-// SendDaemonCommand flattens its failures into opaque error text (see
-// daemonerr.DispatchConnectError).
+// eligible to be reinterpreted as "unknown".
+//
+// The router's timeout is recognised by its sentinel (toolexec.ErrDaemonTimeout:
+// the machine did not answer before the NATS deadline) and by the code the
+// dispatch gave it, never by the router's words: daemonerr withholds those from
+// the error's text. The daemon's own words still decide the rest — forge's
+// "forge command timed out", or a deadline it reported — because
+// SendDaemonCommand carries a daemon's failure as text only.
 func isForgeClusterReadTimeout(err error) bool {
 	if err == nil {
 		return false
 	}
-	text := strings.ToLower(err.Error())
+	text := strings.ToLower(forgeDaemonText(err))
 
 	// Never reinterpret a substantive, separately-classified failure as a
 	// reachability verdict, even if its text happens to mention a timeout
@@ -466,11 +479,14 @@ func isForgeClusterReadTimeout(err error) bool {
 		return false
 	}
 
+	if toolexec.IsDaemonTimeout(err) || errors.Is(err, context.DeadlineExceeded) ||
+		svcerr.Code(err) == connect.CodeDeadlineExceeded {
+		return true
+	}
 	for _, marker := range []string{
-		"nats: timeout",             // NATS request deadline (distributed mode)
-		"context deadline exceeded", // caller/dispatch deadline
+		"context deadline exceeded", // a deadline the daemon reported
 		"deadlineexceeded",
-		"timed out",
+		"timed out", // forgeErrCommandTimedOutMarker, and forge's own timeouts
 	} {
 		if strings.Contains(text, marker) {
 			return true
@@ -933,14 +949,11 @@ func (s *Service) ApplyPromote(
 			Detail:                 reply.Refused.Detail,
 		}
 
-		connectErr := svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("promote refused, nothing was written: %s", reply.Refused.Detail)))
 		// The structured detail is what makes this recoverable without a blind
 		// retry. If it cannot be attached the error still stands — failing
-		// closed is the property that must not depend on the detail encoding.
-		if errDetail, detailErr := connect.NewErrorDetail(detail); detailErr == nil {
-			connectErr.AddDetail(errDetail)
-		}
-		return nil, connectErr
+		// closed is the property that must not depend on the detail encoding
+		// (svcerr.WithDetail attaches it best-effort).
+		return nil, svcerr.WithDetail(svcerr.FailedPrecondition(fmt.Sprintf("promote refused, nothing was written: %s", reply.Refused.Detail)), detail)
 	}
 
 	// Applied. report_json is the plan forge ACTUALLY applied, not the preview,
@@ -1138,7 +1151,7 @@ func forgeDeployRefusalReason(token string) reliantv1.ForgeDeployRefusalReason {
 // Shared by StartDeploy and StartDeployPlan: the two refuse for the same
 // reasons (the target token did not hold, a job is already in flight) and a
 // second copy would be the one that fell behind.
-func forgeDeployRefusedError(refused *forgeDeployRefusalReply) *connect.Error {
+func forgeDeployRefusedError(refused *forgeDeployRefusalReply) error {
 	detail := &reliantv1.ForgeDeployRefusal{
 		Reason:                  forgeDeployRefusalReason(refused.Reason),
 		Detail:                  refused.Detail,
@@ -1154,14 +1167,11 @@ func forgeDeployRefusedError(refused *forgeDeployRefusalReply) *connect.Error {
 		RunningHandle:           refused.RunningHandle,
 	}
 
-	connectErr := svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("deploy refused, nothing was applied: %s", refused.Detail)))
 	// The structured detail is what makes this recoverable without a blind
 	// retry against a cluster. If it cannot be attached the error still
-	// stands — failing closed must not depend on the detail encoding.
-	if errDetail, detailErr := connect.NewErrorDetail(detail); detailErr == nil {
-		connectErr.AddDetail(errDetail)
-	}
-	return connectErr
+	// stands — failing closed must not depend on the detail encoding
+	// (svcerr.WithDetail attaches it best-effort).
+	return svcerr.WithDetail(svcerr.FailedPrecondition(fmt.Sprintf("deploy refused, nothing was applied: %s", refused.Detail)), detail)
 }
 
 // PlanDeploy previews a deploy. APPLIES NOTHING.
