@@ -6,8 +6,7 @@
  * and that provider fetching wires through to the panel.
  */
 
-import { screen } from "@testing-library/react";
-import { renderWithQuery as render } from "../../../test/renderWithQuery";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({

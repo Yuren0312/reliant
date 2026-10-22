@@ -39,8 +39,6 @@ interface ChatSettingsPopoverProps {
   // Workflow tag info
   workflowTag?: string;
   groupTags?: Record<string, string>;
-  /** The chat these settings belong to; absent when they are a sub-agent's or a new chat's. */
-  chatId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +142,6 @@ export function ChatSettingsPopover({
   presets,
   selectedPreset,
   onPresetChange,
-  chatId,
 }: ChatSettingsPopoverProps) {
   const [currentPage, setCurrentPage] = useState<PageId>(initialPage);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -355,7 +352,6 @@ export function ChatSettingsPopover({
             onChange={handleModelChange}
             onBack={() => setCurrentPage("main")}
             onClose={onClose}
-            chatId={chatId}
           />
         )}
 

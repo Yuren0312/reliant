@@ -31,10 +31,6 @@ import {
   ListBranchesRequestSchema,
   SetChatDaemonRequestSchema,
   UpdateWorkflowParamsRequestSchema,
-  UpdateChatProviderPolicyRequestSchema,
-  ProviderPolicySchema,
-  type ProviderPolicy_OnLimit,
-  type ChatSelection,
   GetChatUpdatesRequestSchema,
   ListChatPlansRequestSchema,
   WorkspaceBranchContextSchema,
@@ -643,11 +639,10 @@ export const chatGrpc = {
   },
 
   // "Retry now" on a run held until a provider's usage limit resets. Resolves to
-  // whether a waiting run was woken. `useModel` ("<model>@<driver>") answers the
-  // wait with a cross-provider fallback instead, until the original reset.
-  async retryUsageLimitWait(chatId: string, useModel?: string): Promise<boolean> {
+  // whether a waiting run was woken.
+  async retryUsageLimitWait(chatId: string): Promise<boolean> {
     const client = grpcClient.chat();
-    const response = await client.retryUsageLimitWait(create(RetryUsageLimitWaitRequestSchema, { chatId, useModel }));
+    const response = await client.retryUsageLimitWait(create(RetryUsageLimitWaitRequestSchema, { chatId }));
     return response.woken;
   },
 
@@ -780,21 +775,16 @@ export const chatGrpc = {
     };
   },
 
-  // Edit a chat's params. The server stores them as the chat's selection (the
-  // choice every later run starts from) whether or not a run is live, and signals
-  // a live run. `expectedVersion` is the selection version the edit was made
-  // against: a stale one is refused with Code.Aborted and the caller refetches.
-  // The response carries the selection as stored, after any unservable-model move.
+  // Update workflow parameters for a running chat
+  // This is the generic API for updating mode and other workflow params
   async updateWorkflowParams(
     chatId: string,
     params: Record<string, unknown>,
-    threadId?: string,
-    expectedVersion?: bigint
+    threadId?: string
   ): Promise<{
     success: boolean;
     chat_id: string;
     message: string;
-    selection?: ChatSelection;
   }> {
     const client = grpcClient.chat();
     const protoParams = buildWorkflowParamsPayload(params);
@@ -803,32 +793,13 @@ export const chatGrpc = {
       chatId,
       params: protoParams,
       threadId: threadId || undefined,
-      expectedVersion,
     });
     const response = await client.updateWorkflowParams(request);
     return {
       success: response.success,
       chat_id: chatId,
       message: response.message,
-      selection: response.selection,
     };
-  },
-
-  // Set what the chat does when its provider is rate-limited.
-  async updateProviderPolicy(
-    chatId: string,
-    providerPolicy: { onLimit: ProviderPolicy_OnLimit; fallbackModel?: string },
-    expectedVersion?: bigint
-  ): Promise<ChatSelection | undefined> {
-    const client = grpcClient.chat();
-    const response = await client.updateChatProviderPolicy(
-      create(UpdateChatProviderPolicyRequestSchema, {
-        chatId,
-        providerPolicy: create(ProviderPolicySchema, providerPolicy),
-        expectedVersion,
-      })
-    );
-    return response.selection;
   },
 
   // Fetch chat updates since a sequence number

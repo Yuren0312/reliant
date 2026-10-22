@@ -35,7 +35,7 @@ export interface UseCopilotOAuthReturn {
   /** Success or error message, set when the flow settles. */
   message: string | null
   lastResult: CopilotOAuthResult | null
-  start: (options?: { accountId?: string }) => Promise<CopilotOAuthResult>
+  start: () => Promise<CopilotOAuthResult>
   cancel: () => void
   reset: () => void
 }
@@ -64,7 +64,7 @@ export function useCopilotOAuth(): UseCopilotOAuthReturn {
   }, [])
 
   const start = useCallback(
-    async (options?: { accountId?: string }): Promise<CopilotOAuthResult> => {
+    async (): Promise<CopilotOAuthResult> => {
       // Cancel any in-flight run before starting a new one.
       abortControllerRef.current?.abort()
 
@@ -83,7 +83,6 @@ export function useCopilotOAuth(): UseCopilotOAuthReturn {
       try {
         const result = await runCopilotDeviceFlow({
           signal: abortController.signal,
-          accountId: options?.accountId,
           onDeviceCode: (info) => {
             if (!isCurrent()) return
             setUserCode(info.userCode)

@@ -31,7 +31,7 @@ import { watchPollInterval, watchedProjects, type SettledDeploy } from "@/servic
 import { getNotificationSoundOptions, shouldShowNotificationSync } from "@/store/notificationStore";
 import { useQueuedDeployStore } from "@/store/queuedDeployStore";
 
-import { consolePageOf, consolePath, withSearch } from "./Console/paths";
+import { forgeEnvPath } from "./ForgeShell";
 
 const LIVE_VIEW_PREFIX = [...forgeKeys.all, "live-view"] as const;
 
@@ -72,10 +72,9 @@ export function QueuedDeployNotifier() {
       for (const settled of useQueuedDeployStore.getState().observe(project, reading.envs)) {
         notifySettled(settled, pathnameRef.current, () =>
           void navigateRef.current({
-            href: withSearch(
-              consolePath(settled.deploy.forgeProject, { kind: "environment", env: settled.deploy.envName }),
-              { env: settled.deploy.envName }
-            ),
+            to: "/forge/env/$env",
+            params: { env: settled.deploy.envName },
+            search: { forgeProject: settled.deploy.forgeProject },
           })
         );
       }
@@ -100,10 +99,8 @@ function isLiveViewKey(key: readonly unknown[]): boolean {
  * shows it.
  */
 export function notifySettled(settled: SettledDeploy, pathname: string, openEnvironment: () => void): boolean {
-  const { envName, forgeProject } = settled.deploy;
-  const here = consolePageOf(pathname);
-  const viewing =
-    here?.project === forgeProject && here.page.kind === "environment" && here.page.env === envName;
+  const { envName } = settled.deploy;
+  const viewing = safeDecode(pathname) === safeDecode(forgeEnvPath(envName));
   if (!shouldShowNotificationSync(viewing)) return false;
 
   const release = settled.release !== "" ? `Release ${settled.release}` : "The release";
@@ -123,4 +120,12 @@ export function notifySettled(settled: SettledDeploy, pathname: string, openEnvi
     },
     getNotificationSoundOptions()
   );
+}
+
+function safeDecode(path: string): string {
+  try {
+    return decodeURI(path);
+  } catch {
+    return path;
+  }
 }

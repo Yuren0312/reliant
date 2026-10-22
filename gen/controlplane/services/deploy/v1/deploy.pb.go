@@ -28,177 +28,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// How a DeployCommitComparison was assembled. Read it before the commits: an
-// empty list means "nothing between them" only when COMPUTED.
-type DeployCommitComparisonState int32
-
-const (
-	DeployCommitComparisonState_DEPLOY_COMMIT_COMPARISON_STATE_UNSPECIFIED DeployCommitComparisonState = 0
-	// The later release's range was walked back, base by base, to the earlier.
-	DeployCommitComparisonState_DEPLOY_COMMIT_COMPARISON_STATE_COMPUTED DeployCommitComparisonState = 1
-	// The two are one release.
-	DeployCommitComparisonState_DEPLOY_COMMIT_COMPARISON_STATE_SAME DeployCommitComparisonState = 2
-	// No base chain joins them (a shallow-clone cut, or one that predates
-	// ranges): the commits recorded by the releases cut between them on the
-	// later one's branch. Approximate; truncated when any of those ranges was.
-	DeployCommitComparisonState_DEPLOY_COMMIT_COMPARISON_STATE_BY_CUT_TIME DeployCommitComparisonState = 3
-	// Nothing between them recorded any commits.
-	DeployCommitComparisonState_DEPLOY_COMMIT_COMPARISON_STATE_UNRECORDED DeployCommitComparisonState = 4
-)
-
-// Enum value maps for DeployCommitComparisonState.
-var (
-	DeployCommitComparisonState_name = map[int32]string{
-		0: "DEPLOY_COMMIT_COMPARISON_STATE_UNSPECIFIED",
-		1: "DEPLOY_COMMIT_COMPARISON_STATE_COMPUTED",
-		2: "DEPLOY_COMMIT_COMPARISON_STATE_SAME",
-		3: "DEPLOY_COMMIT_COMPARISON_STATE_BY_CUT_TIME",
-		4: "DEPLOY_COMMIT_COMPARISON_STATE_UNRECORDED",
-	}
-	DeployCommitComparisonState_value = map[string]int32{
-		"DEPLOY_COMMIT_COMPARISON_STATE_UNSPECIFIED": 0,
-		"DEPLOY_COMMIT_COMPARISON_STATE_COMPUTED":    1,
-		"DEPLOY_COMMIT_COMPARISON_STATE_SAME":        2,
-		"DEPLOY_COMMIT_COMPARISON_STATE_BY_CUT_TIME": 3,
-		"DEPLOY_COMMIT_COMPARISON_STATE_UNRECORDED":  4,
-	}
-)
-
-func (x DeployCommitComparisonState) Enum() *DeployCommitComparisonState {
-	p := new(DeployCommitComparisonState)
-	*p = x
-	return p
-}
-
-func (x DeployCommitComparisonState) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (DeployCommitComparisonState) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_deploy_v1_deploy_proto_enumTypes[0].Descriptor()
-}
-
-func (DeployCommitComparisonState) Type() protoreflect.EnumType {
-	return &file_services_deploy_v1_deploy_proto_enumTypes[0]
-}
-
-func (x DeployCommitComparisonState) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use DeployCommitComparisonState.Descriptor instead.
-func (DeployCommitComparisonState) EnumDescriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{0}
-}
-
-// How one artifact, object or object section differs between two releases.
-type DeployChangeKind int32
-
-const (
-	DeployChangeKind_DEPLOY_CHANGE_KIND_UNSPECIFIED DeployChangeKind = 0
-	DeployChangeKind_DEPLOY_CHANGE_KIND_ADDED       DeployChangeKind = 1
-	DeployChangeKind_DEPLOY_CHANGE_KIND_MODIFIED    DeployChangeKind = 2
-	DeployChangeKind_DEPLOY_CHANGE_KIND_REMOVED     DeployChangeKind = 3
-)
-
-// Enum value maps for DeployChangeKind.
-var (
-	DeployChangeKind_name = map[int32]string{
-		0: "DEPLOY_CHANGE_KIND_UNSPECIFIED",
-		1: "DEPLOY_CHANGE_KIND_ADDED",
-		2: "DEPLOY_CHANGE_KIND_MODIFIED",
-		3: "DEPLOY_CHANGE_KIND_REMOVED",
-	}
-	DeployChangeKind_value = map[string]int32{
-		"DEPLOY_CHANGE_KIND_UNSPECIFIED": 0,
-		"DEPLOY_CHANGE_KIND_ADDED":       1,
-		"DEPLOY_CHANGE_KIND_MODIFIED":    2,
-		"DEPLOY_CHANGE_KIND_REMOVED":     3,
-	}
-)
-
-func (x DeployChangeKind) Enum() *DeployChangeKind {
-	p := new(DeployChangeKind)
-	*p = x
-	return p
-}
-
-func (x DeployChangeKind) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (DeployChangeKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_deploy_v1_deploy_proto_enumTypes[1].Descriptor()
-}
-
-func (DeployChangeKind) Type() protoreflect.EnumType {
-	return &file_services_deploy_v1_deploy_proto_enumTypes[1]
-}
-
-func (x DeployChangeKind) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use DeployChangeKind.Descriptor instead.
-func (DeployChangeKind) EnumDescriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{1}
-}
-
-type DeployObjectComparisonState int32
-
-const (
-	DeployObjectComparisonState_DEPLOY_OBJECT_COMPARISON_STATE_UNSPECIFIED DeployObjectComparisonState = 0
-	DeployObjectComparisonState_DEPLOY_OBJECT_COMPARISON_STATE_COMPARED    DeployObjectComparisonState = 1
-	// The request named no environment.
-	DeployObjectComparisonState_DEPLOY_OBJECT_COMPARISON_STATE_NO_ENVIRONMENT DeployObjectComparisonState = 2
-	// The environment recorded no bundle for one of the releases (it never ran
-	// there, or ran before bundles were recorded). detail names which.
-	DeployObjectComparisonState_DEPLOY_OBJECT_COMPARISON_STATE_BUNDLE_MISSING DeployObjectComparisonState = 3
-)
-
-// Enum value maps for DeployObjectComparisonState.
-var (
-	DeployObjectComparisonState_name = map[int32]string{
-		0: "DEPLOY_OBJECT_COMPARISON_STATE_UNSPECIFIED",
-		1: "DEPLOY_OBJECT_COMPARISON_STATE_COMPARED",
-		2: "DEPLOY_OBJECT_COMPARISON_STATE_NO_ENVIRONMENT",
-		3: "DEPLOY_OBJECT_COMPARISON_STATE_BUNDLE_MISSING",
-	}
-	DeployObjectComparisonState_value = map[string]int32{
-		"DEPLOY_OBJECT_COMPARISON_STATE_UNSPECIFIED":    0,
-		"DEPLOY_OBJECT_COMPARISON_STATE_COMPARED":       1,
-		"DEPLOY_OBJECT_COMPARISON_STATE_NO_ENVIRONMENT": 2,
-		"DEPLOY_OBJECT_COMPARISON_STATE_BUNDLE_MISSING": 3,
-	}
-)
-
-func (x DeployObjectComparisonState) Enum() *DeployObjectComparisonState {
-	p := new(DeployObjectComparisonState)
-	*p = x
-	return p
-}
-
-func (x DeployObjectComparisonState) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (DeployObjectComparisonState) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_deploy_v1_deploy_proto_enumTypes[2].Descriptor()
-}
-
-func (DeployObjectComparisonState) Type() protoreflect.EnumType {
-	return &file_services_deploy_v1_deploy_proto_enumTypes[2]
-}
-
-func (x DeployObjectComparisonState) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use DeployObjectComparisonState.Descriptor instead.
-func (DeployObjectComparisonState) EnumDescriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{2}
-}
-
 // DeployCapacityCode is why a verdict came out the way it did.
 type DeployCapacityCode int32
 
@@ -250,11 +79,11 @@ func (x DeployCapacityCode) String() string {
 }
 
 func (DeployCapacityCode) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_deploy_v1_deploy_proto_enumTypes[3].Descriptor()
+	return file_services_deploy_v1_deploy_proto_enumTypes[0].Descriptor()
 }
 
 func (DeployCapacityCode) Type() protoreflect.EnumType {
-	return &file_services_deploy_v1_deploy_proto_enumTypes[3]
+	return &file_services_deploy_v1_deploy_proto_enumTypes[0]
 }
 
 func (x DeployCapacityCode) Number() protoreflect.EnumNumber {
@@ -263,103 +92,7 @@ func (x DeployCapacityCode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DeployCapacityCode.Descriptor instead.
 func (DeployCapacityCode) EnumDescriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{3}
-}
-
-type GetDeployCapabilitiesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetDeployCapabilitiesRequest) Reset() {
-	*x = GetDeployCapabilitiesRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetDeployCapabilitiesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetDeployCapabilitiesRequest) ProtoMessage() {}
-
-func (x *GetDeployCapabilitiesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetDeployCapabilitiesRequest.ProtoReflect.Descriptor instead.
-func (*GetDeployCapabilitiesRequest) Descriptor() ([]byte, []int) {
 	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{0}
-}
-
-type GetDeployCapabilitiesResponse struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	SnapshotSchemaVersions []string               `protobuf:"bytes,1,rep,name=snapshot_schema_versions,json=snapshotSchemaVersions,proto3" json:"snapshot_schema_versions,omitempty"`
-	ImmutableSnapshotSeals bool                   `protobuf:"varint,2,opt,name=immutable_snapshot_seals,json=immutableSnapshotSeals,proto3" json:"immutable_snapshot_seals,omitempty"`
-	FrozenPromotionBundles bool                   `protobuf:"varint,3,opt,name=frozen_promotion_bundles,json=frozenPromotionBundles,proto3" json:"frozen_promotion_bundles,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
-}
-
-func (x *GetDeployCapabilitiesResponse) Reset() {
-	*x = GetDeployCapabilitiesResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetDeployCapabilitiesResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetDeployCapabilitiesResponse) ProtoMessage() {}
-
-func (x *GetDeployCapabilitiesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetDeployCapabilitiesResponse.ProtoReflect.Descriptor instead.
-func (*GetDeployCapabilitiesResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *GetDeployCapabilitiesResponse) GetSnapshotSchemaVersions() []string {
-	if x != nil {
-		return x.SnapshotSchemaVersions
-	}
-	return nil
-}
-
-func (x *GetDeployCapabilitiesResponse) GetImmutableSnapshotSeals() bool {
-	if x != nil {
-		return x.ImmutableSnapshotSeals
-	}
-	return false
-}
-
-func (x *GetDeployCapabilitiesResponse) GetFrozenPromotionBundles() bool {
-	if x != nil {
-		return x.FrozenPromotionBundles
-	}
-	return false
 }
 
 type GetDeployTenantRequest struct {
@@ -370,7 +103,7 @@ type GetDeployTenantRequest struct {
 
 func (x *GetDeployTenantRequest) Reset() {
 	*x = GetDeployTenantRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[2]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -382,7 +115,7 @@ func (x *GetDeployTenantRequest) String() string {
 func (*GetDeployTenantRequest) ProtoMessage() {}
 
 func (x *GetDeployTenantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[2]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -395,7 +128,7 @@ func (x *GetDeployTenantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployTenantRequest.ProtoReflect.Descriptor instead.
 func (*GetDeployTenantRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{2}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{0}
 }
 
 type GetDeployTenantResponse struct {
@@ -407,7 +140,7 @@ type GetDeployTenantResponse struct {
 
 func (x *GetDeployTenantResponse) Reset() {
 	*x = GetDeployTenantResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[3]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -419,7 +152,7 @@ func (x *GetDeployTenantResponse) String() string {
 func (*GetDeployTenantResponse) ProtoMessage() {}
 
 func (x *GetDeployTenantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[3]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -432,7 +165,7 @@ func (x *GetDeployTenantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployTenantResponse.ProtoReflect.Descriptor instead.
 func (*GetDeployTenantResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{3}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *GetDeployTenantResponse) GetTenant() *v1.DeployTenant {
@@ -454,7 +187,7 @@ type CreateDeployTenantRequest struct {
 
 func (x *CreateDeployTenantRequest) Reset() {
 	*x = CreateDeployTenantRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[4]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -466,7 +199,7 @@ func (x *CreateDeployTenantRequest) String() string {
 func (*CreateDeployTenantRequest) ProtoMessage() {}
 
 func (x *CreateDeployTenantRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[4]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -479,7 +212,7 @@ func (x *CreateDeployTenantRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDeployTenantRequest.ProtoReflect.Descriptor instead.
 func (*CreateDeployTenantRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{4}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CreateDeployTenantRequest) GetSlug() string {
@@ -498,7 +231,7 @@ type CreateDeployTenantResponse struct {
 
 func (x *CreateDeployTenantResponse) Reset() {
 	*x = CreateDeployTenantResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[5]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -510,7 +243,7 @@ func (x *CreateDeployTenantResponse) String() string {
 func (*CreateDeployTenantResponse) ProtoMessage() {}
 
 func (x *CreateDeployTenantResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[5]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -523,7 +256,7 @@ func (x *CreateDeployTenantResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDeployTenantResponse.ProtoReflect.Descriptor instead.
 func (*CreateDeployTenantResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{5}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CreateDeployTenantResponse) GetTenant() *v1.DeployTenant {
@@ -545,7 +278,7 @@ type CreateDeployEnvironmentRequest struct {
 
 func (x *CreateDeployEnvironmentRequest) Reset() {
 	*x = CreateDeployEnvironmentRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[6]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -557,7 +290,7 @@ func (x *CreateDeployEnvironmentRequest) String() string {
 func (*CreateDeployEnvironmentRequest) ProtoMessage() {}
 
 func (x *CreateDeployEnvironmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[6]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -570,7 +303,7 @@ func (x *CreateDeployEnvironmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDeployEnvironmentRequest.ProtoReflect.Descriptor instead.
 func (*CreateDeployEnvironmentRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{6}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CreateDeployEnvironmentRequest) GetSpec() *v1.DeployEnvironmentSpec {
@@ -589,7 +322,7 @@ type CreateDeployEnvironmentResponse struct {
 
 func (x *CreateDeployEnvironmentResponse) Reset() {
 	*x = CreateDeployEnvironmentResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[7]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -601,7 +334,7 @@ func (x *CreateDeployEnvironmentResponse) String() string {
 func (*CreateDeployEnvironmentResponse) ProtoMessage() {}
 
 func (x *CreateDeployEnvironmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[7]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -614,7 +347,7 @@ func (x *CreateDeployEnvironmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDeployEnvironmentResponse.ProtoReflect.Descriptor instead.
 func (*CreateDeployEnvironmentResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{7}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CreateDeployEnvironmentResponse) GetEnvironment() *v1.DeployEnvironment {
@@ -633,7 +366,7 @@ type GetDeployEnvironmentRequest struct {
 
 func (x *GetDeployEnvironmentRequest) Reset() {
 	*x = GetDeployEnvironmentRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[8]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -645,7 +378,7 @@ func (x *GetDeployEnvironmentRequest) String() string {
 func (*GetDeployEnvironmentRequest) ProtoMessage() {}
 
 func (x *GetDeployEnvironmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[8]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -658,7 +391,7 @@ func (x *GetDeployEnvironmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployEnvironmentRequest.ProtoReflect.Descriptor instead.
 func (*GetDeployEnvironmentRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{8}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetDeployEnvironmentRequest) GetEnvironmentId() string {
@@ -680,7 +413,7 @@ type GetDeployEnvironmentResponse struct {
 
 func (x *GetDeployEnvironmentResponse) Reset() {
 	*x = GetDeployEnvironmentResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[9]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -692,7 +425,7 @@ func (x *GetDeployEnvironmentResponse) String() string {
 func (*GetDeployEnvironmentResponse) ProtoMessage() {}
 
 func (x *GetDeployEnvironmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[9]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -705,7 +438,7 @@ func (x *GetDeployEnvironmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployEnvironmentResponse.ProtoReflect.Descriptor instead.
 func (*GetDeployEnvironmentResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{9}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetDeployEnvironmentResponse) GetEnvironment() *v1.DeployEnvironment {
@@ -746,7 +479,7 @@ type ListDeployEnvironmentsRequest struct {
 
 func (x *ListDeployEnvironmentsRequest) Reset() {
 	*x = ListDeployEnvironmentsRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[10]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -758,7 +491,7 @@ func (x *ListDeployEnvironmentsRequest) String() string {
 func (*ListDeployEnvironmentsRequest) ProtoMessage() {}
 
 func (x *ListDeployEnvironmentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[10]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -771,7 +504,7 @@ func (x *ListDeployEnvironmentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployEnvironmentsRequest.ProtoReflect.Descriptor instead.
 func (*ListDeployEnvironmentsRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{10}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListDeployEnvironmentsRequest) GetKind() v1.DeployEnvironmentKind {
@@ -804,7 +537,7 @@ type ListDeployEnvironmentsResponse struct {
 
 func (x *ListDeployEnvironmentsResponse) Reset() {
 	*x = ListDeployEnvironmentsResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[11]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -816,7 +549,7 @@ func (x *ListDeployEnvironmentsResponse) String() string {
 func (*ListDeployEnvironmentsResponse) ProtoMessage() {}
 
 func (x *ListDeployEnvironmentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[11]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -829,7 +562,7 @@ func (x *ListDeployEnvironmentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployEnvironmentsResponse.ProtoReflect.Descriptor instead.
 func (*ListDeployEnvironmentsResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{11}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListDeployEnvironmentsResponse) GetEnvironments() []*v1.DeployEnvironment {
@@ -853,7 +586,7 @@ type UpdateDeployEnvironmentRequest struct {
 
 func (x *UpdateDeployEnvironmentRequest) Reset() {
 	*x = UpdateDeployEnvironmentRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[12]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -865,7 +598,7 @@ func (x *UpdateDeployEnvironmentRequest) String() string {
 func (*UpdateDeployEnvironmentRequest) ProtoMessage() {}
 
 func (x *UpdateDeployEnvironmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[12]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -878,7 +611,7 @@ func (x *UpdateDeployEnvironmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDeployEnvironmentRequest.ProtoReflect.Descriptor instead.
 func (*UpdateDeployEnvironmentRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{12}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *UpdateDeployEnvironmentRequest) GetEnvironmentId() string {
@@ -904,7 +637,7 @@ type UpdateDeployEnvironmentResponse struct {
 
 func (x *UpdateDeployEnvironmentResponse) Reset() {
 	*x = UpdateDeployEnvironmentResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[13]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -916,7 +649,7 @@ func (x *UpdateDeployEnvironmentResponse) String() string {
 func (*UpdateDeployEnvironmentResponse) ProtoMessage() {}
 
 func (x *UpdateDeployEnvironmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[13]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -929,7 +662,7 @@ func (x *UpdateDeployEnvironmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDeployEnvironmentResponse.ProtoReflect.Descriptor instead.
 func (*UpdateDeployEnvironmentResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{13}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *UpdateDeployEnvironmentResponse) GetEnvironment() *v1.DeployEnvironment {
@@ -958,7 +691,7 @@ type DeleteDeployEnvironmentRequest struct {
 
 func (x *DeleteDeployEnvironmentRequest) Reset() {
 	*x = DeleteDeployEnvironmentRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[14]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -970,7 +703,7 @@ func (x *DeleteDeployEnvironmentRequest) String() string {
 func (*DeleteDeployEnvironmentRequest) ProtoMessage() {}
 
 func (x *DeleteDeployEnvironmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[14]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -983,7 +716,7 @@ func (x *DeleteDeployEnvironmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDeployEnvironmentRequest.ProtoReflect.Descriptor instead.
 func (*DeleteDeployEnvironmentRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{14}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DeleteDeployEnvironmentRequest) GetEnvironmentId() string {
@@ -1015,7 +748,7 @@ type DeleteDeployEnvironmentResponse struct {
 
 func (x *DeleteDeployEnvironmentResponse) Reset() {
 	*x = DeleteDeployEnvironmentResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[15]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1027,7 +760,7 @@ func (x *DeleteDeployEnvironmentResponse) String() string {
 func (*DeleteDeployEnvironmentResponse) ProtoMessage() {}
 
 func (x *DeleteDeployEnvironmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[15]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1040,7 +773,7 @@ func (x *DeleteDeployEnvironmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDeployEnvironmentResponse.ProtoReflect.Descriptor instead.
 func (*DeleteDeployEnvironmentResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{15}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{13}
 }
 
 // RetainedDatabase is a managed database whose environment was deleted
@@ -1066,7 +799,7 @@ type RetainedDatabase struct {
 
 func (x *RetainedDatabase) Reset() {
 	*x = RetainedDatabase{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[16]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1078,7 +811,7 @@ func (x *RetainedDatabase) String() string {
 func (*RetainedDatabase) ProtoMessage() {}
 
 func (x *RetainedDatabase) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[16]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1091,7 +824,7 @@ func (x *RetainedDatabase) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RetainedDatabase.ProtoReflect.Descriptor instead.
 func (*RetainedDatabase) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{16}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *RetainedDatabase) GetId() string {
@@ -1165,7 +898,7 @@ type ListRetainedDatabasesRequest struct {
 
 func (x *ListRetainedDatabasesRequest) Reset() {
 	*x = ListRetainedDatabasesRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[17]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1177,7 +910,7 @@ func (x *ListRetainedDatabasesRequest) String() string {
 func (*ListRetainedDatabasesRequest) ProtoMessage() {}
 
 func (x *ListRetainedDatabasesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[17]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1190,7 +923,7 @@ func (x *ListRetainedDatabasesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRetainedDatabasesRequest.ProtoReflect.Descriptor instead.
 func (*ListRetainedDatabasesRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{17}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{15}
 }
 
 type ListRetainedDatabasesResponse struct {
@@ -1202,7 +935,7 @@ type ListRetainedDatabasesResponse struct {
 
 func (x *ListRetainedDatabasesResponse) Reset() {
 	*x = ListRetainedDatabasesResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[18]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1214,7 +947,7 @@ func (x *ListRetainedDatabasesResponse) String() string {
 func (*ListRetainedDatabasesResponse) ProtoMessage() {}
 
 func (x *ListRetainedDatabasesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[18]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1227,7 +960,7 @@ func (x *ListRetainedDatabasesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRetainedDatabasesResponse.ProtoReflect.Descriptor instead.
 func (*ListRetainedDatabasesResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{18}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListRetainedDatabasesResponse) GetRetainedDatabases() []*RetainedDatabase {
@@ -1246,7 +979,7 @@ type DeleteRetainedDatabaseRequest struct {
 
 func (x *DeleteRetainedDatabaseRequest) Reset() {
 	*x = DeleteRetainedDatabaseRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[19]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1258,7 +991,7 @@ func (x *DeleteRetainedDatabaseRequest) String() string {
 func (*DeleteRetainedDatabaseRequest) ProtoMessage() {}
 
 func (x *DeleteRetainedDatabaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[19]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1271,7 +1004,7 @@ func (x *DeleteRetainedDatabaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRetainedDatabaseRequest.ProtoReflect.Descriptor instead.
 func (*DeleteRetainedDatabaseRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{19}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DeleteRetainedDatabaseRequest) GetId() string {
@@ -1289,7 +1022,7 @@ type DeleteRetainedDatabaseResponse struct {
 
 func (x *DeleteRetainedDatabaseResponse) Reset() {
 	*x = DeleteRetainedDatabaseResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[20]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1301,7 +1034,7 @@ func (x *DeleteRetainedDatabaseResponse) String() string {
 func (*DeleteRetainedDatabaseResponse) ProtoMessage() {}
 
 func (x *DeleteRetainedDatabaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[20]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1314,7 +1047,7 @@ func (x *DeleteRetainedDatabaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteRetainedDatabaseResponse.ProtoReflect.Descriptor instead.
 func (*DeleteRetainedDatabaseResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{20}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{18}
 }
 
 type EnsureDeployEnvironmentRequest struct {
@@ -1328,7 +1061,7 @@ type EnsureDeployEnvironmentRequest struct {
 
 func (x *EnsureDeployEnvironmentRequest) Reset() {
 	*x = EnsureDeployEnvironmentRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[21]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1340,7 +1073,7 @@ func (x *EnsureDeployEnvironmentRequest) String() string {
 func (*EnsureDeployEnvironmentRequest) ProtoMessage() {}
 
 func (x *EnsureDeployEnvironmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[21]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1353,7 +1086,7 @@ func (x *EnsureDeployEnvironmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnsureDeployEnvironmentRequest.ProtoReflect.Descriptor instead.
 func (*EnsureDeployEnvironmentRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{21}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *EnsureDeployEnvironmentRequest) GetSpec() *v1.DeployEnvironmentSpec {
@@ -1375,7 +1108,7 @@ type EnsureDeployEnvironmentResponse struct {
 
 func (x *EnsureDeployEnvironmentResponse) Reset() {
 	*x = EnsureDeployEnvironmentResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[22]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1387,7 +1120,7 @@ func (x *EnsureDeployEnvironmentResponse) String() string {
 func (*EnsureDeployEnvironmentResponse) ProtoMessage() {}
 
 func (x *EnsureDeployEnvironmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[22]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1400,7 +1133,7 @@ func (x *EnsureDeployEnvironmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnsureDeployEnvironmentResponse.ProtoReflect.Descriptor instead.
 func (*EnsureDeployEnvironmentResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{22}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *EnsureDeployEnvironmentResponse) GetEnvironment() *v1.DeployEnvironment {
@@ -1446,7 +1179,7 @@ type CreateDeploymentRequest struct {
 
 func (x *CreateDeploymentRequest) Reset() {
 	*x = CreateDeploymentRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[23]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1458,7 +1191,7 @@ func (x *CreateDeploymentRequest) String() string {
 func (*CreateDeploymentRequest) ProtoMessage() {}
 
 func (x *CreateDeploymentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[23]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1471,7 +1204,7 @@ func (x *CreateDeploymentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDeploymentRequest.ProtoReflect.Descriptor instead.
 func (*CreateDeploymentRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{23}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *CreateDeploymentRequest) GetEnvironmentId() string {
@@ -1511,7 +1244,7 @@ type CreateDeploymentResponse struct {
 
 func (x *CreateDeploymentResponse) Reset() {
 	*x = CreateDeploymentResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[24]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1523,7 +1256,7 @@ func (x *CreateDeploymentResponse) String() string {
 func (*CreateDeploymentResponse) ProtoMessage() {}
 
 func (x *CreateDeploymentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[24]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1536,7 +1269,7 @@ func (x *CreateDeploymentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDeploymentResponse.ProtoReflect.Descriptor instead.
 func (*CreateDeploymentResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{24}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CreateDeploymentResponse) GetDeployment() *v1.Deployment {
@@ -1555,7 +1288,7 @@ type GetDeploymentRequest struct {
 
 func (x *GetDeploymentRequest) Reset() {
 	*x = GetDeploymentRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[25]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1567,7 +1300,7 @@ func (x *GetDeploymentRequest) String() string {
 func (*GetDeploymentRequest) ProtoMessage() {}
 
 func (x *GetDeploymentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[25]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1580,7 +1313,7 @@ func (x *GetDeploymentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeploymentRequest.ProtoReflect.Descriptor instead.
 func (*GetDeploymentRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{25}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GetDeploymentRequest) GetDeploymentId() string {
@@ -1599,7 +1332,7 @@ type GetDeploymentResponse struct {
 
 func (x *GetDeploymentResponse) Reset() {
 	*x = GetDeploymentResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[26]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1611,7 +1344,7 @@ func (x *GetDeploymentResponse) String() string {
 func (*GetDeploymentResponse) ProtoMessage() {}
 
 func (x *GetDeploymentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[26]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1624,7 +1357,7 @@ func (x *GetDeploymentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeploymentResponse.ProtoReflect.Descriptor instead.
 func (*GetDeploymentResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{26}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetDeploymentResponse) GetDeployment() *v1.Deployment {
@@ -1654,7 +1387,7 @@ type ListDeploymentsRequest struct {
 
 func (x *ListDeploymentsRequest) Reset() {
 	*x = ListDeploymentsRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[27]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1666,7 +1399,7 @@ func (x *ListDeploymentsRequest) String() string {
 func (*ListDeploymentsRequest) ProtoMessage() {}
 
 func (x *ListDeploymentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[27]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1679,7 +1412,7 @@ func (x *ListDeploymentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeploymentsRequest.ProtoReflect.Descriptor instead.
 func (*ListDeploymentsRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{27}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListDeploymentsRequest) GetEnvironmentId() string {
@@ -1719,7 +1452,7 @@ type ListDeploymentsResponse struct {
 
 func (x *ListDeploymentsResponse) Reset() {
 	*x = ListDeploymentsResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[28]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1731,7 +1464,7 @@ func (x *ListDeploymentsResponse) String() string {
 func (*ListDeploymentsResponse) ProtoMessage() {}
 
 func (x *ListDeploymentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[28]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1744,7 +1477,7 @@ func (x *ListDeploymentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeploymentsResponse.ProtoReflect.Descriptor instead.
 func (*ListDeploymentsResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{28}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListDeploymentsResponse) GetDeployments() []*v1.Deployment {
@@ -1768,7 +1501,7 @@ type UpdateDeploymentRequest struct {
 
 func (x *UpdateDeploymentRequest) Reset() {
 	*x = UpdateDeploymentRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[29]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1780,7 +1513,7 @@ func (x *UpdateDeploymentRequest) String() string {
 func (*UpdateDeploymentRequest) ProtoMessage() {}
 
 func (x *UpdateDeploymentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[29]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1793,7 +1526,7 @@ func (x *UpdateDeploymentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDeploymentRequest.ProtoReflect.Descriptor instead.
 func (*UpdateDeploymentRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{29}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *UpdateDeploymentRequest) GetDeploymentId() string {
@@ -1819,7 +1552,7 @@ type UpdateDeploymentResponse struct {
 
 func (x *UpdateDeploymentResponse) Reset() {
 	*x = UpdateDeploymentResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[30]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1831,7 +1564,7 @@ func (x *UpdateDeploymentResponse) String() string {
 func (*UpdateDeploymentResponse) ProtoMessage() {}
 
 func (x *UpdateDeploymentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[30]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1844,7 +1577,7 @@ func (x *UpdateDeploymentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDeploymentResponse.ProtoReflect.Descriptor instead.
 func (*UpdateDeploymentResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{30}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *UpdateDeploymentResponse) GetDeployment() *v1.Deployment {
@@ -1863,7 +1596,7 @@ type DeleteDeploymentRequest struct {
 
 func (x *DeleteDeploymentRequest) Reset() {
 	*x = DeleteDeploymentRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[31]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1875,7 +1608,7 @@ func (x *DeleteDeploymentRequest) String() string {
 func (*DeleteDeploymentRequest) ProtoMessage() {}
 
 func (x *DeleteDeploymentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[31]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1888,7 +1621,7 @@ func (x *DeleteDeploymentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDeploymentRequest.ProtoReflect.Descriptor instead.
 func (*DeleteDeploymentRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{31}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DeleteDeploymentRequest) GetDeploymentId() string {
@@ -1906,7 +1639,7 @@ type DeleteDeploymentResponse struct {
 
 func (x *DeleteDeploymentResponse) Reset() {
 	*x = DeleteDeploymentResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[32]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1918,7 +1651,7 @@ func (x *DeleteDeploymentResponse) String() string {
 func (*DeleteDeploymentResponse) ProtoMessage() {}
 
 func (x *DeleteDeploymentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[32]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1931,7 +1664,7 @@ func (x *DeleteDeploymentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDeploymentResponse.ProtoReflect.Descriptor instead.
 func (*DeleteDeploymentResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{32}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{30}
 }
 
 // PromoteReleaseRequest asks that an environment be re-pointed at an existing
@@ -2019,22 +1752,13 @@ type PromoteReleaseRequest struct {
 	// future destructive change to that environment. A finding code cannot be
 	// pre-approved, because it is not known until the plan is computed.
 	AcknowledgedFindings []string `protobuf:"bytes,14,rep,name=acknowledged_findings,json=acknowledgedFindings,proto3" json:"acknowledged_findings,omitempty"`
-	// The components a SCOPED deploy moves (`--target api`, `--frontends-only`),
-	// recorded on the promotion as DeployPromotion.targets. Empty for a
-	// whole-release deploy.
-	//
-	// It takes part in the idempotency rule (forge's release.Decide): promoting
-	// the bound release again is a no-op only when the current promotion already
-	// moved everything this one names, so a whole deploy after a scoped one is a
-	// real move and is recorded.
-	Targets       []string `protobuf:"bytes,15,rep,name=targets,proto3" json:"targets,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *PromoteReleaseRequest) Reset() {
 	*x = PromoteReleaseRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[33]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2046,7 +1770,7 @@ func (x *PromoteReleaseRequest) String() string {
 func (*PromoteReleaseRequest) ProtoMessage() {}
 
 func (x *PromoteReleaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[33]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2059,7 +1783,7 @@ func (x *PromoteReleaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromoteReleaseRequest.ProtoReflect.Descriptor instead.
 func (*PromoteReleaseRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{33}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *PromoteReleaseRequest) GetEnvironmentId() string {
@@ -2164,13 +1888,6 @@ func (x *PromoteReleaseRequest) GetAcknowledgedFindings() []string {
 	return nil
 }
 
-func (x *PromoteReleaseRequest) GetTargets() []string {
-	if x != nil {
-		return x.Targets
-	}
-	return nil
-}
-
 type isPromoteReleaseRequest_ExpectedCurrent interface {
 	isPromoteReleaseRequest_ExpectedCurrent()
 }
@@ -2203,7 +1920,7 @@ type PromoteReleaseResponse struct {
 
 func (x *PromoteReleaseResponse) Reset() {
 	*x = PromoteReleaseResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[34]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2215,7 +1932,7 @@ func (x *PromoteReleaseResponse) String() string {
 func (*PromoteReleaseResponse) ProtoMessage() {}
 
 func (x *PromoteReleaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[34]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2228,7 +1945,7 @@ func (x *PromoteReleaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromoteReleaseResponse.ProtoReflect.Descriptor instead.
 func (*PromoteReleaseResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{34}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *PromoteReleaseResponse) GetPromotion() *v1.DeployPromotion {
@@ -2256,7 +1973,7 @@ type ScaleDeploymentRequest struct {
 
 func (x *ScaleDeploymentRequest) Reset() {
 	*x = ScaleDeploymentRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[35]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2268,7 +1985,7 @@ func (x *ScaleDeploymentRequest) String() string {
 func (*ScaleDeploymentRequest) ProtoMessage() {}
 
 func (x *ScaleDeploymentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[35]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2281,7 +1998,7 @@ func (x *ScaleDeploymentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScaleDeploymentRequest.ProtoReflect.Descriptor instead.
 func (*ScaleDeploymentRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{35}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ScaleDeploymentRequest) GetDeploymentId() string {
@@ -2311,7 +2028,7 @@ type ScaleDeploymentResponse struct {
 
 func (x *ScaleDeploymentResponse) Reset() {
 	*x = ScaleDeploymentResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[36]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2323,7 +2040,7 @@ func (x *ScaleDeploymentResponse) String() string {
 func (*ScaleDeploymentResponse) ProtoMessage() {}
 
 func (x *ScaleDeploymentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[36]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2336,7 +2053,7 @@ func (x *ScaleDeploymentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScaleDeploymentResponse.ProtoReflect.Descriptor instead.
 func (*ScaleDeploymentResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{36}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ScaleDeploymentResponse) GetDeployment() *v1.Deployment {
@@ -2357,7 +2074,7 @@ type SetEnvironmentRunStateRequest struct {
 
 func (x *SetEnvironmentRunStateRequest) Reset() {
 	*x = SetEnvironmentRunStateRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[37]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2369,7 +2086,7 @@ func (x *SetEnvironmentRunStateRequest) String() string {
 func (*SetEnvironmentRunStateRequest) ProtoMessage() {}
 
 func (x *SetEnvironmentRunStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[37]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2382,7 +2099,7 @@ func (x *SetEnvironmentRunStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetEnvironmentRunStateRequest.ProtoReflect.Descriptor instead.
 func (*SetEnvironmentRunStateRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{37}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *SetEnvironmentRunStateRequest) GetEnvironmentId() string {
@@ -2410,7 +2127,7 @@ type SetEnvironmentRunStateResponse struct {
 
 func (x *SetEnvironmentRunStateResponse) Reset() {
 	*x = SetEnvironmentRunStateResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[38]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2422,7 +2139,7 @@ func (x *SetEnvironmentRunStateResponse) String() string {
 func (*SetEnvironmentRunStateResponse) ProtoMessage() {}
 
 func (x *SetEnvironmentRunStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[38]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2435,7 +2152,7 @@ func (x *SetEnvironmentRunStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetEnvironmentRunStateResponse.ProtoReflect.Descriptor instead.
 func (*SetEnvironmentRunStateResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{38}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SetEnvironmentRunStateResponse) GetDeployments() []*v1.Deployment {
@@ -2458,7 +2175,7 @@ type GetDeploymentStatusRequest struct {
 
 func (x *GetDeploymentStatusRequest) Reset() {
 	*x = GetDeploymentStatusRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[39]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2470,7 +2187,7 @@ func (x *GetDeploymentStatusRequest) String() string {
 func (*GetDeploymentStatusRequest) ProtoMessage() {}
 
 func (x *GetDeploymentStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[39]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2483,7 +2200,7 @@ func (x *GetDeploymentStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeploymentStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetDeploymentStatusRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{39}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *GetDeploymentStatusRequest) GetDeploymentId() string {
@@ -2518,7 +2235,7 @@ type DeploymentStatus struct {
 
 func (x *DeploymentStatus) Reset() {
 	*x = DeploymentStatus{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[40]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2530,7 +2247,7 @@ func (x *DeploymentStatus) String() string {
 func (*DeploymentStatus) ProtoMessage() {}
 
 func (x *DeploymentStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[40]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2543,7 +2260,7 @@ func (x *DeploymentStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploymentStatus.ProtoReflect.Descriptor instead.
 func (*DeploymentStatus) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{40}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *DeploymentStatus) GetDeployment() *v1.Deployment {
@@ -2624,7 +2341,7 @@ type GetDeploymentStatusResponse struct {
 
 func (x *GetDeploymentStatusResponse) Reset() {
 	*x = GetDeploymentStatusResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[41]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2636,7 +2353,7 @@ func (x *GetDeploymentStatusResponse) String() string {
 func (*GetDeploymentStatusResponse) ProtoMessage() {}
 
 func (x *GetDeploymentStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[41]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2649,7 +2366,7 @@ func (x *GetDeploymentStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeploymentStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetDeploymentStatusResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{41}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *GetDeploymentStatusResponse) GetDeployment() *v1.Deployment {
@@ -2742,7 +2459,7 @@ type StreamDeploymentLogsRequest struct {
 
 func (x *StreamDeploymentLogsRequest) Reset() {
 	*x = StreamDeploymentLogsRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[42]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2754,7 +2471,7 @@ func (x *StreamDeploymentLogsRequest) String() string {
 func (*StreamDeploymentLogsRequest) ProtoMessage() {}
 
 func (x *StreamDeploymentLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[42]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2767,7 +2484,7 @@ func (x *StreamDeploymentLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamDeploymentLogsRequest.ProtoReflect.Descriptor instead.
 func (*StreamDeploymentLogsRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{42}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *StreamDeploymentLogsRequest) GetDeploymentId() string {
@@ -2820,7 +2537,7 @@ type StreamDeploymentLogsResponse struct {
 
 func (x *StreamDeploymentLogsResponse) Reset() {
 	*x = StreamDeploymentLogsResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[43]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2832,7 +2549,7 @@ func (x *StreamDeploymentLogsResponse) String() string {
 func (*StreamDeploymentLogsResponse) ProtoMessage() {}
 
 func (x *StreamDeploymentLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[43]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2845,7 +2562,7 @@ func (x *StreamDeploymentLogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamDeploymentLogsResponse.ProtoReflect.Descriptor instead.
 func (*StreamDeploymentLogsResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{43}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *StreamDeploymentLogsResponse) GetLines() []*v1.DeployLogLine {
@@ -2914,21 +2631,14 @@ type CutReleaseRequest struct {
 	// EMPTY IS LEGACY: a caller that does not send it cuts into the
 	// pre-project namespace, which is where every release cut before this field
 	// existed lives.
-	Project string `protobuf:"bytes,8,opt,name=project,proto3" json:"project,omitempty"`
-	// Strict forge release.Release JSON. Exclusive with legacy artifact, git,
-	// provenance and run fields; version/project must match this envelope.
-	SnapshotRelease *structpb.Struct `protobuf:"bytes,9,opt,name=snapshot_release,json=snapshotRelease,proto3" json:"snapshot_release,omitempty"`
-	// The commits this release adds over the release it was cut after
-	// (DeployRelease.commits). Recorded as the claim it is; not part of the
-	// release's identity, so a retry with a different range is still a retry.
-	Commits       *v1.DeployCommitRange `protobuf:"bytes,10,opt,name=commits,proto3" json:"commits,omitempty"`
+	Project       string `protobuf:"bytes,8,opt,name=project,proto3" json:"project,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CutReleaseRequest) Reset() {
 	*x = CutReleaseRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[44]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2940,7 +2650,7 @@ func (x *CutReleaseRequest) String() string {
 func (*CutReleaseRequest) ProtoMessage() {}
 
 func (x *CutReleaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[44]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2953,7 +2663,7 @@ func (x *CutReleaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CutReleaseRequest.ProtoReflect.Descriptor instead.
 func (*CutReleaseRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{44}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *CutReleaseRequest) GetVersion() string {
@@ -3012,20 +2722,6 @@ func (x *CutReleaseRequest) GetProject() string {
 	return ""
 }
 
-func (x *CutReleaseRequest) GetSnapshotRelease() *structpb.Struct {
-	if x != nil {
-		return x.SnapshotRelease
-	}
-	return nil
-}
-
-func (x *CutReleaseRequest) GetCommits() *v1.DeployCommitRange {
-	if x != nil {
-		return x.Commits
-	}
-	return nil
-}
-
 type CutReleaseResponse struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Release *v1.DeployRelease      `protobuf:"bytes,1,opt,name=release,proto3" json:"release,omitempty"`
@@ -3044,7 +2740,7 @@ type CutReleaseResponse struct {
 
 func (x *CutReleaseResponse) Reset() {
 	*x = CutReleaseResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[45]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3056,7 +2752,7 @@ func (x *CutReleaseResponse) String() string {
 func (*CutReleaseResponse) ProtoMessage() {}
 
 func (x *CutReleaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[45]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3069,7 +2765,7 @@ func (x *CutReleaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CutReleaseResponse.ProtoReflect.Descriptor instead.
 func (*CutReleaseResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{45}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *CutReleaseResponse) GetRelease() *v1.DeployRelease {
@@ -3084,679 +2780,6 @@ func (x *CutReleaseResponse) GetCreated() bool {
 		return x.Created
 	}
 	return false
-}
-
-type CompareDeployReleasesRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The release compared FROM (typically what the environment ran before) and
-	// the one compared TO.
-	FromVersion string `protobuf:"bytes,1,opt,name=from_version,json=fromVersion,proto3" json:"from_version,omitempty"`
-	ToVersion   string `protobuf:"bytes,2,opt,name=to_version,json=toVersion,proto3" json:"to_version,omitempty"`
-	// The forge project both belong to, resolved as GetRelease resolves it: a
-	// version not found in the project falls back to the pre-project namespace.
-	Project string `protobuf:"bytes,3,opt,name=project,proto3" json:"project,omitempty"`
-	// The environment whose bundles the object comparison reads. A bundle is ONE
-	// environment's render, and two environments render one release into
-	// different objects, so there is no environment-free answer: unset leaves
-	// objects.state NO_ENVIRONMENT and compares commits and artifacts only.
-	EnvironmentId string `protobuf:"bytes,4,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CompareDeployReleasesRequest) Reset() {
-	*x = CompareDeployReleasesRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[46]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CompareDeployReleasesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CompareDeployReleasesRequest) ProtoMessage() {}
-
-func (x *CompareDeployReleasesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[46]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CompareDeployReleasesRequest.ProtoReflect.Descriptor instead.
-func (*CompareDeployReleasesRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{46}
-}
-
-func (x *CompareDeployReleasesRequest) GetFromVersion() string {
-	if x != nil {
-		return x.FromVersion
-	}
-	return ""
-}
-
-func (x *CompareDeployReleasesRequest) GetToVersion() string {
-	if x != nil {
-		return x.ToVersion
-	}
-	return ""
-}
-
-func (x *CompareDeployReleasesRequest) GetProject() string {
-	if x != nil {
-		return x.Project
-	}
-	return ""
-}
-
-func (x *CompareDeployReleasesRequest) GetEnvironmentId() string {
-	if x != nil {
-		return x.EnvironmentId
-	}
-	return ""
-}
-
-type CompareDeployReleasesResponse struct {
-	state   protoimpl.MessageState  `protogen:"open.v1"`
-	From    *v1.DeployRelease       `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
-	To      *v1.DeployRelease       `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
-	Commits *DeployCommitComparison `protobuf:"bytes,3,opt,name=commits,proto3" json:"commits,omitempty"`
-	// The artifacts whose identity differs, sorted by name: an image's digest
-	// (one entry per variant of a variant image, "web[staging]"), a source
-	// pin's commit, a package's version.
-	Artifacts []*DeployArtifactChange `protobuf:"bytes,4,rep,name=artifacts,proto3" json:"artifacts,omitempty"`
-	// How many artifacts are the same in both.
-	UnchangedArtifacts int32                   `protobuf:"varint,5,opt,name=unchanged_artifacts,json=unchangedArtifacts,proto3" json:"unchanged_artifacts,omitempty"`
-	Objects            *DeployObjectComparison `protobuf:"bytes,6,opt,name=objects,proto3" json:"objects,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
-}
-
-func (x *CompareDeployReleasesResponse) Reset() {
-	*x = CompareDeployReleasesResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[47]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CompareDeployReleasesResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CompareDeployReleasesResponse) ProtoMessage() {}
-
-func (x *CompareDeployReleasesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[47]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CompareDeployReleasesResponse.ProtoReflect.Descriptor instead.
-func (*CompareDeployReleasesResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{47}
-}
-
-func (x *CompareDeployReleasesResponse) GetFrom() *v1.DeployRelease {
-	if x != nil {
-		return x.From
-	}
-	return nil
-}
-
-func (x *CompareDeployReleasesResponse) GetTo() *v1.DeployRelease {
-	if x != nil {
-		return x.To
-	}
-	return nil
-}
-
-func (x *CompareDeployReleasesResponse) GetCommits() *DeployCommitComparison {
-	if x != nil {
-		return x.Commits
-	}
-	return nil
-}
-
-func (x *CompareDeployReleasesResponse) GetArtifacts() []*DeployArtifactChange {
-	if x != nil {
-		return x.Artifacts
-	}
-	return nil
-}
-
-func (x *CompareDeployReleasesResponse) GetUnchangedArtifacts() int32 {
-	if x != nil {
-		return x.UnchangedArtifacts
-	}
-	return 0
-}
-
-func (x *CompareDeployReleasesResponse) GetObjects() *DeployObjectComparison {
-	if x != nil {
-		return x.Objects
-	}
-	return nil
-}
-
-// DeployCommitComparison is the source history between two releases, composed
-// from their recorded commit ranges.
-type DeployCommitComparison struct {
-	state protoimpl.MessageState      `protogen:"open.v1"`
-	State DeployCommitComparisonState `protobuf:"varint,1,opt,name=state,proto3,enum=controlplane.v1.DeployCommitComparisonState" json:"state,omitempty"`
-	// True when `to` is the OLDER release: commits are then the ones `from` has
-	// and `to` does not, which is what moving from -> to takes away.
-	Reverts bool `protobuf:"varint,2,opt,name=reverts,proto3" json:"reverts,omitempty"`
-	// Newest first, at most 250.
-	Commits []*v1.DeployCommit `protobuf:"bytes,3,rep,name=commits,proto3" json:"commits,omitempty"`
-	// The number of commits between the two when every composed range could
-	// count its own; 0 when one could not (a shallow-clone cut).
-	Total int32 `protobuf:"varint,4,opt,name=total,proto3" json:"total,omitempty"`
-	// The list is not every commit between the two. Never render a truncated
-	// comparison as complete.
-	Truncated bool `protobuf:"varint,5,opt,name=truncated,proto3" json:"truncated,omitempty"`
-	// The versions whose recorded ranges were composed, newest first.
-	Releases      []string `protobuf:"bytes,6,rep,name=releases,proto3" json:"releases,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeployCommitComparison) Reset() {
-	*x = DeployCommitComparison{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[48]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeployCommitComparison) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeployCommitComparison) ProtoMessage() {}
-
-func (x *DeployCommitComparison) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[48]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeployCommitComparison.ProtoReflect.Descriptor instead.
-func (*DeployCommitComparison) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{48}
-}
-
-func (x *DeployCommitComparison) GetState() DeployCommitComparisonState {
-	if x != nil {
-		return x.State
-	}
-	return DeployCommitComparisonState_DEPLOY_COMMIT_COMPARISON_STATE_UNSPECIFIED
-}
-
-func (x *DeployCommitComparison) GetReverts() bool {
-	if x != nil {
-		return x.Reverts
-	}
-	return false
-}
-
-func (x *DeployCommitComparison) GetCommits() []*v1.DeployCommit {
-	if x != nil {
-		return x.Commits
-	}
-	return nil
-}
-
-func (x *DeployCommitComparison) GetTotal() int32 {
-	if x != nil {
-		return x.Total
-	}
-	return 0
-}
-
-func (x *DeployCommitComparison) GetTruncated() bool {
-	if x != nil {
-		return x.Truncated
-	}
-	return false
-}
-
-func (x *DeployCommitComparison) GetReleases() []string {
-	if x != nil {
-		return x.Releases
-	}
-	return nil
-}
-
-type DeployArtifactChange struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// The artifact kind: oci, npm, gomod, file, git.
-	Kind   string           `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
-	Change DeployChangeKind `protobuf:"varint,3,opt,name=change,proto3,enum=controlplane.v1.DeployChangeKind" json:"change,omitempty"`
-	// The identity on each side: a digest, a commit, a version. Empty on the
-	// side where the artifact does not exist.
-	From          string `protobuf:"bytes,4,opt,name=from,proto3" json:"from,omitempty"`
-	To            string `protobuf:"bytes,5,opt,name=to,proto3" json:"to,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeployArtifactChange) Reset() {
-	*x = DeployArtifactChange{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[49]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeployArtifactChange) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeployArtifactChange) ProtoMessage() {}
-
-func (x *DeployArtifactChange) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[49]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeployArtifactChange.ProtoReflect.Descriptor instead.
-func (*DeployArtifactChange) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{49}
-}
-
-func (x *DeployArtifactChange) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *DeployArtifactChange) GetKind() string {
-	if x != nil {
-		return x.Kind
-	}
-	return ""
-}
-
-func (x *DeployArtifactChange) GetChange() DeployChangeKind {
-	if x != nil {
-		return x.Change
-	}
-	return DeployChangeKind_DEPLOY_CHANGE_KIND_UNSPECIFIED
-}
-
-func (x *DeployArtifactChange) GetFrom() string {
-	if x != nil {
-		return x.From
-	}
-	return ""
-}
-
-func (x *DeployArtifactChange) GetTo() string {
-	if x != nil {
-		return x.To
-	}
-	return ""
-}
-
-// DeployObjectComparison is the Kubernetes-object half of a comparison: the
-// two releases' bundles for one environment, object by object.
-type DeployObjectComparison struct {
-	state protoimpl.MessageState      `protogen:"open.v1"`
-	State DeployObjectComparisonState `protobuf:"varint,1,opt,name=state,proto3,enum=controlplane.v1.DeployObjectComparisonState" json:"state,omitempty"`
-	// Why the objects were not compared, when they were not.
-	Detail        string `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
-	EnvironmentId string `protobuf:"bytes,3,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
-	// The bundles compared, when both were found.
-	FromBundleDigest string `protobuf:"bytes,4,opt,name=from_bundle_digest,json=fromBundleDigest,proto3" json:"from_bundle_digest,omitempty"`
-	ToBundleDigest   string `protobuf:"bytes,5,opt,name=to_bundle_digest,json=toBundleDigest,proto3" json:"to_bundle_digest,omitempty"`
-	// Added, then modified, then removed; by object within each.
-	Deltas    []*DeployObjectDelta `protobuf:"bytes,6,rep,name=deltas,proto3" json:"deltas,omitempty"`
-	Unchanged int32                `protobuf:"varint,7,opt,name=unchanged,proto3" json:"unchanged,omitempty"`
-	// At least one bundle was recorded by a forge that wrote no per-object
-	// summaries: objects are named without saying what they are or what in them
-	// changed.
-	SummariesMissing bool `protobuf:"varint,8,opt,name=summaries_missing,json=summariesMissing,proto3" json:"summaries_missing,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *DeployObjectComparison) Reset() {
-	*x = DeployObjectComparison{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[50]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeployObjectComparison) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeployObjectComparison) ProtoMessage() {}
-
-func (x *DeployObjectComparison) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[50]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeployObjectComparison.ProtoReflect.Descriptor instead.
-func (*DeployObjectComparison) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{50}
-}
-
-func (x *DeployObjectComparison) GetState() DeployObjectComparisonState {
-	if x != nil {
-		return x.State
-	}
-	return DeployObjectComparisonState_DEPLOY_OBJECT_COMPARISON_STATE_UNSPECIFIED
-}
-
-func (x *DeployObjectComparison) GetDetail() string {
-	if x != nil {
-		return x.Detail
-	}
-	return ""
-}
-
-func (x *DeployObjectComparison) GetEnvironmentId() string {
-	if x != nil {
-		return x.EnvironmentId
-	}
-	return ""
-}
-
-func (x *DeployObjectComparison) GetFromBundleDigest() string {
-	if x != nil {
-		return x.FromBundleDigest
-	}
-	return ""
-}
-
-func (x *DeployObjectComparison) GetToBundleDigest() string {
-	if x != nil {
-		return x.ToBundleDigest
-	}
-	return ""
-}
-
-func (x *DeployObjectComparison) GetDeltas() []*DeployObjectDelta {
-	if x != nil {
-		return x.Deltas
-	}
-	return nil
-}
-
-func (x *DeployObjectComparison) GetUnchanged() int32 {
-	if x != nil {
-		return x.Unchanged
-	}
-	return 0
-}
-
-func (x *DeployObjectComparison) GetSummariesMissing() bool {
-	if x != nil {
-		return x.SummariesMissing
-	}
-	return false
-}
-
-// DeployObjectDelta is one object the two bundles disagree on.
-type DeployObjectDelta struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Change    DeployChangeKind       `protobuf:"varint,1,opt,name=change,proto3,enum=controlplane.v1.DeployChangeKind" json:"change,omitempty"`
-	Cluster   string                 `protobuf:"bytes,2,opt,name=cluster,proto3" json:"cluster,omitempty"`
-	Kind      string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
-	Namespace string                 `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Name      string                 `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
-	// The forge workload the object belongs to, for grouping.
-	Workload string `protobuf:"bytes,6,opt,name=workload,proto3" json:"workload,omitempty"`
-	// One line: the object's own summary when it was added or removed
-	// ("alerts DeployConvergeForcedReconcile"), and what changed when it was
-	// modified ("image control-plane; env FORCE_RECONCILE removed").
-	Summary string `protobuf:"bytes,7,opt,name=summary,proto3" json:"summary,omitempty"`
-	// The release-bound images whose digest moved in this object.
-	Images []*DeployImageChange `protobuf:"bytes,8,rep,name=images,proto3" json:"images,omitempty"`
-	// The sections that moved, when both bundles recorded them
-	// ("api.env.FORCE_RECONCILE", "data.force_reconcile", "replicas").
-	Parts         []*DeployPartChange `protobuf:"bytes,9,rep,name=parts,proto3" json:"parts,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeployObjectDelta) Reset() {
-	*x = DeployObjectDelta{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[51]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeployObjectDelta) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeployObjectDelta) ProtoMessage() {}
-
-func (x *DeployObjectDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[51]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeployObjectDelta.ProtoReflect.Descriptor instead.
-func (*DeployObjectDelta) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{51}
-}
-
-func (x *DeployObjectDelta) GetChange() DeployChangeKind {
-	if x != nil {
-		return x.Change
-	}
-	return DeployChangeKind_DEPLOY_CHANGE_KIND_UNSPECIFIED
-}
-
-func (x *DeployObjectDelta) GetCluster() string {
-	if x != nil {
-		return x.Cluster
-	}
-	return ""
-}
-
-func (x *DeployObjectDelta) GetKind() string {
-	if x != nil {
-		return x.Kind
-	}
-	return ""
-}
-
-func (x *DeployObjectDelta) GetNamespace() string {
-	if x != nil {
-		return x.Namespace
-	}
-	return ""
-}
-
-func (x *DeployObjectDelta) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *DeployObjectDelta) GetWorkload() string {
-	if x != nil {
-		return x.Workload
-	}
-	return ""
-}
-
-func (x *DeployObjectDelta) GetSummary() string {
-	if x != nil {
-		return x.Summary
-	}
-	return ""
-}
-
-func (x *DeployObjectDelta) GetImages() []*DeployImageChange {
-	if x != nil {
-		return x.Images
-	}
-	return nil
-}
-
-func (x *DeployObjectDelta) GetParts() []*DeployPartChange {
-	if x != nil {
-		return x.Parts
-	}
-	return nil
-}
-
-type DeployImageChange struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Artifact      string                 `protobuf:"bytes,1,opt,name=artifact,proto3" json:"artifact,omitempty"`
-	From          string                 `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
-	To            string                 `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeployImageChange) Reset() {
-	*x = DeployImageChange{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[52]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeployImageChange) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeployImageChange) ProtoMessage() {}
-
-func (x *DeployImageChange) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[52]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeployImageChange.ProtoReflect.Descriptor instead.
-func (*DeployImageChange) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{52}
-}
-
-func (x *DeployImageChange) GetArtifact() string {
-	if x != nil {
-		return x.Artifact
-	}
-	return ""
-}
-
-func (x *DeployImageChange) GetFrom() string {
-	if x != nil {
-		return x.From
-	}
-	return ""
-}
-
-func (x *DeployImageChange) GetTo() string {
-	if x != nil {
-		return x.To
-	}
-	return ""
-}
-
-type DeployPartChange struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Part          string                 `protobuf:"bytes,1,opt,name=part,proto3" json:"part,omitempty"`
-	Change        DeployChangeKind       `protobuf:"varint,2,opt,name=change,proto3,enum=controlplane.v1.DeployChangeKind" json:"change,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeployPartChange) Reset() {
-	*x = DeployPartChange{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[53]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeployPartChange) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeployPartChange) ProtoMessage() {}
-
-func (x *DeployPartChange) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[53]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeployPartChange.ProtoReflect.Descriptor instead.
-func (*DeployPartChange) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{53}
-}
-
-func (x *DeployPartChange) GetPart() string {
-	if x != nil {
-		return x.Part
-	}
-	return ""
-}
-
-func (x *DeployPartChange) GetChange() DeployChangeKind {
-	if x != nil {
-		return x.Change
-	}
-	return DeployChangeKind_DEPLOY_CHANGE_KIND_UNSPECIFIED
 }
 
 type ListDeployReleasesRequest struct {
@@ -3776,7 +2799,7 @@ type ListDeployReleasesRequest struct {
 
 func (x *ListDeployReleasesRequest) Reset() {
 	*x = ListDeployReleasesRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[54]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3788,7 +2811,7 @@ func (x *ListDeployReleasesRequest) String() string {
 func (*ListDeployReleasesRequest) ProtoMessage() {}
 
 func (x *ListDeployReleasesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[54]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3801,7 +2824,7 @@ func (x *ListDeployReleasesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployReleasesRequest.ProtoReflect.Descriptor instead.
 func (*ListDeployReleasesRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{54}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ListDeployReleasesRequest) GetVersionContains() string {
@@ -3848,7 +2871,7 @@ type ListDeployReleasesResponse struct {
 
 func (x *ListDeployReleasesResponse) Reset() {
 	*x = ListDeployReleasesResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[55]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3860,7 +2883,7 @@ func (x *ListDeployReleasesResponse) String() string {
 func (*ListDeployReleasesResponse) ProtoMessage() {}
 
 func (x *ListDeployReleasesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[55]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3873,7 +2896,7 @@ func (x *ListDeployReleasesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployReleasesResponse.ProtoReflect.Descriptor instead.
 func (*ListDeployReleasesResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{55}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ListDeployReleasesResponse) GetReleases() []*v1.DeployRelease {
@@ -3900,7 +2923,7 @@ type GetDeployReleaseRequest struct {
 
 func (x *GetDeployReleaseRequest) Reset() {
 	*x = GetDeployReleaseRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[56]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3912,7 +2935,7 @@ func (x *GetDeployReleaseRequest) String() string {
 func (*GetDeployReleaseRequest) ProtoMessage() {}
 
 func (x *GetDeployReleaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[56]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3925,7 +2948,7 @@ func (x *GetDeployReleaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployReleaseRequest.ProtoReflect.Descriptor instead.
 func (*GetDeployReleaseRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{56}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *GetDeployReleaseRequest) GetVersion() string {
@@ -3954,7 +2977,7 @@ type GetDeployReleaseResponse struct {
 
 func (x *GetDeployReleaseResponse) Reset() {
 	*x = GetDeployReleaseResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[57]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3966,7 +2989,7 @@ func (x *GetDeployReleaseResponse) String() string {
 func (*GetDeployReleaseResponse) ProtoMessage() {}
 
 func (x *GetDeployReleaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[57]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3979,7 +3002,7 @@ func (x *GetDeployReleaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployReleaseResponse.ProtoReflect.Descriptor instead.
 func (*GetDeployReleaseResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{57}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *GetDeployReleaseResponse) GetRelease() *v1.DeployRelease {
@@ -4019,7 +3042,7 @@ type ListDeployPromotionsRequest struct {
 
 func (x *ListDeployPromotionsRequest) Reset() {
 	*x = ListDeployPromotionsRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[58]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4031,7 +3054,7 @@ func (x *ListDeployPromotionsRequest) String() string {
 func (*ListDeployPromotionsRequest) ProtoMessage() {}
 
 func (x *ListDeployPromotionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[58]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4044,7 +3067,7 @@ func (x *ListDeployPromotionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployPromotionsRequest.ProtoReflect.Descriptor instead.
 func (*ListDeployPromotionsRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{58}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ListDeployPromotionsRequest) GetEnvironmentId() string {
@@ -4096,7 +3119,7 @@ type ListDeployPromotionsResponse struct {
 
 func (x *ListDeployPromotionsResponse) Reset() {
 	*x = ListDeployPromotionsResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[59]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4108,7 +3131,7 @@ func (x *ListDeployPromotionsResponse) String() string {
 func (*ListDeployPromotionsResponse) ProtoMessage() {}
 
 func (x *ListDeployPromotionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[59]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4121,7 +3144,7 @@ func (x *ListDeployPromotionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployPromotionsResponse.ProtoReflect.Descriptor instead.
 func (*ListDeployPromotionsResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{59}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ListDeployPromotionsResponse) GetPromotions() []*v1.DeployPromotion {
@@ -4149,7 +3172,7 @@ type GetDeployRolloutRequest struct {
 
 func (x *GetDeployRolloutRequest) Reset() {
 	*x = GetDeployRolloutRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[60]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4161,7 +3184,7 @@ func (x *GetDeployRolloutRequest) String() string {
 func (*GetDeployRolloutRequest) ProtoMessage() {}
 
 func (x *GetDeployRolloutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[60]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4174,7 +3197,7 @@ func (x *GetDeployRolloutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployRolloutRequest.ProtoReflect.Descriptor instead.
 func (*GetDeployRolloutRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{60}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *GetDeployRolloutRequest) GetEnvironmentId() string {
@@ -4200,7 +3223,7 @@ type GetDeployRolloutResponse struct {
 
 func (x *GetDeployRolloutResponse) Reset() {
 	*x = GetDeployRolloutResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[61]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4212,7 +3235,7 @@ func (x *GetDeployRolloutResponse) String() string {
 func (*GetDeployRolloutResponse) ProtoMessage() {}
 
 func (x *GetDeployRolloutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[61]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4225,7 +3248,7 @@ func (x *GetDeployRolloutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployRolloutResponse.ProtoReflect.Descriptor instead.
 func (*GetDeployRolloutResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{61}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *GetDeployRolloutResponse) GetRollout() *v1.DeployRollout {
@@ -4247,7 +3270,7 @@ type RecordDeployGateRequest struct {
 
 func (x *RecordDeployGateRequest) Reset() {
 	*x = RecordDeployGateRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[62]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4259,7 +3282,7 @@ func (x *RecordDeployGateRequest) String() string {
 func (*RecordDeployGateRequest) ProtoMessage() {}
 
 func (x *RecordDeployGateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[62]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4272,7 +3295,7 @@ func (x *RecordDeployGateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordDeployGateRequest.ProtoReflect.Descriptor instead.
 func (*RecordDeployGateRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{62}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *RecordDeployGateRequest) GetPromotionId() string {
@@ -4302,7 +3325,7 @@ type RecordDeployGateResponse struct {
 
 func (x *RecordDeployGateResponse) Reset() {
 	*x = RecordDeployGateResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[63]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4314,7 +3337,7 @@ func (x *RecordDeployGateResponse) String() string {
 func (*RecordDeployGateResponse) ProtoMessage() {}
 
 func (x *RecordDeployGateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[63]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4327,7 +3350,7 @@ func (x *RecordDeployGateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordDeployGateResponse.ProtoReflect.Descriptor instead.
 func (*RecordDeployGateResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{63}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *RecordDeployGateResponse) GetGate() *v1.DeployGate {
@@ -4353,7 +3376,7 @@ type ListDeployGatesRequest struct {
 
 func (x *ListDeployGatesRequest) Reset() {
 	*x = ListDeployGatesRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[64]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4365,7 +3388,7 @@ func (x *ListDeployGatesRequest) String() string {
 func (*ListDeployGatesRequest) ProtoMessage() {}
 
 func (x *ListDeployGatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[64]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4378,7 +3401,7 @@ func (x *ListDeployGatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployGatesRequest.ProtoReflect.Descriptor instead.
 func (*ListDeployGatesRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{64}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *ListDeployGatesRequest) GetPromotionId() string {
@@ -4398,7 +3421,7 @@ type ListDeployGatesResponse struct {
 
 func (x *ListDeployGatesResponse) Reset() {
 	*x = ListDeployGatesResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[65]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4410,7 +3433,7 @@ func (x *ListDeployGatesResponse) String() string {
 func (*ListDeployGatesResponse) ProtoMessage() {}
 
 func (x *ListDeployGatesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[65]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4423,7 +3446,7 @@ func (x *ListDeployGatesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployGatesResponse.ProtoReflect.Descriptor instead.
 func (*ListDeployGatesResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{65}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *ListDeployGatesResponse) GetGates() []*v1.DeployGate {
@@ -4442,7 +3465,7 @@ type GetDeployRunRequest struct {
 
 func (x *GetDeployRunRequest) Reset() {
 	*x = GetDeployRunRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[66]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4454,7 +3477,7 @@ func (x *GetDeployRunRequest) String() string {
 func (*GetDeployRunRequest) ProtoMessage() {}
 
 func (x *GetDeployRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[66]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4467,7 +3490,7 @@ func (x *GetDeployRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployRunRequest.ProtoReflect.Descriptor instead.
 func (*GetDeployRunRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{66}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *GetDeployRunRequest) GetRunId() string {
@@ -4489,7 +3512,7 @@ type GetDeployRunResponse struct {
 
 func (x *GetDeployRunResponse) Reset() {
 	*x = GetDeployRunResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[67]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4501,7 +3524,7 @@ func (x *GetDeployRunResponse) String() string {
 func (*GetDeployRunResponse) ProtoMessage() {}
 
 func (x *GetDeployRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[67]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4514,7 +3537,7 @@ func (x *GetDeployRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployRunResponse.ProtoReflect.Descriptor instead.
 func (*GetDeployRunResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{67}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *GetDeployRunResponse) GetRun() *v1.DeployRun {
@@ -4557,7 +3580,7 @@ type ListDeployUsageRequest struct {
 
 func (x *ListDeployUsageRequest) Reset() {
 	*x = ListDeployUsageRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[68]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4569,7 +3592,7 @@ func (x *ListDeployUsageRequest) String() string {
 func (*ListDeployUsageRequest) ProtoMessage() {}
 
 func (x *ListDeployUsageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[68]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4582,7 +3605,7 @@ func (x *ListDeployUsageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployUsageRequest.ProtoReflect.Descriptor instead.
 func (*ListDeployUsageRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{68}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ListDeployUsageRequest) GetStartTime() *timestamppb.Timestamp {
@@ -4640,7 +3663,7 @@ type ListDeployUsageResponse struct {
 
 func (x *ListDeployUsageResponse) Reset() {
 	*x = ListDeployUsageResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[69]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4652,7 +3675,7 @@ func (x *ListDeployUsageResponse) String() string {
 func (*ListDeployUsageResponse) ProtoMessage() {}
 
 func (x *ListDeployUsageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[69]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4665,7 +3688,7 @@ func (x *ListDeployUsageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployUsageResponse.ProtoReflect.Descriptor instead.
 func (*ListDeployUsageResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{69}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *ListDeployUsageResponse) GetRows() []*v1.DeployUsageRow {
@@ -4710,17 +3733,14 @@ type RecordDeployBundleRequest struct {
 	// than a legitimate deploy.
 	Config []byte `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"`
 	// The CI run that produced this render.
-	Run *v1.DeployRun `protobuf:"bytes,5,opt,name=run,proto3" json:"run,omitempty"`
-	// Compressed OCI manifests layer. Required for snapshot seals; capped at
-	// 8 MiB, descriptor digest/size and exact snapshot inventory verified server-side.
-	ManifestsLayer []byte `protobuf:"bytes,6,opt,name=manifests_layer,json=manifestsLayer,proto3" json:"manifests_layer,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	Run           *v1.DeployRun `protobuf:"bytes,5,opt,name=run,proto3" json:"run,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RecordDeployBundleRequest) Reset() {
 	*x = RecordDeployBundleRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[70]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4732,7 +3752,7 @@ func (x *RecordDeployBundleRequest) String() string {
 func (*RecordDeployBundleRequest) ProtoMessage() {}
 
 func (x *RecordDeployBundleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[70]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4745,7 +3765,7 @@ func (x *RecordDeployBundleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordDeployBundleRequest.ProtoReflect.Descriptor instead.
 func (*RecordDeployBundleRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{70}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *RecordDeployBundleRequest) GetEnvironmentId() string {
@@ -4783,13 +3803,6 @@ func (x *RecordDeployBundleRequest) GetRun() *v1.DeployRun {
 	return nil
 }
 
-func (x *RecordDeployBundleRequest) GetManifestsLayer() []byte {
-	if x != nil {
-		return x.ManifestsLayer
-	}
-	return nil
-}
-
 type RecordDeployBundleResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Bundle *v1.DeployBundle       `protobuf:"bytes,1,opt,name=bundle,proto3" json:"bundle,omitempty"`
@@ -4803,7 +3816,7 @@ type RecordDeployBundleResponse struct {
 
 func (x *RecordDeployBundleResponse) Reset() {
 	*x = RecordDeployBundleResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[71]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4815,7 +3828,7 @@ func (x *RecordDeployBundleResponse) String() string {
 func (*RecordDeployBundleResponse) ProtoMessage() {}
 
 func (x *RecordDeployBundleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[71]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4828,7 +3841,7 @@ func (x *RecordDeployBundleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordDeployBundleResponse.ProtoReflect.Descriptor instead.
 func (*RecordDeployBundleResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{71}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *RecordDeployBundleResponse) GetBundle() *v1.DeployBundle {
@@ -4858,7 +3871,7 @@ type GetDeployBundleRequest struct {
 
 func (x *GetDeployBundleRequest) Reset() {
 	*x = GetDeployBundleRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[72]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4870,7 +3883,7 @@ func (x *GetDeployBundleRequest) String() string {
 func (*GetDeployBundleRequest) ProtoMessage() {}
 
 func (x *GetDeployBundleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[72]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4883,7 +3896,7 @@ func (x *GetDeployBundleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployBundleRequest.ProtoReflect.Descriptor instead.
 func (*GetDeployBundleRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{72}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *GetDeployBundleRequest) GetBundleId() string {
@@ -4916,7 +3929,7 @@ type GetDeployBundleResponse struct {
 
 func (x *GetDeployBundleResponse) Reset() {
 	*x = GetDeployBundleResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[73]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4928,7 +3941,7 @@ func (x *GetDeployBundleResponse) String() string {
 func (*GetDeployBundleResponse) ProtoMessage() {}
 
 func (x *GetDeployBundleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[73]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4941,7 +3954,7 @@ func (x *GetDeployBundleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployBundleResponse.ProtoReflect.Descriptor instead.
 func (*GetDeployBundleResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{73}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *GetDeployBundleResponse) GetBundle() *v1.DeployBundle {
@@ -4964,7 +3977,7 @@ type ListDeployConvergencesRequest struct {
 
 func (x *ListDeployConvergencesRequest) Reset() {
 	*x = ListDeployConvergencesRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[74]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4976,7 +3989,7 @@ func (x *ListDeployConvergencesRequest) String() string {
 func (*ListDeployConvergencesRequest) ProtoMessage() {}
 
 func (x *ListDeployConvergencesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[74]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4989,7 +4002,7 @@ func (x *ListDeployConvergencesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployConvergencesRequest.ProtoReflect.Descriptor instead.
 func (*ListDeployConvergencesRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{74}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *ListDeployConvergencesRequest) GetEnvironmentId() string {
@@ -5023,7 +4036,7 @@ type ListDeployConvergencesResponse struct {
 
 func (x *ListDeployConvergencesResponse) Reset() {
 	*x = ListDeployConvergencesResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[75]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5035,7 +4048,7 @@ func (x *ListDeployConvergencesResponse) String() string {
 func (*ListDeployConvergencesResponse) ProtoMessage() {}
 
 func (x *ListDeployConvergencesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[75]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5048,7 +4061,7 @@ func (x *ListDeployConvergencesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDeployConvergencesResponse.ProtoReflect.Descriptor instead.
 func (*ListDeployConvergencesResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{75}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *ListDeployConvergencesResponse) GetConvergences() []*v1.DeployConvergence {
@@ -5073,7 +4086,7 @@ type GetDeployLiveViewRequest struct {
 
 func (x *GetDeployLiveViewRequest) Reset() {
 	*x = GetDeployLiveViewRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[76]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5085,7 +4098,7 @@ func (x *GetDeployLiveViewRequest) String() string {
 func (*GetDeployLiveViewRequest) ProtoMessage() {}
 
 func (x *GetDeployLiveViewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[76]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5098,7 +4111,7 @@ func (x *GetDeployLiveViewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployLiveViewRequest.ProtoReflect.Descriptor instead.
 func (*GetDeployLiveViewRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{76}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *GetDeployLiveViewRequest) GetProject() string {
@@ -5126,7 +4139,7 @@ type GetDeployLiveViewResponse struct {
 
 func (x *GetDeployLiveViewResponse) Reset() {
 	*x = GetDeployLiveViewResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[77]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5138,7 +4151,7 @@ func (x *GetDeployLiveViewResponse) String() string {
 func (*GetDeployLiveViewResponse) ProtoMessage() {}
 
 func (x *GetDeployLiveViewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[77]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5151,7 +4164,7 @@ func (x *GetDeployLiveViewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployLiveViewResponse.ProtoReflect.Descriptor instead.
 func (*GetDeployLiveViewResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{77}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *GetDeployLiveViewResponse) GetEnvironments() []*v1.DeployLiveEnvironment {
@@ -5175,7 +4188,7 @@ type PlanDeployRequest struct {
 
 func (x *PlanDeployRequest) Reset() {
 	*x = PlanDeployRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[78]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5187,7 +4200,7 @@ func (x *PlanDeployRequest) String() string {
 func (*PlanDeployRequest) ProtoMessage() {}
 
 func (x *PlanDeployRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[78]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5200,7 +4213,7 @@ func (x *PlanDeployRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanDeployRequest.ProtoReflect.Descriptor instead.
 func (*PlanDeployRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{78}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *PlanDeployRequest) GetEnvironmentId() string {
@@ -5225,18 +4238,15 @@ func (x *PlanDeployRequest) GetReleaseVersion() string {
 }
 
 type PlanDeployResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Plan  *v1.DeployPlan         `protobuf:"bytes,1,opt,name=plan,proto3" json:"plan,omitempty"`
-	// Candidate bundle's exact composition identity; GetBundle supplies the
-	// selected/build/carry decisions and independent consumer bindings for review.
-	SnapshotDigest string `protobuf:"bytes,2,opt,name=snapshot_digest,json=snapshotDigest,proto3" json:"snapshot_digest,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Plan          *v1.DeployPlan         `protobuf:"bytes,1,opt,name=plan,proto3" json:"plan,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PlanDeployResponse) Reset() {
 	*x = PlanDeployResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[79]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5248,7 +4258,7 @@ func (x *PlanDeployResponse) String() string {
 func (*PlanDeployResponse) ProtoMessage() {}
 
 func (x *PlanDeployResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[79]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5261,7 +4271,7 @@ func (x *PlanDeployResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanDeployResponse.ProtoReflect.Descriptor instead.
 func (*PlanDeployResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{79}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *PlanDeployResponse) GetPlan() *v1.DeployPlan {
@@ -5269,13 +4279,6 @@ func (x *PlanDeployResponse) GetPlan() *v1.DeployPlan {
 		return x.Plan
 	}
 	return nil
-}
-
-func (x *PlanDeployResponse) GetSnapshotDigest() string {
-	if x != nil {
-		return x.SnapshotDigest
-	}
-	return ""
 }
 
 // DeployCapacityDemand is what a deploy would run, summed across its objects.
@@ -5300,7 +4303,7 @@ type DeployCapacityDemand struct {
 
 func (x *DeployCapacityDemand) Reset() {
 	*x = DeployCapacityDemand{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[80]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5312,7 +4315,7 @@ func (x *DeployCapacityDemand) String() string {
 func (*DeployCapacityDemand) ProtoMessage() {}
 
 func (x *DeployCapacityDemand) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[80]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5325,7 +4328,7 @@ func (x *DeployCapacityDemand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployCapacityDemand.ProtoReflect.Descriptor instead.
 func (*DeployCapacityDemand) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{80}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *DeployCapacityDemand) GetCpuMillicores() int64 {
@@ -5398,7 +4401,7 @@ type CheckDeployCapacityRequest struct {
 
 func (x *CheckDeployCapacityRequest) Reset() {
 	*x = CheckDeployCapacityRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[81]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5410,7 +4413,7 @@ func (x *CheckDeployCapacityRequest) String() string {
 func (*CheckDeployCapacityRequest) ProtoMessage() {}
 
 func (x *CheckDeployCapacityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[81]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5423,7 +4426,7 @@ func (x *CheckDeployCapacityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckDeployCapacityRequest.ProtoReflect.Descriptor instead.
 func (*CheckDeployCapacityRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{81}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *CheckDeployCapacityRequest) GetEnvironmentId() string {
@@ -5466,7 +4469,7 @@ type CheckDeployCapacityResponse struct {
 
 func (x *CheckDeployCapacityResponse) Reset() {
 	*x = CheckDeployCapacityResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[82]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5478,7 +4481,7 @@ func (x *CheckDeployCapacityResponse) String() string {
 func (*CheckDeployCapacityResponse) ProtoMessage() {}
 
 func (x *CheckDeployCapacityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[82]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5491,7 +4494,7 @@ func (x *CheckDeployCapacityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckDeployCapacityResponse.ProtoReflect.Descriptor instead.
 func (*CheckDeployCapacityResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{82}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *CheckDeployCapacityResponse) GetAllowed() bool {
@@ -5586,7 +4589,7 @@ type ReportLocalSessionRequest struct {
 
 func (x *ReportLocalSessionRequest) Reset() {
 	*x = ReportLocalSessionRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[83]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5598,7 +4601,7 @@ func (x *ReportLocalSessionRequest) String() string {
 func (*ReportLocalSessionRequest) ProtoMessage() {}
 
 func (x *ReportLocalSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[83]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5611,7 +4614,7 @@ func (x *ReportLocalSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportLocalSessionRequest.ProtoReflect.Descriptor instead.
 func (*ReportLocalSessionRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{83}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *ReportLocalSessionRequest) GetSessionId() string {
@@ -5672,7 +4675,7 @@ type ReportLocalSessionResponse struct {
 
 func (x *ReportLocalSessionResponse) Reset() {
 	*x = ReportLocalSessionResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[84]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5684,7 +4687,7 @@ func (x *ReportLocalSessionResponse) String() string {
 func (*ReportLocalSessionResponse) ProtoMessage() {}
 
 func (x *ReportLocalSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[84]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5697,7 +4700,7 @@ func (x *ReportLocalSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportLocalSessionResponse.ProtoReflect.Descriptor instead.
 func (*ReportLocalSessionResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{84}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *ReportLocalSessionResponse) GetSession() *v1.DeployLocalSession {
@@ -5735,7 +4738,7 @@ type ImportLedgerRequest struct {
 
 func (x *ImportLedgerRequest) Reset() {
 	*x = ImportLedgerRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[85]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5747,7 +4750,7 @@ func (x *ImportLedgerRequest) String() string {
 func (*ImportLedgerRequest) ProtoMessage() {}
 
 func (x *ImportLedgerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[85]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5760,7 +4763,7 @@ func (x *ImportLedgerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportLedgerRequest.ProtoReflect.Descriptor instead.
 func (*ImportLedgerRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{85}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *ImportLedgerRequest) GetProject() string {
@@ -5834,16 +4837,14 @@ type LedgerImportRelease struct {
 	// The idempotency key, e.g. "git:.forge/releases/v1.7.12.json@<blob sha>".
 	// Keyed by CONTENTS rather than by filename, so a file whose name disagrees
 	// with the version inside it imports as what it actually is.
-	ImportedFrom string `protobuf:"bytes,5,opt,name=imported_from,json=importedFrom,proto3" json:"imported_from,omitempty"`
-	// The commits the release recorded at its cut, when it did.
-	Commits       *v1.DeployCommitRange `protobuf:"bytes,6,opt,name=commits,proto3" json:"commits,omitempty"`
+	ImportedFrom  string `protobuf:"bytes,5,opt,name=imported_from,json=importedFrom,proto3" json:"imported_from,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LedgerImportRelease) Reset() {
 	*x = LedgerImportRelease{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[86]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5855,7 +4856,7 @@ func (x *LedgerImportRelease) String() string {
 func (*LedgerImportRelease) ProtoMessage() {}
 
 func (x *LedgerImportRelease) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[86]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5868,7 +4869,7 @@ func (x *LedgerImportRelease) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LedgerImportRelease.ProtoReflect.Descriptor instead.
 func (*LedgerImportRelease) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{86}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *LedgerImportRelease) GetVersion() string {
@@ -5906,13 +4907,6 @@ func (x *LedgerImportRelease) GetImportedFrom() string {
 	return ""
 }
 
-func (x *LedgerImportRelease) GetCommits() *v1.DeployCommitRange {
-	if x != nil {
-		return x.Commits
-	}
-	return nil
-}
-
 // LedgerImportEnvironment is one historical environment.
 type LedgerImportEnvironment struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -5932,7 +4926,7 @@ type LedgerImportEnvironment struct {
 
 func (x *LedgerImportEnvironment) Reset() {
 	*x = LedgerImportEnvironment{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[87]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5944,7 +4938,7 @@ func (x *LedgerImportEnvironment) String() string {
 func (*LedgerImportEnvironment) ProtoMessage() {}
 
 func (x *LedgerImportEnvironment) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[87]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5957,7 +4951,7 @@ func (x *LedgerImportEnvironment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LedgerImportEnvironment.ProtoReflect.Descriptor instead.
 func (*LedgerImportEnvironment) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{87}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *LedgerImportEnvironment) GetName() string {
@@ -6022,16 +5016,14 @@ type LedgerImportPromotion struct {
 	// and `forge env deploy` would refuse a ledger that had in fact been
 	// imported. It is also what makes a re-import recognise what it already
 	// wrote.
-	Id string `protobuf:"bytes,11,opt,name=id,proto3" json:"id,omitempty"`
-	// The scope the promotion recorded (DeployPromotion.targets).
-	Targets       []string `protobuf:"bytes,12,rep,name=targets,proto3" json:"targets,omitempty"`
+	Id            string `protobuf:"bytes,11,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LedgerImportPromotion) Reset() {
 	*x = LedgerImportPromotion{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[88]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6043,7 +5035,7 @@ func (x *LedgerImportPromotion) String() string {
 func (*LedgerImportPromotion) ProtoMessage() {}
 
 func (x *LedgerImportPromotion) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[88]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6056,7 +5048,7 @@ func (x *LedgerImportPromotion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LedgerImportPromotion.ProtoReflect.Descriptor instead.
 func (*LedgerImportPromotion) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{88}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *LedgerImportPromotion) GetEnvironment() string {
@@ -6136,13 +5128,6 @@ func (x *LedgerImportPromotion) GetId() string {
 	return ""
 }
 
-func (x *LedgerImportPromotion) GetTargets() []string {
-	if x != nil {
-		return x.Targets
-	}
-	return nil
-}
-
 // LedgerImportBundle is one historical bundle. Empty for every project whose
 // history predates bundles, which today is all of them — the field exists so
 // an import from a newer forge is not lossy.
@@ -6163,7 +5148,7 @@ type LedgerImportBundle struct {
 
 func (x *LedgerImportBundle) Reset() {
 	*x = LedgerImportBundle{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[89]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6175,7 +5160,7 @@ func (x *LedgerImportBundle) String() string {
 func (*LedgerImportBundle) ProtoMessage() {}
 
 func (x *LedgerImportBundle) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[89]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6188,7 +5173,7 @@ func (x *LedgerImportBundle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LedgerImportBundle.ProtoReflect.Descriptor instead.
 func (*LedgerImportBundle) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{89}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *LedgerImportBundle) GetEnvironment() string {
@@ -6281,7 +5266,7 @@ type LedgerImportApply struct {
 
 func (x *LedgerImportApply) Reset() {
 	*x = LedgerImportApply{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[90]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6293,7 +5278,7 @@ func (x *LedgerImportApply) String() string {
 func (*LedgerImportApply) ProtoMessage() {}
 
 func (x *LedgerImportApply) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[90]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6306,7 +5291,7 @@ func (x *LedgerImportApply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LedgerImportApply.ProtoReflect.Descriptor instead.
 func (*LedgerImportApply) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{90}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *LedgerImportApply) GetEnvironment() string {
@@ -6371,7 +5356,7 @@ type LedgerImportApplyOutcome struct {
 
 func (x *LedgerImportApplyOutcome) Reset() {
 	*x = LedgerImportApplyOutcome{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[91]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6383,7 +5368,7 @@ func (x *LedgerImportApplyOutcome) String() string {
 func (*LedgerImportApplyOutcome) ProtoMessage() {}
 
 func (x *LedgerImportApplyOutcome) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[91]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6396,7 +5381,7 @@ func (x *LedgerImportApplyOutcome) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LedgerImportApplyOutcome.ProtoReflect.Descriptor instead.
 func (*LedgerImportApplyOutcome) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{91}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *LedgerImportApplyOutcome) GetStatus() string {
@@ -6451,7 +5436,7 @@ type ImportLedgerResponse struct {
 
 func (x *ImportLedgerResponse) Reset() {
 	*x = ImportLedgerResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[92]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6463,7 +5448,7 @@ func (x *ImportLedgerResponse) String() string {
 func (*ImportLedgerResponse) ProtoMessage() {}
 
 func (x *ImportLedgerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[92]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6476,7 +5461,7 @@ func (x *ImportLedgerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportLedgerResponse.ProtoReflect.Descriptor instead.
 func (*ImportLedgerResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{92}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *ImportLedgerResponse) GetCounts() *structpb.Struct {
@@ -6502,7 +5487,7 @@ type GetDeployDriftRequest struct {
 
 func (x *GetDeployDriftRequest) Reset() {
 	*x = GetDeployDriftRequest{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[93]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6514,7 +5499,7 @@ func (x *GetDeployDriftRequest) String() string {
 func (*GetDeployDriftRequest) ProtoMessage() {}
 
 func (x *GetDeployDriftRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[93]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6527,7 +5512,7 @@ func (x *GetDeployDriftRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployDriftRequest.ProtoReflect.Descriptor instead.
 func (*GetDeployDriftRequest) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{93}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *GetDeployDriftRequest) GetEnvironmentId() string {
@@ -6546,7 +5531,7 @@ type GetDeployDriftResponse struct {
 
 func (x *GetDeployDriftResponse) Reset() {
 	*x = GetDeployDriftResponse{}
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[94]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6558,7 +5543,7 @@ func (x *GetDeployDriftResponse) String() string {
 func (*GetDeployDriftResponse) ProtoMessage() {}
 
 func (x *GetDeployDriftResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_deploy_v1_deploy_proto_msgTypes[94]
+	mi := &file_services_deploy_v1_deploy_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6571,7 +5556,7 @@ func (x *GetDeployDriftResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeployDriftResponse.ProtoReflect.Descriptor instead.
 func (*GetDeployDriftResponse) Descriptor() ([]byte, []int) {
-	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{94}
+	return file_services_deploy_v1_deploy_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *GetDeployDriftResponse) GetDrift() *v1.DeployDrift {
@@ -6585,12 +5570,7 @@ var File_services_deploy_v1_deploy_proto protoreflect.FileDescriptor
 
 const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\n" +
-	"\x1fservices/deploy/v1/deploy.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x1e\n" +
-	"\x1cGetDeployCapabilitiesRequest\"\xcd\x01\n" +
-	"\x1dGetDeployCapabilitiesResponse\x128\n" +
-	"\x18snapshot_schema_versions\x18\x01 \x03(\tR\x16snapshotSchemaVersions\x128\n" +
-	"\x18immutable_snapshot_seals\x18\x02 \x01(\bR\x16immutableSnapshotSeals\x128\n" +
-	"\x18frozen_promotion_bundles\x18\x03 \x01(\bR\x16frozenPromotionBundles\"\x18\n" +
+	"\x1fservices/deploy/v1/deploy.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x18\n" +
 	"\x16GetDeployTenantRequest\"P\n" +
 	"\x17GetDeployTenantResponse\x125\n" +
 	"\x06tenant\x18\x01 \x01(\v2\x1d.controlplane.v1.DeployTenantR\x06tenant\"/\n" +
@@ -6687,7 +5667,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"deployment\">\n" +
 	"\x17DeleteDeploymentRequest\x12#\n" +
 	"\rdeployment_id\x18\x01 \x01(\tR\fdeploymentId\"\x1a\n" +
-	"\x18DeleteDeploymentResponse\"\xfd\x04\n" +
+	"\x18DeleteDeploymentResponse\"\xe3\x04\n" +
 	"\x15PromoteReleaseRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12.\n" +
@@ -6703,8 +5683,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x03run\x18\v \x01(\v2\x1a.controlplane.v1.DeployRunR\x03run\x12\x1f\n" +
 	"\vplan_digest\x18\r \x01(\tR\n" +
 	"planDigest\x123\n" +
-	"\x15acknowledged_findings\x18\x0e \x03(\tR\x14acknowledgedFindings\x12\x18\n" +
-	"\atargets\x18\x0f \x03(\tR\atargetsB\x12\n" +
+	"\x15acknowledged_findings\x18\x0e \x03(\tR\x14acknowledgedFindingsB\x12\n" +
 	"\x10expected_currentJ\x04\b\f\x10\r\"\x8b\x01\n" +
 	"\x16PromoteReleaseResponse\x12>\n" +
 	"\tpromotion\x18\x01 \x01(\v2 .controlplane.v1.DeployPromotionR\tpromotion\x121\n" +
@@ -6759,7 +5738,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x05lines\x18\x01 \x03(\v2\x1e.controlplane.v1.DeployLogLineR\x05lines\x12\x1f\n" +
 	"\vis_snapshot\x18\x02 \x01(\bR\n" +
 	"isSnapshot\x12'\n" +
-	"\x0flatest_sequence\x18\x03 \x01(\x03R\x0elatestSequence\"\xd4\x03\n" +
+	"\x0flatest_sequence\x18\x03 \x01(\x03R\x0elatestSequence\"\xd2\x02\n" +
 	"\x11CutReleaseRequest\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12=\n" +
 	"\tartifacts\x18\x02 \x03(\v2\x1f.controlplane.v1.DeployArtifactR\tartifacts\x12\x1d\n" +
@@ -6771,65 +5750,10 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"provenance\x18\a \x01(\v2'.controlplane.v1.DeploySourceProvenanceR\n" +
 	"provenance\x12\x18\n" +
-	"\aproject\x18\b \x01(\tR\aproject\x12B\n" +
-	"\x10snapshot_release\x18\t \x01(\v2\x17.google.protobuf.StructR\x0fsnapshotRelease\x12<\n" +
-	"\acommits\x18\n" +
-	" \x01(\v2\".controlplane.v1.DeployCommitRangeR\acommits\"h\n" +
+	"\aproject\x18\b \x01(\tR\aproject\"h\n" +
 	"\x12CutReleaseResponse\x128\n" +
 	"\arelease\x18\x01 \x01(\v2\x1e.controlplane.v1.DeployReleaseR\arelease\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"\xa1\x01\n" +
-	"\x1cCompareDeployReleasesRequest\x12!\n" +
-	"\ffrom_version\x18\x01 \x01(\tR\vfromVersion\x12\x1d\n" +
-	"\n" +
-	"to_version\x18\x02 \x01(\tR\ttoVersion\x12\x18\n" +
-	"\aproject\x18\x03 \x01(\tR\aproject\x12%\n" +
-	"\x0eenvironment_id\x18\x04 \x01(\tR\renvironmentId\"\xff\x02\n" +
-	"\x1dCompareDeployReleasesResponse\x122\n" +
-	"\x04from\x18\x01 \x01(\v2\x1e.controlplane.v1.DeployReleaseR\x04from\x12.\n" +
-	"\x02to\x18\x02 \x01(\v2\x1e.controlplane.v1.DeployReleaseR\x02to\x12A\n" +
-	"\acommits\x18\x03 \x01(\v2'.controlplane.v1.DeployCommitComparisonR\acommits\x12C\n" +
-	"\tartifacts\x18\x04 \x03(\v2%.controlplane.v1.DeployArtifactChangeR\tartifacts\x12/\n" +
-	"\x13unchanged_artifacts\x18\x05 \x01(\x05R\x12unchangedArtifacts\x12A\n" +
-	"\aobjects\x18\x06 \x01(\v2'.controlplane.v1.DeployObjectComparisonR\aobjects\"\xff\x01\n" +
-	"\x16DeployCommitComparison\x12B\n" +
-	"\x05state\x18\x01 \x01(\x0e2,.controlplane.v1.DeployCommitComparisonStateR\x05state\x12\x18\n" +
-	"\areverts\x18\x02 \x01(\bR\areverts\x127\n" +
-	"\acommits\x18\x03 \x03(\v2\x1d.controlplane.v1.DeployCommitR\acommits\x12\x14\n" +
-	"\x05total\x18\x04 \x01(\x05R\x05total\x12\x1c\n" +
-	"\ttruncated\x18\x05 \x01(\bR\ttruncated\x12\x1a\n" +
-	"\breleases\x18\x06 \x03(\tR\breleases\"\x9d\x01\n" +
-	"\x14DeployArtifactChange\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
-	"\x04kind\x18\x02 \x01(\tR\x04kind\x129\n" +
-	"\x06change\x18\x03 \x01(\x0e2!.controlplane.v1.DeployChangeKindR\x06change\x12\x12\n" +
-	"\x04from\x18\x04 \x01(\tR\x04from\x12\x0e\n" +
-	"\x02to\x18\x05 \x01(\tR\x02to\"\xfa\x02\n" +
-	"\x16DeployObjectComparison\x12B\n" +
-	"\x05state\x18\x01 \x01(\x0e2,.controlplane.v1.DeployObjectComparisonStateR\x05state\x12\x16\n" +
-	"\x06detail\x18\x02 \x01(\tR\x06detail\x12%\n" +
-	"\x0eenvironment_id\x18\x03 \x01(\tR\renvironmentId\x12,\n" +
-	"\x12from_bundle_digest\x18\x04 \x01(\tR\x10fromBundleDigest\x12(\n" +
-	"\x10to_bundle_digest\x18\x05 \x01(\tR\x0etoBundleDigest\x12:\n" +
-	"\x06deltas\x18\x06 \x03(\v2\".controlplane.v1.DeployObjectDeltaR\x06deltas\x12\x1c\n" +
-	"\tunchanged\x18\a \x01(\x05R\tunchanged\x12+\n" +
-	"\x11summaries_missing\x18\b \x01(\bR\x10summariesMissing\"\xd9\x02\n" +
-	"\x11DeployObjectDelta\x129\n" +
-	"\x06change\x18\x01 \x01(\x0e2!.controlplane.v1.DeployChangeKindR\x06change\x12\x18\n" +
-	"\acluster\x18\x02 \x01(\tR\acluster\x12\x12\n" +
-	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x1c\n" +
-	"\tnamespace\x18\x04 \x01(\tR\tnamespace\x12\x12\n" +
-	"\x04name\x18\x05 \x01(\tR\x04name\x12\x1a\n" +
-	"\bworkload\x18\x06 \x01(\tR\bworkload\x12\x18\n" +
-	"\asummary\x18\a \x01(\tR\asummary\x12:\n" +
-	"\x06images\x18\b \x03(\v2\".controlplane.v1.DeployImageChangeR\x06images\x127\n" +
-	"\x05parts\x18\t \x03(\v2!.controlplane.v1.DeployPartChangeR\x05parts\"S\n" +
-	"\x11DeployImageChange\x12\x1a\n" +
-	"\bartifact\x18\x01 \x01(\tR\bartifact\x12\x12\n" +
-	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
-	"\x02to\x18\x03 \x01(\tR\x02to\"a\n" +
-	"\x10DeployPartChange\x12\x12\n" +
-	"\x04part\x18\x01 \x01(\tR\x04part\x129\n" +
-	"\x06change\x18\x02 \x01(\x0e2!.controlplane.v1.DeployChangeKindR\x06change\"\xc4\x02\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"\xc4\x02\n" +
 	"\x19ListDeployReleasesRequest\x12.\n" +
 	"\x10version_contains\x18\x01 \x01(\tH\x00R\x0fversionContains\x88\x01\x01\x12\"\n" +
 	"\n" +
@@ -6901,7 +5825,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x14_granularity_seconds\"\x7f\n" +
 	"\x17ListDeployUsageResponse\x123\n" +
 	"\x04rows\x18\x01 \x03(\v2\x1f.controlplane.v1.DeployUsageRowR\x04rows\x12/\n" +
-	"\x14total_cost_usd_nanos\x18\x02 \x01(\x03R\x11totalCostUsdNanos\"\xed\x01\n" +
+	"\x14total_cost_usd_nanos\x18\x02 \x01(\x03R\x11totalCostUsdNanos\"\xc4\x01\n" +
 	"\x19RecordDeployBundleRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x1e\n" +
 	"\n" +
@@ -6909,8 +5833,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"repository\x12\x1a\n" +
 	"\bmanifest\x18\x03 \x01(\fR\bmanifest\x12\x16\n" +
 	"\x06config\x18\x04 \x01(\fR\x06config\x12,\n" +
-	"\x03run\x18\x05 \x01(\v2\x1a.controlplane.v1.DeployRunR\x03run\x12'\n" +
-	"\x0fmanifests_layer\x18\x06 \x01(\fR\x0emanifestsLayer\"m\n" +
+	"\x03run\x18\x05 \x01(\v2\x1a.controlplane.v1.DeployRunR\x03run\"m\n" +
 	"\x1aRecordDeployBundleResponse\x125\n" +
 	"\x06bundle\x18\x01 \x01(\v2\x1d.controlplane.v1.DeployBundleR\x06bundle\x12\x18\n" +
 	"\acreated\x18\x02 \x01(\bR\acreated\"t\n" +
@@ -6936,10 +5859,9 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x11PlanDeployRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x1b\n" +
 	"\tbundle_id\x18\x02 \x01(\tR\bbundleId\x12'\n" +
-	"\x0frelease_version\x18\x03 \x01(\tR\x0ereleaseVersion\"n\n" +
+	"\x0frelease_version\x18\x03 \x01(\tR\x0ereleaseVersion\"E\n" +
 	"\x12PlanDeployResponse\x12/\n" +
-	"\x04plan\x18\x01 \x01(\v2\x1b.controlplane.v1.DeployPlanR\x04plan\x12'\n" +
-	"\x0fsnapshot_digest\x18\x02 \x01(\tR\x0esnapshotDigest\"\xa6\x02\n" +
+	"\x04plan\x18\x01 \x01(\v2\x1b.controlplane.v1.DeployPlanR\x04plan\"\xa6\x02\n" +
 	"\x14DeployCapacityDemand\x12%\n" +
 	"\x0ecpu_millicores\x18\x01 \x01(\x03R\rcpuMillicores\x12!\n" +
 	"\fmemory_bytes\x18\x02 \x01(\x03R\vmemoryBytes\x12\x1f\n" +
@@ -6986,7 +5908,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\abundles\x18\x05 \x03(\v2#.controlplane.v1.LedgerImportBundleR\abundles\x12<\n" +
 	"\aapplies\x18\x06 \x03(\v2\".controlplane.v1.LedgerImportApplyR\aapplies\x12\x16\n" +
 	"\x06source\x18\a \x01(\tR\x06source\x12\x17\n" +
-	"\adry_run\x18\b \x01(\bR\x06dryRun\"\xd5\x02\n" +
+	"\adry_run\x18\b \x01(\bR\x06dryRun\"\x97\x02\n" +
 	"\x13LedgerImportRelease\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12=\n" +
 	"\tartifacts\x18\x02 \x03(\v2\x1f.controlplane.v1.DeployArtifactR\tartifacts\x12G\n" +
@@ -6995,14 +5917,13 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"provenance\x129\n" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12#\n" +
-	"\rimported_from\x18\x05 \x01(\tR\fimportedFrom\x12<\n" +
-	"\acommits\x18\x06 \x01(\v2\".controlplane.v1.DeployCommitRangeR\acommits\"\xc9\x01\n" +
+	"\rimported_from\x18\x05 \x01(\tR\fimportedFrom\"\xc9\x01\n" +
 	"\x17LedgerImportEnvironment\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12:\n" +
 	"\x04kind\x18\x02 \x01(\x0e2&.controlplane.v1.DeployEnvironmentKindR\x04kind\x129\n" +
 	"\n" +
 	"deleted_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAt\x12#\n" +
-	"\rimported_from\x18\x04 \x01(\tR\fimportedFrom\"\x8b\x06\n" +
+	"\rimported_from\x18\x04 \x01(\tR\fimportedFrom\"\xf1\x05\n" +
 	"\x15LedgerImportPromotion\x12 \n" +
 	"\venvironment\x18\x01 \x01(\tR\venvironment\x12'\n" +
 	"\x0frelease_version\x18\x02 \x01(\tR\x0ereleaseVersion\x12l\n" +
@@ -7016,8 +5937,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"promotedAt\x12#\n" +
 	"\rimported_from\x18\n" +
 	" \x01(\tR\fimportedFrom\x12\x0e\n" +
-	"\x02id\x18\v \x01(\tR\x02id\x12\x18\n" +
-	"\atargets\x18\f \x03(\tR\atargets\x1aD\n" +
+	"\x02id\x18\v \x01(\tR\x02id\x1aD\n" +
 	"\x16ResolvedArtifactsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aa\n" +
@@ -7058,23 +5978,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x15GetDeployDriftRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\"L\n" +
 	"\x16GetDeployDriftResponse\x122\n" +
-	"\x05drift\x18\x01 \x01(\v2\x1c.controlplane.v1.DeployDriftR\x05drift*\x82\x02\n" +
-	"\x1bDeployCommitComparisonState\x12.\n" +
-	"*DEPLOY_COMMIT_COMPARISON_STATE_UNSPECIFIED\x10\x00\x12+\n" +
-	"'DEPLOY_COMMIT_COMPARISON_STATE_COMPUTED\x10\x01\x12'\n" +
-	"#DEPLOY_COMMIT_COMPARISON_STATE_SAME\x10\x02\x12.\n" +
-	"*DEPLOY_COMMIT_COMPARISON_STATE_BY_CUT_TIME\x10\x03\x12-\n" +
-	")DEPLOY_COMMIT_COMPARISON_STATE_UNRECORDED\x10\x04*\x95\x01\n" +
-	"\x10DeployChangeKind\x12\"\n" +
-	"\x1eDEPLOY_CHANGE_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
-	"\x18DEPLOY_CHANGE_KIND_ADDED\x10\x01\x12\x1f\n" +
-	"\x1bDEPLOY_CHANGE_KIND_MODIFIED\x10\x02\x12\x1e\n" +
-	"\x1aDEPLOY_CHANGE_KIND_REMOVED\x10\x03*\xe0\x01\n" +
-	"\x1bDeployObjectComparisonState\x12.\n" +
-	"*DEPLOY_OBJECT_COMPARISON_STATE_UNSPECIFIED\x10\x00\x12+\n" +
-	"'DEPLOY_OBJECT_COMPARISON_STATE_COMPARED\x10\x01\x121\n" +
-	"-DEPLOY_OBJECT_COMPARISON_STATE_NO_ENVIRONMENT\x10\x02\x121\n" +
-	"-DEPLOY_OBJECT_COMPARISON_STATE_BUNDLE_MISSING\x10\x03*\xb2\x02\n" +
+	"\x05drift\x18\x01 \x01(\v2\x1c.controlplane.v1.DeployDriftR\x05drift*\xb2\x02\n" +
 	"\x12DeployCapacityCode\x12$\n" +
 	" DEPLOY_CAPACITY_CODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOY_CAPACITY_CODE_OK\x10\x01\x12(\n" +
@@ -7082,9 +5986,8 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	".DEPLOY_CAPACITY_CODE_STATIC_FREE_TIER_EXCEEDED\x10\x03\x12(\n" +
 	"$DEPLOY_CAPACITY_CODE_EXCEEDS_CEILING\x10\x04\x12*\n" +
 	"&DEPLOY_CAPACITY_CODE_SPEND_CAP_REACHED\x10\x05\x12%\n" +
-	"!DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN\x10\x062\x81!\n" +
-	"\rDeployService\x12p\n" +
-	"\x0fGetCapabilities\x12-.controlplane.v1.GetDeployCapabilitiesRequest\x1a..controlplane.v1.GetDeployCapabilitiesResponse\x12^\n" +
+	"!DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN\x10\x062\x9d\x1f\n" +
+	"\rDeployService\x12^\n" +
 	"\tGetTenant\x12'.controlplane.v1.GetDeployTenantRequest\x1a(.controlplane.v1.GetDeployTenantResponse\x12g\n" +
 	"\fCreateTenant\x12*.controlplane.v1.CreateDeployTenantRequest\x1a+.controlplane.v1.CreateDeployTenantResponse\x12v\n" +
 	"\x11CreateEnvironment\x12/.controlplane.v1.CreateDeployEnvironmentRequest\x1a0.controlplane.v1.CreateDeployEnvironmentResponse\x12m\n" +
@@ -7111,8 +6014,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\fListReleases\x12*.controlplane.v1.ListDeployReleasesRequest\x1a+.controlplane.v1.ListDeployReleasesResponse\x12a\n" +
 	"\n" +
 	"GetRelease\x12(.controlplane.v1.GetDeployReleaseRequest\x1a).controlplane.v1.GetDeployReleaseResponse\x12m\n" +
-	"\x0eListPromotions\x12,.controlplane.v1.ListDeployPromotionsRequest\x1a-.controlplane.v1.ListDeployPromotionsResponse\x12p\n" +
-	"\x0fCompareReleases\x12-.controlplane.v1.CompareDeployReleasesRequest\x1a..controlplane.v1.CompareDeployReleasesResponse\x12a\n" +
+	"\x0eListPromotions\x12,.controlplane.v1.ListDeployPromotionsRequest\x1a-.controlplane.v1.ListDeployPromotionsResponse\x12a\n" +
 	"\n" +
 	"GetRollout\x12(.controlplane.v1.GetDeployRolloutRequest\x1a).controlplane.v1.GetDeployRolloutResponse\x12a\n" +
 	"\n" +
@@ -7144,348 +6046,312 @@ func file_services_deploy_v1_deploy_proto_rawDescGZIP() []byte {
 	return file_services_deploy_v1_deploy_proto_rawDescData
 }
 
-var file_services_deploy_v1_deploy_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_services_deploy_v1_deploy_proto_msgTypes = make([]protoimpl.MessageInfo, 97)
+var file_services_deploy_v1_deploy_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_services_deploy_v1_deploy_proto_msgTypes = make([]protoimpl.MessageInfo, 87)
 var file_services_deploy_v1_deploy_proto_goTypes = []any{
-	(DeployCommitComparisonState)(0),        // 0: controlplane.v1.DeployCommitComparisonState
-	(DeployChangeKind)(0),                   // 1: controlplane.v1.DeployChangeKind
-	(DeployObjectComparisonState)(0),        // 2: controlplane.v1.DeployObjectComparisonState
-	(DeployCapacityCode)(0),                 // 3: controlplane.v1.DeployCapacityCode
-	(*GetDeployCapabilitiesRequest)(nil),    // 4: controlplane.v1.GetDeployCapabilitiesRequest
-	(*GetDeployCapabilitiesResponse)(nil),   // 5: controlplane.v1.GetDeployCapabilitiesResponse
-	(*GetDeployTenantRequest)(nil),          // 6: controlplane.v1.GetDeployTenantRequest
-	(*GetDeployTenantResponse)(nil),         // 7: controlplane.v1.GetDeployTenantResponse
-	(*CreateDeployTenantRequest)(nil),       // 8: controlplane.v1.CreateDeployTenantRequest
-	(*CreateDeployTenantResponse)(nil),      // 9: controlplane.v1.CreateDeployTenantResponse
-	(*CreateDeployEnvironmentRequest)(nil),  // 10: controlplane.v1.CreateDeployEnvironmentRequest
-	(*CreateDeployEnvironmentResponse)(nil), // 11: controlplane.v1.CreateDeployEnvironmentResponse
-	(*GetDeployEnvironmentRequest)(nil),     // 12: controlplane.v1.GetDeployEnvironmentRequest
-	(*GetDeployEnvironmentResponse)(nil),    // 13: controlplane.v1.GetDeployEnvironmentResponse
-	(*ListDeployEnvironmentsRequest)(nil),   // 14: controlplane.v1.ListDeployEnvironmentsRequest
-	(*ListDeployEnvironmentsResponse)(nil),  // 15: controlplane.v1.ListDeployEnvironmentsResponse
-	(*UpdateDeployEnvironmentRequest)(nil),  // 16: controlplane.v1.UpdateDeployEnvironmentRequest
-	(*UpdateDeployEnvironmentResponse)(nil), // 17: controlplane.v1.UpdateDeployEnvironmentResponse
-	(*DeleteDeployEnvironmentRequest)(nil),  // 18: controlplane.v1.DeleteDeployEnvironmentRequest
-	(*DeleteDeployEnvironmentResponse)(nil), // 19: controlplane.v1.DeleteDeployEnvironmentResponse
-	(*RetainedDatabase)(nil),                // 20: controlplane.v1.RetainedDatabase
-	(*ListRetainedDatabasesRequest)(nil),    // 21: controlplane.v1.ListRetainedDatabasesRequest
-	(*ListRetainedDatabasesResponse)(nil),   // 22: controlplane.v1.ListRetainedDatabasesResponse
-	(*DeleteRetainedDatabaseRequest)(nil),   // 23: controlplane.v1.DeleteRetainedDatabaseRequest
-	(*DeleteRetainedDatabaseResponse)(nil),  // 24: controlplane.v1.DeleteRetainedDatabaseResponse
-	(*EnsureDeployEnvironmentRequest)(nil),  // 25: controlplane.v1.EnsureDeployEnvironmentRequest
-	(*EnsureDeployEnvironmentResponse)(nil), // 26: controlplane.v1.EnsureDeployEnvironmentResponse
-	(*CreateDeploymentRequest)(nil),         // 27: controlplane.v1.CreateDeploymentRequest
-	(*CreateDeploymentResponse)(nil),        // 28: controlplane.v1.CreateDeploymentResponse
-	(*GetDeploymentRequest)(nil),            // 29: controlplane.v1.GetDeploymentRequest
-	(*GetDeploymentResponse)(nil),           // 30: controlplane.v1.GetDeploymentResponse
-	(*ListDeploymentsRequest)(nil),          // 31: controlplane.v1.ListDeploymentsRequest
-	(*ListDeploymentsResponse)(nil),         // 32: controlplane.v1.ListDeploymentsResponse
-	(*UpdateDeploymentRequest)(nil),         // 33: controlplane.v1.UpdateDeploymentRequest
-	(*UpdateDeploymentResponse)(nil),        // 34: controlplane.v1.UpdateDeploymentResponse
-	(*DeleteDeploymentRequest)(nil),         // 35: controlplane.v1.DeleteDeploymentRequest
-	(*DeleteDeploymentResponse)(nil),        // 36: controlplane.v1.DeleteDeploymentResponse
-	(*PromoteReleaseRequest)(nil),           // 37: controlplane.v1.PromoteReleaseRequest
-	(*PromoteReleaseResponse)(nil),          // 38: controlplane.v1.PromoteReleaseResponse
-	(*ScaleDeploymentRequest)(nil),          // 39: controlplane.v1.ScaleDeploymentRequest
-	(*ScaleDeploymentResponse)(nil),         // 40: controlplane.v1.ScaleDeploymentResponse
-	(*SetEnvironmentRunStateRequest)(nil),   // 41: controlplane.v1.SetEnvironmentRunStateRequest
-	(*SetEnvironmentRunStateResponse)(nil),  // 42: controlplane.v1.SetEnvironmentRunStateResponse
-	(*GetDeploymentStatusRequest)(nil),      // 43: controlplane.v1.GetDeploymentStatusRequest
-	(*DeploymentStatus)(nil),                // 44: controlplane.v1.DeploymentStatus
-	(*GetDeploymentStatusResponse)(nil),     // 45: controlplane.v1.GetDeploymentStatusResponse
-	(*StreamDeploymentLogsRequest)(nil),     // 46: controlplane.v1.StreamDeploymentLogsRequest
-	(*StreamDeploymentLogsResponse)(nil),    // 47: controlplane.v1.StreamDeploymentLogsResponse
-	(*CutReleaseRequest)(nil),               // 48: controlplane.v1.CutReleaseRequest
-	(*CutReleaseResponse)(nil),              // 49: controlplane.v1.CutReleaseResponse
-	(*CompareDeployReleasesRequest)(nil),    // 50: controlplane.v1.CompareDeployReleasesRequest
-	(*CompareDeployReleasesResponse)(nil),   // 51: controlplane.v1.CompareDeployReleasesResponse
-	(*DeployCommitComparison)(nil),          // 52: controlplane.v1.DeployCommitComparison
-	(*DeployArtifactChange)(nil),            // 53: controlplane.v1.DeployArtifactChange
-	(*DeployObjectComparison)(nil),          // 54: controlplane.v1.DeployObjectComparison
-	(*DeployObjectDelta)(nil),               // 55: controlplane.v1.DeployObjectDelta
-	(*DeployImageChange)(nil),               // 56: controlplane.v1.DeployImageChange
-	(*DeployPartChange)(nil),                // 57: controlplane.v1.DeployPartChange
-	(*ListDeployReleasesRequest)(nil),       // 58: controlplane.v1.ListDeployReleasesRequest
-	(*ListDeployReleasesResponse)(nil),      // 59: controlplane.v1.ListDeployReleasesResponse
-	(*GetDeployReleaseRequest)(nil),         // 60: controlplane.v1.GetDeployReleaseRequest
-	(*GetDeployReleaseResponse)(nil),        // 61: controlplane.v1.GetDeployReleaseResponse
-	(*ListDeployPromotionsRequest)(nil),     // 62: controlplane.v1.ListDeployPromotionsRequest
-	(*ListDeployPromotionsResponse)(nil),    // 63: controlplane.v1.ListDeployPromotionsResponse
-	(*GetDeployRolloutRequest)(nil),         // 64: controlplane.v1.GetDeployRolloutRequest
-	(*GetDeployRolloutResponse)(nil),        // 65: controlplane.v1.GetDeployRolloutResponse
-	(*RecordDeployGateRequest)(nil),         // 66: controlplane.v1.RecordDeployGateRequest
-	(*RecordDeployGateResponse)(nil),        // 67: controlplane.v1.RecordDeployGateResponse
-	(*ListDeployGatesRequest)(nil),          // 68: controlplane.v1.ListDeployGatesRequest
-	(*ListDeployGatesResponse)(nil),         // 69: controlplane.v1.ListDeployGatesResponse
-	(*GetDeployRunRequest)(nil),             // 70: controlplane.v1.GetDeployRunRequest
-	(*GetDeployRunResponse)(nil),            // 71: controlplane.v1.GetDeployRunResponse
-	(*ListDeployUsageRequest)(nil),          // 72: controlplane.v1.ListDeployUsageRequest
-	(*ListDeployUsageResponse)(nil),         // 73: controlplane.v1.ListDeployUsageResponse
-	(*RecordDeployBundleRequest)(nil),       // 74: controlplane.v1.RecordDeployBundleRequest
-	(*RecordDeployBundleResponse)(nil),      // 75: controlplane.v1.RecordDeployBundleResponse
-	(*GetDeployBundleRequest)(nil),          // 76: controlplane.v1.GetDeployBundleRequest
-	(*GetDeployBundleResponse)(nil),         // 77: controlplane.v1.GetDeployBundleResponse
-	(*ListDeployConvergencesRequest)(nil),   // 78: controlplane.v1.ListDeployConvergencesRequest
-	(*ListDeployConvergencesResponse)(nil),  // 79: controlplane.v1.ListDeployConvergencesResponse
-	(*GetDeployLiveViewRequest)(nil),        // 80: controlplane.v1.GetDeployLiveViewRequest
-	(*GetDeployLiveViewResponse)(nil),       // 81: controlplane.v1.GetDeployLiveViewResponse
-	(*PlanDeployRequest)(nil),               // 82: controlplane.v1.PlanDeployRequest
-	(*PlanDeployResponse)(nil),              // 83: controlplane.v1.PlanDeployResponse
-	(*DeployCapacityDemand)(nil),            // 84: controlplane.v1.DeployCapacityDemand
-	(*CheckDeployCapacityRequest)(nil),      // 85: controlplane.v1.CheckDeployCapacityRequest
-	(*CheckDeployCapacityResponse)(nil),     // 86: controlplane.v1.CheckDeployCapacityResponse
-	(*ReportLocalSessionRequest)(nil),       // 87: controlplane.v1.ReportLocalSessionRequest
-	(*ReportLocalSessionResponse)(nil),      // 88: controlplane.v1.ReportLocalSessionResponse
-	(*ImportLedgerRequest)(nil),             // 89: controlplane.v1.ImportLedgerRequest
-	(*LedgerImportRelease)(nil),             // 90: controlplane.v1.LedgerImportRelease
-	(*LedgerImportEnvironment)(nil),         // 91: controlplane.v1.LedgerImportEnvironment
-	(*LedgerImportPromotion)(nil),           // 92: controlplane.v1.LedgerImportPromotion
-	(*LedgerImportBundle)(nil),              // 93: controlplane.v1.LedgerImportBundle
-	(*LedgerImportApply)(nil),               // 94: controlplane.v1.LedgerImportApply
-	(*LedgerImportApplyOutcome)(nil),        // 95: controlplane.v1.LedgerImportApplyOutcome
-	(*ImportLedgerResponse)(nil),            // 96: controlplane.v1.ImportLedgerResponse
-	(*GetDeployDriftRequest)(nil),           // 97: controlplane.v1.GetDeployDriftRequest
-	(*GetDeployDriftResponse)(nil),          // 98: controlplane.v1.GetDeployDriftResponse
-	nil,                                     // 99: controlplane.v1.LedgerImportPromotion.ResolvedArtifactsEntry
-	nil,                                     // 100: controlplane.v1.LedgerImportPromotion.ResolvedSourcesEntry
-	(*v1.DeployTenant)(nil),                 // 101: controlplane.v1.DeployTenant
-	(*v1.DeployEnvironmentSpec)(nil),        // 102: controlplane.v1.DeployEnvironmentSpec
-	(*v1.DeployEnvironment)(nil),            // 103: controlplane.v1.DeployEnvironment
-	(*v1.DeployPromotion)(nil),              // 104: controlplane.v1.DeployPromotion
-	(v1.DeployEnvironmentKind)(0),           // 105: controlplane.v1.DeployEnvironmentKind
-	(*timestamppb.Timestamp)(nil),           // 106: google.protobuf.Timestamp
-	(v1.DeployTier)(0),                      // 107: controlplane.v1.DeployTier
-	(*structpb.Struct)(nil),                 // 108: google.protobuf.Struct
-	(*v1.Deployment)(nil),                   // 109: controlplane.v1.Deployment
-	(v1.DeployObservedState)(0),             // 110: controlplane.v1.DeployObservedState
-	(*v1.DeployGate)(nil),                   // 111: controlplane.v1.DeployGate
-	(*v1.DeployRun)(nil),                    // 112: controlplane.v1.DeployRun
-	(*v1.DeployHold)(nil),                   // 113: controlplane.v1.DeployHold
-	(v1.DeployRunState)(0),                  // 114: controlplane.v1.DeployRunState
-	(v1.DeployVerdict)(0),                   // 115: controlplane.v1.DeployVerdict
-	(v1.DeployReconcilePolicy)(0),           // 116: controlplane.v1.DeployReconcilePolicy
-	(v1.DeployLogStream)(0),                 // 117: controlplane.v1.DeployLogStream
-	(*v1.DeployLogLine)(nil),                // 118: controlplane.v1.DeployLogLine
-	(*v1.DeployArtifact)(nil),               // 119: controlplane.v1.DeployArtifact
-	(*v1.DeploySourceProvenance)(nil),       // 120: controlplane.v1.DeploySourceProvenance
-	(*v1.DeployCommitRange)(nil),            // 121: controlplane.v1.DeployCommitRange
-	(*v1.DeployRelease)(nil),                // 122: controlplane.v1.DeployRelease
-	(*v1.DeployCommit)(nil),                 // 123: controlplane.v1.DeployCommit
-	(v1.DeployPromotionKind)(0),             // 124: controlplane.v1.DeployPromotionKind
-	(*v1.DeployRollout)(nil),                // 125: controlplane.v1.DeployRollout
-	(*v1.DeployRunStage)(nil),               // 126: controlplane.v1.DeployRunStage
-	(v1.DeployResourceKind)(0),              // 127: controlplane.v1.DeployResourceKind
-	(*v1.DeployUsageRow)(nil),               // 128: controlplane.v1.DeployUsageRow
-	(*v1.DeployBundle)(nil),                 // 129: controlplane.v1.DeployBundle
-	(*v1.DeployConvergence)(nil),            // 130: controlplane.v1.DeployConvergence
-	(*v1.DeployLiveEnvironment)(nil),        // 131: controlplane.v1.DeployLiveEnvironment
-	(*v1.DeployPlan)(nil),                   // 132: controlplane.v1.DeployPlan
-	(*v1.DeployWorktree)(nil),               // 133: controlplane.v1.DeployWorktree
-	(*v1.DeployLocalSession)(nil),           // 134: controlplane.v1.DeployLocalSession
-	(*v1.DeployDrift)(nil),                  // 135: controlplane.v1.DeployDrift
-	(*v1.DeploySource)(nil),                 // 136: controlplane.v1.DeploySource
+	(DeployCapacityCode)(0),                 // 0: controlplane.v1.DeployCapacityCode
+	(*GetDeployTenantRequest)(nil),          // 1: controlplane.v1.GetDeployTenantRequest
+	(*GetDeployTenantResponse)(nil),         // 2: controlplane.v1.GetDeployTenantResponse
+	(*CreateDeployTenantRequest)(nil),       // 3: controlplane.v1.CreateDeployTenantRequest
+	(*CreateDeployTenantResponse)(nil),      // 4: controlplane.v1.CreateDeployTenantResponse
+	(*CreateDeployEnvironmentRequest)(nil),  // 5: controlplane.v1.CreateDeployEnvironmentRequest
+	(*CreateDeployEnvironmentResponse)(nil), // 6: controlplane.v1.CreateDeployEnvironmentResponse
+	(*GetDeployEnvironmentRequest)(nil),     // 7: controlplane.v1.GetDeployEnvironmentRequest
+	(*GetDeployEnvironmentResponse)(nil),    // 8: controlplane.v1.GetDeployEnvironmentResponse
+	(*ListDeployEnvironmentsRequest)(nil),   // 9: controlplane.v1.ListDeployEnvironmentsRequest
+	(*ListDeployEnvironmentsResponse)(nil),  // 10: controlplane.v1.ListDeployEnvironmentsResponse
+	(*UpdateDeployEnvironmentRequest)(nil),  // 11: controlplane.v1.UpdateDeployEnvironmentRequest
+	(*UpdateDeployEnvironmentResponse)(nil), // 12: controlplane.v1.UpdateDeployEnvironmentResponse
+	(*DeleteDeployEnvironmentRequest)(nil),  // 13: controlplane.v1.DeleteDeployEnvironmentRequest
+	(*DeleteDeployEnvironmentResponse)(nil), // 14: controlplane.v1.DeleteDeployEnvironmentResponse
+	(*RetainedDatabase)(nil),                // 15: controlplane.v1.RetainedDatabase
+	(*ListRetainedDatabasesRequest)(nil),    // 16: controlplane.v1.ListRetainedDatabasesRequest
+	(*ListRetainedDatabasesResponse)(nil),   // 17: controlplane.v1.ListRetainedDatabasesResponse
+	(*DeleteRetainedDatabaseRequest)(nil),   // 18: controlplane.v1.DeleteRetainedDatabaseRequest
+	(*DeleteRetainedDatabaseResponse)(nil),  // 19: controlplane.v1.DeleteRetainedDatabaseResponse
+	(*EnsureDeployEnvironmentRequest)(nil),  // 20: controlplane.v1.EnsureDeployEnvironmentRequest
+	(*EnsureDeployEnvironmentResponse)(nil), // 21: controlplane.v1.EnsureDeployEnvironmentResponse
+	(*CreateDeploymentRequest)(nil),         // 22: controlplane.v1.CreateDeploymentRequest
+	(*CreateDeploymentResponse)(nil),        // 23: controlplane.v1.CreateDeploymentResponse
+	(*GetDeploymentRequest)(nil),            // 24: controlplane.v1.GetDeploymentRequest
+	(*GetDeploymentResponse)(nil),           // 25: controlplane.v1.GetDeploymentResponse
+	(*ListDeploymentsRequest)(nil),          // 26: controlplane.v1.ListDeploymentsRequest
+	(*ListDeploymentsResponse)(nil),         // 27: controlplane.v1.ListDeploymentsResponse
+	(*UpdateDeploymentRequest)(nil),         // 28: controlplane.v1.UpdateDeploymentRequest
+	(*UpdateDeploymentResponse)(nil),        // 29: controlplane.v1.UpdateDeploymentResponse
+	(*DeleteDeploymentRequest)(nil),         // 30: controlplane.v1.DeleteDeploymentRequest
+	(*DeleteDeploymentResponse)(nil),        // 31: controlplane.v1.DeleteDeploymentResponse
+	(*PromoteReleaseRequest)(nil),           // 32: controlplane.v1.PromoteReleaseRequest
+	(*PromoteReleaseResponse)(nil),          // 33: controlplane.v1.PromoteReleaseResponse
+	(*ScaleDeploymentRequest)(nil),          // 34: controlplane.v1.ScaleDeploymentRequest
+	(*ScaleDeploymentResponse)(nil),         // 35: controlplane.v1.ScaleDeploymentResponse
+	(*SetEnvironmentRunStateRequest)(nil),   // 36: controlplane.v1.SetEnvironmentRunStateRequest
+	(*SetEnvironmentRunStateResponse)(nil),  // 37: controlplane.v1.SetEnvironmentRunStateResponse
+	(*GetDeploymentStatusRequest)(nil),      // 38: controlplane.v1.GetDeploymentStatusRequest
+	(*DeploymentStatus)(nil),                // 39: controlplane.v1.DeploymentStatus
+	(*GetDeploymentStatusResponse)(nil),     // 40: controlplane.v1.GetDeploymentStatusResponse
+	(*StreamDeploymentLogsRequest)(nil),     // 41: controlplane.v1.StreamDeploymentLogsRequest
+	(*StreamDeploymentLogsResponse)(nil),    // 42: controlplane.v1.StreamDeploymentLogsResponse
+	(*CutReleaseRequest)(nil),               // 43: controlplane.v1.CutReleaseRequest
+	(*CutReleaseResponse)(nil),              // 44: controlplane.v1.CutReleaseResponse
+	(*ListDeployReleasesRequest)(nil),       // 45: controlplane.v1.ListDeployReleasesRequest
+	(*ListDeployReleasesResponse)(nil),      // 46: controlplane.v1.ListDeployReleasesResponse
+	(*GetDeployReleaseRequest)(nil),         // 47: controlplane.v1.GetDeployReleaseRequest
+	(*GetDeployReleaseResponse)(nil),        // 48: controlplane.v1.GetDeployReleaseResponse
+	(*ListDeployPromotionsRequest)(nil),     // 49: controlplane.v1.ListDeployPromotionsRequest
+	(*ListDeployPromotionsResponse)(nil),    // 50: controlplane.v1.ListDeployPromotionsResponse
+	(*GetDeployRolloutRequest)(nil),         // 51: controlplane.v1.GetDeployRolloutRequest
+	(*GetDeployRolloutResponse)(nil),        // 52: controlplane.v1.GetDeployRolloutResponse
+	(*RecordDeployGateRequest)(nil),         // 53: controlplane.v1.RecordDeployGateRequest
+	(*RecordDeployGateResponse)(nil),        // 54: controlplane.v1.RecordDeployGateResponse
+	(*ListDeployGatesRequest)(nil),          // 55: controlplane.v1.ListDeployGatesRequest
+	(*ListDeployGatesResponse)(nil),         // 56: controlplane.v1.ListDeployGatesResponse
+	(*GetDeployRunRequest)(nil),             // 57: controlplane.v1.GetDeployRunRequest
+	(*GetDeployRunResponse)(nil),            // 58: controlplane.v1.GetDeployRunResponse
+	(*ListDeployUsageRequest)(nil),          // 59: controlplane.v1.ListDeployUsageRequest
+	(*ListDeployUsageResponse)(nil),         // 60: controlplane.v1.ListDeployUsageResponse
+	(*RecordDeployBundleRequest)(nil),       // 61: controlplane.v1.RecordDeployBundleRequest
+	(*RecordDeployBundleResponse)(nil),      // 62: controlplane.v1.RecordDeployBundleResponse
+	(*GetDeployBundleRequest)(nil),          // 63: controlplane.v1.GetDeployBundleRequest
+	(*GetDeployBundleResponse)(nil),         // 64: controlplane.v1.GetDeployBundleResponse
+	(*ListDeployConvergencesRequest)(nil),   // 65: controlplane.v1.ListDeployConvergencesRequest
+	(*ListDeployConvergencesResponse)(nil),  // 66: controlplane.v1.ListDeployConvergencesResponse
+	(*GetDeployLiveViewRequest)(nil),        // 67: controlplane.v1.GetDeployLiveViewRequest
+	(*GetDeployLiveViewResponse)(nil),       // 68: controlplane.v1.GetDeployLiveViewResponse
+	(*PlanDeployRequest)(nil),               // 69: controlplane.v1.PlanDeployRequest
+	(*PlanDeployResponse)(nil),              // 70: controlplane.v1.PlanDeployResponse
+	(*DeployCapacityDemand)(nil),            // 71: controlplane.v1.DeployCapacityDemand
+	(*CheckDeployCapacityRequest)(nil),      // 72: controlplane.v1.CheckDeployCapacityRequest
+	(*CheckDeployCapacityResponse)(nil),     // 73: controlplane.v1.CheckDeployCapacityResponse
+	(*ReportLocalSessionRequest)(nil),       // 74: controlplane.v1.ReportLocalSessionRequest
+	(*ReportLocalSessionResponse)(nil),      // 75: controlplane.v1.ReportLocalSessionResponse
+	(*ImportLedgerRequest)(nil),             // 76: controlplane.v1.ImportLedgerRequest
+	(*LedgerImportRelease)(nil),             // 77: controlplane.v1.LedgerImportRelease
+	(*LedgerImportEnvironment)(nil),         // 78: controlplane.v1.LedgerImportEnvironment
+	(*LedgerImportPromotion)(nil),           // 79: controlplane.v1.LedgerImportPromotion
+	(*LedgerImportBundle)(nil),              // 80: controlplane.v1.LedgerImportBundle
+	(*LedgerImportApply)(nil),               // 81: controlplane.v1.LedgerImportApply
+	(*LedgerImportApplyOutcome)(nil),        // 82: controlplane.v1.LedgerImportApplyOutcome
+	(*ImportLedgerResponse)(nil),            // 83: controlplane.v1.ImportLedgerResponse
+	(*GetDeployDriftRequest)(nil),           // 84: controlplane.v1.GetDeployDriftRequest
+	(*GetDeployDriftResponse)(nil),          // 85: controlplane.v1.GetDeployDriftResponse
+	nil,                                     // 86: controlplane.v1.LedgerImportPromotion.ResolvedArtifactsEntry
+	nil,                                     // 87: controlplane.v1.LedgerImportPromotion.ResolvedSourcesEntry
+	(*v1.DeployTenant)(nil),                 // 88: controlplane.v1.DeployTenant
+	(*v1.DeployEnvironmentSpec)(nil),        // 89: controlplane.v1.DeployEnvironmentSpec
+	(*v1.DeployEnvironment)(nil),            // 90: controlplane.v1.DeployEnvironment
+	(*v1.DeployPromotion)(nil),              // 91: controlplane.v1.DeployPromotion
+	(v1.DeployEnvironmentKind)(0),           // 92: controlplane.v1.DeployEnvironmentKind
+	(*timestamppb.Timestamp)(nil),           // 93: google.protobuf.Timestamp
+	(v1.DeployTier)(0),                      // 94: controlplane.v1.DeployTier
+	(*structpb.Struct)(nil),                 // 95: google.protobuf.Struct
+	(*v1.Deployment)(nil),                   // 96: controlplane.v1.Deployment
+	(v1.DeployObservedState)(0),             // 97: controlplane.v1.DeployObservedState
+	(*v1.DeployGate)(nil),                   // 98: controlplane.v1.DeployGate
+	(*v1.DeployRun)(nil),                    // 99: controlplane.v1.DeployRun
+	(*v1.DeployHold)(nil),                   // 100: controlplane.v1.DeployHold
+	(v1.DeployRunState)(0),                  // 101: controlplane.v1.DeployRunState
+	(v1.DeployVerdict)(0),                   // 102: controlplane.v1.DeployVerdict
+	(v1.DeployReconcilePolicy)(0),           // 103: controlplane.v1.DeployReconcilePolicy
+	(v1.DeployLogStream)(0),                 // 104: controlplane.v1.DeployLogStream
+	(*v1.DeployLogLine)(nil),                // 105: controlplane.v1.DeployLogLine
+	(*v1.DeployArtifact)(nil),               // 106: controlplane.v1.DeployArtifact
+	(*v1.DeploySourceProvenance)(nil),       // 107: controlplane.v1.DeploySourceProvenance
+	(*v1.DeployRelease)(nil),                // 108: controlplane.v1.DeployRelease
+	(v1.DeployPromotionKind)(0),             // 109: controlplane.v1.DeployPromotionKind
+	(*v1.DeployRollout)(nil),                // 110: controlplane.v1.DeployRollout
+	(*v1.DeployRunStage)(nil),               // 111: controlplane.v1.DeployRunStage
+	(v1.DeployResourceKind)(0),              // 112: controlplane.v1.DeployResourceKind
+	(*v1.DeployUsageRow)(nil),               // 113: controlplane.v1.DeployUsageRow
+	(*v1.DeployBundle)(nil),                 // 114: controlplane.v1.DeployBundle
+	(*v1.DeployConvergence)(nil),            // 115: controlplane.v1.DeployConvergence
+	(*v1.DeployLiveEnvironment)(nil),        // 116: controlplane.v1.DeployLiveEnvironment
+	(*v1.DeployPlan)(nil),                   // 117: controlplane.v1.DeployPlan
+	(*v1.DeployWorktree)(nil),               // 118: controlplane.v1.DeployWorktree
+	(*v1.DeployLocalSession)(nil),           // 119: controlplane.v1.DeployLocalSession
+	(*v1.DeployDrift)(nil),                  // 120: controlplane.v1.DeployDrift
+	(*v1.DeploySource)(nil),                 // 121: controlplane.v1.DeploySource
 }
 var file_services_deploy_v1_deploy_proto_depIdxs = []int32{
-	101, // 0: controlplane.v1.GetDeployTenantResponse.tenant:type_name -> controlplane.v1.DeployTenant
-	101, // 1: controlplane.v1.CreateDeployTenantResponse.tenant:type_name -> controlplane.v1.DeployTenant
-	102, // 2: controlplane.v1.CreateDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
-	103, // 3: controlplane.v1.CreateDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
-	103, // 4: controlplane.v1.GetDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
-	104, // 5: controlplane.v1.GetDeployEnvironmentResponse.current_promotion:type_name -> controlplane.v1.DeployPromotion
-	105, // 6: controlplane.v1.ListDeployEnvironmentsRequest.kind:type_name -> controlplane.v1.DeployEnvironmentKind
-	103, // 7: controlplane.v1.ListDeployEnvironmentsResponse.environments:type_name -> controlplane.v1.DeployEnvironment
-	102, // 8: controlplane.v1.UpdateDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
-	103, // 9: controlplane.v1.UpdateDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
-	106, // 10: controlplane.v1.RetainedDatabase.retained_at:type_name -> google.protobuf.Timestamp
-	20,  // 11: controlplane.v1.ListRetainedDatabasesResponse.retained_databases:type_name -> controlplane.v1.RetainedDatabase
-	102, // 12: controlplane.v1.EnsureDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
-	103, // 13: controlplane.v1.EnsureDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
-	107, // 14: controlplane.v1.CreateDeploymentRequest.tier:type_name -> controlplane.v1.DeployTier
-	108, // 15: controlplane.v1.CreateDeploymentRequest.spec:type_name -> google.protobuf.Struct
-	109, // 16: controlplane.v1.CreateDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	109, // 17: controlplane.v1.GetDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	107, // 18: controlplane.v1.ListDeploymentsRequest.tier:type_name -> controlplane.v1.DeployTier
-	110, // 19: controlplane.v1.ListDeploymentsRequest.observed_state:type_name -> controlplane.v1.DeployObservedState
-	109, // 20: controlplane.v1.ListDeploymentsResponse.deployments:type_name -> controlplane.v1.Deployment
-	108, // 21: controlplane.v1.UpdateDeploymentRequest.spec:type_name -> google.protobuf.Struct
-	109, // 22: controlplane.v1.UpdateDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	111, // 23: controlplane.v1.PromoteReleaseRequest.gates:type_name -> controlplane.v1.DeployGate
-	112, // 24: controlplane.v1.PromoteReleaseRequest.run:type_name -> controlplane.v1.DeployRun
-	104, // 25: controlplane.v1.PromoteReleaseResponse.promotion:type_name -> controlplane.v1.DeployPromotion
-	113, // 26: controlplane.v1.PromoteReleaseResponse.holds:type_name -> controlplane.v1.DeployHold
-	114, // 27: controlplane.v1.ScaleDeploymentRequest.run_state:type_name -> controlplane.v1.DeployRunState
-	109, // 28: controlplane.v1.ScaleDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
-	114, // 29: controlplane.v1.SetEnvironmentRunStateRequest.run_state:type_name -> controlplane.v1.DeployRunState
-	109, // 30: controlplane.v1.SetEnvironmentRunStateResponse.deployments:type_name -> controlplane.v1.Deployment
-	109, // 31: controlplane.v1.DeploymentStatus.deployment:type_name -> controlplane.v1.Deployment
-	115, // 32: controlplane.v1.DeploymentStatus.verdict:type_name -> controlplane.v1.DeployVerdict
-	106, // 33: controlplane.v1.DeploymentStatus.observed_at:type_name -> google.protobuf.Timestamp
-	109, // 34: controlplane.v1.GetDeploymentStatusResponse.deployment:type_name -> controlplane.v1.Deployment
-	104, // 35: controlplane.v1.GetDeploymentStatusResponse.current_promotion:type_name -> controlplane.v1.DeployPromotion
-	106, // 36: controlplane.v1.GetDeploymentStatusResponse.observed_at:type_name -> google.protobuf.Timestamp
-	115, // 37: controlplane.v1.GetDeploymentStatusResponse.verdict:type_name -> controlplane.v1.DeployVerdict
-	44,  // 38: controlplane.v1.GetDeploymentStatusResponse.deployments:type_name -> controlplane.v1.DeploymentStatus
-	115, // 39: controlplane.v1.GetDeploymentStatusResponse.environment_verdict:type_name -> controlplane.v1.DeployVerdict
-	116, // 40: controlplane.v1.GetDeploymentStatusResponse.reconcile_policy:type_name -> controlplane.v1.DeployReconcilePolicy
-	117, // 41: controlplane.v1.StreamDeploymentLogsRequest.stream:type_name -> controlplane.v1.DeployLogStream
-	118, // 42: controlplane.v1.StreamDeploymentLogsResponse.lines:type_name -> controlplane.v1.DeployLogLine
-	119, // 43: controlplane.v1.CutReleaseRequest.artifacts:type_name -> controlplane.v1.DeployArtifact
-	112, // 44: controlplane.v1.CutReleaseRequest.run:type_name -> controlplane.v1.DeployRun
-	120, // 45: controlplane.v1.CutReleaseRequest.provenance:type_name -> controlplane.v1.DeploySourceProvenance
-	108, // 46: controlplane.v1.CutReleaseRequest.snapshot_release:type_name -> google.protobuf.Struct
-	121, // 47: controlplane.v1.CutReleaseRequest.commits:type_name -> controlplane.v1.DeployCommitRange
-	122, // 48: controlplane.v1.CutReleaseResponse.release:type_name -> controlplane.v1.DeployRelease
-	122, // 49: controlplane.v1.CompareDeployReleasesResponse.from:type_name -> controlplane.v1.DeployRelease
-	122, // 50: controlplane.v1.CompareDeployReleasesResponse.to:type_name -> controlplane.v1.DeployRelease
-	52,  // 51: controlplane.v1.CompareDeployReleasesResponse.commits:type_name -> controlplane.v1.DeployCommitComparison
-	53,  // 52: controlplane.v1.CompareDeployReleasesResponse.artifacts:type_name -> controlplane.v1.DeployArtifactChange
-	54,  // 53: controlplane.v1.CompareDeployReleasesResponse.objects:type_name -> controlplane.v1.DeployObjectComparison
-	0,   // 54: controlplane.v1.DeployCommitComparison.state:type_name -> controlplane.v1.DeployCommitComparisonState
-	123, // 55: controlplane.v1.DeployCommitComparison.commits:type_name -> controlplane.v1.DeployCommit
-	1,   // 56: controlplane.v1.DeployArtifactChange.change:type_name -> controlplane.v1.DeployChangeKind
-	2,   // 57: controlplane.v1.DeployObjectComparison.state:type_name -> controlplane.v1.DeployObjectComparisonState
-	55,  // 58: controlplane.v1.DeployObjectComparison.deltas:type_name -> controlplane.v1.DeployObjectDelta
-	1,   // 59: controlplane.v1.DeployObjectDelta.change:type_name -> controlplane.v1.DeployChangeKind
-	56,  // 60: controlplane.v1.DeployObjectDelta.images:type_name -> controlplane.v1.DeployImageChange
-	57,  // 61: controlplane.v1.DeployObjectDelta.parts:type_name -> controlplane.v1.DeployPartChange
-	1,   // 62: controlplane.v1.DeployPartChange.change:type_name -> controlplane.v1.DeployChangeKind
-	122, // 63: controlplane.v1.ListDeployReleasesResponse.releases:type_name -> controlplane.v1.DeployRelease
-	122, // 64: controlplane.v1.GetDeployReleaseResponse.release:type_name -> controlplane.v1.DeployRelease
-	124, // 65: controlplane.v1.ListDeployPromotionsRequest.kind:type_name -> controlplane.v1.DeployPromotionKind
-	104, // 66: controlplane.v1.ListDeployPromotionsResponse.promotions:type_name -> controlplane.v1.DeployPromotion
-	125, // 67: controlplane.v1.GetDeployRolloutResponse.rollout:type_name -> controlplane.v1.DeployRollout
-	111, // 68: controlplane.v1.RecordDeployGateRequest.gate:type_name -> controlplane.v1.DeployGate
-	111, // 69: controlplane.v1.RecordDeployGateResponse.gate:type_name -> controlplane.v1.DeployGate
-	111, // 70: controlplane.v1.ListDeployGatesResponse.gates:type_name -> controlplane.v1.DeployGate
-	112, // 71: controlplane.v1.GetDeployRunResponse.run:type_name -> controlplane.v1.DeployRun
-	122, // 72: controlplane.v1.GetDeployRunResponse.release:type_name -> controlplane.v1.DeployRelease
-	126, // 73: controlplane.v1.GetDeployRunResponse.stages:type_name -> controlplane.v1.DeployRunStage
-	106, // 74: controlplane.v1.ListDeployUsageRequest.start_time:type_name -> google.protobuf.Timestamp
-	106, // 75: controlplane.v1.ListDeployUsageRequest.end_time:type_name -> google.protobuf.Timestamp
-	127, // 76: controlplane.v1.ListDeployUsageRequest.resource_kind:type_name -> controlplane.v1.DeployResourceKind
-	128, // 77: controlplane.v1.ListDeployUsageResponse.rows:type_name -> controlplane.v1.DeployUsageRow
-	112, // 78: controlplane.v1.RecordDeployBundleRequest.run:type_name -> controlplane.v1.DeployRun
-	129, // 79: controlplane.v1.RecordDeployBundleResponse.bundle:type_name -> controlplane.v1.DeployBundle
-	129, // 80: controlplane.v1.GetDeployBundleResponse.bundle:type_name -> controlplane.v1.DeployBundle
-	130, // 81: controlplane.v1.ListDeployConvergencesResponse.convergences:type_name -> controlplane.v1.DeployConvergence
-	131, // 82: controlplane.v1.GetDeployLiveViewResponse.environments:type_name -> controlplane.v1.DeployLiveEnvironment
-	132, // 83: controlplane.v1.PlanDeployResponse.plan:type_name -> controlplane.v1.DeployPlan
-	84,  // 84: controlplane.v1.CheckDeployCapacityRequest.demand:type_name -> controlplane.v1.DeployCapacityDemand
-	3,   // 85: controlplane.v1.CheckDeployCapacityResponse.code:type_name -> controlplane.v1.DeployCapacityCode
-	113, // 86: controlplane.v1.CheckDeployCapacityResponse.holds:type_name -> controlplane.v1.DeployHold
-	133, // 87: controlplane.v1.ReportLocalSessionRequest.worktree:type_name -> controlplane.v1.DeployWorktree
-	120, // 88: controlplane.v1.ReportLocalSessionRequest.provenance:type_name -> controlplane.v1.DeploySourceProvenance
-	134, // 89: controlplane.v1.ReportLocalSessionResponse.session:type_name -> controlplane.v1.DeployLocalSession
-	90,  // 90: controlplane.v1.ImportLedgerRequest.releases:type_name -> controlplane.v1.LedgerImportRelease
-	91,  // 91: controlplane.v1.ImportLedgerRequest.environments:type_name -> controlplane.v1.LedgerImportEnvironment
-	92,  // 92: controlplane.v1.ImportLedgerRequest.promotions:type_name -> controlplane.v1.LedgerImportPromotion
-	93,  // 93: controlplane.v1.ImportLedgerRequest.bundles:type_name -> controlplane.v1.LedgerImportBundle
-	94,  // 94: controlplane.v1.ImportLedgerRequest.applies:type_name -> controlplane.v1.LedgerImportApply
-	119, // 95: controlplane.v1.LedgerImportRelease.artifacts:type_name -> controlplane.v1.DeployArtifact
-	120, // 96: controlplane.v1.LedgerImportRelease.provenance:type_name -> controlplane.v1.DeploySourceProvenance
-	106, // 97: controlplane.v1.LedgerImportRelease.created_at:type_name -> google.protobuf.Timestamp
-	121, // 98: controlplane.v1.LedgerImportRelease.commits:type_name -> controlplane.v1.DeployCommitRange
-	105, // 99: controlplane.v1.LedgerImportEnvironment.kind:type_name -> controlplane.v1.DeployEnvironmentKind
-	106, // 100: controlplane.v1.LedgerImportEnvironment.deleted_at:type_name -> google.protobuf.Timestamp
-	99,  // 101: controlplane.v1.LedgerImportPromotion.resolved_artifacts:type_name -> controlplane.v1.LedgerImportPromotion.ResolvedArtifactsEntry
-	100, // 102: controlplane.v1.LedgerImportPromotion.resolved_sources:type_name -> controlplane.v1.LedgerImportPromotion.ResolvedSourcesEntry
-	111, // 103: controlplane.v1.LedgerImportPromotion.gates:type_name -> controlplane.v1.DeployGate
-	106, // 104: controlplane.v1.LedgerImportPromotion.promoted_at:type_name -> google.protobuf.Timestamp
-	108, // 105: controlplane.v1.LedgerImportBundle.shape:type_name -> google.protobuf.Struct
-	120, // 106: controlplane.v1.LedgerImportBundle.provenance:type_name -> controlplane.v1.DeploySourceProvenance
-	106, // 107: controlplane.v1.LedgerImportBundle.created_at:type_name -> google.protobuf.Timestamp
-	95,  // 108: controlplane.v1.LedgerImportApply.outcome:type_name -> controlplane.v1.LedgerImportApplyOutcome
-	106, // 109: controlplane.v1.LedgerImportApply.created_at:type_name -> google.protobuf.Timestamp
-	108, // 110: controlplane.v1.LedgerImportApplyOutcome.workloads:type_name -> google.protobuf.Struct
-	106, // 111: controlplane.v1.LedgerImportApplyOutcome.finished_at:type_name -> google.protobuf.Timestamp
-	108, // 112: controlplane.v1.ImportLedgerResponse.counts:type_name -> google.protobuf.Struct
-	135, // 113: controlplane.v1.GetDeployDriftResponse.drift:type_name -> controlplane.v1.DeployDrift
-	136, // 114: controlplane.v1.LedgerImportPromotion.ResolvedSourcesEntry.value:type_name -> controlplane.v1.DeploySource
-	4,   // 115: controlplane.v1.DeployService.GetCapabilities:input_type -> controlplane.v1.GetDeployCapabilitiesRequest
-	6,   // 116: controlplane.v1.DeployService.GetTenant:input_type -> controlplane.v1.GetDeployTenantRequest
-	8,   // 117: controlplane.v1.DeployService.CreateTenant:input_type -> controlplane.v1.CreateDeployTenantRequest
-	10,  // 118: controlplane.v1.DeployService.CreateEnvironment:input_type -> controlplane.v1.CreateDeployEnvironmentRequest
-	12,  // 119: controlplane.v1.DeployService.GetEnvironment:input_type -> controlplane.v1.GetDeployEnvironmentRequest
-	14,  // 120: controlplane.v1.DeployService.ListEnvironments:input_type -> controlplane.v1.ListDeployEnvironmentsRequest
-	16,  // 121: controlplane.v1.DeployService.UpdateEnvironment:input_type -> controlplane.v1.UpdateDeployEnvironmentRequest
-	18,  // 122: controlplane.v1.DeployService.DeleteEnvironment:input_type -> controlplane.v1.DeleteDeployEnvironmentRequest
-	21,  // 123: controlplane.v1.DeployService.ListRetainedDatabases:input_type -> controlplane.v1.ListRetainedDatabasesRequest
-	23,  // 124: controlplane.v1.DeployService.DeleteRetainedDatabase:input_type -> controlplane.v1.DeleteRetainedDatabaseRequest
-	25,  // 125: controlplane.v1.DeployService.EnsureEnvironment:input_type -> controlplane.v1.EnsureDeployEnvironmentRequest
-	27,  // 126: controlplane.v1.DeployService.CreateDeployment:input_type -> controlplane.v1.CreateDeploymentRequest
-	29,  // 127: controlplane.v1.DeployService.GetDeployment:input_type -> controlplane.v1.GetDeploymentRequest
-	31,  // 128: controlplane.v1.DeployService.ListDeployments:input_type -> controlplane.v1.ListDeploymentsRequest
-	33,  // 129: controlplane.v1.DeployService.UpdateDeployment:input_type -> controlplane.v1.UpdateDeploymentRequest
-	35,  // 130: controlplane.v1.DeployService.DeleteDeployment:input_type -> controlplane.v1.DeleteDeploymentRequest
-	37,  // 131: controlplane.v1.DeployService.Promote:input_type -> controlplane.v1.PromoteReleaseRequest
-	39,  // 132: controlplane.v1.DeployService.Scale:input_type -> controlplane.v1.ScaleDeploymentRequest
-	41,  // 133: controlplane.v1.DeployService.SetEnvironmentRunState:input_type -> controlplane.v1.SetEnvironmentRunStateRequest
-	43,  // 134: controlplane.v1.DeployService.GetStatus:input_type -> controlplane.v1.GetDeploymentStatusRequest
-	46,  // 135: controlplane.v1.DeployService.StreamLogs:input_type -> controlplane.v1.StreamDeploymentLogsRequest
-	48,  // 136: controlplane.v1.DeployService.CutRelease:input_type -> controlplane.v1.CutReleaseRequest
-	58,  // 137: controlplane.v1.DeployService.ListReleases:input_type -> controlplane.v1.ListDeployReleasesRequest
-	60,  // 138: controlplane.v1.DeployService.GetRelease:input_type -> controlplane.v1.GetDeployReleaseRequest
-	62,  // 139: controlplane.v1.DeployService.ListPromotions:input_type -> controlplane.v1.ListDeployPromotionsRequest
-	50,  // 140: controlplane.v1.DeployService.CompareReleases:input_type -> controlplane.v1.CompareDeployReleasesRequest
-	64,  // 141: controlplane.v1.DeployService.GetRollout:input_type -> controlplane.v1.GetDeployRolloutRequest
-	66,  // 142: controlplane.v1.DeployService.RecordGate:input_type -> controlplane.v1.RecordDeployGateRequest
-	68,  // 143: controlplane.v1.DeployService.ListGates:input_type -> controlplane.v1.ListDeployGatesRequest
-	70,  // 144: controlplane.v1.DeployService.GetRun:input_type -> controlplane.v1.GetDeployRunRequest
-	72,  // 145: controlplane.v1.DeployService.ListUsage:input_type -> controlplane.v1.ListDeployUsageRequest
-	74,  // 146: controlplane.v1.DeployService.RecordBundle:input_type -> controlplane.v1.RecordDeployBundleRequest
-	76,  // 147: controlplane.v1.DeployService.GetBundle:input_type -> controlplane.v1.GetDeployBundleRequest
-	78,  // 148: controlplane.v1.DeployService.ListConvergences:input_type -> controlplane.v1.ListDeployConvergencesRequest
-	80,  // 149: controlplane.v1.DeployService.GetLiveView:input_type -> controlplane.v1.GetDeployLiveViewRequest
-	82,  // 150: controlplane.v1.DeployService.PlanDeploy:input_type -> controlplane.v1.PlanDeployRequest
-	85,  // 151: controlplane.v1.DeployService.CheckDeployCapacity:input_type -> controlplane.v1.CheckDeployCapacityRequest
-	87,  // 152: controlplane.v1.DeployService.ReportLocalSession:input_type -> controlplane.v1.ReportLocalSessionRequest
-	89,  // 153: controlplane.v1.DeployService.ImportLedger:input_type -> controlplane.v1.ImportLedgerRequest
-	97,  // 154: controlplane.v1.DeployService.GetDrift:input_type -> controlplane.v1.GetDeployDriftRequest
-	5,   // 155: controlplane.v1.DeployService.GetCapabilities:output_type -> controlplane.v1.GetDeployCapabilitiesResponse
-	7,   // 156: controlplane.v1.DeployService.GetTenant:output_type -> controlplane.v1.GetDeployTenantResponse
-	9,   // 157: controlplane.v1.DeployService.CreateTenant:output_type -> controlplane.v1.CreateDeployTenantResponse
-	11,  // 158: controlplane.v1.DeployService.CreateEnvironment:output_type -> controlplane.v1.CreateDeployEnvironmentResponse
-	13,  // 159: controlplane.v1.DeployService.GetEnvironment:output_type -> controlplane.v1.GetDeployEnvironmentResponse
-	15,  // 160: controlplane.v1.DeployService.ListEnvironments:output_type -> controlplane.v1.ListDeployEnvironmentsResponse
-	17,  // 161: controlplane.v1.DeployService.UpdateEnvironment:output_type -> controlplane.v1.UpdateDeployEnvironmentResponse
-	19,  // 162: controlplane.v1.DeployService.DeleteEnvironment:output_type -> controlplane.v1.DeleteDeployEnvironmentResponse
-	22,  // 163: controlplane.v1.DeployService.ListRetainedDatabases:output_type -> controlplane.v1.ListRetainedDatabasesResponse
-	24,  // 164: controlplane.v1.DeployService.DeleteRetainedDatabase:output_type -> controlplane.v1.DeleteRetainedDatabaseResponse
-	26,  // 165: controlplane.v1.DeployService.EnsureEnvironment:output_type -> controlplane.v1.EnsureDeployEnvironmentResponse
-	28,  // 166: controlplane.v1.DeployService.CreateDeployment:output_type -> controlplane.v1.CreateDeploymentResponse
-	30,  // 167: controlplane.v1.DeployService.GetDeployment:output_type -> controlplane.v1.GetDeploymentResponse
-	32,  // 168: controlplane.v1.DeployService.ListDeployments:output_type -> controlplane.v1.ListDeploymentsResponse
-	34,  // 169: controlplane.v1.DeployService.UpdateDeployment:output_type -> controlplane.v1.UpdateDeploymentResponse
-	36,  // 170: controlplane.v1.DeployService.DeleteDeployment:output_type -> controlplane.v1.DeleteDeploymentResponse
-	38,  // 171: controlplane.v1.DeployService.Promote:output_type -> controlplane.v1.PromoteReleaseResponse
-	40,  // 172: controlplane.v1.DeployService.Scale:output_type -> controlplane.v1.ScaleDeploymentResponse
-	42,  // 173: controlplane.v1.DeployService.SetEnvironmentRunState:output_type -> controlplane.v1.SetEnvironmentRunStateResponse
-	45,  // 174: controlplane.v1.DeployService.GetStatus:output_type -> controlplane.v1.GetDeploymentStatusResponse
-	47,  // 175: controlplane.v1.DeployService.StreamLogs:output_type -> controlplane.v1.StreamDeploymentLogsResponse
-	49,  // 176: controlplane.v1.DeployService.CutRelease:output_type -> controlplane.v1.CutReleaseResponse
-	59,  // 177: controlplane.v1.DeployService.ListReleases:output_type -> controlplane.v1.ListDeployReleasesResponse
-	61,  // 178: controlplane.v1.DeployService.GetRelease:output_type -> controlplane.v1.GetDeployReleaseResponse
-	63,  // 179: controlplane.v1.DeployService.ListPromotions:output_type -> controlplane.v1.ListDeployPromotionsResponse
-	51,  // 180: controlplane.v1.DeployService.CompareReleases:output_type -> controlplane.v1.CompareDeployReleasesResponse
-	65,  // 181: controlplane.v1.DeployService.GetRollout:output_type -> controlplane.v1.GetDeployRolloutResponse
-	67,  // 182: controlplane.v1.DeployService.RecordGate:output_type -> controlplane.v1.RecordDeployGateResponse
-	69,  // 183: controlplane.v1.DeployService.ListGates:output_type -> controlplane.v1.ListDeployGatesResponse
-	71,  // 184: controlplane.v1.DeployService.GetRun:output_type -> controlplane.v1.GetDeployRunResponse
-	73,  // 185: controlplane.v1.DeployService.ListUsage:output_type -> controlplane.v1.ListDeployUsageResponse
-	75,  // 186: controlplane.v1.DeployService.RecordBundle:output_type -> controlplane.v1.RecordDeployBundleResponse
-	77,  // 187: controlplane.v1.DeployService.GetBundle:output_type -> controlplane.v1.GetDeployBundleResponse
-	79,  // 188: controlplane.v1.DeployService.ListConvergences:output_type -> controlplane.v1.ListDeployConvergencesResponse
-	81,  // 189: controlplane.v1.DeployService.GetLiveView:output_type -> controlplane.v1.GetDeployLiveViewResponse
-	83,  // 190: controlplane.v1.DeployService.PlanDeploy:output_type -> controlplane.v1.PlanDeployResponse
-	86,  // 191: controlplane.v1.DeployService.CheckDeployCapacity:output_type -> controlplane.v1.CheckDeployCapacityResponse
-	88,  // 192: controlplane.v1.DeployService.ReportLocalSession:output_type -> controlplane.v1.ReportLocalSessionResponse
-	96,  // 193: controlplane.v1.DeployService.ImportLedger:output_type -> controlplane.v1.ImportLedgerResponse
-	98,  // 194: controlplane.v1.DeployService.GetDrift:output_type -> controlplane.v1.GetDeployDriftResponse
-	155, // [155:195] is the sub-list for method output_type
-	115, // [115:155] is the sub-list for method input_type
-	115, // [115:115] is the sub-list for extension type_name
-	115, // [115:115] is the sub-list for extension extendee
-	0,   // [0:115] is the sub-list for field type_name
+	88,  // 0: controlplane.v1.GetDeployTenantResponse.tenant:type_name -> controlplane.v1.DeployTenant
+	88,  // 1: controlplane.v1.CreateDeployTenantResponse.tenant:type_name -> controlplane.v1.DeployTenant
+	89,  // 2: controlplane.v1.CreateDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
+	90,  // 3: controlplane.v1.CreateDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
+	90,  // 4: controlplane.v1.GetDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
+	91,  // 5: controlplane.v1.GetDeployEnvironmentResponse.current_promotion:type_name -> controlplane.v1.DeployPromotion
+	92,  // 6: controlplane.v1.ListDeployEnvironmentsRequest.kind:type_name -> controlplane.v1.DeployEnvironmentKind
+	90,  // 7: controlplane.v1.ListDeployEnvironmentsResponse.environments:type_name -> controlplane.v1.DeployEnvironment
+	89,  // 8: controlplane.v1.UpdateDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
+	90,  // 9: controlplane.v1.UpdateDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
+	93,  // 10: controlplane.v1.RetainedDatabase.retained_at:type_name -> google.protobuf.Timestamp
+	15,  // 11: controlplane.v1.ListRetainedDatabasesResponse.retained_databases:type_name -> controlplane.v1.RetainedDatabase
+	89,  // 12: controlplane.v1.EnsureDeployEnvironmentRequest.spec:type_name -> controlplane.v1.DeployEnvironmentSpec
+	90,  // 13: controlplane.v1.EnsureDeployEnvironmentResponse.environment:type_name -> controlplane.v1.DeployEnvironment
+	94,  // 14: controlplane.v1.CreateDeploymentRequest.tier:type_name -> controlplane.v1.DeployTier
+	95,  // 15: controlplane.v1.CreateDeploymentRequest.spec:type_name -> google.protobuf.Struct
+	96,  // 16: controlplane.v1.CreateDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	96,  // 17: controlplane.v1.GetDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	94,  // 18: controlplane.v1.ListDeploymentsRequest.tier:type_name -> controlplane.v1.DeployTier
+	97,  // 19: controlplane.v1.ListDeploymentsRequest.observed_state:type_name -> controlplane.v1.DeployObservedState
+	96,  // 20: controlplane.v1.ListDeploymentsResponse.deployments:type_name -> controlplane.v1.Deployment
+	95,  // 21: controlplane.v1.UpdateDeploymentRequest.spec:type_name -> google.protobuf.Struct
+	96,  // 22: controlplane.v1.UpdateDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	98,  // 23: controlplane.v1.PromoteReleaseRequest.gates:type_name -> controlplane.v1.DeployGate
+	99,  // 24: controlplane.v1.PromoteReleaseRequest.run:type_name -> controlplane.v1.DeployRun
+	91,  // 25: controlplane.v1.PromoteReleaseResponse.promotion:type_name -> controlplane.v1.DeployPromotion
+	100, // 26: controlplane.v1.PromoteReleaseResponse.holds:type_name -> controlplane.v1.DeployHold
+	101, // 27: controlplane.v1.ScaleDeploymentRequest.run_state:type_name -> controlplane.v1.DeployRunState
+	96,  // 28: controlplane.v1.ScaleDeploymentResponse.deployment:type_name -> controlplane.v1.Deployment
+	101, // 29: controlplane.v1.SetEnvironmentRunStateRequest.run_state:type_name -> controlplane.v1.DeployRunState
+	96,  // 30: controlplane.v1.SetEnvironmentRunStateResponse.deployments:type_name -> controlplane.v1.Deployment
+	96,  // 31: controlplane.v1.DeploymentStatus.deployment:type_name -> controlplane.v1.Deployment
+	102, // 32: controlplane.v1.DeploymentStatus.verdict:type_name -> controlplane.v1.DeployVerdict
+	93,  // 33: controlplane.v1.DeploymentStatus.observed_at:type_name -> google.protobuf.Timestamp
+	96,  // 34: controlplane.v1.GetDeploymentStatusResponse.deployment:type_name -> controlplane.v1.Deployment
+	91,  // 35: controlplane.v1.GetDeploymentStatusResponse.current_promotion:type_name -> controlplane.v1.DeployPromotion
+	93,  // 36: controlplane.v1.GetDeploymentStatusResponse.observed_at:type_name -> google.protobuf.Timestamp
+	102, // 37: controlplane.v1.GetDeploymentStatusResponse.verdict:type_name -> controlplane.v1.DeployVerdict
+	39,  // 38: controlplane.v1.GetDeploymentStatusResponse.deployments:type_name -> controlplane.v1.DeploymentStatus
+	102, // 39: controlplane.v1.GetDeploymentStatusResponse.environment_verdict:type_name -> controlplane.v1.DeployVerdict
+	103, // 40: controlplane.v1.GetDeploymentStatusResponse.reconcile_policy:type_name -> controlplane.v1.DeployReconcilePolicy
+	104, // 41: controlplane.v1.StreamDeploymentLogsRequest.stream:type_name -> controlplane.v1.DeployLogStream
+	105, // 42: controlplane.v1.StreamDeploymentLogsResponse.lines:type_name -> controlplane.v1.DeployLogLine
+	106, // 43: controlplane.v1.CutReleaseRequest.artifacts:type_name -> controlplane.v1.DeployArtifact
+	99,  // 44: controlplane.v1.CutReleaseRequest.run:type_name -> controlplane.v1.DeployRun
+	107, // 45: controlplane.v1.CutReleaseRequest.provenance:type_name -> controlplane.v1.DeploySourceProvenance
+	108, // 46: controlplane.v1.CutReleaseResponse.release:type_name -> controlplane.v1.DeployRelease
+	108, // 47: controlplane.v1.ListDeployReleasesResponse.releases:type_name -> controlplane.v1.DeployRelease
+	108, // 48: controlplane.v1.GetDeployReleaseResponse.release:type_name -> controlplane.v1.DeployRelease
+	109, // 49: controlplane.v1.ListDeployPromotionsRequest.kind:type_name -> controlplane.v1.DeployPromotionKind
+	91,  // 50: controlplane.v1.ListDeployPromotionsResponse.promotions:type_name -> controlplane.v1.DeployPromotion
+	110, // 51: controlplane.v1.GetDeployRolloutResponse.rollout:type_name -> controlplane.v1.DeployRollout
+	98,  // 52: controlplane.v1.RecordDeployGateRequest.gate:type_name -> controlplane.v1.DeployGate
+	98,  // 53: controlplane.v1.RecordDeployGateResponse.gate:type_name -> controlplane.v1.DeployGate
+	98,  // 54: controlplane.v1.ListDeployGatesResponse.gates:type_name -> controlplane.v1.DeployGate
+	99,  // 55: controlplane.v1.GetDeployRunResponse.run:type_name -> controlplane.v1.DeployRun
+	108, // 56: controlplane.v1.GetDeployRunResponse.release:type_name -> controlplane.v1.DeployRelease
+	111, // 57: controlplane.v1.GetDeployRunResponse.stages:type_name -> controlplane.v1.DeployRunStage
+	93,  // 58: controlplane.v1.ListDeployUsageRequest.start_time:type_name -> google.protobuf.Timestamp
+	93,  // 59: controlplane.v1.ListDeployUsageRequest.end_time:type_name -> google.protobuf.Timestamp
+	112, // 60: controlplane.v1.ListDeployUsageRequest.resource_kind:type_name -> controlplane.v1.DeployResourceKind
+	113, // 61: controlplane.v1.ListDeployUsageResponse.rows:type_name -> controlplane.v1.DeployUsageRow
+	99,  // 62: controlplane.v1.RecordDeployBundleRequest.run:type_name -> controlplane.v1.DeployRun
+	114, // 63: controlplane.v1.RecordDeployBundleResponse.bundle:type_name -> controlplane.v1.DeployBundle
+	114, // 64: controlplane.v1.GetDeployBundleResponse.bundle:type_name -> controlplane.v1.DeployBundle
+	115, // 65: controlplane.v1.ListDeployConvergencesResponse.convergences:type_name -> controlplane.v1.DeployConvergence
+	116, // 66: controlplane.v1.GetDeployLiveViewResponse.environments:type_name -> controlplane.v1.DeployLiveEnvironment
+	117, // 67: controlplane.v1.PlanDeployResponse.plan:type_name -> controlplane.v1.DeployPlan
+	71,  // 68: controlplane.v1.CheckDeployCapacityRequest.demand:type_name -> controlplane.v1.DeployCapacityDemand
+	0,   // 69: controlplane.v1.CheckDeployCapacityResponse.code:type_name -> controlplane.v1.DeployCapacityCode
+	100, // 70: controlplane.v1.CheckDeployCapacityResponse.holds:type_name -> controlplane.v1.DeployHold
+	118, // 71: controlplane.v1.ReportLocalSessionRequest.worktree:type_name -> controlplane.v1.DeployWorktree
+	107, // 72: controlplane.v1.ReportLocalSessionRequest.provenance:type_name -> controlplane.v1.DeploySourceProvenance
+	119, // 73: controlplane.v1.ReportLocalSessionResponse.session:type_name -> controlplane.v1.DeployLocalSession
+	77,  // 74: controlplane.v1.ImportLedgerRequest.releases:type_name -> controlplane.v1.LedgerImportRelease
+	78,  // 75: controlplane.v1.ImportLedgerRequest.environments:type_name -> controlplane.v1.LedgerImportEnvironment
+	79,  // 76: controlplane.v1.ImportLedgerRequest.promotions:type_name -> controlplane.v1.LedgerImportPromotion
+	80,  // 77: controlplane.v1.ImportLedgerRequest.bundles:type_name -> controlplane.v1.LedgerImportBundle
+	81,  // 78: controlplane.v1.ImportLedgerRequest.applies:type_name -> controlplane.v1.LedgerImportApply
+	106, // 79: controlplane.v1.LedgerImportRelease.artifacts:type_name -> controlplane.v1.DeployArtifact
+	107, // 80: controlplane.v1.LedgerImportRelease.provenance:type_name -> controlplane.v1.DeploySourceProvenance
+	93,  // 81: controlplane.v1.LedgerImportRelease.created_at:type_name -> google.protobuf.Timestamp
+	92,  // 82: controlplane.v1.LedgerImportEnvironment.kind:type_name -> controlplane.v1.DeployEnvironmentKind
+	93,  // 83: controlplane.v1.LedgerImportEnvironment.deleted_at:type_name -> google.protobuf.Timestamp
+	86,  // 84: controlplane.v1.LedgerImportPromotion.resolved_artifacts:type_name -> controlplane.v1.LedgerImportPromotion.ResolvedArtifactsEntry
+	87,  // 85: controlplane.v1.LedgerImportPromotion.resolved_sources:type_name -> controlplane.v1.LedgerImportPromotion.ResolvedSourcesEntry
+	98,  // 86: controlplane.v1.LedgerImportPromotion.gates:type_name -> controlplane.v1.DeployGate
+	93,  // 87: controlplane.v1.LedgerImportPromotion.promoted_at:type_name -> google.protobuf.Timestamp
+	95,  // 88: controlplane.v1.LedgerImportBundle.shape:type_name -> google.protobuf.Struct
+	107, // 89: controlplane.v1.LedgerImportBundle.provenance:type_name -> controlplane.v1.DeploySourceProvenance
+	93,  // 90: controlplane.v1.LedgerImportBundle.created_at:type_name -> google.protobuf.Timestamp
+	82,  // 91: controlplane.v1.LedgerImportApply.outcome:type_name -> controlplane.v1.LedgerImportApplyOutcome
+	93,  // 92: controlplane.v1.LedgerImportApply.created_at:type_name -> google.protobuf.Timestamp
+	95,  // 93: controlplane.v1.LedgerImportApplyOutcome.workloads:type_name -> google.protobuf.Struct
+	93,  // 94: controlplane.v1.LedgerImportApplyOutcome.finished_at:type_name -> google.protobuf.Timestamp
+	95,  // 95: controlplane.v1.ImportLedgerResponse.counts:type_name -> google.protobuf.Struct
+	120, // 96: controlplane.v1.GetDeployDriftResponse.drift:type_name -> controlplane.v1.DeployDrift
+	121, // 97: controlplane.v1.LedgerImportPromotion.ResolvedSourcesEntry.value:type_name -> controlplane.v1.DeploySource
+	1,   // 98: controlplane.v1.DeployService.GetTenant:input_type -> controlplane.v1.GetDeployTenantRequest
+	3,   // 99: controlplane.v1.DeployService.CreateTenant:input_type -> controlplane.v1.CreateDeployTenantRequest
+	5,   // 100: controlplane.v1.DeployService.CreateEnvironment:input_type -> controlplane.v1.CreateDeployEnvironmentRequest
+	7,   // 101: controlplane.v1.DeployService.GetEnvironment:input_type -> controlplane.v1.GetDeployEnvironmentRequest
+	9,   // 102: controlplane.v1.DeployService.ListEnvironments:input_type -> controlplane.v1.ListDeployEnvironmentsRequest
+	11,  // 103: controlplane.v1.DeployService.UpdateEnvironment:input_type -> controlplane.v1.UpdateDeployEnvironmentRequest
+	13,  // 104: controlplane.v1.DeployService.DeleteEnvironment:input_type -> controlplane.v1.DeleteDeployEnvironmentRequest
+	16,  // 105: controlplane.v1.DeployService.ListRetainedDatabases:input_type -> controlplane.v1.ListRetainedDatabasesRequest
+	18,  // 106: controlplane.v1.DeployService.DeleteRetainedDatabase:input_type -> controlplane.v1.DeleteRetainedDatabaseRequest
+	20,  // 107: controlplane.v1.DeployService.EnsureEnvironment:input_type -> controlplane.v1.EnsureDeployEnvironmentRequest
+	22,  // 108: controlplane.v1.DeployService.CreateDeployment:input_type -> controlplane.v1.CreateDeploymentRequest
+	24,  // 109: controlplane.v1.DeployService.GetDeployment:input_type -> controlplane.v1.GetDeploymentRequest
+	26,  // 110: controlplane.v1.DeployService.ListDeployments:input_type -> controlplane.v1.ListDeploymentsRequest
+	28,  // 111: controlplane.v1.DeployService.UpdateDeployment:input_type -> controlplane.v1.UpdateDeploymentRequest
+	30,  // 112: controlplane.v1.DeployService.DeleteDeployment:input_type -> controlplane.v1.DeleteDeploymentRequest
+	32,  // 113: controlplane.v1.DeployService.Promote:input_type -> controlplane.v1.PromoteReleaseRequest
+	34,  // 114: controlplane.v1.DeployService.Scale:input_type -> controlplane.v1.ScaleDeploymentRequest
+	36,  // 115: controlplane.v1.DeployService.SetEnvironmentRunState:input_type -> controlplane.v1.SetEnvironmentRunStateRequest
+	38,  // 116: controlplane.v1.DeployService.GetStatus:input_type -> controlplane.v1.GetDeploymentStatusRequest
+	41,  // 117: controlplane.v1.DeployService.StreamLogs:input_type -> controlplane.v1.StreamDeploymentLogsRequest
+	43,  // 118: controlplane.v1.DeployService.CutRelease:input_type -> controlplane.v1.CutReleaseRequest
+	45,  // 119: controlplane.v1.DeployService.ListReleases:input_type -> controlplane.v1.ListDeployReleasesRequest
+	47,  // 120: controlplane.v1.DeployService.GetRelease:input_type -> controlplane.v1.GetDeployReleaseRequest
+	49,  // 121: controlplane.v1.DeployService.ListPromotions:input_type -> controlplane.v1.ListDeployPromotionsRequest
+	51,  // 122: controlplane.v1.DeployService.GetRollout:input_type -> controlplane.v1.GetDeployRolloutRequest
+	53,  // 123: controlplane.v1.DeployService.RecordGate:input_type -> controlplane.v1.RecordDeployGateRequest
+	55,  // 124: controlplane.v1.DeployService.ListGates:input_type -> controlplane.v1.ListDeployGatesRequest
+	57,  // 125: controlplane.v1.DeployService.GetRun:input_type -> controlplane.v1.GetDeployRunRequest
+	59,  // 126: controlplane.v1.DeployService.ListUsage:input_type -> controlplane.v1.ListDeployUsageRequest
+	61,  // 127: controlplane.v1.DeployService.RecordBundle:input_type -> controlplane.v1.RecordDeployBundleRequest
+	63,  // 128: controlplane.v1.DeployService.GetBundle:input_type -> controlplane.v1.GetDeployBundleRequest
+	65,  // 129: controlplane.v1.DeployService.ListConvergences:input_type -> controlplane.v1.ListDeployConvergencesRequest
+	67,  // 130: controlplane.v1.DeployService.GetLiveView:input_type -> controlplane.v1.GetDeployLiveViewRequest
+	69,  // 131: controlplane.v1.DeployService.PlanDeploy:input_type -> controlplane.v1.PlanDeployRequest
+	72,  // 132: controlplane.v1.DeployService.CheckDeployCapacity:input_type -> controlplane.v1.CheckDeployCapacityRequest
+	74,  // 133: controlplane.v1.DeployService.ReportLocalSession:input_type -> controlplane.v1.ReportLocalSessionRequest
+	76,  // 134: controlplane.v1.DeployService.ImportLedger:input_type -> controlplane.v1.ImportLedgerRequest
+	84,  // 135: controlplane.v1.DeployService.GetDrift:input_type -> controlplane.v1.GetDeployDriftRequest
+	2,   // 136: controlplane.v1.DeployService.GetTenant:output_type -> controlplane.v1.GetDeployTenantResponse
+	4,   // 137: controlplane.v1.DeployService.CreateTenant:output_type -> controlplane.v1.CreateDeployTenantResponse
+	6,   // 138: controlplane.v1.DeployService.CreateEnvironment:output_type -> controlplane.v1.CreateDeployEnvironmentResponse
+	8,   // 139: controlplane.v1.DeployService.GetEnvironment:output_type -> controlplane.v1.GetDeployEnvironmentResponse
+	10,  // 140: controlplane.v1.DeployService.ListEnvironments:output_type -> controlplane.v1.ListDeployEnvironmentsResponse
+	12,  // 141: controlplane.v1.DeployService.UpdateEnvironment:output_type -> controlplane.v1.UpdateDeployEnvironmentResponse
+	14,  // 142: controlplane.v1.DeployService.DeleteEnvironment:output_type -> controlplane.v1.DeleteDeployEnvironmentResponse
+	17,  // 143: controlplane.v1.DeployService.ListRetainedDatabases:output_type -> controlplane.v1.ListRetainedDatabasesResponse
+	19,  // 144: controlplane.v1.DeployService.DeleteRetainedDatabase:output_type -> controlplane.v1.DeleteRetainedDatabaseResponse
+	21,  // 145: controlplane.v1.DeployService.EnsureEnvironment:output_type -> controlplane.v1.EnsureDeployEnvironmentResponse
+	23,  // 146: controlplane.v1.DeployService.CreateDeployment:output_type -> controlplane.v1.CreateDeploymentResponse
+	25,  // 147: controlplane.v1.DeployService.GetDeployment:output_type -> controlplane.v1.GetDeploymentResponse
+	27,  // 148: controlplane.v1.DeployService.ListDeployments:output_type -> controlplane.v1.ListDeploymentsResponse
+	29,  // 149: controlplane.v1.DeployService.UpdateDeployment:output_type -> controlplane.v1.UpdateDeploymentResponse
+	31,  // 150: controlplane.v1.DeployService.DeleteDeployment:output_type -> controlplane.v1.DeleteDeploymentResponse
+	33,  // 151: controlplane.v1.DeployService.Promote:output_type -> controlplane.v1.PromoteReleaseResponse
+	35,  // 152: controlplane.v1.DeployService.Scale:output_type -> controlplane.v1.ScaleDeploymentResponse
+	37,  // 153: controlplane.v1.DeployService.SetEnvironmentRunState:output_type -> controlplane.v1.SetEnvironmentRunStateResponse
+	40,  // 154: controlplane.v1.DeployService.GetStatus:output_type -> controlplane.v1.GetDeploymentStatusResponse
+	42,  // 155: controlplane.v1.DeployService.StreamLogs:output_type -> controlplane.v1.StreamDeploymentLogsResponse
+	44,  // 156: controlplane.v1.DeployService.CutRelease:output_type -> controlplane.v1.CutReleaseResponse
+	46,  // 157: controlplane.v1.DeployService.ListReleases:output_type -> controlplane.v1.ListDeployReleasesResponse
+	48,  // 158: controlplane.v1.DeployService.GetRelease:output_type -> controlplane.v1.GetDeployReleaseResponse
+	50,  // 159: controlplane.v1.DeployService.ListPromotions:output_type -> controlplane.v1.ListDeployPromotionsResponse
+	52,  // 160: controlplane.v1.DeployService.GetRollout:output_type -> controlplane.v1.GetDeployRolloutResponse
+	54,  // 161: controlplane.v1.DeployService.RecordGate:output_type -> controlplane.v1.RecordDeployGateResponse
+	56,  // 162: controlplane.v1.DeployService.ListGates:output_type -> controlplane.v1.ListDeployGatesResponse
+	58,  // 163: controlplane.v1.DeployService.GetRun:output_type -> controlplane.v1.GetDeployRunResponse
+	60,  // 164: controlplane.v1.DeployService.ListUsage:output_type -> controlplane.v1.ListDeployUsageResponse
+	62,  // 165: controlplane.v1.DeployService.RecordBundle:output_type -> controlplane.v1.RecordDeployBundleResponse
+	64,  // 166: controlplane.v1.DeployService.GetBundle:output_type -> controlplane.v1.GetDeployBundleResponse
+	66,  // 167: controlplane.v1.DeployService.ListConvergences:output_type -> controlplane.v1.ListDeployConvergencesResponse
+	68,  // 168: controlplane.v1.DeployService.GetLiveView:output_type -> controlplane.v1.GetDeployLiveViewResponse
+	70,  // 169: controlplane.v1.DeployService.PlanDeploy:output_type -> controlplane.v1.PlanDeployResponse
+	73,  // 170: controlplane.v1.DeployService.CheckDeployCapacity:output_type -> controlplane.v1.CheckDeployCapacityResponse
+	75,  // 171: controlplane.v1.DeployService.ReportLocalSession:output_type -> controlplane.v1.ReportLocalSessionResponse
+	83,  // 172: controlplane.v1.DeployService.ImportLedger:output_type -> controlplane.v1.ImportLedgerResponse
+	85,  // 173: controlplane.v1.DeployService.GetDrift:output_type -> controlplane.v1.GetDeployDriftResponse
+	136, // [136:174] is the sub-list for method output_type
+	98,  // [98:136] is the sub-list for method input_type
+	98,  // [98:98] is the sub-list for extension type_name
+	98,  // [98:98] is the sub-list for extension extendee
+	0,   // [0:98] is the sub-list for field type_name
 }
 
 func init() { file_services_deploy_v1_deploy_proto_init() }
@@ -7493,23 +6359,23 @@ func file_services_deploy_v1_deploy_proto_init() {
 	if File_services_deploy_v1_deploy_proto != nil {
 		return
 	}
-	file_services_deploy_v1_deploy_proto_msgTypes[10].OneofWrappers = []any{}
-	file_services_deploy_v1_deploy_proto_msgTypes[27].OneofWrappers = []any{}
-	file_services_deploy_v1_deploy_proto_msgTypes[33].OneofWrappers = []any{
+	file_services_deploy_v1_deploy_proto_msgTypes[8].OneofWrappers = []any{}
+	file_services_deploy_v1_deploy_proto_msgTypes[25].OneofWrappers = []any{}
+	file_services_deploy_v1_deploy_proto_msgTypes[31].OneofWrappers = []any{
 		(*PromoteReleaseRequest_ExpectedCurrentPromotionId)(nil),
 		(*PromoteReleaseRequest_ExpectUnbound)(nil),
 	}
-	file_services_deploy_v1_deploy_proto_msgTypes[54].OneofWrappers = []any{}
+	file_services_deploy_v1_deploy_proto_msgTypes[44].OneofWrappers = []any{}
+	file_services_deploy_v1_deploy_proto_msgTypes[48].OneofWrappers = []any{}
 	file_services_deploy_v1_deploy_proto_msgTypes[58].OneofWrappers = []any{}
-	file_services_deploy_v1_deploy_proto_msgTypes[68].OneofWrappers = []any{}
-	file_services_deploy_v1_deploy_proto_msgTypes[74].OneofWrappers = []any{}
+	file_services_deploy_v1_deploy_proto_msgTypes[64].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_deploy_v1_deploy_proto_rawDesc), len(file_services_deploy_v1_deploy_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   97,
+			NumEnums:      1,
+			NumMessages:   87,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

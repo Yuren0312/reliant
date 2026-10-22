@@ -1,33 +1,36 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Convert the composer's flat group keys to the nested shape the server stores.
- *
- * Example (groups = {"agent"}):
+ * Convert flat dot-notation params to nested structure.
+ * 
+ * Example:
  *   Input:  { "agent.model": "claude", "agent.temperature": 0.7, "mode": "fast" }
  *   Output: { "agent": { "model": "claude", "temperature": 0.7 }, "mode": "fast" }
- *
- * The composer keys a group's params as "<group>.<param>"; a run's inputs, the
- * send payload and the chat's stored selection nest them. Only keys under a
- * known group are nested: a key with a dot that is not one stays as it is, and
- * the send boundary refuses it rather than this guessing a group out of it.
+ * 
+ * This is needed because the frontend stores params with flat keys like "group.param"
+ * but the backend expects nested structure for group inputs.
  */
 export function flatToNestedParams(
-  flatParams: Record<string, unknown>,
-  groupNames: ReadonlySet<string>
+  flatParams: Record<string, unknown>
 ): Record<string, unknown> {
   const nested: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(flatParams)) {
     const dotIndex = key.indexOf(".");
-    const groupName = dotIndex > 0 ? key.substring(0, dotIndex) : "";
-
-    if (groupName && groupNames.has(groupName)) {
-      if (!isPlainObject(nested[groupName])) {
+    
+    if (dotIndex > 0) {
+      // Key has dot notation - nest it
+      const groupName = key.substring(0, dotIndex);
+      const paramName = key.substring(dotIndex + 1);
+      
+      // Initialize group object if needed
+      if (!nested[groupName] || typeof nested[groupName] !== "object") {
         nested[groupName] = {};
       }
-      (nested[groupName] as Record<string, unknown>)[key.substring(dotIndex + 1)] = value;
+      
+      (nested[groupName] as Record<string, unknown>)[paramName] = value;
     } else {
+      // Top-level param - keep as-is
       nested[key] = value;
     }
   }
@@ -36,62 +39,23 @@ export function flatToNestedParams(
 }
 
 /**
- * The flat keys' edits as a server patch: the changed keys, nested, with a
- * changed group sent WHOLE.
+ * Convert nested params to flat dot-notation, the inverse of flatToNestedParams.
  *
- * A signalled or stored key is replaced as a whole value, so a patch carrying
- * only {"agent": {"model": ...}} would erase the group's other params in the
- * run and in the selection. A group with any changed param therefore goes out
- * with every param the composer holds for it.
- */
-export function nestChangedParams(
-  changed: Record<string, unknown>,
-  all: Record<string, unknown>,
-  groupNames: ReadonlySet<string>
-): Record<string, unknown> {
-  const groupsTouched = new Set<string>();
-  const patch: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(changed)) {
-    const dotIndex = key.indexOf(".");
-    const groupName = dotIndex > 0 ? key.substring(0, dotIndex) : "";
-    if (groupName && groupNames.has(groupName)) {
-      groupsTouched.add(groupName);
-    } else {
-      patch[key] = value;
-    }
-  }
-  if (groupsTouched.size === 0) return patch;
-
-  const wholeGroups = flatToNestedParams(
-    Object.fromEntries(
-      Object.entries(all).filter(([key]) => groupsTouched.has(key.split(".", 1)[0]) && key.includes("."))
-    ),
-    groupNames
-  );
-  return { ...patch, ...wholeGroups };
-}
-
-/**
- * Convert nested params to the composer's flat group keys, the inverse of
- * flatToNestedParams.
+ * Example:
+ *   Input:  { "agent": { "model": "claude" }, "mode": "fast" }
+ *   Output: { "agent.model": "claude", "mode": "fast" }
  *
- * Example (groups = {"agent"}):
- *   Input:  { "agent": { "model": "claude" }, "model": { "id": "gpt" }, "mode": "fast" }
- *   Output: { "agent.model": "claude", "model": { "id": "gpt" }, "mode": "fast" }
- *
- * Only the schema's group inputs are flattened. A top-level param whose value
- * is an object — a model selector — is a value and stays whole; flattening it
- * turned {model: {id}} into "model.id", which no input is named, so the
- * composer could never adopt the model a run was really using.
+ * The backend returns group inputs nested; the params panel keys them flat.
+ * Only one level is flattened, matching flatToNestedParams — a param whose
+ * value is itself an object (a model selector, say) stays intact.
  */
 export function nestedToFlatParams(
-  nestedParams: Record<string, unknown>,
-  groupNames: ReadonlySet<string>
+  nestedParams: Record<string, unknown>
 ): Record<string, unknown> {
   const flat: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(nestedParams)) {
-    if (groupNames.has(key) && isPlainObject(value)) {
+    if (isPlainObject(value)) {
       for (const [nestedKey, nestedValue] of Object.entries(value)) {
         flat[`${key}.${nestedKey}`] = nestedValue;
       }
@@ -101,21 +65,6 @@ export function nestedToFlatParams(
   }
 
   return flat;
-}
-
-/**
- * The group names in a flattened input schema (`buildWorkflowInputsFromProto`
- * names a group's params "<group>.<param>").
- */
-export function groupNamesOf(
-  inputs: Record<string, unknown> | null | undefined
-): ReadonlySet<string> {
-  const groups = new Set<string>();
-  for (const key of Object.keys(inputs ?? {})) {
-    const dotIndex = key.indexOf(".");
-    if (dotIndex > 0) groups.add(key.substring(0, dotIndex));
-  }
-  return groups;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -151,53 +100,35 @@ export function paramValuesEqual(a: unknown, b: unknown): boolean {
 }
 
 /**
- * Adopt the chat's server-side params into the composer, keeping what the user
- * has edited and not yet pushed.
+ * Reconcile locally displayed params against the values a running workflow
+ * actually holds.
  *
- * `local` is what the composer shows, `synced` the baseline last known to be on
- * the server, and `server` the chat's selection now (flat keys). A key is DIRTY
- * when `local` differs from the baseline: the user's newer value wins, and the
- * next push carries it. Every other key takes the server's value — and a key the
- * server no longer holds is dropped. That is how the pill converges on what
- * actually runs: another device's pick, or a model the server moved off a
- * provider that cannot serve it.
+ * `current` is what the UI shows, `sent` is what was just pushed to the server,
+ * and `server` is what the workflow reports afterwards. A key adopts the server
+ * value unless the user has edited it since the push — their newer edit wins and
+ * the next sync will carry it.
  *
- * The new baseline is the server's value for every adopted key, and the old
- * baseline for dirty ones.
+ * Only keys already present in `current` are considered; a workflow's inputs
+ * also carry runtime keys the params panel never displays.
  */
-export function adoptServerParams(
-  local: Record<string, unknown>,
-  synced: Record<string, unknown>,
+export function reconcileParamsWithServer(
+  current: Record<string, unknown>,
+  sent: Record<string, unknown>,
   server: Record<string, unknown>
-): { params: Record<string, unknown>; synced: Record<string, unknown> } {
-  const params: Record<string, unknown> = {};
-  const baseline: Record<string, unknown> = {};
-  const keys = new Set([...Object.keys(local), ...Object.keys(server), ...Object.keys(synced)]);
+): { params: Record<string, unknown>; changed: boolean } {
+  const reconciled = { ...current };
+  let changed = false;
 
-  for (const key of keys) {
-    if (!paramValuesEqual(local[key], synced[key])) {
-      if (Object.hasOwn(local, key)) params[key] = local[key];
-      if (Object.hasOwn(synced, key)) baseline[key] = synced[key];
-      continue;
-    }
-    if (Object.hasOwn(server, key)) {
-      params[key] = server[key];
-      baseline[key] = server[key];
-    }
-  }
-  return { params, synced: baseline };
-}
+  for (const [key, serverValue] of Object.entries(server)) {
+    if (!Object.hasOwn(current, key)) continue;
+    if (!paramValuesEqual(current[key], sent[key])) continue;
+    if (paramValuesEqual(current[key], serverValue)) continue;
 
-/** The keys of `local` that differ from the baseline: what a push would carry. */
-export function unsyncedParams(
-  local: Record<string, unknown>,
-  synced: Record<string, unknown>
-): Record<string, unknown> {
-  const changed: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(local)) {
-    if (!paramValuesEqual(synced[key], value)) changed[key] = value;
+    reconciled[key] = serverValue;
+    changed = true;
   }
-  return changed;
+
+  return { params: reconciled, changed };
 }
 
 /**

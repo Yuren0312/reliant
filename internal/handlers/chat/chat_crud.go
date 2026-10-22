@@ -187,7 +187,7 @@ func (s *Service) StartChat(
 	}
 
 	return connect.NewResponse(&reliantv1.StartChatResponse{
-		Chat:       s.chatToProtoWithSelection(ctx, result.Chat),
+		Chat:       chatToProto(result.Chat),
 		WorkflowId: result.WorkflowID,
 		RunId:      result.RunID,
 	}), nil
@@ -311,8 +311,7 @@ func (s *Service) GetChat(
 		}
 	}
 
-	// Carries the composer's choice for this chat, so any device opens on it.
-	protoChat := s.chatToProtoWithSelection(ctx, chat)
+	protoChat := chatToProto(chat)
 	protoChat.NeedsRecovery = needsRecovery
 	return connect.NewResponse(&reliantv1.GetChatResponse{
 		Chat: protoChat,

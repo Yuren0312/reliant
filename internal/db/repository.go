@@ -6,7 +6,6 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/chatselection"
 	core "github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -348,20 +347,6 @@ type Repository interface {
 	SetClaudeAuthTokens(ctx context.Context, userID string, tokens core.ClaudeAuthTokens) error
 	CompareAndSwapClaudeAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.ClaudeAuthTokens) (bool, error)
 	DeleteClaudeAuthTokens(ctx context.Context, userID string) error
-
-	// Provider accounts: one row per connected LLM credential, with its limit state and the
-	// sticky thread assignments (core.ProviderAccountStore).
-	core.ProviderAccountStore
-	// ListThreadAssignments returns a thread's sticky account per provider, newest first.
-	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
-	// LatestServingAccount is the account that served a thread's newest assistant message that
-	// names one ("" when none does).
-	LatestServingAccount(ctx context.Context, threadID string) (string, error)
-	// GetAccountLimits, ClaimUsageFetch and EnsureUsagePollScheduled are the usage poller's and
-	// on-demand refresh's reads and claims (internal/llm/accountlimits).
-	GetAccountLimits(ctx context.Context, accountID string) (*core.LimitState, error)
-	ClaimUsageFetch(ctx context.Context, accountID string, now time.Time, floor time.Duration) (bool, error)
-	EnsureUsagePollScheduled(ctx context.Context, accountID string, next time.Time, providers []string) error
 
 	// Privacy Settings
 	GetAnalyticsEnabled(ctx context.Context, userID string) (bool, error)
@@ -717,11 +702,6 @@ type Repository interface {
 	// written before the run parks on its timer. See provider_backoff.go.
 	RecordUsageLimitWait(ctx context.Context, chatID, threadID, provider string, probing bool, resumeAt, now time.Time) error
 	ClearUsageLimitWait(ctx context.Context, chatID, threadID string, now time.Time) error
-	// Chat selection — the composer's server-side choice for a chat, layered
-	// under every run the chat builds. See chat_selection.go.
-	GetChatSelection(ctx context.Context, chatID string) (*chatselection.Selection, error)
-	MutateChatSelection(ctx context.Context, chatID string, mutate func(current *chatselection.Selection) (*chatselection.Selection, error)) (*chatselection.Selection, error)
-	CopyChatSelection(ctx context.Context, fromChatID, toChatID, userID string) error
 	// Threads - First-class entity for thread hierarchy and fork relationships.
 	// Thread.Origin (main/spawn/fork/node) is a stored column, not re-derived
 	// at read time from a workflow row's spawned_by_node_id sentinel -- see

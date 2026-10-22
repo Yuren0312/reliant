@@ -12,9 +12,6 @@ import {
   localProviderRef,
 } from "../../Settings/localModels";
 import { preferredThinkingLevel, resolveThinkingCapabilityForModel } from "../../../hooks/useThinkingCapability";
-import { api } from "../../../api/client";
-import { primaryDriverOfSelection } from "../../../lib/providerPolicy";
-import { OnLimitRow } from "./OnLimitRow";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -25,8 +22,6 @@ interface ModelSettingsPageProps {
   onChange: (value: unknown) => void;
   onBack: () => void;
   onClose: () => void;
-  /** The chat whose provider policy the on-limit row edits; absent (a new chat, a sub-agent's params) hides the row. */
-  chatId?: string;
 }
 
 type ModelTab = "tag" | "explicit";
@@ -110,7 +105,6 @@ export function ModelSettingsPage({
   onChange,
   onBack,
   onClose,
-  chatId,
 }: ModelSettingsPageProps) {
   const navigate = useNavigate();
   const parsed = parseModelValue(value);
@@ -504,16 +498,6 @@ export function ModelSettingsPage({
             )}
           </div>
         </div>
-      )}
-
-      {chatId && (
-        <OnLimitRow
-          chatId={chatId}
-          primaryDriver={primaryDriverOfSelection(value, tiers)}
-          selectedModel={selectedModel}
-          models={models}
-          providerName={api.models._driverDisplayName}
-        />
       )}
 
       {/* Overrides section */}

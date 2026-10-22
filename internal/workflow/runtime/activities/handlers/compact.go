@@ -64,16 +64,6 @@ type CompactActivity struct {
 	// compaction_guard.go). Process-wide, so a window is reported once no
 	// matter which activity instance meets it.
 	skips *compactionSkipNotices
-	// routing keeps the summary request on the thread's account; nil routes
-	// nothing.
-	routing *AccountRouting
-}
-
-// WithAccountRouting wires multi-account routing into compaction, so the
-// summary request is served by the same account as the thread it summarizes.
-func (a *CompactActivity) WithAccountRouting(r *AccountRouting) *CompactActivity {
-	a.routing = r
-	return a
 }
 
 // NewCompactActivity creates a new CompactActivity
@@ -156,7 +146,7 @@ func (a *CompactActivity) Execute(ctx context.Context, input ActivityInput) (Com
 	a.emitThreadUpdate(ctx, rtx.ChatID, thread, "active", "Compact")
 
 	// Generate summary of messages to be compacted
-	summary, err := a.generateCompactionSummary(ctx, chat, thread, rtx.FallbackModel, currentContextMessages, summarizeWith)
+	summary, err := a.generateCompactionSummary(ctx, chat, currentContextMessages, summarizeWith)
 	if err != nil {
 		return CompactOutput{}, fmt.Errorf("failed to generate compaction summary: %w", err)
 	}
@@ -372,7 +362,7 @@ var compactionModelTier = []models.ModelID{
 // selection, tool-less history sanitization — flows through the same
 // request-construction path as a normal CallLLM turn (resolveLLMCall +
 // prepareHistoryForLLM), so provider constraints are handled in one place.
-func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *db.Chat, thread, fallbackModel string, messages []message.Message, summarizeWith *reliantv1.ModelSelector) (string, error) {
+func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *db.Chat, messages []message.Message, summarizeWith *reliantv1.ModelSelector) (string, error) {
 	if len(messages) == 0 {
 		return "", fmt.Errorf("no messages to summarize")
 	}
@@ -383,10 +373,6 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 		UserID:      chat.UserID,
 		SessionID:   chat.ID, // Use chat ID as thread ID for Anthropic
 		Temperature: &temperature,
-		// The summary is a request over this thread's own prefix, so it goes to
-		// the thread's account.
-		ThreadID: thread,
-		Routing:  a.routing,
 	}
 
 	// Pick the summarization model. With an injected resolver (tests) the
@@ -397,10 +383,6 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 			return "", err
 		}
 		spec.Selector = selector
-		if fallbackModel != "" {
-			// The thread is on another provider until its own resets.
-			spec.Selector = models.ModelSelector{ID: fallbackModel, RequireOutputModality: models.ModalityText}
-		}
 		logging.Debug("[COMPACTION] Selected model for summarization",
 			"chatID", chat.ID,
 			"model", selector.ID,
@@ -437,12 +419,9 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 	// Call LLM to generate summary using streaming (required for long operations)
 	// We use streaming mode because Anthropic requires it for operations that may take >10 minutes
 	// The accumulator will collect all chunks and return the final response
-	response, err := accumulator.StreamAndAccumulate(a.routing.observe(ctx, chat.UserID, resolved.Account), resolved.Driver, compactionPrompts, history, []tools.Tool{})
+	response, err := accumulator.StreamAndAccumulate(ctx, resolved.Driver, compactionPrompts, history, []tools.Tool{})
 	if err != nil {
-		return "", a.routing.usageLimitFailure(ctx, fmt.Errorf("failed to generate summary: %w", err), usageLimitContext{
-			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
-			ModelID: definitionID(resolved.Definition), Account: resolved.Account,
-		})
+		return "", fmt.Errorf("failed to generate summary: %w", err)
 	}
 
 	if response.Content == "" {
@@ -466,7 +445,7 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 // The tier list remains the fallback for nodes that declare no model and for
 // an agent model that no longer resolves against the user's providers.
 func resolveCompactionModel(ctx context.Context, userID string, preferred *reliantv1.ModelSelector) (models.ModelSelector, string, error) {
-	availableDrivers := getAvailableDrivers(ctx, userID)
+	availableDrivers := drivers.GetAvailableDrivers(ctx, userID)
 	availableProviders := configuredProviderIDs(availableDrivers)
 	registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
 

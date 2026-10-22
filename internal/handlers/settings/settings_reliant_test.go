@@ -11,7 +11,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -77,7 +76,9 @@ func TestSettingsService_SyncReliantProvider_PersistsKeyAndEmitsRefetch(t *testi
 	assert.Equal(t, "reliant", resp.Msg.Provider.Provider)
 	assert.True(t, resp.Msg.Provider.Configured)
 
-	assert.Equal(t, "rlat_abcdef0123456789abcdef0123456789", managedKey(t, ctx, repo, userID))
+	stored, err := repo.GetProviderAPIKey(ctx, userID, "reliant")
+	require.NoError(t, err)
+	assert.Equal(t, "rlat_abcdef0123456789abcdef0123456789", stored)
 
 	assert.Equal(t, 1, fake.issueCallCount)
 	assert.Equal(t, jwt, fake.lastIssueJWT)
@@ -95,11 +96,7 @@ func TestSettingsService_SyncReliantProvider_RotationComesFromControlPlane(t *te
 
 	userID := "test-user"
 	auth.SetUserJWT(userID, "test-jwt-token")
-	_, _, err := repo.UpsertProviderAccount(context.Background(), core.AccountUpsert{
-		UserID: userID, Provider: "reliant", AuthKind: core.AuthKindManaged, IdentityKey: core.ManagedIdentityKey,
-		Secrets: core.AccountSecrets{Secret: "rlat_previous0000000000000000000000000"},
-	})
-	require.NoError(t, err)
+	require.NoError(t, repo.SetProviderAPIKey(context.Background(), userID, "reliant", "rlat_previous0000000000000000000000000"))
 
 	fake := &fakeControlPlaneClient{issueKey: "rlat_next000000000000000000000000000000", issueRotated: true}
 	svc := newTestService(t, Deps{Repo: repo, ControlPlane: fake})
@@ -108,8 +105,9 @@ func TestSettingsService_SyncReliantProvider_RotationComesFromControlPlane(t *te
 	assert.True(t, resp.Msg.RotatedKey)
 	assert.False(t, resp.Msg.CreatedKey)
 
-	assert.Equal(t, "rlat_next000000000000000000000000000000", managedKey(t, context.Background(), repo, userID))
-	assert.Len(t, accountsOfProvider(t, context.Background(), repo, userID, "reliant"), 1)
+	stored, err := repo.GetProviderAPIKey(context.Background(), userID, "reliant")
+	require.NoError(t, err)
+	assert.Equal(t, "rlat_next000000000000000000000000000000", stored)
 
 	// A local store holding a key does NOT make a fresh control-plane mint a
 	// rotation: control-plane is the authority on whether one was replaced.

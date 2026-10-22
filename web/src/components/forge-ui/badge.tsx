@@ -1,3 +1,4 @@
+
 // Canonical variants. `danger` and `default` are accepted aliases for
 // `error` and `neutral` respectively — many existing codebases (and
 // alternate design systems) name the destructive variant `danger` and
@@ -33,7 +34,10 @@ const dotStyles: Record<BadgeVariant, string> = {
 };
 
 const sizeStyles: Record<BadgeSize, string> = {
-  sm: "px-1.5 py-0.5 text-[0.6875rem]",
+  // text-2xs, not an arbitrary px value: a hardcoded size opts this badge out
+  // of the font-size preference permanently, which is what
+  // fontScaleContract.test.ts guards. See tailwind.config.js's scale comment.
+  sm: "px-1.5 py-0.5 text-2xs",
   md: "px-2 py-0.5 text-xs",
   lg: "px-2.5 py-1 text-sm",
 };
@@ -76,7 +80,11 @@ export default function Badge({
             strokeWidth={3}
             stroke="currentColor"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M6 18L18 6M6 6l12 12"
+            />
           </svg>
         </button>
       )}

@@ -9,7 +9,7 @@ describe("an environment page's tabs", () => {
     // dev runs the working tree via `forge env up`; it is never built or
     // released, so "Releases" and "not built yet" are both the wrong question.
     expect(defaultTab("local")).toBe("running");
-    expect(tabsFor("local").map((tab) => tab.id)).toEqual(["running", "identity", "secrets"]);
+    expect(tabsFor("local").map((tab) => tab.id)).toEqual(["running", "secrets"]);
   });
 
   it("leads a deployed env with its overview, and has releases", () => {
@@ -17,7 +17,6 @@ describe("an environment page's tabs", () => {
     expect(tabsFor("deployed").map((tab) => tab.id)).toEqual([
       "overview",
       "observability",
-      "identity",
       "releases",
       "activity",
       "secrets",
@@ -30,7 +29,6 @@ describe("an environment page's tabs", () => {
     expect(needs).toEqual({
       overview: false,
       observability: false,
-      identity: false,
       releases: false,
       activity: false,
       secrets: false,
@@ -82,7 +80,6 @@ describe("releases, activity and domains are their own tabs", () => {
     expect(resolveTab("activity", "local")).toBe("running");
     expect(tabNeedsDaemon("activity")).toBe(false);
     expect(tabNeedsDaemon("domains")).toBe(false);
-    expect(tabNeedsDaemon("identity")).toBe(false);
     expect(tabNeedsDaemon("running")).toBe(true);
     expect(tabNeedsDaemon("changes")).toBe(false);
     expect(tabNeedsDaemon("preview")).toBe(false);

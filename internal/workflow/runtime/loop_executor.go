@@ -754,7 +754,20 @@ func (e *InlineLoopExecutor) loadAndMergePresets(ctx workflow.Context, iterInput
 		}
 
 		// Merge params into iterInputs (nested: group params under iterInputs[groupName])
-		mergePresetParams(iterInputs, groupName, params)
+		if groupName == DefaultPresetGroup {
+			for paramName, paramValue := range params {
+				iterInputs[paramName] = paramValue
+			}
+		} else {
+			groupMap, _ := iterInputs[groupName].(map[string]interface{})
+			if groupMap == nil {
+				groupMap = make(map[string]interface{})
+				iterInputs[groupName] = groupMap
+			}
+			for paramName, paramValue := range params {
+				groupMap[paramName] = paramValue
+			}
+		}
 
 		e.logger.Debug("[InlineLoop] Applied preset params",
 			"loopID", e.loopID,

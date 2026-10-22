@@ -21,8 +21,6 @@ export type CopilotOAuthResult =
   | {
       ok: true
       message: string
-      /** What the sign-in did to the account list; see SignInOutcome. */
-      outcome: { created: boolean; identityMismatch?: string; accountLabel?: string }
     }
   | {
       ok: false
@@ -40,8 +38,6 @@ export interface CopilotDeviceCodeInfo {
 
 export interface CopilotOAuthOptions {
   signal?: AbortSignal
-  /** Reconnect target: the account that is signing in again. Empty = add / sign in. */
-  accountId?: string
   /**
    * Invoked once the device code has been issued, so the UI can display the
    * `userCode` and open the verification URI. Polling begins immediately after.
@@ -97,7 +93,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 export async function runCopilotDeviceFlow(
   options: CopilotOAuthOptions = {},
 ): Promise<CopilotOAuthResult> {
-  const { signal, onDeviceCode, onPolling, accountId } = options
+  const { signal, onDeviceCode, onPolling } = options
 
   let start: Awaited<ReturnType<typeof settingsGrpc.startCopilotDeviceAuth>>
   try {
@@ -145,14 +141,13 @@ export async function runCopilotDeviceFlow(
 
       await sleep(intervalMs, signal)
 
-      const { status, errorMessage, ...outcome } = await settingsGrpc.pollCopilotDeviceAuth(
+      const { status, errorMessage } = await settingsGrpc.pollCopilotDeviceAuth(
         start.deviceCode,
-        accountId,
       )
 
       switch (status) {
         case PollCopilotDeviceAuthResponse_Status.AUTHORIZED:
-          return { ok: true, message: 'Connected to GitHub Copilot successfully!', outcome }
+          return { ok: true, message: 'Connected to GitHub Copilot successfully!' }
         case PollCopilotDeviceAuthResponse_Status.PENDING:
         case PollCopilotDeviceAuthResponse_Status.UNSPECIFIED:
           continue

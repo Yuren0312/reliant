@@ -132,9 +132,6 @@ func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageCo
 	if dbMsg.Model != nil {
 		msg.Model = models.ModelID(*dbMsg.Model)
 	}
-	if dbMsg.ProviderAccountID != nil {
-		msg.ProviderAccountID = *dbMsg.ProviderAccountID
-	}
 
 	return msg
 }

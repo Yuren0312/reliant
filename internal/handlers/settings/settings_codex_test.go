@@ -11,7 +11,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,98 +48,139 @@ func findProviderStatus(t *testing.T, statuses []*reliantv1.ProviderStatus, prov
 	return nil
 }
 
-func TestSettingsService_ValidateProviderAPIKey_SubscriptionProvidersReportTheirAccounts(t *testing.T) {
+func TestSettingsService_UpdateProviderAPIKey_CodexRejectsManualKey(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
 	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
-	userID := "test-user"
-	validate := func(provider string) *reliantv1.ValidateProviderAPIKeyResponse {
-		t.Helper()
-		resp, err := svc.ValidateProviderAPIKey(ctx, connect.NewRequest(&reliantv1.ValidateProviderAPIKeyRequest{Provider: provider}))
-		require.NoError(t, err)
-		return resp.Msg
-	}
 
-	// No account => not connected.
-	missing := validate("codex")
-	assert.False(t, missing.Valid)
-	assert.Equal(t, "Codex is not connected", missing.Message)
-
-	// An account waiting for sign-in => session expired.
-	acct, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
-		UserID: userID, Provider: "codex", AuthKind: core.AuthKindOAuth,
-		IdentityKey: core.CodexIdentityKey("A", "U"),
-		Secrets:     core.AccountSecrets{Secret: "codex-access", Refresh: "codex-refresh"},
-	})
-	require.NoError(t, err)
-	reason := "refresh token rejected"
-	_, err = repo.PatchProviderAccount(ctx, userID, acct.ID, core.AccountPatch{NeedsReauth: &reason})
-	require.NoError(t, err)
-	expired := validate("codex")
-	assert.False(t, expired.Valid)
-	assert.Contains(t, expired.Message, "session expired")
-
-	// Signing in again clears it.
-	_, _, err = repo.UpsertProviderAccount(ctx, core.AccountUpsert{
-		UserID: userID, Provider: "codex", AuthKind: core.AuthKindOAuth,
-		IdentityKey: core.CodexIdentityKey("A", "U"),
-		Secrets:     core.AccountSecrets{Secret: "codex-access-2", Refresh: "codex-refresh-2"},
-	})
-	require.NoError(t, err)
-	ok := validate("codex")
-	assert.True(t, ok.Valid)
-	assert.Equal(t, "Connected to Codex", ok.Message)
+	_, err := svc.UpdateProviderAPIKey(ctx, connect.NewRequest(&reliantv1.UpdateProviderAPIKeyRequest{
+		Provider: "codex",
+		ApiKey:   "manual-key-not-allowed",
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Contains(t, err.Error(), "does not use manual API keys")
 }
 
-func TestSettingsService_GetProviderStatuses_ConfiguredMeansAnAccountCanServe(t *testing.T) {
+func TestSettingsService_UpdateProviderAPIKey_CodexDisconnectRemovesMarkerAndTokens(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
 	svc := newTestService(t, Deps{Repo: repo})
 	ctx := newSettingsServiceTestContext()
 	userID := "test-user"
-	statusOf := func(provider string) *reliantv1.ProviderStatus {
-		t.Helper()
-		resp, err := svc.GetProviderStatuses(ctx, connect.NewRequest(&reliantv1.GetProviderStatusesRequest{}))
-		require.NoError(t, err)
-		return findProviderStatus(t, resp.Msg.Providers, provider)
-	}
 
-	assert.False(t, statusOf("codex").Configured)
-	assert.Zero(t, statusOf("codex").AccountCount)
+	validToken := makeCodexJWTForSettingsTest(t, time.Now().Add(1*time.Hour))
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "codex", "oauth"))
+	require.NoError(t, repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
+		AccessToken:  validToken,
+		RefreshToken: "refresh-token",
+		AccountID:    "test-account-id",
+	}))
 
-	first, _, err := repo.UpsertProviderAccount(ctx, core.AccountUpsert{
-		UserID: userID, Provider: "codex", AuthKind: core.AuthKindOAuth, IdentityKey: core.CodexIdentityKey("A", "U1"),
-		Secrets: core.AccountSecrets{Secret: "a1", Refresh: "r1"},
-	})
+	resp, err := svc.UpdateProviderAPIKey(ctx, connect.NewRequest(&reliantv1.UpdateProviderAPIKeyRequest{
+		Provider: "codex",
+		ApiKey:   "",
+	}))
 	require.NoError(t, err)
-	assert.True(t, statusOf("codex").Configured)
-	assert.EqualValues(t, 1, statusOf("codex").AccountCount)
+	require.True(t, resp.Msg.Success)
+	assert.Equal(t, "Disconnected from Codex", resp.Msg.Message)
 
-	// One account waiting for sign-in does not unconfigure the provider while another can serve.
-	_, _, err = repo.UpsertProviderAccount(ctx, core.AccountUpsert{
-		UserID: userID, Provider: "codex", AuthKind: core.AuthKindOAuth, IdentityKey: core.CodexIdentityKey("A", "U2"),
-		Secrets: core.AccountSecrets{Secret: "a2", Refresh: "r2"},
-	})
+	tokens, err := repo.GetCodexAuthTokens(ctx, userID)
 	require.NoError(t, err)
-	reason := "refresh token rejected"
-	_, err = repo.PatchProviderAccount(ctx, userID, first.ID, core.AccountPatch{NeedsReauth: &reason})
-	require.NoError(t, err)
-	assert.True(t, statusOf("codex").Configured)
-	assert.EqualValues(t, 2, statusOf("codex").AccountCount)
+	assert.Nil(t, tokens)
 
-	// Every account waiting for sign-in: not configured, but still counted so the UI can offer Reconnect.
-	accounts, err := repo.ListProviderAccounts(ctx, userID)
+	keys, err := repo.GetProviderAPIKeys(ctx, userID)
 	require.NoError(t, err)
-	for _, a := range accounts {
-		_, err = repo.PatchProviderAccount(ctx, userID, a.ID, core.AccountPatch{NeedsReauth: &reason})
-		require.NoError(t, err)
-	}
-	assert.False(t, statusOf("codex").Configured)
-	assert.EqualValues(t, 2, statusOf("codex").AccountCount)
+	_, hasCodex := keys["codex"]
+	assert.False(t, hasCodex)
+}
 
-	// Providers are independent.
-	assert.False(t, statusOf("claude").Configured)
+func TestSettingsService_ValidateProviderAPIKey_CodexStatusFromPersistedTokens(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	svc := newTestService(t, Deps{Repo: repo})
+	ctx := newSettingsServiceTestContext()
+	userID := "test-user"
+
+	// Missing tokens => not connected
+	missingResp, err := svc.ValidateProviderAPIKey(ctx, connect.NewRequest(&reliantv1.ValidateProviderAPIKeyRequest{
+		Provider: "codex",
+	}))
+	require.NoError(t, err)
+	assert.False(t, missingResp.Msg.Valid)
+	assert.Equal(t, "Codex is not connected", missingResp.Msg.Message)
+
+	// Expired token => expired message
+	expiredToken := makeCodexJWTForSettingsTest(t, time.Now().Add(-10*time.Minute))
+	require.NoError(t, repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
+		AccessToken:  expiredToken,
+		RefreshToken: "refresh-token",
+		AccountID:    "test-account-id",
+	}))
+
+	expiredResp, err := svc.ValidateProviderAPIKey(ctx, connect.NewRequest(&reliantv1.ValidateProviderAPIKeyRequest{
+		Provider: "codex",
+	}))
+	require.NoError(t, err)
+	assert.False(t, expiredResp.Msg.Valid)
+	assert.Contains(t, expiredResp.Msg.Message, "session expired")
+
+	// Valid token => connected
+	validToken := makeCodexJWTForSettingsTest(t, time.Now().Add(1*time.Hour))
+	require.NoError(t, repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
+		AccessToken:  validToken,
+		RefreshToken: "refresh-token",
+		AccountID:    "test-account-id",
+	}))
+
+	validResp, err := svc.ValidateProviderAPIKey(ctx, connect.NewRequest(&reliantv1.ValidateProviderAPIKeyRequest{
+		Provider: "codex",
+	}))
+	require.NoError(t, err)
+	assert.True(t, validResp.Msg.Valid)
+	assert.Equal(t, "Connected to Codex", validResp.Msg.Message)
+}
+
+func TestSettingsService_GetProviderStatuses_CodexUsesPersistedTokenExpiry(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	svc := newTestService(t, Deps{Repo: repo})
+	ctx := newSettingsServiceTestContext()
+	userID := "test-user"
+
+	validToken := makeCodexJWTForSettingsTest(t, time.Now().Add(1*time.Hour))
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "codex", "oauth"))
+	require.NoError(t, repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
+		AccessToken:  validToken,
+		RefreshToken: "refresh-token",
+		AccountID:    "test-account-id",
+	}))
+
+	resp, err := svc.GetProviderStatuses(ctx, connect.NewRequest(&reliantv1.GetProviderStatusesRequest{}))
+	require.NoError(t, err)
+
+	codexStatus := findProviderStatus(t, resp.Msg.Providers, "codex")
+	assert.True(t, codexStatus.Configured)
+	assert.True(t, codexStatus.HasApiKey)
+	assert.Nil(t, codexStatus.MaskedKey)
+
+	expiredToken := makeCodexJWTForSettingsTest(t, time.Now().Add(-10*time.Minute))
+	require.NoError(t, repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
+		AccessToken:  expiredToken,
+		RefreshToken: "refresh-token",
+		AccountID:    "test-account-id",
+	}))
+
+	expiredResp, err := svc.GetProviderStatuses(ctx, connect.NewRequest(&reliantv1.GetProviderStatusesRequest{}))
+	require.NoError(t, err)
+
+	expiredCodexStatus := findProviderStatus(t, expiredResp.Msg.Providers, "codex")
+	assert.False(t, expiredCodexStatus.Configured)
+	assert.False(t, expiredCodexStatus.HasApiKey)
+	assert.Nil(t, expiredCodexStatus.MaskedKey)
 }

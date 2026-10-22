@@ -24,19 +24,14 @@ import (
 // already using: the composer keeps sending the model the user last picked,
 // so once a run has been moved, later sends would otherwise repeat the notice.
 // It receives the input's top-level key.
-//
-// It returns every move it made, announced or not: the chat's selection records
-// them, so what the composer shows is what runs.
-func (s *Service) fallBackFromUnservableModels(ctx context.Context, userID, chatID, projectID, workflowName, workflowID, thread string, inputs map[string]interface{}, isNews func(topLevelInput string) bool) []launch.ModelSubstitution {
+func (s *Service) fallBackFromUnservableModels(ctx context.Context, userID, chatID, projectID, workflowName, workflowID, thread string, inputs map[string]interface{}, isNews func(topLevelInput string) bool) {
 	var news []launch.ModelSubstitution
-	moved := s.moveUnservableModels(ctx, userID, chatID, projectID, workflowName, workflowID, inputs)
-	for _, sub := range moved {
+	for _, sub := range s.moveUnservableModels(ctx, userID, chatID, projectID, workflowName, workflowID, inputs) {
 		if isNews == nil || isNews(topLevelInput(sub.Input)) {
 			news = append(news, sub)
 		}
 	}
 	s.postModelFallbackNotices(ctx, chatID, workflowID, thread, news)
-	return moved
 }
 
 // moveUnservableModels is the policy half of fallBackFromUnservableModels: it
@@ -80,17 +75,13 @@ func (s *Service) postModelFallbackNotices(ctx context.Context, chatID, workflow
 // Temporal could not say: then only the send's params are moved, and every
 // move is announced. With them, a move of a sent param is announced only when
 // it changes what the run is using (see fallBackFromUnservableModels' isNews).
-//
-// The third result is every move, announced or not, for the chat's selection.
-func (s *Service) resumeInputUpdate(ctx context.Context, userID, chatID, projectID, workflowName, workflowID string, sent, runInputs map[string]interface{}) (map[string]interface{}, []launch.ModelSubstitution, []launch.ModelSubstitution) {
+func (s *Service) resumeInputUpdate(ctx context.Context, userID, chatID, projectID, workflowName, workflowID string, sent, runInputs map[string]interface{}) (map[string]interface{}, []launch.ModelSubstitution) {
 	update := make(map[string]interface{}, len(sent))
 	for key, value := range sent {
 		update[key] = value
 	}
-	var notices, moves []launch.ModelSubstitution
-	sentMoves := s.moveUnservableModels(ctx, userID, chatID, projectID, workflowName, workflowID, update)
-	moves = append(moves, sentMoves...)
-	for _, sub := range sentMoves {
+	var notices []launch.ModelSubstitution
+	for _, sub := range s.moveUnservableModels(ctx, userID, chatID, projectID, workflowName, workflowID, update) {
 		key := topLevelInput(sub.Input)
 		if runInputs == nil || inputsDiffer(runInputs, map[string]interface{}{key: update[key]}) {
 			notices = append(notices, sub)
@@ -104,9 +95,7 @@ func (s *Service) resumeInputUpdate(ctx context.Context, userID, chatID, project
 				held[key] = value
 			}
 		}
-		heldMoves := s.moveUnservableModels(ctx, userID, chatID, projectID, workflowName, workflowID, held)
-		moves = append(moves, heldMoves...)
-		for _, sub := range heldMoves {
+		for _, sub := range s.moveUnservableModels(ctx, userID, chatID, projectID, workflowName, workflowID, held) {
 			key := topLevelInput(sub.Input)
 			update[key] = held[key]
 			notices = append(notices, sub)
@@ -114,9 +103,9 @@ func (s *Service) resumeInputUpdate(ctx context.Context, userID, chatID, project
 	}
 
 	if len(update) == 0 {
-		return nil, notices, moves
+		return nil, notices
 	}
-	return update, notices, moves
+	return update, notices
 }
 
 // runInputsTimeout bounds the get_workflow_inputs query a send makes on the

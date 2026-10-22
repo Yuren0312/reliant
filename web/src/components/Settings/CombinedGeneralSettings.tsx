@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect } from "react";
 import {
   Loader2,
   AlertCircle,
@@ -48,6 +48,7 @@ interface CombinedGeneralSettingsProps {
     provider: string;
     displayName: string;
     hasApiKey: boolean;
+    maskedKey?: string;
     configured: boolean;
   }>;
   onProvidersUpdate?: () => void;
@@ -57,18 +58,6 @@ interface CombinedGeneralSettingsProps {
    * undefined the "Manage AI keys & spend" CTA is hidden.
    */
   onOpenReliantAI?: () => void;
-  /**
-   * Replaces the single-credential "Configured Providers" list. Provided by
-   * {@link AISettings} when the server serves provider accounts; absent, the
-   * list below (today's connect/disconnect view) renders unchanged.
-   */
-  configuredProvidersSlot?: ReactNode;
-  /**
-   * Provider ids the slot already lists. Their rows are dropped from the
-   * single-credential list; any configured provider the accounts RPC does not
-   * cover (yet) keeps its row there, so no connected provider disappears.
-   */
-  accountProviders?: ReadonlySet<string>;
 }
 
 // Providers visible in the manual-entry UI (other providers are hidden but implementations remain).
@@ -374,8 +363,6 @@ export function CombinedGeneralSettings({
   providers,
   onProvidersUpdate,
   onOpenReliantAI,
-  configuredProvidersSlot,
-  accountProviders,
 }: CombinedGeneralSettingsProps) {
   // Add Provider State
   const [selectedProvider, setSelectedProvider] = useState<string>("");
@@ -388,6 +375,12 @@ export function CombinedGeneralSettings({
     message: string;
   } | null>(null);
 
+  // Edit Provider State
+  const [editingProvider, setEditingProvider] = useState<string | null>(null);
+  const [editApiKeys, setEditApiKeys] = useState<{ [key: string]: string }>({});
+  const [showEditKeys, setShowEditKeys] = useState<{ [key: string]: boolean }>(
+    {}
+  );
   const [deletingProvider, setDeletingProvider] = useState<string | null>(null);
 
   // Streaming preference state
@@ -433,9 +426,6 @@ export function CombinedGeneralSettings({
       )
   );
   const reliantConfigured = configuredProviders.some((p) => p.provider === "reliant");
-  const legacyProviders = accountProviders
-    ? configuredProviders.filter((p) => !accountProviders.has(p.provider))
-    : configuredProviders;
   // Gated on LLM FUNDING (wallet balance), not compute eligibility.
   //
   // This used to read useCloudEligibility(), which answers "may this account
@@ -488,7 +478,7 @@ export function CombinedGeneralSettings({
 
     setDeletingProvider(provider);
     try {
-      await api.settings.deleteProvider(provider);
+      await api.settings.updateProvider(provider, ""); // Empty key triggers deletion
       onProvidersUpdate?.();
 
       // Refresh models immediately - the API call already waits for the database write to complete
@@ -514,17 +504,20 @@ export function CombinedGeneralSettings({
     }
   };
 
-  const handleSaveApiKey = async () => {
-    const targetProvider = selectedProvider;
+  const handleSaveApiKey = async (provider?: string) => {
+    const targetProvider = provider || selectedProvider;
+    const targetKey = provider ? editApiKeys[provider] : apiKey;
 
     // Reliant is server-managed; users cannot set its key.
     if (targetProvider === "reliant") return;
 
-    setSaving(true);
+    if (!provider) {
+      setSaving(true);
+    }
     setValidationMessage(null);
 
     try {
-      await api.settings.updateProvider(targetProvider, apiKey);
+      await api.settings.updateProvider(targetProvider, targetKey || "");
       onProvidersUpdate?.();
 
       // Refresh models immediately - the API call already waits for the database write to complete
@@ -533,13 +526,20 @@ export function CombinedGeneralSettings({
       // Notify model inputs to refresh via the typed event bus.
       getEventBus().emit("api-key:saved", { provider: targetProvider });
 
-      setSelectedProvider("");
-      setApiKey("");
-      setValidationMessage({
-        valid: true,
-        message: "API key saved successfully",
-      });
-      setTimeout(() => setValidationMessage(null), 3000);
+      if (provider) {
+        // Editing existing provider
+        setEditingProvider(null);
+        setEditApiKeys({ ...editApiKeys, [provider]: "" });
+      } else {
+        // Adding new provider
+        setSelectedProvider("");
+        setApiKey("");
+        setValidationMessage({
+          valid: true,
+          message: "API key saved successfully",
+        });
+        setTimeout(() => setValidationMessage(null), 3000);
+      }
     } catch (error) {
       console.error("Failed to save API key:", error);
       const errorText =
@@ -553,10 +553,11 @@ export function CombinedGeneralSettings({
         message: errorMessage,
       });
     } finally {
-      setSaving(false);
+      if (!provider) {
+        setSaving(false);
+      }
     }
   };
-
 
   // Load streaming and notification preferences on mount
   useEffect(() => {
@@ -987,14 +988,11 @@ export function CombinedGeneralSettings({
       )}
 
       {/* Configured Providers List */}
-      {configuredProvidersSlot}
-      {legacyProviders.length > 0 && (
+      {configuredProviders.length > 0 && (
         <div>
-          <h3 className="text-lg font-semibold mb-4">
-            {configuredProvidersSlot ? "Other providers" : "Configured Providers"}
-          </h3>
+          <h3 className="text-lg font-semibold mb-4">Configured Providers</h3>
           <div className="space-y-3">
-            {legacyProviders.map((provider) => {
+            {configuredProviders.map((provider) => {
               const config =
                 providerConfigs[
                   provider.provider as ProviderId
@@ -1002,6 +1000,7 @@ export function CombinedGeneralSettings({
               // Reliant's key is provisioned server-side and stays opaque to the user —
               // no masked-key display and no manual Update.
               const isReliant = provider.provider === "reliant";
+              const canUpdate = !config?.usesOAuth && !isReliant;
               const disconnectLabel = config?.usesOAuth || isReliant ? "Disconnect" : "Delete";
 
               return (
@@ -1025,11 +1024,45 @@ export function CombinedGeneralSettings({
                             <Check className="h-3 w-3" />
                             Connected
                           </span>
+                          {!isReliant && provider.maskedKey && (
+                            <span className="text-sm text-muted-foreground font-mono" data-sentry-mask>
+                              {provider.maskedKey}
+                            </span>
+                          )}
                         </div>
 
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {canUpdate && (
+                        <button
+                          className="px-3 py-1.5 text-sm border border-border/40 rounded-md hover:bg-accent transition-colors flex items-center gap-1"
+                          onClick={() => {
+                            if (editingProvider === provider.provider) {
+                              setEditingProvider(null);
+                              setEditApiKeys({
+                                ...editApiKeys,
+                                [provider.provider]: "",
+                              });
+                              setShowEditKeys({
+                                ...showEditKeys,
+                                [provider.provider]: false,
+                              });
+                            } else {
+                              setEditingProvider(provider.provider);
+                              setEditApiKeys({
+                                ...editApiKeys,
+                                [provider.provider]: "",
+                              });
+                            }
+                          }}
+                        >
+                          <Settings2 className="w-4 h-4" />
+                          {editingProvider === provider.provider
+                            ? "Cancel"
+                            : "Update"}
+                        </button>
+                      )}
                       <button
                         className="px-3 py-1.5 text-sm border border-destructive/20 text-destructive-ink rounded-md hover:bg-destructive/10 transition-colors flex items-center gap-1"
                         onClick={() => handleDeleteProvider(provider.provider)}
@@ -1046,6 +1079,66 @@ export function CombinedGeneralSettings({
                     </div>
                   </div>
 
+                  {/* Only show edit section for providers that use API-key auth */}
+                  {editingProvider === provider.provider && canUpdate && (
+                    <div className="border-t border-border/40 mt-4 pt-4 space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">
+                          Update API Key
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={
+                              showEditKeys[provider.provider]
+                                ? "text"
+                                : "password"
+                            }
+                            value={editApiKeys[provider.provider] || ""}
+                            onChange={(e) => {
+                              setEditApiKeys({
+                                ...editApiKeys,
+                                [provider.provider]: e.target.value,
+                              });
+                            }}
+                            placeholder="Enter new API key to update"
+                            className="w-full px-3 py-2 border border-border/40 bg-background rounded-md pr-10 font-mono text-sm focus:ring-2 focus:ring-ring/40"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowEditKeys({
+                                ...showEditKeys,
+                                [provider.provider]:
+                                  !showEditKeys[provider.provider],
+                              })
+                            }
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            {showEditKeys[provider.provider] ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Note: For security, existing API keys cannot be
+                          viewed. Enter a new key to update.
+                        </p>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
+                          onClick={() => handleSaveApiKey(provider.provider)}
+                          disabled={!editApiKeys[provider.provider]}
+                        >
+                          <Check className="h-4 w-4" />
+                          Save Changes
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

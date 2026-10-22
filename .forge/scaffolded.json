@@ -510,27 +510,6 @@
     "internal/handlers/project/handlers_scaffold_update_project_test.go": {
       "scaffolded_at": "2026-10-14T18:21:44Z"
     },
-    "internal/handlers/provider_account/handlers_scaffold_add_provider_api_key_test.go": {
-      "scaffolded_at": "2026-10-19T03:59:40Z"
-    },
-    "internal/handlers/provider_account/handlers_scaffold_delete_provider_account_test.go": {
-      "scaffolded_at": "2026-10-19T03:59:40Z"
-    },
-    "internal/handlers/provider_account/handlers_scaffold_get_chat_provider_account_test.go": {
-      "scaffolded_at": "2026-10-19T03:59:40Z"
-    },
-    "internal/handlers/provider_account/handlers_scaffold_list_provider_accounts_test.go": {
-      "scaffolded_at": "2026-10-19T03:59:40Z"
-    },
-    "internal/handlers/provider_account/handlers_scaffold_refresh_provider_account_usage_test.go": {
-      "scaffolded_at": "2026-10-19T03:59:40Z"
-    },
-    "internal/handlers/provider_account/handlers_scaffold_reorder_provider_accounts_test.go": {
-      "scaffolded_at": "2026-10-19T03:59:40Z"
-    },
-    "internal/handlers/provider_account/handlers_scaffold_update_provider_account_test.go": {
-      "scaffolded_at": "2026-10-19T03:59:40Z"
-    },
     "internal/handlers/question/handlers_scaffold_get_pending_question_test.go": {
       "scaffolded_at": "2026-10-13T07:28:55Z"
     },
@@ -1002,12 +981,6 @@
     "internal/handlers/project/handlers_scaffold_create_project_from_repo_test.go",
     "internal/handlers/project/handlers_scaffold_create_project_test.go",
     "internal/handlers/project/handlers_scaffold_initialize_git_repo_test.go",
-    "internal/handlers/provider_account/handlers_scaffold_add_provider_api_key_test.go",
-    "internal/handlers/provider_account/handlers_scaffold_delete_provider_account_test.go",
-    "internal/handlers/provider_account/handlers_scaffold_get_chat_provider_account_test.go",
-    "internal/handlers/provider_account/handlers_scaffold_list_provider_accounts_test.go",
-    "internal/handlers/provider_account/handlers_scaffold_reorder_provider_accounts_test.go",
-    "internal/handlers/provider_account/handlers_scaffold_update_provider_account_test.go",
     "internal/handlers/scenario/handlers_scaffold_run_scenario_test.go",
     "internal/handlers/settings/handlers_scaffold_batch_upsert_settings_test.go",
     "internal/handlers/settings/handlers_scaffold_complete_claude_o_auth_test.go",

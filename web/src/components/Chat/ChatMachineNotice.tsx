@@ -14,7 +14,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
-import Status from "../forge-ui/status";
+import StatusDot from "../forge-ui/status_dot";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import { markWaking } from "@/lib/machineWake";
 import { resumeErrorMessage } from "@/lib/daemon-resume";
@@ -61,7 +61,7 @@ export function ChatMachineNoticeLine({ notice }: { notice: ChatMachineNotice })
         {notice.kind === "failed" ? (
           <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 text-warning" aria-hidden="true" />
         ) : (
-          <Status tone={notice.offerStart ? "warning" : "neutral"} pulse={!notice.offerStart} size="sm" />
+          <StatusDot variant={notice.offerStart ? "paused" : "pending"} pulse={!notice.offerStart} size="sm" />
         )}
         <span className="text-foreground">{notice.title}</span>
         {elapsed && (

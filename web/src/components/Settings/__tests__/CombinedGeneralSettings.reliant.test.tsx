@@ -107,6 +107,7 @@ describe('CombinedGeneralSettings Reliant provider', () => {
             provider: 'reliant',
             displayName: 'Reliant',
             hasApiKey: true,
+            maskedKey: 'sk-...abcd',
             configured: true,
           },
         ]}

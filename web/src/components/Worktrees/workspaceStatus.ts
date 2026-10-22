@@ -2,10 +2,9 @@ import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import type { WorktreeGitStatus } from "../../api/worktree-grpc";
 import type { Worktree } from "../../store/worktreeStore";
 import type { Chat } from "../../types/chat";
-import type { StatusTone } from "../forge-ui/status";
 
-/** forge-ui Status tones. */
-export type StatusVariant = StatusTone;
+/** Mirrors forge-ui StatusDot's variants, which that module does not export. */
+export type StatusVariant = "active" | "paused" | "pending" | "error" | "warning" | "neutral";
 
 export interface LifecycleInfo {
   label: string;
@@ -27,12 +26,12 @@ const LIFECYCLE: Record<WorktreeStatus, LifecycleInfo> = {
   [WorktreeStatus.ACTIVE]: {
     label: "Active",
     description: "Currently being worked on",
-    variant: "success",
+    variant: "active",
   },
   [WorktreeStatus.MERGING]: {
     label: "Merging",
     description: "Pull request in review or merging",
-    variant: "neutral",
+    variant: "pending",
   },
   [WorktreeStatus.COMPLETED]: {
     label: "Completed",
@@ -42,17 +41,17 @@ const LIFECYCLE: Record<WorktreeStatus, LifecycleInfo> = {
   [WorktreeStatus.ABANDONED]: {
     label: "Abandoned",
     description: "No longer being worked on",
-    variant: "warning",
+    variant: "paused",
   },
   [WorktreeStatus.CREATING]: {
     label: "Creating",
     description: "The worktree is still being created on your machine",
-    variant: "neutral",
+    variant: "pending",
   },
   [WorktreeStatus.FAILED]: {
     label: "Failed",
     description: "Creating the worktree did not finish",
-    variant: "danger",
+    variant: "error",
   },
 };
 
@@ -129,14 +128,14 @@ export function workingTreeState(status: WorktreeGitStatus): WorkingTreeState {
       .filter(Boolean)
       .join("; ");
     return {
-      variant: "neutral",
+      variant: status.ahead > 0 ? "pending" : "neutral",
       label,
       detail: `Clean working tree. ${detail}.`,
     };
   }
 
   return {
-    variant: "success",
+    variant: "active",
     label: "Clean",
     detail: "No uncommitted changes, and in sync with its upstream branch.",
   };

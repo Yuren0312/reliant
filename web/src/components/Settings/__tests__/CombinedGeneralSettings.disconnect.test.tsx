@@ -6,14 +6,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 // Settings → Providers must change only the provider the user acted on.
 // Prod, 2026-10-09: a user whose only provider was Codex lost it seconds before
 // a Claude sign-in. The server log shows the web client sent one
-// removal RPC (this Disconnect) and then CompleteClaudeOAuth; these
+// UpdateProviderAPIKey (this Disconnect) and then CompleteClaudeOAuth; these
 // pin both halves: Disconnect says exactly which provider goes, and a Claude
-// sign-in never removes or re-keys another provider at all.
+// sign-in never sends UpdateProviderAPIKey at all.
 
 const mocks = vi.hoisted(() => ({
   refetchModels: vi.fn(),
   updateProvider: vi.fn(),
-  deleteProvider: vi.fn(),
   validateProviderAPIKey: vi.fn(),
   getPreferences: vi.fn(),
   updatePreferences: vi.fn(),
@@ -25,7 +24,6 @@ vi.mock('@/api/client', () => ({
   api: {
     settings: {
       updateProvider: mocks.updateProvider,
-      deleteProvider: mocks.deleteProvider,
       validateProviderAPIKey: mocks.validateProviderAPIKey,
       getPreferences: mocks.getPreferences,
       updatePreferences: mocks.updatePreferences,
@@ -124,7 +122,7 @@ describe('Settings → Providers: one provider at a time', () => {
     // A sign-in provider has no API key; the prompt must not claim one.
     expect(prompt).not.toMatch(/api key/i)
     // Declined: nothing is sent.
-    expect(mocks.deleteProvider).not.toHaveBeenCalled()
+    expect(mocks.updateProvider).not.toHaveBeenCalled()
   })
 
   it('confirmed, it disconnects only the provider whose button was clicked', async () => {
@@ -132,23 +130,22 @@ describe('Settings → Providers: one provider at a time', () => {
     const user = userEvent.setup()
     renderSettings([
       codexConnected,
-      { provider: 'openai', displayName: 'OpenAI', hasApiKey: true, configured: true },
+      { provider: 'openai', displayName: 'OpenAI', hasApiKey: true, configured: true, maskedKey: 'sk-...abcd' },
     ])
 
     await user.click(await screen.findByRole('button', { name: 'Disconnect Codex (ChatGPT)' }))
 
-    await waitFor(() => expect(mocks.deleteProvider).toHaveBeenCalledTimes(1))
-    expect(mocks.deleteProvider).toHaveBeenCalledWith('codex')
-    expect(mocks.updateProvider).not.toHaveBeenCalled()
+    await waitFor(() => expect(mocks.updateProvider).toHaveBeenCalledTimes(1))
+    expect(mocks.updateProvider).toHaveBeenCalledWith('codex', '')
   })
 
-  it('a Claude sign-in with Codex connected never removes or re-keys another provider', async () => {
-    mocks.claudeStart.mockResolvedValue({ ok: true, message: 'Connected to Claude', outcome: { created: true } })
+  it('a Claude sign-in with Codex connected never sends UpdateProviderAPIKey', async () => {
+    mocks.claudeStart.mockResolvedValue({ ok: true, message: 'Connected to Claude' })
     const user = userEvent.setup()
     renderSettings()
 
     await user.selectOptions(await screen.findByRole('combobox'), 'claude')
-    await user.click(await screen.findByRole('button', { name: 'Login with Claude subscription' }))
+    await user.click(await screen.findByRole('button', { name: 'Login with Claude Code' }))
 
     await waitFor(() => expect(mocks.claudeStart).toHaveBeenCalledTimes(1))
     // The success path ran to its end (models refetched after the sign-in).
@@ -156,6 +153,5 @@ describe('Settings → Providers: one provider at a time', () => {
     expect(mocks.codexStart).not.toHaveBeenCalled()
     expect(confirmSpy).not.toHaveBeenCalled()
     expect(mocks.updateProvider).not.toHaveBeenCalled()
-    expect(mocks.deleteProvider).not.toHaveBeenCalled()
   })
 })

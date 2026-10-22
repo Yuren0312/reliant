@@ -37,9 +37,6 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// DeployServiceGetCapabilitiesProcedure is the fully-qualified name of the DeployService's
-	// GetCapabilities RPC.
-	DeployServiceGetCapabilitiesProcedure = "/controlplane.v1.DeployService/GetCapabilities"
 	// DeployServiceGetTenantProcedure is the fully-qualified name of the DeployService's GetTenant RPC.
 	DeployServiceGetTenantProcedure = "/controlplane.v1.DeployService/GetTenant"
 	// DeployServiceCreateTenantProcedure is the fully-qualified name of the DeployService's
@@ -108,9 +105,6 @@ const (
 	// DeployServiceListPromotionsProcedure is the fully-qualified name of the DeployService's
 	// ListPromotions RPC.
 	DeployServiceListPromotionsProcedure = "/controlplane.v1.DeployService/ListPromotions"
-	// DeployServiceCompareReleasesProcedure is the fully-qualified name of the DeployService's
-	// CompareReleases RPC.
-	DeployServiceCompareReleasesProcedure = "/controlplane.v1.DeployService/CompareReleases"
 	// DeployServiceGetRolloutProcedure is the fully-qualified name of the DeployService's GetRollout
 	// RPC.
 	DeployServiceGetRolloutProcedure = "/controlplane.v1.DeployService/GetRollout"
@@ -152,8 +146,6 @@ const (
 
 // DeployServiceClient is a client for the controlplane.v1.DeployService service.
 type DeployServiceClient interface {
-	// Feature negotiation is mandatory before sending immutable snapshot documents.
-	GetCapabilities(context.Context, *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error)
 	// GetTenant returns the caller's organization as a deploy tenant. There is
 	// no enrollment: the deploy product is open to every org, so every live org
 	// is a tenant (slug and namespace prefix = the org id).
@@ -275,18 +267,6 @@ type DeployServiceClient interface {
 	// including every release the env moved away from, which a current-pointer
 	// read cannot show.
 	ListPromotions(context.Context, *connect.Request[v1.ListDeployPromotionsRequest]) (*connect.Response[v1.ListDeployPromotionsResponse], error)
-	// CompareReleases says what changed between two releases of one project,
-	// from what the ledger recorded when each was cut: the commits between them,
-	// the artifacts whose identity moved (digest -> digest), and, in one
-	// environment, the Kubernetes objects their bundles add, modify and remove,
-	// each with a one-line summary. It reads only records (forge's
-	// release.CompareCommits / CompareArtifacts / CompareObjects), so it answers
-	// with no repository and no registry at hand. Release detail's Changes tab.
-	//
-	// Either order works: comparing a newer release FROM an older one lists what
-	// it adds; the other way round sets commits.reverts and lists what moving
-	// to it takes away.
-	CompareReleases(context.Context, *connect.Request[v1.CompareDeployReleasesRequest]) (*connect.Response[v1.CompareDeployReleasesResponse], error)
 	// GetRollout reports how far ONE promotion has rolled out, judged against
 	// THAT promotion's frozen pins — never against whatever the deployment rows
 	// declare now. An empty promotion_id means the environment's current
@@ -465,12 +445,6 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	deployServiceMethods := v1.File_services_deploy_v1_deploy_proto.Services().ByName("DeployService").Methods()
 	return &deployServiceClient{
-		getCapabilities: connect.NewClient[v1.GetDeployCapabilitiesRequest, v1.GetDeployCapabilitiesResponse](
-			httpClient,
-			baseURL+DeployServiceGetCapabilitiesProcedure,
-			connect.WithSchema(deployServiceMethods.ByName("GetCapabilities")),
-			connect.WithClientOptions(opts...),
-		),
 		getTenant: connect.NewClient[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse](
 			httpClient,
 			baseURL+DeployServiceGetTenantProcedure,
@@ -615,12 +589,6 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("ListPromotions")),
 			connect.WithClientOptions(opts...),
 		),
-		compareReleases: connect.NewClient[v1.CompareDeployReleasesRequest, v1.CompareDeployReleasesResponse](
-			httpClient,
-			baseURL+DeployServiceCompareReleasesProcedure,
-			connect.WithSchema(deployServiceMethods.ByName("CompareReleases")),
-			connect.WithClientOptions(opts...),
-		),
 		getRollout: connect.NewClient[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse](
 			httpClient,
 			baseURL+DeployServiceGetRolloutProcedure,
@@ -710,7 +678,6 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // deployServiceClient implements DeployServiceClient.
 type deployServiceClient struct {
-	getCapabilities        *connect.Client[v1.GetDeployCapabilitiesRequest, v1.GetDeployCapabilitiesResponse]
 	getTenant              *connect.Client[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse]
 	createTenant           *connect.Client[v1.CreateDeployTenantRequest, v1.CreateDeployTenantResponse]
 	createEnvironment      *connect.Client[v1.CreateDeployEnvironmentRequest, v1.CreateDeployEnvironmentResponse]
@@ -735,7 +702,6 @@ type deployServiceClient struct {
 	listReleases           *connect.Client[v1.ListDeployReleasesRequest, v1.ListDeployReleasesResponse]
 	getRelease             *connect.Client[v1.GetDeployReleaseRequest, v1.GetDeployReleaseResponse]
 	listPromotions         *connect.Client[v1.ListDeployPromotionsRequest, v1.ListDeployPromotionsResponse]
-	compareReleases        *connect.Client[v1.CompareDeployReleasesRequest, v1.CompareDeployReleasesResponse]
 	getRollout             *connect.Client[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse]
 	recordGate             *connect.Client[v1.RecordDeployGateRequest, v1.RecordDeployGateResponse]
 	listGates              *connect.Client[v1.ListDeployGatesRequest, v1.ListDeployGatesResponse]
@@ -750,11 +716,6 @@ type deployServiceClient struct {
 	reportLocalSession     *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
 	importLedger           *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
 	getDrift               *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
-}
-
-// GetCapabilities calls controlplane.v1.DeployService.GetCapabilities.
-func (c *deployServiceClient) GetCapabilities(ctx context.Context, req *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error) {
-	return c.getCapabilities.CallUnary(ctx, req)
 }
 
 // GetTenant calls controlplane.v1.DeployService.GetTenant.
@@ -877,11 +838,6 @@ func (c *deployServiceClient) ListPromotions(ctx context.Context, req *connect.R
 	return c.listPromotions.CallUnary(ctx, req)
 }
 
-// CompareReleases calls controlplane.v1.DeployService.CompareReleases.
-func (c *deployServiceClient) CompareReleases(ctx context.Context, req *connect.Request[v1.CompareDeployReleasesRequest]) (*connect.Response[v1.CompareDeployReleasesResponse], error) {
-	return c.compareReleases.CallUnary(ctx, req)
-}
-
 // GetRollout calls controlplane.v1.DeployService.GetRollout.
 func (c *deployServiceClient) GetRollout(ctx context.Context, req *connect.Request[v1.GetDeployRolloutRequest]) (*connect.Response[v1.GetDeployRolloutResponse], error) {
 	return c.getRollout.CallUnary(ctx, req)
@@ -954,8 +910,6 @@ func (c *deployServiceClient) GetDrift(ctx context.Context, req *connect.Request
 
 // DeployServiceHandler is an implementation of the controlplane.v1.DeployService service.
 type DeployServiceHandler interface {
-	// Feature negotiation is mandatory before sending immutable snapshot documents.
-	GetCapabilities(context.Context, *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error)
 	// GetTenant returns the caller's organization as a deploy tenant. There is
 	// no enrollment: the deploy product is open to every org, so every live org
 	// is a tenant (slug and namespace prefix = the org id).
@@ -1077,18 +1031,6 @@ type DeployServiceHandler interface {
 	// including every release the env moved away from, which a current-pointer
 	// read cannot show.
 	ListPromotions(context.Context, *connect.Request[v1.ListDeployPromotionsRequest]) (*connect.Response[v1.ListDeployPromotionsResponse], error)
-	// CompareReleases says what changed between two releases of one project,
-	// from what the ledger recorded when each was cut: the commits between them,
-	// the artifacts whose identity moved (digest -> digest), and, in one
-	// environment, the Kubernetes objects their bundles add, modify and remove,
-	// each with a one-line summary. It reads only records (forge's
-	// release.CompareCommits / CompareArtifacts / CompareObjects), so it answers
-	// with no repository and no registry at hand. Release detail's Changes tab.
-	//
-	// Either order works: comparing a newer release FROM an older one lists what
-	// it adds; the other way round sets commits.reverts and lists what moving
-	// to it takes away.
-	CompareReleases(context.Context, *connect.Request[v1.CompareDeployReleasesRequest]) (*connect.Response[v1.CompareDeployReleasesResponse], error)
 	// GetRollout reports how far ONE promotion has rolled out, judged against
 	// THAT promotion's frozen pins — never against whatever the deployment rows
 	// declare now. An empty promotion_id means the environment's current
@@ -1263,12 +1205,6 @@ type DeployServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	deployServiceMethods := v1.File_services_deploy_v1_deploy_proto.Services().ByName("DeployService").Methods()
-	deployServiceGetCapabilitiesHandler := connect.NewUnaryHandler(
-		DeployServiceGetCapabilitiesProcedure,
-		svc.GetCapabilities,
-		connect.WithSchema(deployServiceMethods.ByName("GetCapabilities")),
-		connect.WithHandlerOptions(opts...),
-	)
 	deployServiceGetTenantHandler := connect.NewUnaryHandler(
 		DeployServiceGetTenantProcedure,
 		svc.GetTenant,
@@ -1413,12 +1349,6 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("ListPromotions")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deployServiceCompareReleasesHandler := connect.NewUnaryHandler(
-		DeployServiceCompareReleasesProcedure,
-		svc.CompareReleases,
-		connect.WithSchema(deployServiceMethods.ByName("CompareReleases")),
-		connect.WithHandlerOptions(opts...),
-	)
 	deployServiceGetRolloutHandler := connect.NewUnaryHandler(
 		DeployServiceGetRolloutProcedure,
 		svc.GetRollout,
@@ -1505,8 +1435,6 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 	)
 	return "/controlplane.v1.DeployService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case DeployServiceGetCapabilitiesProcedure:
-			deployServiceGetCapabilitiesHandler.ServeHTTP(w, r)
 		case DeployServiceGetTenantProcedure:
 			deployServiceGetTenantHandler.ServeHTTP(w, r)
 		case DeployServiceCreateTenantProcedure:
@@ -1555,8 +1483,6 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceGetReleaseHandler.ServeHTTP(w, r)
 		case DeployServiceListPromotionsProcedure:
 			deployServiceListPromotionsHandler.ServeHTTP(w, r)
-		case DeployServiceCompareReleasesProcedure:
-			deployServiceCompareReleasesHandler.ServeHTTP(w, r)
 		case DeployServiceGetRolloutProcedure:
 			deployServiceGetRolloutHandler.ServeHTTP(w, r)
 		case DeployServiceRecordGateProcedure:
@@ -1593,10 +1519,6 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 
 // UnimplementedDeployServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedDeployServiceHandler struct{}
-
-func (UnimplementedDeployServiceHandler) GetCapabilities(context.Context, *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetCapabilities is not implemented"))
-}
 
 func (UnimplementedDeployServiceHandler) GetTenant(context.Context, *connect.Request[v1.GetDeployTenantRequest]) (*connect.Response[v1.GetDeployTenantResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetTenant is not implemented"))
@@ -1692,10 +1614,6 @@ func (UnimplementedDeployServiceHandler) GetRelease(context.Context, *connect.Re
 
 func (UnimplementedDeployServiceHandler) ListPromotions(context.Context, *connect.Request[v1.ListDeployPromotionsRequest]) (*connect.Response[v1.ListDeployPromotionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListPromotions is not implemented"))
-}
-
-func (UnimplementedDeployServiceHandler) CompareReleases(context.Context, *connect.Request[v1.CompareDeployReleasesRequest]) (*connect.Response[v1.CompareDeployReleasesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.CompareReleases is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) GetRollout(context.Context, *connect.Request[v1.GetDeployRolloutRequest]) (*connect.Response[v1.GetDeployRolloutResponse], error) {

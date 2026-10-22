@@ -179,7 +179,6 @@ Send a prompt to a language model and get a response
 | `stop_reason` | string | - |
 | `finish_reason` | string | - |
 | `capabilities` | object | - |
-| `provider_account_id` | string | - |
 
 ---
 

@@ -3,7 +3,6 @@ package llm
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -219,19 +218,6 @@ type DriverOptions struct {
 	// TokenExpiresAt is when the current access token expires.
 	TokenExpiresAt time.Time
 }
-
-// ErrRefreshRejected matches every *RefreshRejectedError via errors.Is.
-var ErrRefreshRejected = errors.New("oauth refresh token rejected")
-
-// RefreshRejectedError is a provider's verdict (invalid_grant) that a refresh token is dead.
-// It is not an outage: nothing but signing in again recovers the session, which is what lets
-// the refresh coordinator mark the account needs-sign-in on it and on nothing else.
-type RefreshRejectedError struct{ Message string }
-
-func (e *RefreshRejectedError) Error() string { return e.Message }
-
-// Is makes errors.Is(err, ErrRefreshRejected) hold.
-func (e *RefreshRejectedError) Is(target error) bool { return target == ErrRefreshRejected }
 
 // OAuthTokens is a snapshot of OAuth credentials held by a driver that
 // supports transparent token refresh (currently Claude OAuth).

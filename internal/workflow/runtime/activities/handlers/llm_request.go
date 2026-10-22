@@ -17,7 +17,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/modelprefs"
 	"github.com/reliant-labs/reliant/internal/models/message"
-	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // This file is the single request-construction path for LLM calls made by
@@ -50,19 +49,6 @@ type llmCallSpec struct {
 	// names no provider of its own (see withRunProviders), and then rank above
 	// the user's tag preference model and the tier's own order.
 	RunProviders []string
-
-	// ThreadID is the thread the call belongs to. It is what keeps a thread on
-	// one account of its provider (prompt cache and reasoning envelopes are per
-	// account). Empty = no stickiness: the call takes the default account.
-	ThreadID string
-
-	// Routing picks the account of the resolved provider and benches one that
-	// is refused. nil routes nothing (one-shot calls, tests).
-	Routing *AccountRouting
-
-	// Failover is the run's policy for a provider whose accounts are all
-	// limited, and the accounts it prefers (RuntimeContext.Failover).
-	Failover types.FailoverPolicy
 
 	// Explicit per-call overrides. Zero values mean "use the resolved model's
 	// default" — exactly like an unset workflow arg on a normal request.
@@ -142,11 +128,6 @@ type resolvedLLMCall struct {
 	// default), nil when neither is set.
 	Temperature *float64
 
-	// Account is the account of ProviderDriver that serves this call; nil when
-	// the call was not routed (local, injected resolver, a provider with no
-	// accounts, routing off).
-	Account *routedAccount
-
 	// TagCompactionThreshold is the tag preference's compaction threshold, 0
 	// when none applied. The caller uses it only when neither the node arg
 	// nor the model value set one.
@@ -181,7 +162,6 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 	var modelIDForDriver string
 	var providerDriver string
 	var localTransport http.RoundTripper
-	var routingDrivers models.AvailableDrivers
 	effectiveTemperature := spec.Temperature
 	effectiveThinkingLevel := spec.ThinkingLevel
 	var tagCompactionThreshold int32
@@ -225,13 +205,7 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 	} else {
 		// Resolve model using the registry against the providers the user has
 		// configured.
-		// A store failure says nothing about what the user has connected, so it
-		// must not read as "connect a provider", which is terminal.
-		availableDrivers, lerr := lookupAvailableDriversWithRetry(ctx, spec.UserID)
-		if lerr != nil {
-			return nil, lerr
-		}
-		routingDrivers = availableDrivers
+		availableDrivers := drivers.GetAvailableDrivers(ctx, spec.UserID)
 		availableProviders := configuredProviderIDs(availableDrivers)
 
 		registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
@@ -342,19 +316,6 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 	}
 
 	var driver llm.Driver
-	var account *routedAccount
-	if localTransport == nil && resolver == nil && providerDriver != "" && !drivers.ReplayMode.Enabled {
-		var rerr error
-		account, rerr = routeAccount(ctx, spec, routingDrivers, providerDriver, definitionID(definition))
-		if rerr != nil {
-			// Every account is limited: refuse here, with no provider call, the
-			// way the provider would have, carrying the facts to decide on.
-			return nil, spec.Routing.usageLimitFailure(ctx, rerr, usageLimitContext{
-				UserID: spec.UserID, ThreadID: spec.ThreadID, Driver: models.DriverID(providerDriver),
-				ModelID: definitionID(definition), Policy: spec.Failover,
-			})
-		}
-	}
 	if localTransport != nil {
 		driverOpts = append(driverOpts,
 			llm.WithBaseURL(local.PlaceholderBaseURL),
@@ -371,26 +332,13 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 			return nil, fmt.Errorf("failed to get LLM driver: %w", err)
 		}
 	} else {
-		if account != nil {
-			if d, aerr := spec.Routing.DriverFor(ctx, spec.UserID, account.Config.DriverConfig, legacyModel, append(drivers.PreferenceDriverOptions(legacyModel, preferences[0]), driverOpts...)...); aerr != nil {
-				// A driver for the chosen account that cannot be built is not
-				// worth a failed turn: the provider's default account serves.
-				logging.Warn("[LLMRequest] Could not build a driver for the thread's account; using the provider's default account",
-					"userID", spec.UserID, "provider", providerDriver, "accountID", account.Config.AccountID, "error", aerr)
-				account = nil
-			} else {
-				driver = d
-			}
+		resolve := drivers.GetDriver
+		if resolver != nil {
+			resolve = resolver
 		}
-		if driver == nil {
-			resolve := drivers.GetDriver
-			if resolver != nil {
-				resolve = resolver
-			}
-			var err error
-			if driver, err = resolve(ctx, spec.UserID, preferences, driverOpts...); err != nil {
-				return nil, fmt.Errorf("failed to get LLM driver: %w", err)
-			}
+		var err error
+		if driver, err = resolve(ctx, spec.UserID, preferences, driverOpts...); err != nil {
+			return nil, fmt.Errorf("failed to get LLM driver: %w", err)
 		}
 	}
 
@@ -400,7 +348,6 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 		ModelID:        modelIDForDriver,
 		Definition:     definition,
 		ProviderDriver: providerDriver,
-		Account:        account,
 		ThinkingLevel:  effectiveThinkingLevel,
 		Temperature:    effectiveTemperature,
 
@@ -656,13 +603,4 @@ func resolveLocalModel(ctx context.Context, spec llmCallSpec) (legacy models.Mod
 		return legacy, nil, "", "", nil, err
 	}
 	return definition.ToModel(), &definition, picked.CatalogID(), thinkingLevel, transport, nil
-}
-
-// definitionID is the registry id of the resolved model, "" for a call that did
-// not resolve through the registry.
-func definitionID(def *models.ModelDefinition) string {
-	if def == nil {
-		return ""
-	}
-	return def.ID
 }

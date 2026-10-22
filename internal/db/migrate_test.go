@@ -256,33 +256,6 @@ func schemaFingerprint(t *testing.T, db *sql.DB) string {
 	return fp
 }
 
-// schemaRelations lists the tables, indexes and sequences in public as "oid/name". Views are left
-// out: a post-baseline migration may legitimately recreate one.
-func schemaRelations(t *testing.T, db *sql.DB) []string {
-	t.Helper()
-	rows, err := db.Query(`SELECT c.oid::text || '/' || c.relname
-		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-		WHERE n.nspname = 'public' AND c.relname NOT LIKE 'schema_migrations%' AND c.relkind IN ('r', 'i', 'S') ORDER BY c.oid`)
-	require.NoError(t, err)
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var r string
-		require.NoError(t, rows.Scan(&r))
-		out = append(out, r)
-	}
-	require.NoError(t, rows.Err())
-	return out
-}
-
-// requireRelationsKept asserts every relation in before is still there with the same oid: adoption
-// ran no baseline DDL (a rebuilt table gets a new oid). Relations a post-baseline migration adds
-// are allowed, because migrate() applies those after adopting.
-func requireRelationsKept(t *testing.T, db *sql.DB, before []string, msg string) {
-	t.Helper()
-	require.Subset(t, schemaRelations(t, db), before, msg)
-}
-
 // gooseRows is goose_db_version, row by row.
 func gooseRows(t *testing.T, db *sql.DB) string {
 	t.Helper()
@@ -334,7 +307,7 @@ func TestMigrate_AdoptsAGooseHeadDatabaseWithoutRunningItsSQL(t *testing.T) {
 	versions := gooseVersions(t)
 	dsn := gooseDBAt(t, versions[len(versions)-1])
 	db := openTestDSN(t, dsn)
-	before, goose := schemaRelations(t, db), gooseRows(t, db)
+	before, goose := schemaFingerprint(t, db), gooseRows(t, db)
 
 	res, err := migrate(dsn)
 	require.NoError(t, err)
@@ -348,7 +321,7 @@ func TestMigrate_AdoptsAGooseHeadDatabaseWithoutRunningItsSQL(t *testing.T) {
 	require.NoError(t, db.QueryRow(`SELECT name FROM schema_migrations_applied WHERE version = $1`, base.Version).Scan(&recorded))
 	require.Equal(t, base.Descriptor, recorded, "the applied record must name the baseline")
 
-	requireRelationsKept(t, db, before, "adoption must not run DDL")
+	require.Equal(t, before, schemaFingerprint(t, db), "adoption must not run DDL")
 	require.Equal(t, goose, gooseRows(t, db), "goose_db_version is the rollback target and must be left alone")
 	requireSeededRows(t, db)
 }
@@ -552,11 +525,11 @@ func TestMigrate_ConcurrentRunsTakeTurns(t *testing.T) {
 	t.Run("goose head", func(t *testing.T) {
 		dsn := gooseDBAt(t, versions[len(versions)-1])
 		db := openTestDSN(t, dsn)
-		before := schemaRelations(t, db)
+		before := schemaFingerprint(t, db)
 		results := run(t, dsn)
 		require.Equal(t, 1, count(results, func(r MigrateResult) bool { return r.Forge.Adopted != nil }))
 		requireCurrent(t, db)
-		requireRelationsKept(t, db, before, "adopted, not rebuilt")
+		require.Equal(t, before, schemaFingerprint(t, db), "adopted, not rebuilt")
 	})
 	t.Run("goose behind, across CREATE INDEX CONCURRENTLY", func(t *testing.T) {
 		dsn := gooseDBAt(t, versions[len(versions)/2-1])

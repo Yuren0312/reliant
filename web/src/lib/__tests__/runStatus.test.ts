@@ -37,14 +37,14 @@ describe("runStatus: the §0 display vocabulary", () => {
       wire: "PENDING",
       input: { state: WorkflowState.PENDING, stopReason: WorkflowStopReason.UNSPECIFIED },
       label: "Queued",
-      dot: "neutral",
+      dot: "pending",
       badge: "info",
     },
     {
       wire: "ACTIVE",
       input: { state: WorkflowState.ACTIVE, stopReason: WorkflowStopReason.UNSPECIFIED },
       label: "Running",
-      dot: "success",
+      dot: "active",
       badge: "info",
     },
     {
@@ -55,7 +55,7 @@ describe("runStatus: the §0 display vocabulary", () => {
         activity: ChatActivity.RUNNING,
       },
       label: "Running",
-      dot: "success",
+      dot: "active",
       badge: "info",
     },
     {
@@ -73,7 +73,7 @@ describe("runStatus: the §0 display vocabulary", () => {
       wire: "STOPPED / PAUSED",
       input: { state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.PAUSED },
       label: "Paused",
-      dot: "warning",
+      dot: "paused",
       badge: "warning",
     },
     {
@@ -102,14 +102,14 @@ describe("runStatus: the §0 display vocabulary", () => {
         outcome: "failure",
       },
       label: "Failed",
-      dot: "danger",
+      dot: "error",
       badge: "error",
     },
     {
       wire: "STOPPED / FAILED",
       input: { state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.FAILED },
       label: "Failed",
-      dot: "danger",
+      dot: "error",
       badge: "error",
     },
     {
@@ -166,10 +166,10 @@ describe("runStatus: the §0 display vocabulary", () => {
 
 describe("runStatusFromActivity: the sidebar's view of the same vocabulary", () => {
   it.each([
-    [ChatActivity.RUNNING, "Running", "success"],
+    [ChatActivity.RUNNING, "Running", "active"],
     [ChatActivity.AWAITING_INPUT, "Needs you", "warning"],
-    [ChatActivity.PAUSED, "Paused", "warning"],
-    [ChatActivity.ERROR, "Failed", "danger"],
+    [ChatActivity.PAUSED, "Paused", "paused"],
+    [ChatActivity.ERROR, "Failed", "error"],
   ] as const)("activity %s reads %s", (activity, label, dot) => {
     const status = runStatusFromActivity(activity);
     expect(status?.label).toBe(label);
@@ -183,14 +183,14 @@ describe("runStatusFromActivity: the sidebar's view of the same vocabulary", () 
 
 describe("runStatusFromDisplayState: the server-folded state the Runs list carries", () => {
   it.each([
-    [RunDisplayState.QUEUED, "Queued", "neutral", "info"],
-    [RunDisplayState.RUNNING, "Running", "success", "info"],
+    [RunDisplayState.QUEUED, "Queued", "pending", "info"],
+    [RunDisplayState.RUNNING, "Running", "active", "info"],
     [RunDisplayState.NEEDS_INPUT, "Needs you", "warning", "warning"],
-    [RunDisplayState.PAUSED, "Paused", "warning", "warning"],
+    [RunDisplayState.PAUSED, "Paused", "paused", "warning"],
     [RunDisplayState.COMPLETED, "Completed", "neutral", "success"],
-    [RunDisplayState.FAILED, "Failed", "danger", "error"],
+    [RunDisplayState.FAILED, "Failed", "error", "error"],
     [RunDisplayState.CANCELLED, "Cancelled", "neutral", "neutral"],
-    [RunDisplayState.WAITING_FOR_MACHINE, "Waiting for machine", "neutral", "warning"],
+    [RunDisplayState.WAITING_FOR_MACHINE, "Waiting for machine", "pending", "warning"],
   ] as const)("%s reads %s", (state, label, dot, badge) => {
     const status = runStatusFromDisplayState(state);
     expect(status.label).toBe(label);
@@ -231,7 +231,7 @@ describe("waiting for a machine overrides the lifecycle row (G7)", () => {
       stopReason: WorkflowStopReason.UNSPECIFIED,
       activity: ChatActivity.WAITING_FOR_DAEMON,
     });
-    expect(status).toMatchObject({ label: "Waiting for machine", dotVariant: "neutral", badgeVariant: "warning" });
+    expect(status).toMatchObject({ label: "Waiting for machine", dotVariant: "pending", badgeVariant: "warning" });
   });
 
   it("a live run held for a usage-limit reset reads Waiting for usage limit, not Running", () => {
@@ -240,7 +240,7 @@ describe("waiting for a machine overrides the lifecycle row (G7)", () => {
       stopReason: WorkflowStopReason.UNSPECIFIED,
       activity: ChatActivity.WAITING_FOR_USAGE_LIMIT,
     });
-    expect(status).toMatchObject({ label: "Waiting for usage limit", dotVariant: "neutral", badgeVariant: "warning", pulse: false });
+    expect(status).toMatchObject({ label: "Waiting for usage limit", dotVariant: "pending", badgeVariant: "warning", pulse: false });
   });
 
   it("the sidebar's activity view says the same", () => {
@@ -255,7 +255,7 @@ describe("waiting for a machine overrides the lifecycle row (G7)", () => {
       stopReason: WorkflowStopReason.FAILED,
       activity: ChatActivity.QUEUED_FOR_MACHINE,
     });
-    expect(status).toMatchObject({ label: "Queued for machine", dotVariant: "neutral", badgeVariant: "warning", pulse: false });
+    expect(status).toMatchObject({ label: "Queued for machine", dotVariant: "pending", badgeVariant: "warning", pulse: false });
     expect(runStatusFromActivity(ChatActivity.QUEUED_FOR_MACHINE)?.label).toBe("Queued for machine");
   });
 });

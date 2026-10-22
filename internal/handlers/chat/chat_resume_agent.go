@@ -236,8 +236,6 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 	if inputs != nil {
 		delete(inputs, v2.InputKeyLaunchRun)
 		v2.DropActingIdentity(inputs)
-		inputs = s.overSelection(ctx, chat.ID, workflowName, inputs)
-		s.refreshProviderPolicy(ctx, chat, inputs)
 	} else {
 		presets := make(map[string]string, len(chat.SelectedPresets))
 		for k, v := range chat.SelectedPresets {
@@ -245,7 +243,8 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 				presets[k] = v
 			}
 		}
-		inputs = s.launcher().BuildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, nil)
+		checkout := s.launcher().GetEffectiveCheckout(ctx, chat)
+		inputs = s.launcher().BuildWorkflowInputs(ctx, userID, checkout, chat.ProjectID, workflowName, presets, nil)
 		if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, inputs); len(validationErrors) > 0 {
 			msgs := make([]string, len(validationErrors))
 			for i, e := range validationErrors {

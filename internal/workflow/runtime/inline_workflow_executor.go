@@ -10,7 +10,6 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/preset"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -356,13 +355,6 @@ func applyPresets(
 // given group. The default group is flattened onto the top-level; named groups
 // are nested under subInputs[groupName].
 func mergePresetParams(subInputs map[string]interface{}, groupName string, params map[string]interface{}) {
-	// A preset's `providers:` policy is a fact about the run, so it lands at the
-	// top level whichever group the preset targets.
-	for paramName, paramValue := range params {
-		if preset.IsProviderInput(paramName) {
-			subInputs[paramName] = paramValue
-		}
-	}
 	if groupName == DefaultPresetGroup {
 		for paramName, paramValue := range params {
 			subInputs[paramName] = paramValue
@@ -375,9 +367,6 @@ func mergePresetParams(subInputs map[string]interface{}, groupName string, param
 		subInputs[groupName] = groupMap
 	}
 	for paramName, paramValue := range params {
-		if preset.IsProviderInput(paramName) {
-			continue
-		}
 		groupMap[paramName] = paramValue
 	}
 }
@@ -520,7 +509,10 @@ func (e *InlineWorkflowExecutor) buildSubWorkflowInputsWithOwnership() (map[stri
 		}
 	}
 
-	overlayNodeArgs(subInputs, ownedKeys, e.subWorkflowInputs)
+	for key, value := range e.subWorkflowInputs {
+		subInputs[key] = value
+		ownedKeys[key] = true
+	}
 
 	if len(e.subWorkflow.GetInputs()) > 0 {
 		subInputs = ApplyDefaultsForRuntime(subInputs, e.subWorkflow.GetInputs())
@@ -535,25 +527,6 @@ func (e *InlineWorkflowExecutor) buildSubWorkflowInputsWithOwnership() (map[stri
 	propagateProviderPreference(e.workflowInputs, subInputs)
 
 	return subInputs, ownedKeys, nil
-}
-
-// overlayNodeArgs lays a node's args over the inputs its presets produced, and
-// marks them owned by the thread.
-//
-// The provider policy is the one input that merges instead of replacing: a
-// spawn call's `providers` beats its preset's field by field, so
-// `providers: {prefer: [...]}` on a spawn does not erase the preset's on_limit.
-func overlayNodeArgs(subInputs map[string]interface{}, ownedKeys map[string]bool, args map[string]interface{}) {
-	presetPolicy := readProviderPolicy(subInputs)
-	for key, value := range args {
-		subInputs[key] = value
-		ownedKeys[key] = true
-	}
-	if _, argsSetPolicy := args[InputKeyProviderPolicy]; argsSetPolicy {
-		if merged := mergeProviderPolicy(presetPolicy, readProviderPolicy(args)); !merged.IsZero() {
-			subInputs[InputKeyProviderPolicy] = merged.Value()
-		}
-	}
 }
 
 // Execute runs the sub-workflow inline and returns its outputs.

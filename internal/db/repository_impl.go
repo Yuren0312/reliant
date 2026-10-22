@@ -5216,7 +5216,6 @@ func (r *Repo) EnableCredentialSealing(sealer postgresstore.CredentialSealer) er
 		return fmt.Errorf("settings store does not support api key sealing")
 	}
 	s.SetSealer(sealer)
-	r.accounts.SetSealer(sealer)
 	return nil
 }
 

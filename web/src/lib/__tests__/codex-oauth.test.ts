@@ -84,16 +84,11 @@ describe("runCodexOAuthFlow", () => {
     completeCodexOAuthMock.mockResolvedValue({
       success: true,
       message: "Connected",
-      created: true,
     });
 
     const result = await runCodexOAuthFlow();
 
-    expect(result).toEqual({
-      ok: true,
-      message: "Connected",
-      outcome: { success: true, message: "Connected", created: true },
-    });
+    expect(result).toEqual({ ok: true, message: "Connected" });
 
     // Verify the URL template has the placeholder
     expect(capturedUrlTemplate).toContain("{redirect_uri}");
@@ -125,14 +120,7 @@ describe("runCodexOAuthFlow", () => {
       "test-code",
       expect.any(String),
       "http://127.0.0.1:9999/callback",
-      undefined,
     );
-  });
-
-  it("names the reconnect target on the exchange", async () => {
-    completeCodexOAuthMock.mockResolvedValue({ success: true, message: "Connected", created: false });
-    await runCodexOAuthFlow({ accountId: "acct-7" });
-    expect(completeCodexOAuthMock.mock.calls[0][3]).toBe("acct-7");
   });
 
   it("fails when daemon returns mismatched state", async () => {

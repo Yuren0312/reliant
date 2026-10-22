@@ -285,12 +285,8 @@ func (s *Service) restartAtCheckpoint(ctx context.Context, chat *db.Chat, root *
 				presets[group] = name
 			}
 		}
-		inputs = s.launcher().BuildChatWorkflowInputs(ctx, chat.UserID, chat, workflowName, presets, nil)
-	} else {
-		// The closed run's own inputs say what it ran on; the chat's selection
-		// says what it is set to now, which may be a later pick.
-		inputs = s.overSelection(ctx, chat.ID, workflowName, inputs)
-		s.refreshProviderPolicy(ctx, chat, inputs)
+		checkout := s.launcher().GetEffectiveCheckout(ctx, chat)
+		inputs = s.launcher().BuildWorkflowInputs(ctx, chat.UserID, checkout, chat.ProjectID, workflowName, presets, nil)
 	}
 	// This run answers a person, not whatever launched the chat.
 	delete(inputs, v2.InputKeyLaunchRun)

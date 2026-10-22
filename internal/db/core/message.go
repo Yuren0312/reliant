@@ -36,9 +36,6 @@ type Message struct {
 	NodePath        *string // Full path to node in workflow hierarchy
 	ActivityID      *string // Temporal activity ID for idempotency
 	IsStreaming     bool    // Whether message is currently streaming
-	// ProviderAccountID is the provider account that served an assistant
-	// message; nil before accounts were recorded and for other roles.
-	ProviderAccountID *string
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

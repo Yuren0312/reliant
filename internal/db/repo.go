@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -126,8 +125,6 @@ type Repo struct {
 	worktrees       core.WorktreeStore
 	repos           core.RepoStore
 	settings        core.SettingStore
-	accounts        *postgresstore.AccountStore
-	legacyBackoff   sync.Map // user id -> time.Time before which SyncLegacyCredentials leaves the user alone
 	attachments     core.AttachmentStore
 	workflows       core.WorkflowStore
 	threads         core.ThreadStore
@@ -181,7 +178,6 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
 	return &Repo{
 		DB:            q,
 		driver:        driver,
-		accounts:      postgresstore.NewProviderAccountStore(db),
 		planTasks:     postgresstore.NewPlanTaskStore(pgQueries),
 		chats:         postgresstore.NewChatStore(pgQueries, q),
 		runs:          postgresstore.NewRunStore(pgQueries),
@@ -289,15 +285,17 @@ func (r *Repo) sessionPool() *sql.DB {
 }
 
 // Close closes the repository's pools. A connection the database end had
-// already dropped is not a close failure: the main pool's connections do not
-// report one (serverkit.OpenDB), and the session pool keeps no idle
-// connection to close.
+// already dropped is not a close failure: see withoutPeerClosedErrors.
 func (r *Repo) Close() error {
 	err := r.DB.Close()
 	if r.session != nil {
 		err = errors.Join(err, r.session.Close())
 	}
-	return err
+	kept := withoutPeerClosedErrors(err)
+	if err != nil && kept == nil {
+		logging.Debug("Database connections were already closed by the server end", "error", err)
+	}
+	return kept
 }
 
 func (r *Repo) Ping(ctx context.Context) error {

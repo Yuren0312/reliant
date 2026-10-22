@@ -332,15 +332,15 @@ export function rowStatusLabel(row: SecretSurfaceRow): string {
  */
 export function rowStatusVariant(
   row: SecretSurfaceRow
-): "success" | "warning" | "danger" | "neutral" {
-  if (row.origin === "declared-unset") return "danger";
-  if (row.origin === "declared-present") return "success";
+): "active" | "warning" | "error" | "neutral" {
+  if (row.origin === "declared-unset") return "error";
+  if (row.origin === "declared-present") return "active";
   // Not known is neutral — never the error dot, which would claim a blocker
   // nobody observed.
   if (row.origin === "declared-unread") return "neutral";
   switch (row.state) {
     case "set":
-      return "success";
+      return "active";
     case "deleted":
     case "tombstoned":
       return "warning";

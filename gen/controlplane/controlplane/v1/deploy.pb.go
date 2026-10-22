@@ -2768,16 +2768,7 @@ type DeployRelease struct {
 	// EMPTY IS LEGACY, not "no project": releases cut before this field existed
 	// carry "" and are resolved by falling back to it, so a project's lookup
 	// finds its own row first and the pre-project history second.
-	Project string `protobuf:"bytes,12,opt,name=project,proto3" json:"project,omitempty"`
-	// Complete immutable forge release document, including catalog and snapshot intent.
-	// Absent on historical cuts that predate snapshots.
-	SnapshotRelease *structpb.Struct `protobuf:"bytes,13,opt,name=snapshot_release,json=snapshotRelease,proto3" json:"snapshot_release,omitempty"`
-	// The commits this release adds over the release it was cut after, as forge
-	// recorded them at the cut. Unset when none were recorded (a non-git tree, a
-	// forge that predates it, or a capture that failed). Evidence about the
-	// release, not part of its identity: a re-cut with a different range is
-	// still the same release.
-	Commits       *DeployCommitRange `protobuf:"bytes,14,opt,name=commits,proto3" json:"commits,omitempty"`
+	Project       string `protobuf:"bytes,12,opt,name=project,proto3" json:"project,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2887,20 +2878,6 @@ func (x *DeployRelease) GetProject() string {
 		return x.Project
 	}
 	return ""
-}
-
-func (x *DeployRelease) GetSnapshotRelease() *structpb.Struct {
-	if x != nil {
-		return x.SnapshotRelease
-	}
-	return nil
-}
-
-func (x *DeployRelease) GetCommits() *DeployCommitRange {
-	if x != nil {
-		return x.Commits
-	}
-	return nil
 }
 
 // DeployGate is one check's result, recorded against a promotion.
@@ -3906,24 +3883,8 @@ type DeployPromotion struct {
 	// leaves no trace is indistinguishable afterwards from one nobody was ever
 	// warned about.
 	AcknowledgedFindings []string `protobuf:"bytes,25,rep,name=acknowledged_findings,json=acknowledgedFindings,proto3" json:"acknowledged_findings,omitempty"`
-	// Frozen at promotion, never resolved from a later bundle association.
-	SnapshotDigest string           `protobuf:"bytes,26,opt,name=snapshot_digest,json=snapshotDigest,proto3" json:"snapshot_digest,omitempty"`
-	BundleId       string           `protobuf:"bytes,27,opt,name=bundle_id,json=bundleId,proto3" json:"bundle_id,omitempty"`
-	BundleDigest   string           `protobuf:"bytes,28,opt,name=bundle_digest,json=bundleDigest,proto3" json:"bundle_digest,omitempty"`
-	Snapshot       *structpb.Struct `protobuf:"bytes,29,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
-	// The components a SCOPED deploy moved (`forge env deploy prod v2 --target
-	// api`, `--frontends-only`): workload, frontend or group names as the env
-	// declares them, sorted. Empty means the whole release moved.
-	//
-	// This row still binds the environment to the release — the release whose
-	// pins the deploy shipped — and targets says only these took them. So "what
-	// does workload X run" is the newest promotion whose targets are empty or
-	// name X, and a release is live on an env only for what it moved (forge's
-	// release.Promotion.Moved). Without it a one-workload deploy read as the whole
-	// environment running the release.
-	Targets       []string `protobuf:"bytes,30,rep,name=targets,proto3" json:"targets,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *DeployPromotion) Reset() {
@@ -4117,41 +4078,6 @@ func (x *DeployPromotion) GetAcknowledgedFindings() []string {
 	return nil
 }
 
-func (x *DeployPromotion) GetSnapshotDigest() string {
-	if x != nil {
-		return x.SnapshotDigest
-	}
-	return ""
-}
-
-func (x *DeployPromotion) GetBundleId() string {
-	if x != nil {
-		return x.BundleId
-	}
-	return ""
-}
-
-func (x *DeployPromotion) GetBundleDigest() string {
-	if x != nil {
-		return x.BundleDigest
-	}
-	return ""
-}
-
-func (x *DeployPromotion) GetSnapshot() *structpb.Struct {
-	if x != nil {
-		return x.Snapshot
-	}
-	return nil
-}
-
-func (x *DeployPromotion) GetTargets() []string {
-	if x != nil {
-		return x.Targets
-	}
-	return nil
-}
-
 // DeploySourceProvenance is where a thing came from, in enough detail to find
 // it again. It mirrors forge's release.Provenance field for field, because the
 // CLI and the server must agree on the record's shape to agree on its digest.
@@ -4193,14 +4119,7 @@ type DeploySourceProvenance struct {
 	// unknown commit. A CLAIM, like branch and dirty, recorded as one; it is
 	// what turns DeliveryInsightsService's lead time from unknown into a figure.
 	// A producer that predates it sends nothing, which reads as "not recorded".
-	CommitTime *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=commit_time,json=commitTime,proto3" json:"commit_time,omitempty"`
-	// The commit's subject line and author name, as forge read them from git —
-	// what a release row shows beside its short sha ("fix(gateway): … · sean").
-	// Claims like branch, one line each (256 / 128 bytes). Set whenever commit
-	// is, dirty or not: a dirty build's commit is the base it was built on.
-	// Never an email: the ledger is shown to every member of the org.
-	CommitSubject string `protobuf:"bytes,11,opt,name=commit_subject,json=commitSubject,proto3" json:"commit_subject,omitempty"`
-	CommitAuthor  string `protobuf:"bytes,12,opt,name=commit_author,json=commitAuthor,proto3" json:"commit_author,omitempty"`
+	CommitTime    *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=commit_time,json=commitTime,proto3" json:"commit_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4305,185 +4224,6 @@ func (x *DeploySourceProvenance) GetCommitTime() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *DeploySourceProvenance) GetCommitSubject() string {
-	if x != nil {
-		return x.CommitSubject
-	}
-	return ""
-}
-
-func (x *DeploySourceProvenance) GetCommitAuthor() string {
-	if x != nil {
-		return x.CommitAuthor
-	}
-	return ""
-}
-
-// DeployCommit is one commit of a recorded range. A claim, as forge's git
-// reported it at the cut.
-type DeployCommit struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The full object id.
-	Sha string `protobuf:"bytes,1,opt,name=sha,proto3" json:"sha,omitempty"`
-	// The first line of the message.
-	Subject string `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	// The author's name, never an email.
-	Author string `protobuf:"bytes,3,opt,name=author,proto3" json:"author,omitempty"`
-	// The committer date, the same clock as DeploySourceProvenance.commit_time.
-	Time          *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=time,proto3" json:"time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeployCommit) Reset() {
-	*x = DeployCommit{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[23]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeployCommit) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeployCommit) ProtoMessage() {}
-
-func (x *DeployCommit) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[23]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeployCommit.ProtoReflect.Descriptor instead.
-func (*DeployCommit) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{23}
-}
-
-func (x *DeployCommit) GetSha() string {
-	if x != nil {
-		return x.Sha
-	}
-	return ""
-}
-
-func (x *DeployCommit) GetSubject() string {
-	if x != nil {
-		return x.Subject
-	}
-	return ""
-}
-
-func (x *DeployCommit) GetAuthor() string {
-	if x != nil {
-		return x.Author
-	}
-	return ""
-}
-
-func (x *DeployCommit) GetTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Time
-	}
-	return nil
-}
-
-// DeployCommitRange is the source history a release adds over the release it
-// was cut after, recorded at the cut (forge's release.CommitRange): the cut is
-// the one moment a checkout is at the release's commit, and no reader of this
-// ledger has the repository.
-//
-// CAPPED, AND THE CAP IS EXPLICIT. At most 100 commits, newest first.
-// `truncated` says the list is not the whole range: either it is longer
-// (`total` says how long), or the checkout's history ended before the base —
-// a shallow clone, which is how CI checks out — and then `total` is 0 because
-// nobody could count. A reader must never present a truncated range as
-// complete.
-type DeployCommitRange struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The earlier release this range starts after (the newest one whose clean
-	// commit is an ancestor of this release's), and its commit. Empty when the
-	// cutting checkout held no such release in its history: the project's first
-	// release, or a shallow clone.
-	BaseRelease   string          `protobuf:"bytes,1,opt,name=base_release,json=baseRelease,proto3" json:"base_release,omitempty"`
-	BaseCommit    string          `protobuf:"bytes,2,opt,name=base_commit,json=baseCommit,proto3" json:"base_commit,omitempty"`
-	Commits       []*DeployCommit `protobuf:"bytes,3,rep,name=commits,proto3" json:"commits,omitempty"`
-	Total         int32           `protobuf:"varint,4,opt,name=total,proto3" json:"total,omitempty"`
-	Truncated     bool            `protobuf:"varint,5,opt,name=truncated,proto3" json:"truncated,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeployCommitRange) Reset() {
-	*x = DeployCommitRange{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[24]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeployCommitRange) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeployCommitRange) ProtoMessage() {}
-
-func (x *DeployCommitRange) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[24]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeployCommitRange.ProtoReflect.Descriptor instead.
-func (*DeployCommitRange) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *DeployCommitRange) GetBaseRelease() string {
-	if x != nil {
-		return x.BaseRelease
-	}
-	return ""
-}
-
-func (x *DeployCommitRange) GetBaseCommit() string {
-	if x != nil {
-		return x.BaseCommit
-	}
-	return ""
-}
-
-func (x *DeployCommitRange) GetCommits() []*DeployCommit {
-	if x != nil {
-		return x.Commits
-	}
-	return nil
-}
-
-func (x *DeployCommitRange) GetTotal() int32 {
-	if x != nil {
-		return x.Total
-	}
-	return 0
-}
-
-func (x *DeployCommitRange) GetTruncated() bool {
-	if x != nil {
-		return x.Truncated
-	}
-	return false
-}
-
 // DeployWorktree identifies one checkout on one machine.
 //
 // A developer runs several worktrees of one project at once, and each may have
@@ -4506,7 +4246,7 @@ type DeployWorktree struct {
 
 func (x *DeployWorktree) Reset() {
 	*x = DeployWorktree{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[25]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4518,7 +4258,7 @@ func (x *DeployWorktree) String() string {
 func (*DeployWorktree) ProtoMessage() {}
 
 func (x *DeployWorktree) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[25]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4531,7 +4271,7 @@ func (x *DeployWorktree) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployWorktree.ProtoReflect.Descriptor instead.
 func (*DeployWorktree) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{25}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *DeployWorktree) GetKey() string {
@@ -4577,7 +4317,7 @@ type DeploySourceAttestation struct {
 
 func (x *DeploySourceAttestation) Reset() {
 	*x = DeploySourceAttestation{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[26]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4589,7 +4329,7 @@ func (x *DeploySourceAttestation) String() string {
 func (*DeploySourceAttestation) ProtoMessage() {}
 
 func (x *DeploySourceAttestation) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[26]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4602,7 +4342,7 @@ func (x *DeploySourceAttestation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeploySourceAttestation.ProtoReflect.Descriptor instead.
 func (*DeploySourceAttestation) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{26}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DeploySourceAttestation) GetProvider() string {
@@ -4673,18 +4413,15 @@ type DeployBundle struct {
 	Provenance *DeploySourceProvenance `protobuf:"bytes,8,opt,name=provenance,proto3" json:"provenance,omitempty"`
 	Run        *DeployRun              `protobuf:"bytes,10,opt,name=run,proto3" json:"run,omitempty"`
 	// Set by the SERVER from the caller's credential.
-	CreatedBy      string                 `protobuf:"bytes,11,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
-	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	SnapshotDigest string                 `protobuf:"bytes,13,opt,name=snapshot_digest,json=snapshotDigest,proto3" json:"snapshot_digest,omitempty"`
-	// Exact forge Snapshot semantic document; resource specs retain original bytes.
-	Snapshot      *structpb.Struct `protobuf:"bytes,14,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
+	CreatedBy     string                 `protobuf:"bytes,11,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeployBundle) Reset() {
 	*x = DeployBundle{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[27]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4696,7 +4433,7 @@ func (x *DeployBundle) String() string {
 func (*DeployBundle) ProtoMessage() {}
 
 func (x *DeployBundle) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[27]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4709,7 +4446,7 @@ func (x *DeployBundle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployBundle.ProtoReflect.Descriptor instead.
 func (*DeployBundle) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{27}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DeployBundle) GetId() string {
@@ -4785,20 +4522,6 @@ func (x *DeployBundle) GetCreatedBy() string {
 func (x *DeployBundle) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
-	}
-	return nil
-}
-
-func (x *DeployBundle) GetSnapshotDigest() string {
-	if x != nil {
-		return x.SnapshotDigest
-	}
-	return ""
-}
-
-func (x *DeployBundle) GetSnapshot() *structpb.Struct {
-	if x != nil {
-		return x.Snapshot
 	}
 	return nil
 }
@@ -4893,7 +4616,7 @@ type DeployConvergence struct {
 
 func (x *DeployConvergence) Reset() {
 	*x = DeployConvergence{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[28]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4905,7 +4628,7 @@ func (x *DeployConvergence) String() string {
 func (*DeployConvergence) ProtoMessage() {}
 
 func (x *DeployConvergence) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[28]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4918,7 +4641,7 @@ func (x *DeployConvergence) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployConvergence.ProtoReflect.Descriptor instead.
 func (*DeployConvergence) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{28}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *DeployConvergence) GetId() string {
@@ -5062,7 +4785,7 @@ type DeployLocalSession struct {
 
 func (x *DeployLocalSession) Reset() {
 	*x = DeployLocalSession{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[29]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5074,7 +4797,7 @@ func (x *DeployLocalSession) String() string {
 func (*DeployLocalSession) ProtoMessage() {}
 
 func (x *DeployLocalSession) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[29]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5087,7 +4810,7 @@ func (x *DeployLocalSession) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployLocalSession.ProtoReflect.Descriptor instead.
 func (*DeployLocalSession) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{29}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *DeployLocalSession) GetId() string {
@@ -5193,7 +4916,7 @@ type DeployPlan struct {
 
 func (x *DeployPlan) Reset() {
 	*x = DeployPlan{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[30]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5205,7 +4928,7 @@ func (x *DeployPlan) String() string {
 func (*DeployPlan) ProtoMessage() {}
 
 func (x *DeployPlan) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[30]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5218,7 +4941,7 @@ func (x *DeployPlan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployPlan.ProtoReflect.Descriptor instead.
 func (*DeployPlan) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{30}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *DeployPlan) GetDigest() string {
@@ -5294,7 +5017,7 @@ type DeployPlanBasis struct {
 
 func (x *DeployPlanBasis) Reset() {
 	*x = DeployPlanBasis{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[31]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5306,7 +5029,7 @@ func (x *DeployPlanBasis) String() string {
 func (*DeployPlanBasis) ProtoMessage() {}
 
 func (x *DeployPlanBasis) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[31]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5319,7 +5042,7 @@ func (x *DeployPlanBasis) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployPlanBasis.ProtoReflect.Descriptor instead.
 func (*DeployPlanBasis) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{31}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DeployPlanBasis) GetCurrentPromotionId() string {
@@ -5377,7 +5100,7 @@ type DeployPlanFinding struct {
 
 func (x *DeployPlanFinding) Reset() {
 	*x = DeployPlanFinding{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[32]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5389,7 +5112,7 @@ func (x *DeployPlanFinding) String() string {
 func (*DeployPlanFinding) ProtoMessage() {}
 
 func (x *DeployPlanFinding) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[32]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5402,7 +5125,7 @@ func (x *DeployPlanFinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployPlanFinding.ProtoReflect.Descriptor instead.
 func (*DeployPlanFinding) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{32}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *DeployPlanFinding) GetCode() string {
@@ -5477,7 +5200,7 @@ type DeployLiveEnvironment struct {
 
 func (x *DeployLiveEnvironment) Reset() {
 	*x = DeployLiveEnvironment{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[33]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5489,7 +5212,7 @@ func (x *DeployLiveEnvironment) String() string {
 func (*DeployLiveEnvironment) ProtoMessage() {}
 
 func (x *DeployLiveEnvironment) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[33]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5502,7 +5225,7 @@ func (x *DeployLiveEnvironment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployLiveEnvironment.ProtoReflect.Descriptor instead.
 func (*DeployLiveEnvironment) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{33}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *DeployLiveEnvironment) GetEnvironment() *DeployEnvironment {
@@ -5591,7 +5314,7 @@ type DeployRolloutTimings struct {
 
 func (x *DeployRolloutTimings) Reset() {
 	*x = DeployRolloutTimings{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[34]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5603,7 +5326,7 @@ func (x *DeployRolloutTimings) String() string {
 func (*DeployRolloutTimings) ProtoMessage() {}
 
 func (x *DeployRolloutTimings) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[34]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5616,7 +5339,7 @@ func (x *DeployRolloutTimings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployRolloutTimings.ProtoReflect.Descriptor instead.
 func (*DeployRolloutTimings) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{34}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *DeployRolloutTimings) GetPromotedAt() *timestamppb.Timestamp {
@@ -5688,7 +5411,7 @@ type DeployDrift struct {
 
 func (x *DeployDrift) Reset() {
 	*x = DeployDrift{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[35]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5700,7 +5423,7 @@ func (x *DeployDrift) String() string {
 func (*DeployDrift) ProtoMessage() {}
 
 func (x *DeployDrift) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[35]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5713,7 +5436,7 @@ func (x *DeployDrift) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployDrift.ProtoReflect.Descriptor instead.
 func (*DeployDrift) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{35}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *DeployDrift) GetState() string {
@@ -5777,7 +5500,7 @@ type DeployDriftObject struct {
 
 func (x *DeployDriftObject) Reset() {
 	*x = DeployDriftObject{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[36]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5789,7 +5512,7 @@ func (x *DeployDriftObject) String() string {
 func (*DeployDriftObject) ProtoMessage() {}
 
 func (x *DeployDriftObject) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[36]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5802,7 +5525,7 @@ func (x *DeployDriftObject) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployDriftObject.ProtoReflect.Descriptor instead.
 func (*DeployDriftObject) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{36}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *DeployDriftObject) GetCluster() string {
@@ -5888,7 +5611,7 @@ type DeployUsageRow struct {
 
 func (x *DeployUsageRow) Reset() {
 	*x = DeployUsageRow{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[37]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5900,7 +5623,7 @@ func (x *DeployUsageRow) String() string {
 func (*DeployUsageRow) ProtoMessage() {}
 
 func (x *DeployUsageRow) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[37]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5913,7 +5636,7 @@ func (x *DeployUsageRow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployUsageRow.ProtoReflect.Descriptor instead.
 func (*DeployUsageRow) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{37}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *DeployUsageRow) GetResourceKind() DeployResourceKind {
@@ -5997,7 +5720,7 @@ type DeployLogLine struct {
 
 func (x *DeployLogLine) Reset() {
 	*x = DeployLogLine{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[38]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6009,7 +5732,7 @@ func (x *DeployLogLine) String() string {
 func (*DeployLogLine) ProtoMessage() {}
 
 func (x *DeployLogLine) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[38]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6022,7 +5745,7 @@ func (x *DeployLogLine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployLogLine.ProtoReflect.Descriptor instead.
 func (*DeployLogLine) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{38}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *DeployLogLine) GetSequence() int64 {
@@ -6067,7 +5790,7 @@ type DeployEnvironmentInternal struct {
 
 func (x *DeployEnvironmentInternal) Reset() {
 	*x = DeployEnvironmentInternal{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[39]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6079,7 +5802,7 @@ func (x *DeployEnvironmentInternal) String() string {
 func (*DeployEnvironmentInternal) ProtoMessage() {}
 
 func (x *DeployEnvironmentInternal) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[39]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6092,7 +5815,7 @@ func (x *DeployEnvironmentInternal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployEnvironmentInternal.ProtoReflect.Descriptor instead.
 func (*DeployEnvironmentInternal) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{39}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *DeployEnvironmentInternal) GetEnvironmentId() string {
@@ -6127,7 +5850,7 @@ type DeployDeploymentInternal struct {
 
 func (x *DeployDeploymentInternal) Reset() {
 	*x = DeployDeploymentInternal{}
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[40]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6139,7 +5862,7 @@ func (x *DeployDeploymentInternal) String() string {
 func (*DeployDeploymentInternal) ProtoMessage() {}
 
 func (x *DeployDeploymentInternal) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_deploy_proto_msgTypes[40]
+	mi := &file_controlplane_v1_deploy_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6152,7 +5875,7 @@ func (x *DeployDeploymentInternal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployDeploymentInternal.ProtoReflect.Descriptor instead.
 func (*DeployDeploymentInternal) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{40}
+	return file_controlplane_v1_deploy_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *DeployDeploymentInternal) GetDeploymentId() string {
@@ -6356,7 +6079,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x16\n" +
 	"\x06subdir\x18\x03 \x01(\tR\x06subdir\x12\x16\n" +
-	"\x06commit\x18\x04 \x01(\tR\x06commit\"\xce\x04\n" +
+	"\x06commit\x18\x04 \x01(\tR\x06commit\"\xcc\x03\n" +
 	"\rDeployRelease\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1d\n" +
@@ -6373,9 +6096,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"provenance\x18\n" +
 	" \x01(\v2'.controlplane.v1.DeploySourceProvenanceR\n" +
 	"provenance\x12\x18\n" +
-	"\aproject\x18\f \x01(\tR\aproject\x12B\n" +
-	"\x10snapshot_release\x18\r \x01(\v2\x17.google.protobuf.StructR\x0fsnapshotRelease\x12<\n" +
-	"\acommits\x18\x0e \x01(\v2\".controlplane.v1.DeployCommitRangeR\acommitsJ\x04\b\v\x10\f\"\x84\x03\n" +
+	"\aproject\x18\f \x01(\tR\aprojectJ\x04\b\v\x10\f\"\x84\x03\n" +
 	"\n" +
 	"DeployGate\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
@@ -6458,7 +6179,8 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\x0eactual_current\x18\x04 \x01(\v2 .controlplane.v1.DeployPromotionR\ractualCurrent\x12F\n" +
 	"\factual_phase\x18\x05 \x01(\x0e2#.controlplane.v1.DeployRolloutPhaseR\vactualPhase\x12\x16\n" +
 	"\x06detail\x18\x06 \x01(\tR\x06detail\x12>\n" +
-	"\fcurrent_plan\x18\b \x01(\v2\x1b.controlplane.v1.DeployPlanR\vcurrentPlanJ\x04\b\a\x10\b\"\x88\f\n" +
+	"\fcurrent_plan\x18\b \x01(\v2\x1b.controlplane.v1.DeployPlanR\vcurrentPlanJ\x04\b\a\x10\b\"\xce\n" +
+	"\n" +
 	"\x0fDeployPromotion\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
 	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12\x1d\n" +
@@ -6487,18 +6209,13 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"planDigest\x12\x1f\n" +
 	"\vapproved_by\x18\x18 \x01(\tR\n" +
 	"approvedBy\x123\n" +
-	"\x15acknowledged_findings\x18\x19 \x03(\tR\x14acknowledgedFindings\x12'\n" +
-	"\x0fsnapshot_digest\x18\x1a \x01(\tR\x0esnapshotDigest\x12\x1b\n" +
-	"\tbundle_id\x18\x1b \x01(\tR\bbundleId\x12#\n" +
-	"\rbundle_digest\x18\x1c \x01(\tR\fbundleDigest\x123\n" +
-	"\bsnapshot\x18\x1d \x01(\v2\x17.google.protobuf.StructR\bsnapshot\x12\x18\n" +
-	"\atargets\x18\x1e \x03(\tR\atargets\x1aD\n" +
+	"\x15acknowledged_findings\x18\x19 \x03(\tR\x14acknowledgedFindings\x1aD\n" +
 	"\x16ResolvedArtifactsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aa\n" +
 	"\x14ResolvedSourcesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x123\n" +
-	"\x05value\x18\x02 \x01(\v2\x1d.controlplane.v1.DeploySourceR\x05value:\x028\x01J\x04\b\x14\x10\x15J\x04\b\x15\x10\x16\"\xcf\x03\n" +
+	"\x05value\x18\x02 \x01(\v2\x1d.controlplane.v1.DeploySourceR\x05value:\x028\x01J\x04\b\x14\x10\x15J\x04\b\x15\x10\x16\"\x83\x03\n" +
 	"\x16DeploySourceProvenance\x12\x12\n" +
 	"\x04repo\x18\x01 \x01(\tR\x04repo\x12\x16\n" +
 	"\x06commit\x18\x02 \x01(\tR\x06commit\x12\x16\n" +
@@ -6511,21 +6228,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\vattestation\x18\t \x01(\v2(.controlplane.v1.DeploySourceAttestationR\vattestation\x12;\n" +
 	"\vcommit_time\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"commitTime\x12%\n" +
-	"\x0ecommit_subject\x18\v \x01(\tR\rcommitSubject\x12#\n" +
-	"\rcommit_author\x18\f \x01(\tR\fcommitAuthor\"\x82\x01\n" +
-	"\fDeployCommit\x12\x10\n" +
-	"\x03sha\x18\x01 \x01(\tR\x03sha\x12\x18\n" +
-	"\asubject\x18\x02 \x01(\tR\asubject\x12\x16\n" +
-	"\x06author\x18\x03 \x01(\tR\x06author\x12.\n" +
-	"\x04time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\"\xc4\x01\n" +
-	"\x11DeployCommitRange\x12!\n" +
-	"\fbase_release\x18\x01 \x01(\tR\vbaseRelease\x12\x1f\n" +
-	"\vbase_commit\x18\x02 \x01(\tR\n" +
-	"baseCommit\x127\n" +
-	"\acommits\x18\x03 \x03(\v2\x1d.controlplane.v1.DeployCommitR\acommits\x12\x14\n" +
-	"\x05total\x18\x04 \x01(\x05R\x05total\x12\x1c\n" +
-	"\ttruncated\x18\x05 \x01(\bR\ttruncated\"Q\n" +
+	"commitTime\"Q\n" +
 	"\x0eDeployWorktree\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x17\n" +
@@ -6534,7 +6237,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x18\n" +
 	"\asubject\x18\x02 \x01(\tR\asubject\x12\x15\n" +
 	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12\x14\n" +
-	"\x05token\x18\x04 \x01(\tR\x05token\"\xad\x04\n" +
+	"\x05token\x18\x04 \x01(\tR\x05token\"\xcf\x03\n" +
 	"\fDeployBundle\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
 	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12'\n" +
@@ -6551,9 +6254,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"created_by\x18\v \x01(\tR\tcreatedBy\x129\n" +
 	"\n" +
-	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12'\n" +
-	"\x0fsnapshot_digest\x18\r \x01(\tR\x0esnapshotDigest\x123\n" +
-	"\bsnapshot\x18\x0e \x01(\v2\x17.google.protobuf.StructR\bsnapshotJ\x04\b\t\x10\n" +
+	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAtJ\x04\b\t\x10\n" +
 	"\"\xee\x04\n" +
 	"\x11DeployConvergence\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
@@ -6769,7 +6470,7 @@ func file_controlplane_v1_deploy_proto_rawDescGZIP() []byte {
 }
 
 var file_controlplane_v1_deploy_proto_enumTypes = make([]protoimpl.EnumInfo, 14)
-var file_controlplane_v1_deploy_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
+var file_controlplane_v1_deploy_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
 var file_controlplane_v1_deploy_proto_goTypes = []any{
 	(DeployTier)(0),                   // 0: controlplane.v1.DeployTier
 	(DeployEnvironmentKind)(0),        // 1: controlplane.v1.DeployEnvironmentKind
@@ -6808,162 +6509,154 @@ var file_controlplane_v1_deploy_proto_goTypes = []any{
 	(*DeployPromoteRefusal)(nil),      // 34: controlplane.v1.DeployPromoteRefusal
 	(*DeployPromotion)(nil),           // 35: controlplane.v1.DeployPromotion
 	(*DeploySourceProvenance)(nil),    // 36: controlplane.v1.DeploySourceProvenance
-	(*DeployCommit)(nil),              // 37: controlplane.v1.DeployCommit
-	(*DeployCommitRange)(nil),         // 38: controlplane.v1.DeployCommitRange
-	(*DeployWorktree)(nil),            // 39: controlplane.v1.DeployWorktree
-	(*DeploySourceAttestation)(nil),   // 40: controlplane.v1.DeploySourceAttestation
-	(*DeployBundle)(nil),              // 41: controlplane.v1.DeployBundle
-	(*DeployConvergence)(nil),         // 42: controlplane.v1.DeployConvergence
-	(*DeployLocalSession)(nil),        // 43: controlplane.v1.DeployLocalSession
-	(*DeployPlan)(nil),                // 44: controlplane.v1.DeployPlan
-	(*DeployPlanBasis)(nil),           // 45: controlplane.v1.DeployPlanBasis
-	(*DeployPlanFinding)(nil),         // 46: controlplane.v1.DeployPlanFinding
-	(*DeployLiveEnvironment)(nil),     // 47: controlplane.v1.DeployLiveEnvironment
-	(*DeployRolloutTimings)(nil),      // 48: controlplane.v1.DeployRolloutTimings
-	(*DeployDrift)(nil),               // 49: controlplane.v1.DeployDrift
-	(*DeployDriftObject)(nil),         // 50: controlplane.v1.DeployDriftObject
-	(*DeployUsageRow)(nil),            // 51: controlplane.v1.DeployUsageRow
-	(*DeployLogLine)(nil),             // 52: controlplane.v1.DeployLogLine
-	(*DeployEnvironmentInternal)(nil), // 53: controlplane.v1.DeployEnvironmentInternal
-	(*DeployDeploymentInternal)(nil),  // 54: controlplane.v1.DeployDeploymentInternal
-	nil,                               // 55: controlplane.v1.DeployPromotion.ResolvedArtifactsEntry
-	nil,                               // 56: controlplane.v1.DeployPromotion.ResolvedSourcesEntry
-	(*timestamppb.Timestamp)(nil),     // 57: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),           // 58: google.protobuf.Struct
+	(*DeployWorktree)(nil),            // 37: controlplane.v1.DeployWorktree
+	(*DeploySourceAttestation)(nil),   // 38: controlplane.v1.DeploySourceAttestation
+	(*DeployBundle)(nil),              // 39: controlplane.v1.DeployBundle
+	(*DeployConvergence)(nil),         // 40: controlplane.v1.DeployConvergence
+	(*DeployLocalSession)(nil),        // 41: controlplane.v1.DeployLocalSession
+	(*DeployPlan)(nil),                // 42: controlplane.v1.DeployPlan
+	(*DeployPlanBasis)(nil),           // 43: controlplane.v1.DeployPlanBasis
+	(*DeployPlanFinding)(nil),         // 44: controlplane.v1.DeployPlanFinding
+	(*DeployLiveEnvironment)(nil),     // 45: controlplane.v1.DeployLiveEnvironment
+	(*DeployRolloutTimings)(nil),      // 46: controlplane.v1.DeployRolloutTimings
+	(*DeployDrift)(nil),               // 47: controlplane.v1.DeployDrift
+	(*DeployDriftObject)(nil),         // 48: controlplane.v1.DeployDriftObject
+	(*DeployUsageRow)(nil),            // 49: controlplane.v1.DeployUsageRow
+	(*DeployLogLine)(nil),             // 50: controlplane.v1.DeployLogLine
+	(*DeployEnvironmentInternal)(nil), // 51: controlplane.v1.DeployEnvironmentInternal
+	(*DeployDeploymentInternal)(nil),  // 52: controlplane.v1.DeployDeploymentInternal
+	nil,                               // 53: controlplane.v1.DeployPromotion.ResolvedArtifactsEntry
+	nil,                               // 54: controlplane.v1.DeployPromotion.ResolvedSourcesEntry
+	(*timestamppb.Timestamp)(nil),     // 55: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),           // 56: google.protobuf.Struct
 }
 var file_controlplane_v1_deploy_proto_depIdxs = []int32{
-	57,  // 0: controlplane.v1.DeployTenant.created_at:type_name -> google.protobuf.Timestamp
-	57,  // 1: controlplane.v1.DeployTenant.updated_at:type_name -> google.protobuf.Timestamp
+	55,  // 0: controlplane.v1.DeployTenant.created_at:type_name -> google.protobuf.Timestamp
+	55,  // 1: controlplane.v1.DeployTenant.updated_at:type_name -> google.protobuf.Timestamp
 	1,   // 2: controlplane.v1.DeployEnvironment.kind:type_name -> controlplane.v1.DeployEnvironmentKind
-	57,  // 3: controlplane.v1.DeployEnvironment.expires_at:type_name -> google.protobuf.Timestamp
-	57,  // 4: controlplane.v1.DeployEnvironment.created_at:type_name -> google.protobuf.Timestamp
-	57,  // 5: controlplane.v1.DeployEnvironment.updated_at:type_name -> google.protobuf.Timestamp
+	55,  // 3: controlplane.v1.DeployEnvironment.expires_at:type_name -> google.protobuf.Timestamp
+	55,  // 4: controlplane.v1.DeployEnvironment.created_at:type_name -> google.protobuf.Timestamp
+	55,  // 5: controlplane.v1.DeployEnvironment.updated_at:type_name -> google.protobuf.Timestamp
 	6,   // 6: controlplane.v1.DeployEnvironment.reconcile_policy:type_name -> controlplane.v1.DeployReconcilePolicy
-	58,  // 7: controlplane.v1.DeployEnvironment.declared_shape:type_name -> google.protobuf.Struct
+	56,  // 7: controlplane.v1.DeployEnvironment.declared_shape:type_name -> google.protobuf.Struct
 	36,  // 8: controlplane.v1.DeployEnvironment.declared_by:type_name -> controlplane.v1.DeploySourceProvenance
-	57,  // 9: controlplane.v1.DeployEnvironment.declared_at:type_name -> google.protobuf.Timestamp
+	55,  // 9: controlplane.v1.DeployEnvironment.declared_at:type_name -> google.protobuf.Timestamp
 	30,  // 10: controlplane.v1.DeployEnvironment.holds:type_name -> controlplane.v1.DeployHold
 	1,   // 11: controlplane.v1.DeployEnvironmentSpec.kind:type_name -> controlplane.v1.DeployEnvironmentKind
-	57,  // 12: controlplane.v1.DeployEnvironmentSpec.expires_at:type_name -> google.protobuf.Timestamp
+	55,  // 12: controlplane.v1.DeployEnvironmentSpec.expires_at:type_name -> google.protobuf.Timestamp
 	6,   // 13: controlplane.v1.DeployEnvironmentSpec.reconcile_policy:type_name -> controlplane.v1.DeployReconcilePolicy
-	58,  // 14: controlplane.v1.DeployEnvironmentSpec.shape:type_name -> google.protobuf.Struct
+	56,  // 14: controlplane.v1.DeployEnvironmentSpec.shape:type_name -> google.protobuf.Struct
 	36,  // 15: controlplane.v1.DeployEnvironmentSpec.declared_by:type_name -> controlplane.v1.DeploySourceProvenance
 	17,  // 16: controlplane.v1.DeployEnvironmentSpec.cluster_bindings:type_name -> controlplane.v1.ClusterBinding
 	3,   // 17: controlplane.v1.DeployObservedStateDetail.state:type_name -> controlplane.v1.DeployObservedState
-	57,  // 18: controlplane.v1.DeployObservedStateDetail.reconciled_at:type_name -> google.protobuf.Timestamp
-	57,  // 19: controlplane.v1.DeployObservedStateDetail.stable_since:type_name -> google.protobuf.Timestamp
+	55,  // 18: controlplane.v1.DeployObservedStateDetail.reconciled_at:type_name -> google.protobuf.Timestamp
+	55,  // 19: controlplane.v1.DeployObservedStateDetail.stable_since:type_name -> google.protobuf.Timestamp
 	20,  // 20: controlplane.v1.DeployObservedStateDetail.domains:type_name -> controlplane.v1.DeployCustomDomainStatus
 	19,  // 21: controlplane.v1.DeployObservedStateDetail.backup:type_name -> controlplane.v1.DeployBackupStatus
 	4,   // 22: controlplane.v1.DeployObservedStateDetail.suspend_reason:type_name -> controlplane.v1.DeploySuspendReason
-	57,  // 23: controlplane.v1.DeployBackupStatus.last_successful_backup:type_name -> google.protobuf.Timestamp
-	57,  // 24: controlplane.v1.DeployBackupStatus.earliest_restorable_time:type_name -> google.protobuf.Timestamp
+	55,  // 23: controlplane.v1.DeployBackupStatus.last_successful_backup:type_name -> google.protobuf.Timestamp
+	55,  // 24: controlplane.v1.DeployBackupStatus.earliest_restorable_time:type_name -> google.protobuf.Timestamp
 	10,  // 25: controlplane.v1.DeployCustomDomainStatus.state:type_name -> controlplane.v1.DeployCustomDomainState
 	21,  // 26: controlplane.v1.DeployCustomDomainStatus.required_records:type_name -> controlplane.v1.DeployDnsRecord
-	57,  // 27: controlplane.v1.DeployCustomDomainStatus.live_since:type_name -> google.protobuf.Timestamp
+	55,  // 27: controlplane.v1.DeployCustomDomainStatus.live_since:type_name -> google.protobuf.Timestamp
 	10,  // 28: controlplane.v1.Domain.state:type_name -> controlplane.v1.DeployCustomDomainState
 	11,  // 29: controlplane.v1.Domain.source:type_name -> controlplane.v1.DomainSource
 	21,  // 30: controlplane.v1.Domain.required_records:type_name -> controlplane.v1.DeployDnsRecord
-	57,  // 31: controlplane.v1.Domain.verified_at:type_name -> google.protobuf.Timestamp
-	57,  // 32: controlplane.v1.Domain.live_since:type_name -> google.protobuf.Timestamp
-	57,  // 33: controlplane.v1.Domain.created_at:type_name -> google.protobuf.Timestamp
-	57,  // 34: controlplane.v1.Domain.updated_at:type_name -> google.protobuf.Timestamp
+	55,  // 31: controlplane.v1.Domain.verified_at:type_name -> google.protobuf.Timestamp
+	55,  // 32: controlplane.v1.Domain.live_since:type_name -> google.protobuf.Timestamp
+	55,  // 33: controlplane.v1.Domain.created_at:type_name -> google.protobuf.Timestamp
+	55,  // 34: controlplane.v1.Domain.updated_at:type_name -> google.protobuf.Timestamp
 	23,  // 35: controlplane.v1.Domain.binding:type_name -> controlplane.v1.DomainBinding
-	57,  // 36: controlplane.v1.DomainBinding.created_at:type_name -> google.protobuf.Timestamp
-	57,  // 37: controlplane.v1.DomainBinding.updated_at:type_name -> google.protobuf.Timestamp
+	55,  // 36: controlplane.v1.DomainBinding.created_at:type_name -> google.protobuf.Timestamp
+	55,  // 37: controlplane.v1.DomainBinding.updated_at:type_name -> google.protobuf.Timestamp
 	0,   // 38: controlplane.v1.Deployment.tier:type_name -> controlplane.v1.DeployTier
 	18,  // 39: controlplane.v1.Deployment.observed:type_name -> controlplane.v1.DeployObservedStateDetail
-	57,  // 40: controlplane.v1.Deployment.created_at:type_name -> google.protobuf.Timestamp
-	57,  // 41: controlplane.v1.Deployment.updated_at:type_name -> google.protobuf.Timestamp
-	58,  // 42: controlplane.v1.Deployment.spec:type_name -> google.protobuf.Struct
+	55,  // 40: controlplane.v1.Deployment.created_at:type_name -> google.protobuf.Timestamp
+	55,  // 41: controlplane.v1.Deployment.updated_at:type_name -> google.protobuf.Timestamp
+	56,  // 42: controlplane.v1.Deployment.spec:type_name -> google.protobuf.Struct
 	2,   // 43: controlplane.v1.Deployment.run_state:type_name -> controlplane.v1.DeployRunState
 	26,  // 44: controlplane.v1.DeployArtifact.source:type_name -> controlplane.v1.DeploySource
 	25,  // 45: controlplane.v1.DeployRelease.artifacts:type_name -> controlplane.v1.DeployArtifact
-	57,  // 46: controlplane.v1.DeployRelease.created_at:type_name -> google.protobuf.Timestamp
+	55,  // 46: controlplane.v1.DeployRelease.created_at:type_name -> google.protobuf.Timestamp
 	29,  // 47: controlplane.v1.DeployRelease.run:type_name -> controlplane.v1.DeployRun
 	36,  // 48: controlplane.v1.DeployRelease.provenance:type_name -> controlplane.v1.DeploySourceProvenance
-	58,  // 49: controlplane.v1.DeployRelease.snapshot_release:type_name -> google.protobuf.Struct
-	38,  // 50: controlplane.v1.DeployRelease.commits:type_name -> controlplane.v1.DeployCommitRange
-	57,  // 51: controlplane.v1.DeployGate.started_at:type_name -> google.protobuf.Timestamp
-	57,  // 52: controlplane.v1.DeployGate.finished_at:type_name -> google.protobuf.Timestamp
-	58,  // 53: controlplane.v1.DeployGate.details:type_name -> google.protobuf.Struct
-	57,  // 54: controlplane.v1.DeployGate.recorded_at:type_name -> google.protobuf.Timestamp
-	13,  // 55: controlplane.v1.DeployHold.kind:type_name -> controlplane.v1.DeployHoldKind
-	57,  // 56: controlplane.v1.DeployHold.held_since:type_name -> google.protobuf.Timestamp
-	3,   // 57: controlplane.v1.DeployWorkloadRollout.observed_state:type_name -> controlplane.v1.DeployObservedState
-	5,   // 58: controlplane.v1.DeployWorkloadRollout.verdict:type_name -> controlplane.v1.DeployVerdict
-	12,  // 59: controlplane.v1.DeployWorkloadRollout.phase:type_name -> controlplane.v1.DeployRolloutPhase
-	57,  // 60: controlplane.v1.DeployWorkloadRollout.stable_since:type_name -> google.protobuf.Timestamp
-	57,  // 61: controlplane.v1.DeployWorkloadRollout.converged_at:type_name -> google.protobuf.Timestamp
-	35,  // 62: controlplane.v1.DeployRollout.promotion:type_name -> controlplane.v1.DeployPromotion
-	12,  // 63: controlplane.v1.DeployRollout.phase:type_name -> controlplane.v1.DeployRolloutPhase
-	31,  // 64: controlplane.v1.DeployRollout.workloads:type_name -> controlplane.v1.DeployWorkloadRollout
-	31,  // 65: controlplane.v1.DeployRollout.unpinned:type_name -> controlplane.v1.DeployWorkloadRollout
-	57,  // 66: controlplane.v1.DeployRollout.started_at:type_name -> google.protobuf.Timestamp
-	57,  // 67: controlplane.v1.DeployRollout.finished_at:type_name -> google.protobuf.Timestamp
-	30,  // 68: controlplane.v1.DeployRollout.holds:type_name -> controlplane.v1.DeployHold
-	57,  // 69: controlplane.v1.DeployRunStage.started_at:type_name -> google.protobuf.Timestamp
-	57,  // 70: controlplane.v1.DeployRunStage.finished_at:type_name -> google.protobuf.Timestamp
-	35,  // 71: controlplane.v1.DeployPromoteRefusal.actual_current:type_name -> controlplane.v1.DeployPromotion
-	12,  // 72: controlplane.v1.DeployPromoteRefusal.actual_phase:type_name -> controlplane.v1.DeployRolloutPhase
-	44,  // 73: controlplane.v1.DeployPromoteRefusal.current_plan:type_name -> controlplane.v1.DeployPlan
-	7,   // 74: controlplane.v1.DeployPromotion.kind:type_name -> controlplane.v1.DeployPromotionKind
-	55,  // 75: controlplane.v1.DeployPromotion.resolved_artifacts:type_name -> controlplane.v1.DeployPromotion.ResolvedArtifactsEntry
-	28,  // 76: controlplane.v1.DeployPromotion.gates:type_name -> controlplane.v1.DeployGate
-	57,  // 77: controlplane.v1.DeployPromotion.created_at:type_name -> google.protobuf.Timestamp
-	56,  // 78: controlplane.v1.DeployPromotion.resolved_sources:type_name -> controlplane.v1.DeployPromotion.ResolvedSourcesEntry
-	28,  // 79: controlplane.v1.DeployPromotion.recorded_gates:type_name -> controlplane.v1.DeployGate
-	29,  // 80: controlplane.v1.DeployPromotion.run:type_name -> controlplane.v1.DeployRun
-	36,  // 81: controlplane.v1.DeployPromotion.release_provenance:type_name -> controlplane.v1.DeploySourceProvenance
-	58,  // 82: controlplane.v1.DeployPromotion.snapshot:type_name -> google.protobuf.Struct
-	39,  // 83: controlplane.v1.DeploySourceProvenance.worktree:type_name -> controlplane.v1.DeployWorktree
-	40,  // 84: controlplane.v1.DeploySourceProvenance.attestation:type_name -> controlplane.v1.DeploySourceAttestation
-	57,  // 85: controlplane.v1.DeploySourceProvenance.commit_time:type_name -> google.protobuf.Timestamp
-	57,  // 86: controlplane.v1.DeployCommit.time:type_name -> google.protobuf.Timestamp
-	37,  // 87: controlplane.v1.DeployCommitRange.commits:type_name -> controlplane.v1.DeployCommit
-	58,  // 88: controlplane.v1.DeployBundle.shape:type_name -> google.protobuf.Struct
-	36,  // 89: controlplane.v1.DeployBundle.provenance:type_name -> controlplane.v1.DeploySourceProvenance
-	29,  // 90: controlplane.v1.DeployBundle.run:type_name -> controlplane.v1.DeployRun
-	57,  // 91: controlplane.v1.DeployBundle.created_at:type_name -> google.protobuf.Timestamp
-	58,  // 92: controlplane.v1.DeployBundle.snapshot:type_name -> google.protobuf.Struct
-	57,  // 93: controlplane.v1.DeployConvergence.observed_at:type_name -> google.protobuf.Timestamp
-	57,  // 94: controlplane.v1.DeployConvergence.created_at:type_name -> google.protobuf.Timestamp
-	57,  // 95: controlplane.v1.DeployConvergence.last_observed_at:type_name -> google.protobuf.Timestamp
-	57,  // 96: controlplane.v1.DeployConvergence.first_attempt_at:type_name -> google.protobuf.Timestamp
-	57,  // 97: controlplane.v1.DeployConvergence.healthy_at:type_name -> google.protobuf.Timestamp
-	39,  // 98: controlplane.v1.DeployLocalSession.worktree:type_name -> controlplane.v1.DeployWorktree
-	36,  // 99: controlplane.v1.DeployLocalSession.provenance:type_name -> controlplane.v1.DeploySourceProvenance
-	57,  // 100: controlplane.v1.DeployLocalSession.started_at:type_name -> google.protobuf.Timestamp
-	57,  // 101: controlplane.v1.DeployLocalSession.last_seen_at:type_name -> google.protobuf.Timestamp
-	57,  // 102: controlplane.v1.DeployLocalSession.stopped_at:type_name -> google.protobuf.Timestamp
-	45,  // 103: controlplane.v1.DeployPlan.live_basis:type_name -> controlplane.v1.DeployPlanBasis
-	46,  // 104: controlplane.v1.DeployPlan.findings:type_name -> controlplane.v1.DeployPlanFinding
-	57,  // 105: controlplane.v1.DeployPlan.computed_at:type_name -> google.protobuf.Timestamp
-	15,  // 106: controlplane.v1.DeployLiveEnvironment.environment:type_name -> controlplane.v1.DeployEnvironment
-	35,  // 107: controlplane.v1.DeployLiveEnvironment.current_promotion:type_name -> controlplane.v1.DeployPromotion
-	27,  // 108: controlplane.v1.DeployLiveEnvironment.current_release:type_name -> controlplane.v1.DeployRelease
-	41,  // 109: controlplane.v1.DeployLiveEnvironment.current_bundle:type_name -> controlplane.v1.DeployBundle
-	12,  // 110: controlplane.v1.DeployLiveEnvironment.phase:type_name -> controlplane.v1.DeployRolloutPhase
-	43,  // 111: controlplane.v1.DeployLiveEnvironment.sessions:type_name -> controlplane.v1.DeployLocalSession
-	49,  // 112: controlplane.v1.DeployLiveEnvironment.drift:type_name -> controlplane.v1.DeployDrift
-	42,  // 113: controlplane.v1.DeployLiveEnvironment.trees:type_name -> controlplane.v1.DeployConvergence
-	48,  // 114: controlplane.v1.DeployLiveEnvironment.timings:type_name -> controlplane.v1.DeployRolloutTimings
-	57,  // 115: controlplane.v1.DeployRolloutTimings.promoted_at:type_name -> google.protobuf.Timestamp
-	57,  // 116: controlplane.v1.DeployRolloutTimings.first_tree_started_at:type_name -> google.protobuf.Timestamp
-	57,  // 117: controlplane.v1.DeployRolloutTimings.all_trees_started_at:type_name -> google.protobuf.Timestamp
-	57,  // 118: controlplane.v1.DeployRolloutTimings.healthy_at:type_name -> google.protobuf.Timestamp
-	57,  // 119: controlplane.v1.DeployDrift.observed_at:type_name -> google.protobuf.Timestamp
-	50,  // 120: controlplane.v1.DeployDrift.objects:type_name -> controlplane.v1.DeployDriftObject
-	8,   // 121: controlplane.v1.DeployUsageRow.resource_kind:type_name -> controlplane.v1.DeployResourceKind
-	57,  // 122: controlplane.v1.DeployUsageRow.window_start:type_name -> google.protobuf.Timestamp
-	57,  // 123: controlplane.v1.DeployUsageRow.window_end:type_name -> google.protobuf.Timestamp
-	57,  // 124: controlplane.v1.DeployLogLine.timestamp:type_name -> google.protobuf.Timestamp
-	57,  // 125: controlplane.v1.DeployDeploymentInternal.last_reconcile_attempt_at:type_name -> google.protobuf.Timestamp
-	26,  // 126: controlplane.v1.DeployPromotion.ResolvedSourcesEntry.value:type_name -> controlplane.v1.DeploySource
-	127, // [127:127] is the sub-list for method output_type
-	127, // [127:127] is the sub-list for method input_type
-	127, // [127:127] is the sub-list for extension type_name
-	127, // [127:127] is the sub-list for extension extendee
-	0,   // [0:127] is the sub-list for field type_name
+	55,  // 49: controlplane.v1.DeployGate.started_at:type_name -> google.protobuf.Timestamp
+	55,  // 50: controlplane.v1.DeployGate.finished_at:type_name -> google.protobuf.Timestamp
+	56,  // 51: controlplane.v1.DeployGate.details:type_name -> google.protobuf.Struct
+	55,  // 52: controlplane.v1.DeployGate.recorded_at:type_name -> google.protobuf.Timestamp
+	13,  // 53: controlplane.v1.DeployHold.kind:type_name -> controlplane.v1.DeployHoldKind
+	55,  // 54: controlplane.v1.DeployHold.held_since:type_name -> google.protobuf.Timestamp
+	3,   // 55: controlplane.v1.DeployWorkloadRollout.observed_state:type_name -> controlplane.v1.DeployObservedState
+	5,   // 56: controlplane.v1.DeployWorkloadRollout.verdict:type_name -> controlplane.v1.DeployVerdict
+	12,  // 57: controlplane.v1.DeployWorkloadRollout.phase:type_name -> controlplane.v1.DeployRolloutPhase
+	55,  // 58: controlplane.v1.DeployWorkloadRollout.stable_since:type_name -> google.protobuf.Timestamp
+	55,  // 59: controlplane.v1.DeployWorkloadRollout.converged_at:type_name -> google.protobuf.Timestamp
+	35,  // 60: controlplane.v1.DeployRollout.promotion:type_name -> controlplane.v1.DeployPromotion
+	12,  // 61: controlplane.v1.DeployRollout.phase:type_name -> controlplane.v1.DeployRolloutPhase
+	31,  // 62: controlplane.v1.DeployRollout.workloads:type_name -> controlplane.v1.DeployWorkloadRollout
+	31,  // 63: controlplane.v1.DeployRollout.unpinned:type_name -> controlplane.v1.DeployWorkloadRollout
+	55,  // 64: controlplane.v1.DeployRollout.started_at:type_name -> google.protobuf.Timestamp
+	55,  // 65: controlplane.v1.DeployRollout.finished_at:type_name -> google.protobuf.Timestamp
+	30,  // 66: controlplane.v1.DeployRollout.holds:type_name -> controlplane.v1.DeployHold
+	55,  // 67: controlplane.v1.DeployRunStage.started_at:type_name -> google.protobuf.Timestamp
+	55,  // 68: controlplane.v1.DeployRunStage.finished_at:type_name -> google.protobuf.Timestamp
+	35,  // 69: controlplane.v1.DeployPromoteRefusal.actual_current:type_name -> controlplane.v1.DeployPromotion
+	12,  // 70: controlplane.v1.DeployPromoteRefusal.actual_phase:type_name -> controlplane.v1.DeployRolloutPhase
+	42,  // 71: controlplane.v1.DeployPromoteRefusal.current_plan:type_name -> controlplane.v1.DeployPlan
+	7,   // 72: controlplane.v1.DeployPromotion.kind:type_name -> controlplane.v1.DeployPromotionKind
+	53,  // 73: controlplane.v1.DeployPromotion.resolved_artifacts:type_name -> controlplane.v1.DeployPromotion.ResolvedArtifactsEntry
+	28,  // 74: controlplane.v1.DeployPromotion.gates:type_name -> controlplane.v1.DeployGate
+	55,  // 75: controlplane.v1.DeployPromotion.created_at:type_name -> google.protobuf.Timestamp
+	54,  // 76: controlplane.v1.DeployPromotion.resolved_sources:type_name -> controlplane.v1.DeployPromotion.ResolvedSourcesEntry
+	28,  // 77: controlplane.v1.DeployPromotion.recorded_gates:type_name -> controlplane.v1.DeployGate
+	29,  // 78: controlplane.v1.DeployPromotion.run:type_name -> controlplane.v1.DeployRun
+	36,  // 79: controlplane.v1.DeployPromotion.release_provenance:type_name -> controlplane.v1.DeploySourceProvenance
+	37,  // 80: controlplane.v1.DeploySourceProvenance.worktree:type_name -> controlplane.v1.DeployWorktree
+	38,  // 81: controlplane.v1.DeploySourceProvenance.attestation:type_name -> controlplane.v1.DeploySourceAttestation
+	55,  // 82: controlplane.v1.DeploySourceProvenance.commit_time:type_name -> google.protobuf.Timestamp
+	56,  // 83: controlplane.v1.DeployBundle.shape:type_name -> google.protobuf.Struct
+	36,  // 84: controlplane.v1.DeployBundle.provenance:type_name -> controlplane.v1.DeploySourceProvenance
+	29,  // 85: controlplane.v1.DeployBundle.run:type_name -> controlplane.v1.DeployRun
+	55,  // 86: controlplane.v1.DeployBundle.created_at:type_name -> google.protobuf.Timestamp
+	55,  // 87: controlplane.v1.DeployConvergence.observed_at:type_name -> google.protobuf.Timestamp
+	55,  // 88: controlplane.v1.DeployConvergence.created_at:type_name -> google.protobuf.Timestamp
+	55,  // 89: controlplane.v1.DeployConvergence.last_observed_at:type_name -> google.protobuf.Timestamp
+	55,  // 90: controlplane.v1.DeployConvergence.first_attempt_at:type_name -> google.protobuf.Timestamp
+	55,  // 91: controlplane.v1.DeployConvergence.healthy_at:type_name -> google.protobuf.Timestamp
+	37,  // 92: controlplane.v1.DeployLocalSession.worktree:type_name -> controlplane.v1.DeployWorktree
+	36,  // 93: controlplane.v1.DeployLocalSession.provenance:type_name -> controlplane.v1.DeploySourceProvenance
+	55,  // 94: controlplane.v1.DeployLocalSession.started_at:type_name -> google.protobuf.Timestamp
+	55,  // 95: controlplane.v1.DeployLocalSession.last_seen_at:type_name -> google.protobuf.Timestamp
+	55,  // 96: controlplane.v1.DeployLocalSession.stopped_at:type_name -> google.protobuf.Timestamp
+	43,  // 97: controlplane.v1.DeployPlan.live_basis:type_name -> controlplane.v1.DeployPlanBasis
+	44,  // 98: controlplane.v1.DeployPlan.findings:type_name -> controlplane.v1.DeployPlanFinding
+	55,  // 99: controlplane.v1.DeployPlan.computed_at:type_name -> google.protobuf.Timestamp
+	15,  // 100: controlplane.v1.DeployLiveEnvironment.environment:type_name -> controlplane.v1.DeployEnvironment
+	35,  // 101: controlplane.v1.DeployLiveEnvironment.current_promotion:type_name -> controlplane.v1.DeployPromotion
+	27,  // 102: controlplane.v1.DeployLiveEnvironment.current_release:type_name -> controlplane.v1.DeployRelease
+	39,  // 103: controlplane.v1.DeployLiveEnvironment.current_bundle:type_name -> controlplane.v1.DeployBundle
+	12,  // 104: controlplane.v1.DeployLiveEnvironment.phase:type_name -> controlplane.v1.DeployRolloutPhase
+	41,  // 105: controlplane.v1.DeployLiveEnvironment.sessions:type_name -> controlplane.v1.DeployLocalSession
+	47,  // 106: controlplane.v1.DeployLiveEnvironment.drift:type_name -> controlplane.v1.DeployDrift
+	40,  // 107: controlplane.v1.DeployLiveEnvironment.trees:type_name -> controlplane.v1.DeployConvergence
+	46,  // 108: controlplane.v1.DeployLiveEnvironment.timings:type_name -> controlplane.v1.DeployRolloutTimings
+	55,  // 109: controlplane.v1.DeployRolloutTimings.promoted_at:type_name -> google.protobuf.Timestamp
+	55,  // 110: controlplane.v1.DeployRolloutTimings.first_tree_started_at:type_name -> google.protobuf.Timestamp
+	55,  // 111: controlplane.v1.DeployRolloutTimings.all_trees_started_at:type_name -> google.protobuf.Timestamp
+	55,  // 112: controlplane.v1.DeployRolloutTimings.healthy_at:type_name -> google.protobuf.Timestamp
+	55,  // 113: controlplane.v1.DeployDrift.observed_at:type_name -> google.protobuf.Timestamp
+	48,  // 114: controlplane.v1.DeployDrift.objects:type_name -> controlplane.v1.DeployDriftObject
+	8,   // 115: controlplane.v1.DeployUsageRow.resource_kind:type_name -> controlplane.v1.DeployResourceKind
+	55,  // 116: controlplane.v1.DeployUsageRow.window_start:type_name -> google.protobuf.Timestamp
+	55,  // 117: controlplane.v1.DeployUsageRow.window_end:type_name -> google.protobuf.Timestamp
+	55,  // 118: controlplane.v1.DeployLogLine.timestamp:type_name -> google.protobuf.Timestamp
+	55,  // 119: controlplane.v1.DeployDeploymentInternal.last_reconcile_attempt_at:type_name -> google.protobuf.Timestamp
+	26,  // 120: controlplane.v1.DeployPromotion.ResolvedSourcesEntry.value:type_name -> controlplane.v1.DeploySource
+	121, // [121:121] is the sub-list for method output_type
+	121, // [121:121] is the sub-list for method input_type
+	121, // [121:121] is the sub-list for extension type_name
+	121, // [121:121] is the sub-list for extension extendee
+	0,   // [0:121] is the sub-list for field type_name
 }
 
 func init() { file_controlplane_v1_deploy_proto_init() }
@@ -6978,7 +6671,7 @@ func file_controlplane_v1_deploy_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_controlplane_v1_deploy_proto_rawDesc), len(file_controlplane_v1_deploy_proto_rawDesc)),
 			NumEnums:      14,
-			NumMessages:   43,
+			NumMessages:   41,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

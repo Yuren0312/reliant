@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/react'
-import { settingsGrpc, type SignInOutcome } from '@/api/settings-grpc'
+import { settingsGrpc } from '@/api/settings-grpc'
 import { startOAuthViaDaemon } from '@/api/daemon-grpc'
 import { startOAuthViaLocalServer } from '@/lib/oauth-local'
 import { startOAuthViaDesktop, supportsLocalProviderOAuth } from '@/lib/oauth-desktop'
@@ -36,7 +36,6 @@ export type CodexOAuthResult =
   | {
       ok: true
       message: string
-      outcome: SignInOutcome
     }
   | {
       ok: false
@@ -50,8 +49,6 @@ export interface CodexOAuthOptions {
   clientId?: string
   scope?: string
   statePrefix?: string
-  /** Reconnect target: the account that is signing in again. Empty = add / sign in. */
-  accountId?: string
 }
 
 const errorResult = (errorCode: CodexOAuthErrorCode, message: string): CodexOAuthResult => ({
@@ -143,11 +140,10 @@ export async function runCodexOAuthFlow(options: CodexOAuthOptions = {}): Promis
       authCode,
       codeVerifier,
       oauthResp.redirectUri,
-      options.accountId,
     )
 
     if (result.success) {
-      return { ok: true, message: result.message || 'Codex connected successfully', outcome: result }
+      return { ok: true, message: result.message || 'Codex connected successfully' }
     }
     Sentry.captureMessage('Codex OAuth token exchange failed', {
       tags: { component: 'oauth', provider: 'codex' },

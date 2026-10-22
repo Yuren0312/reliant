@@ -5,12 +5,10 @@ import { chatGrpc } from "./chat-grpc";
 import type { Chat, Message } from "../types/chat";
 import { ChatState, MessageRole } from "../types/chat";
 import { settingsGrpc, type Preferences } from "./settings-grpc";
-import { providerAccountGrpc } from "./provider-account-grpc";
 import { mcpGrpc } from "./mcp-grpc";
 import { toolCallGrpc } from "./tool-call-grpc";
 import { logger } from "../lib/logger";
 import { HiddenItemType } from "../gen/reliant/v1/settings_pb";
-import type { ProviderPolicy_OnLimit } from "../gen/reliant/v1/chat_pb";
 import type {
   StartChatRequest,
   UpdateChatRequest,
@@ -345,8 +343,8 @@ export const api = {
       return chatGrpc.pause(chatId);
     },
 
-    retryUsageLimitWait: async (chatId: string, useModel?: string) => {
-      return chatGrpc.retryUsageLimitWait(chatId, useModel);
+    retryUsageLimitWait: async (chatId: string) => {
+      return chatGrpc.retryUsageLimitWait(chatId);
     },
     resume: async (chatId: string) => {
       return chatGrpc.resume(chatId);
@@ -383,21 +381,8 @@ export const api = {
       return chatGrpc.compact(chatId, threadId);
     },
 
-    updateWorkflowParams: async (
-      chatId: string,
-      params: Record<string, unknown>,
-      threadId?: string,
-      expectedVersion?: bigint,
-    ) => {
-      return chatGrpc.updateWorkflowParams(chatId, params, threadId, expectedVersion);
-    },
-
-    updateProviderPolicy: async (
-      chatId: string,
-      providerPolicy: { onLimit: ProviderPolicy_OnLimit; fallbackModel?: string },
-      expectedVersion?: bigint,
-    ) => {
-      return chatGrpc.updateProviderPolicy(chatId, providerPolicy, expectedVersion);
+    updateWorkflowParams: async (chatId: string, params: Record<string, unknown>, threadId?: string) => {
+      return chatGrpc.updateWorkflowParams(chatId, params, threadId);
     },
 
     sendMessage: async (
@@ -563,8 +548,8 @@ export const api = {
       return providers.map((p) => ({
         provider: p.provider,
         configured: p.configured,
-        hasApiKey: p.configured,
-        accountCount: p.account_count,
+        hasApiKey: p.has_api_key,
+        maskedKey: p.masked_key,
         displayName: p.display_name,
       }));
     },
@@ -579,34 +564,21 @@ export const api = {
       return {
         provider: found.provider,
         configured: found.configured,
-        hasApiKey: found.configured,
-        accountCount: found.account_count,
+        hasApiKey: found.has_api_key,
+        maskedKey: found.masked_key,
         displayName: found.display_name,
       };
     },
 
-    /**
-     * Adds an API key as a new account of the provider (ProviderAccountService.AddProviderAPIKey,
-     * which validates it first). The same key twice is one account. Rejects an empty key: removing
-     * a provider is {@link deleteProvider}.
-     */
     updateProvider: async (provider: string, apiKey: string) => {
-      if (!apiKey.trim()) {
-        throw new Error('An API key is required.');
-      }
-      const { created } = await providerAccountGrpc.addApiKey(provider, apiKey.trim());
-      return { message: created ? 'API key added' : 'That key is already connected' };
+      const result = await settingsGrpc.updateProviderAPIKey(provider, apiKey);
+      return { message: result.message };
     },
 
-    /** Removes every account of the provider (it becomes disconnected). */
     deleteProvider: async (provider: string) => {
-      const accounts = await providerAccountGrpc.listAccounts();
-      for (const account of accounts) {
-        if (account.provider === provider) {
-          await providerAccountGrpc.deleteAccount(account.id);
-        }
-      }
-      return { message: 'Disconnected' };
+      // Delete by setting empty API key
+      const result = await settingsGrpc.updateProviderAPIKey(provider, "");
+      return { message: result.message };
     },
 
     validateProviderAPIKey: async (provider: string, apiKey: string) => {

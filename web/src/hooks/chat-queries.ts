@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Chat } from "../api/client";
-import type { ChatSelection } from "../gen/reliant/v1/chat_pb";
 import { queryClient } from "../lib/query-client";
 import type { StartChatRequest, UpdateChatRequest } from "../types/api";
 
@@ -12,8 +11,6 @@ export const chatKeys = {
   list: (projectId?: string) => [...chatKeys.lists(), projectId] as const,
   details: () => [...chatKeys.all, "detail"] as const,
   detail: (chatId?: string) => [...chatKeys.details(), chatId] as const,
-  // The chat's server-side selection: a ChatSelection, or null when it has none.
-  selection: (chatId?: string) => [...chatKeys.detail(chatId), "selection"] as const,
   archived: () => [...chatKeys.all, "archived"] as const,
   search: (projectId: string, query: string) =>
     [...chatKeys.all, "search", projectId, query] as const,
@@ -76,26 +73,6 @@ export function patchChatCaches(
  */
 export function seedChatDetail(chat: Chat): void {
   queryClient.setQueryData(chatKeys.detail(chat.id), chat);
-  // Only a chat the server answered for carries its selection (the project
-  // list omits it), so its absence here says nothing about whether there is one.
-  if (chat.selection) {
-    setChatSelection(chat.id, chat.selection);
-  }
-}
-
-/** Install the chat's server-side selection (null: it has none) in its query. */
-export function setChatSelection(chatId: string, selection: ChatSelection | null): void {
-  queryClient.setQueryData(chatKeys.selection(chatId), selection);
-}
-
-/** The chat's cached selection: null when it has none, undefined when not loaded. */
-export function getChatSelection(chatId: string): ChatSelection | null | undefined {
-  return queryClient.getQueryData<ChatSelection | null>(chatKeys.selection(chatId));
-}
-
-/** Re-read the chat's selection from the server, e.g. after a refused stale edit. */
-export function refetchChatSelection(chatId: string): Promise<unknown> {
-  return queryClient.refetchQueries({ queryKey: chatKeys.selection(chatId), exact: true });
 }
 
 /**
@@ -228,25 +205,6 @@ export function useChat(chatId?: string) {
     queryKey: chatKeys.detail(chatId),
     queryFn: () => api.chatsV2.get(chatId!),
     enabled: !!chatId,
-  });
-}
-
-/**
- * The composer's server-side choice for a chat: model, mode, tools and every
- * other param, kept so any device, restart or branch starts from it. `null` is
- * a definite "this chat has none"; `undefined` data means not loaded yet.
- *
- * Always revalidated on mount: the cache is kept current by this device's own
- * writes and by the update stream, but a stream that was down missed nothing
- * the GetChat behind this will not repair. A read-only observer that only
- * wants what the composer already loaded passes a long `staleTime`.
- */
-export function useChatSelection(chatId?: string, options?: { staleTime?: number }) {
-  return useQuery({
-    queryKey: chatKeys.selection(chatId),
-    queryFn: async () => (await api.chatsV2.get(chatId!)).selection ?? null,
-    enabled: !!chatId,
-    staleTime: options?.staleTime ?? 0,
   });
 }
 

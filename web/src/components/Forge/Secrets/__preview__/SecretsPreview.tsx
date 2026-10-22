@@ -26,7 +26,7 @@ import type { ForgeSecretsReport } from "@/services/forge/secrets";
 import type { ManagedSecretSummary, ManagedSecretVersion } from "@/services/forge/secretStore";
 import type { SecretSurfaceMode } from "@/services/forge/secretSurface";
 
-import { ConsolePreviewShell } from "../../Console/ConsolePreviewShell";
+import { ForgeShell } from "../../ForgeShell";
 import { ManagedSecretsView } from "../ManagedSecretsView";
 import { SetSecretModal } from "../SetSecretModal";
 
@@ -188,8 +188,8 @@ export default function SecretsPreview() {
   }
 
   /*
-   * The preview renders inside the REAL shell (ConsoleShell — the same
-   * component ConsoleLayout renders), not bare.
+   * The preview renders inside the REAL shell (ForgeShell — the same component
+   * ForgeLayout renders), not bare.
    *
    * This is not decoration. A harness that drew the screen without the sidebar
    * looked exactly like the product to anyone reading a screenshot, and was
@@ -199,10 +199,11 @@ export default function SecretsPreview() {
    * discouraged.
    */
   return (
-    <ConsolePreviewShell
-      page={{ kind: "secrets" }}
-      controls={
-        <>
+    <ForgeShell
+      activePath="/forge/env/prod"
+      envs={[{ name: "dev", lifecycle: "local", source: "backend" }, { name: "prod", lifecycle: "deployed", source: "backend" }]}
+      headerContent={
+        <div className="flex flex-wrap items-center gap-3 px-4">
         <select
           data-testid="preview-case"
           value={caseId}
@@ -246,10 +247,10 @@ export default function SecretsPreview() {
         >
           Open set-secret modal
         </button>
-        </>
+        </div>
       }
     >
-      <div>
+      <div className="h-full overflow-y-auto p-6">
         <ManagedSecretsView
           env="prod"
           mode={active.mode}
@@ -280,6 +281,6 @@ export default function SecretsPreview() {
           error={null}
         />
       </div>
-    </ConsolePreviewShell>
+    </ForgeShell>
   );
 }

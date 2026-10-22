@@ -100,10 +100,9 @@ func (l *Launcher) ResolveDefaultWorkflow(ctx context.Context, userID string, re
 	return workflow.DefaultWorkflow
 }
 
-// BuildWorkflowInputs constructs a run's inputs from presets, the send's params
-// and the workflow's schema defaults, with no stored chat selection under the
-// send. Order: presets (base), then params (override), then schema defaults for
-// anything still missing. A chat's own runs go through BuildChatWorkflowInputs.
+// BuildWorkflowInputs constructs the initial workflow input data by applying presets,
+// user params, and workflow schema defaults. Order: presets (base), then user params (override),
+// then apply workflow defaults for any missing inputs (e.g. model default from YAML).
 func (l *Launcher) BuildWorkflowInputs(
 	ctx context.Context,
 	userID string,
@@ -113,128 +112,36 @@ func (l *Launcher) BuildWorkflowInputs(
 	selectedPresets map[string]string,
 	userParams map[string]*structpb.Value,
 ) map[string]interface{} {
-	return l.buildWorkflowInputs(ctx, userID, checkout, projectID, workflowName, selectedPresets, nil, paramValues(userParams))
-}
-
-// BuildChatWorkflowInputs is BuildWorkflowInputs for a chat's run, with the
-// chat's stored selection layered between the presets and the send's params:
-// presets -> chat selection -> this send -> schema defaults.
-//
-// The selection is what the composer chose and the server kept, so a run built
-// from a send that carries no params (another device, a restart, a branch, an
-// API message) still runs the model and mode the chat was set to.
-func (l *Launcher) BuildChatWorkflowInputs(
-	ctx context.Context,
-	userID string,
-	chat *db.Chat,
-	workflowName string,
-	selectedPresets map[string]string,
-	userParams map[string]*structpb.Value,
-) map[string]interface{} {
-	return l.buildChatWorkflowInputs(ctx, userID, chat, workflowName, selectedPresets, paramValues(userParams))
-}
-
-func (l *Launcher) buildChatWorkflowInputs(
-	ctx context.Context,
-	userID string,
-	chat *db.Chat,
-	workflowName string,
-	selectedPresets map[string]string,
-	send map[string]interface{},
-) map[string]interface{} {
-	inputs := l.buildWorkflowInputs(ctx, userID, l.GetEffectiveCheckout(ctx, chat), chat.ProjectID, workflowName,
-		selectedPresets, l.ChatSelectionParams(ctx, chat.ID, workflowName), send)
-	l.injectProviderPolicy(ctx, userID, chat.ID, inputs)
-	return inputs
-}
-
-// ChatSelectionParams is the chat's stored selection params for workflowName,
-// nil when it has none, was made for another workflow, or cannot be read. A
-// failed read must not fail the send: the run then builds from presets and the
-// send, which is what every send did before the selection existed.
-func (l *Launcher) ChatSelectionParams(ctx context.Context, chatID, workflowName string) map[string]interface{} {
-	if chatID == "" {
-		return nil
-	}
-	sel, err := l.repo.GetChatSelection(ctx, chatID)
-	if err != nil {
-		logging.Warn("Could not read the chat's selection; building the run without it", "chatID", chatID, "error", err)
-		return nil
-	}
-	if sel == nil || sel.WorkflowName != workflowName || len(sel.Params) == 0 {
-		return nil
-	}
-	return sel.Params
-}
-
-// SelectionPatch is a request's params as the patch to store on the chat's
-// selection: plain values, engine-injected keys dropped, model selectors
-// normalized to {id, ...} the way a run's inputs are, so the composer reads
-// back the shape it sends.
-func (l *Launcher) SelectionPatch(ctx context.Context, userID, projectID, workflowName string, params map[string]*structpb.Value) map[string]interface{} {
-	patch := make(map[string]interface{}, len(params))
-	for key, value := range paramValues(params) {
-		if workflow.RuntimeInjectedInputs[key] {
-			continue
-		}
-		patch[key] = value
-	}
-	if len(patch) > 0 {
-		if protoInputs := l.LoadWorkflowInputsForBuild(ctx, userID, workflowName, projectID); len(protoInputs) > 0 {
-			NormalizeModelInputs(patch, protoInputs)
-		}
-	}
-	return patch
-}
-
-// paramValues is a request's params as plain values.
-func paramValues(params map[string]*structpb.Value) map[string]interface{} {
-	out := make(map[string]interface{}, len(params))
-	for key, value := range params {
-		out[key] = value.AsInterface()
-	}
-	return out
-}
-
-// buildWorkflowInputs is the one precedence function: presets, then the chat's
-// selection, then the send, then schema defaults. The selection and the send
-// combine first, the send replacing the selection key by key and whole (a model
-// selector is a value, not a bag of fields to merge), and only then go over the
-// presets, which is where a group's params merge with the preset's.
-func (l *Launcher) buildWorkflowInputs(
-	ctx context.Context,
-	userID string,
-	checkout Checkout,
-	projectID string,
-	workflowName string,
-	selectedPresets map[string]string,
-	selection map[string]interface{},
-	send map[string]interface{},
-) map[string]interface{} {
 	initialData := make(map[string]interface{})
 
-	userParamKeys := make([]string, 0, len(send))
-	for k := range send {
+	// Apply selected presets first (preset params are the base, user params override)
+	userParamKeys := make([]string, 0, len(userParams))
+	for k := range userParams {
 		userParamKeys = append(userParamKeys, k)
 	}
-	logging.Debug("[buildWorkflowInputs] Starting", "workflow", workflowName, "selectedPresets", selectedPresets, "userParamKeys", userParamKeys, "selectionKeys", len(selection))
+	logging.Debug("[buildWorkflowInputs] Starting", "workflow", workflowName, "selectedPresets", selectedPresets, "userParamKeys", userParamKeys)
 	if len(selectedPresets) > 0 {
-		initialData = l.applyPresets(ctx, userID, projectID, initialData, selectedPresets)
+		loadPreset := l.createDBPresetLoaderFull(ctx, userID, projectID)
+		for groupName, presetName := range selectedPresets {
+			if presetName == "" {
+				continue
+			}
+			p, err := loadPreset(presetName)
+			if err != nil {
+				logging.Warn("Failed to load preset", "preset", presetName, "group", groupName, "error", err)
+				continue
+			}
+			initialData = preset.ApplyToInputs(p, initialData, groupName)
+			logging.Debug("[buildWorkflowInputs] Applied preset", "preset", presetName, "group", groupName, "tools_after_preset", initialData["tools"])
+		}
 	} else {
 		logging.Debug("[buildWorkflowInputs] No presets selected")
 	}
 
-	// The chat's selection and the send's params override preset values.
+	// User-provided params override preset values.
 	// Params must use nested structure (e.g., {"agent": {"model": "..."}}).
 	// Flat keys like "agent.model" are rejected by validation.
-	layered := make(map[string]interface{}, len(selection)+len(send))
-	for key, value := range selection {
-		layered[key] = value
-	}
-	for key, value := range send {
-		layered[key] = value
-	}
-	for key, v := range layered {
+	for key, value := range userParams {
 		// An engine-injected input is the engine's to set: validation skips
 		// these keys precisely because the engine writes them, so taking one
 		// from a request would let a client claim a session daemon, a trigger
@@ -243,6 +150,7 @@ func (l *Launcher) buildWorkflowInputs(
 			logging.Warn("[buildWorkflowInputs] Ignoring a client param that names an engine-injected input", "key", key)
 			continue
 		}
+		v := value.AsInterface()
 
 		// If value is a map, merge it with existing group map.
 		if mapVal, ok := v.(map[string]interface{}); ok {
@@ -251,7 +159,7 @@ func (l *Launcher) buildWorkflowInputs(
 					existing[nestedKey] = nestedValue
 				}
 			} else {
-				initialData[key] = cloneMap(mapVal)
+				initialData[key] = mapVal
 			}
 		} else {
 			initialData[key] = v
@@ -290,83 +198,34 @@ func (l *Launcher) buildWorkflowInputs(
 	return initialData
 }
 
-// applyPresets applies each selected preset's params onto data, in place of
-// the map it returns.
-func (l *Launcher) applyPresets(ctx context.Context, userID, projectID string, data map[string]interface{}, selectedPresets map[string]string) map[string]interface{} {
-	loadPreset := l.createDBPresetLoaderFull(ctx, userID, projectID)
-	for groupName, presetName := range selectedPresets {
-		if presetName == "" {
-			continue
-		}
-		p, err := loadPreset(presetName)
-		if err != nil {
-			logging.Warn("Failed to load preset", "preset", presetName, "group", groupName, "error", err)
-			continue
-		}
-		data = preset.ApplyToInputs(p, data, groupName)
-		logging.Debug("[buildWorkflowInputs] Applied preset", "preset", presetName, "group", groupName, "tools_after_preset", data["tools"])
-	}
-	return data
-}
-
-// cloneMap copies a param map one level deep, so the group-merge above writes
-// into the run's inputs and never into the stored selection it came from.
-func cloneMap(in map[string]interface{}) map[string]interface{} {
-	out := make(map[string]interface{}, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
-}
-
-// BuildStateUpdateForActiveWorkflow builds the update to signal onto a chat's
-// already-running workflow: exactly the keys the request sent, normalized — and
-// a preset's own params underneath them only when the request CHANGED the
-// chat's presets (changedPresets non-empty).
-//
-// It is an edit, not a launch. A key the client did not send is unchanged to
-// the run, never "fill from preset and schema default": the old expansion
-// turned a Mode toggle into a reset of the live run's model to the preset's
-// tier, and a sub-agent's edit into an overwrite of its tools and skills with
-// the root's preset.
-//
-// The runtime replaces a signalled key whole, so a value here is the key's
-// complete new value.
+// BuildStateUpdateForActiveWorkflow builds the inputs to signal onto a chat's
+// already-running workflow, merging the chat's stored preset selection with
+// whatever the request supplied.
 func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 	ctx context.Context,
 	userID string,
 	chat *db.Chat,
 	workflowName string,
-	changedPresets map[string]string,
+	requestPresets map[string]string,
 	requestParams map[string]*structpb.Value,
 ) map[string]interface{} {
 	if chat == nil {
 		return map[string]interface{}{}
 	}
-	update := make(map[string]interface{})
-	if len(changedPresets) > 0 {
-		update = l.applyPresets(ctx, userID, chat.ProjectID, update, changedPresets)
-	}
-	for key, value := range paramValues(requestParams) {
-		if workflow.RuntimeInjectedInputs[key] {
-			logging.Warn("[buildStateUpdate] Ignoring a client param that names an engine-injected input", "key", key)
-			continue
-		}
-		update[key] = value
-	}
-	if protoInputs := l.LoadWorkflowInputsForBuild(ctx, userID, workflowName, chat.ProjectID); len(protoInputs) > 0 {
-		NormalizeModelInputs(update, protoInputs)
-	}
-	return update
-}
 
-// ValidateStateUpdate validates what a run would hold after update lands: the
-// chat's presets, its selection and the update over them, with schema defaults.
-// The update alone cannot be validated — a required input the chat set earlier
-// is not in it — so the signal carries the delta and the check the whole.
-func (l *Launcher) ValidateStateUpdate(ctx context.Context, userID string, chat *db.Chat, workflowName string, presets map[string]string, update map[string]interface{}) []error {
-	effective := l.buildChatWorkflowInputs(ctx, userID, chat, workflowName, presets, update)
-	return l.ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, effective)
+	effectivePresets := make(map[string]string)
+	for key, value := range chat.SelectedPresets {
+		if value != "" {
+			effectivePresets[key] = value
+		}
+	}
+	for key, value := range requestPresets {
+		if value != "" {
+			effectivePresets[key] = value
+		}
+	}
+
+	return l.BuildWorkflowInputs(ctx, userID, l.GetEffectiveCheckout(ctx, chat), chat.ProjectID, workflowName, effectivePresets, requestParams)
 }
 
 // LoadWorkflowInputsForBuild loads workflow input schemas as proto types for ApplyDefaults.
