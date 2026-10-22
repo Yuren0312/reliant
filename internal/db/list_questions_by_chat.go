@@ -50,6 +50,37 @@ func (r *Repo) ListQuestionsByChat(ctx context.Context, chatID string) ([]*Quest
 	return store.ListQuestionsByChat(ctx, r.ORM(), chatID)
 }
 
+// ListPendingQuestionsByChat returns every PENDING question in a chat, oldest
+// first. Each carries its thread_id: a chat with several spawned threads can
+// have one question parked per thread, and only the thread id says which
+// agent a question belongs to.
+//
+// GetPendingQuestionByChatID (newest from ANY thread, LIMIT 1) cannot stand in
+// for this: in prod a spawn's question disappeared behind a sibling's newer
+// one, and the user's reply went to the spawn's mailbox, which a thread parked
+// on a question never drains.
+func (r *Repo) ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+
+	return store.ListPendingQuestionsByChat(ctx, r.ORM(), chatID)
+}
+
+// ListAnswerablePendingQuestionsByChat is ListPendingQuestionsByChat minus the
+// questions nobody can answer any more: those whose asking run completed or
+// was cancelled (the inbox's rule; see store.ListAnswerablePendingQuestionsByChat).
+// It is what the UI shows — a dead sub-agent's leftover question would
+// otherwise sit in the composer of its thread, replacing the input the user
+// needs to message it.
+func (r *Repo) ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+
+	return store.ListAnswerablePendingQuestionsByChat(ctx, r.ORM(), chatID)
+}
+
 // PendingQuestionsByThread returns each thread's newest PENDING question for a
 // chat, keyed by the question's thread id — which is exactly a workflow row's
 // `thread` column, so the result joins straight onto workflow rows.
@@ -68,11 +99,7 @@ func (r *Repo) ListQuestionsByChat(ctx context.Context, chatID string) ([]*Quest
 //
 // Read-only: one SELECT per chat, no mutation.
 func (r *Repo) PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*Question, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-
-	pending, err := store.ListPendingQuestionsByChat(ctx, r.ORM(), chatID)
+	pending, err := r.ListPendingQuestionsByChat(ctx, chatID)
 	if err != nil {
 		return nil, err
 	}
