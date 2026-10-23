@@ -62,9 +62,6 @@ vi.mock("@/api/grpc-client", () => ({
     daemonRegistry: () => ({ clearMachineCaches: mocks.clearMachineCaches }),
   },
 }));
-vi.mock("@/api/client", () => ({
-  api: { approvals: { approve: mocks.approve, deny: mocks.deny } },
-}));
 vi.mock("@/hooks/useOnboardingQueries", () => ({
   useResumeDaemon: (callbacks: { onError?: (error: unknown) => void } = {}) => ({
     mutate: (id: string) => {
@@ -113,6 +110,14 @@ beforeEach(() => {
   mocks.resolveQuestion.mockResolvedValue({});
   setTransport(
     mockTransport({
+      "ApprovalService.Approve": (req) => {
+        const { requestId, actionTaken } = req as { requestId: string; actionTaken?: string };
+        return mocks.approve(requestId, actionTaken);
+      },
+      "ApprovalService.Deny": (req) => {
+        const { requestId, denialReason, actionTaken } = req as { requestId: string; denialReason?: string; actionTaken?: string };
+        return mocks.deny(requestId, denialReason, actionTaken);
+      },
       "QuestionService.ResolveQuestion": (req) => {
         const { questionId, action, responseData } = req as { questionId: string; action: string; responseData?: string };
         return mocks.resolveQuestion(questionId, action, responseData);

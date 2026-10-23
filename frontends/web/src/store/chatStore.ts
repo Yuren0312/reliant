@@ -1,10 +1,5 @@
 import { create } from "zustand";
-import {
-  api,
-  type Chat,
-  type Message,
-  type ToolApprovalRequest,
-} from "../api/client";
+import { api, type Chat, type Message } from "../api/client";
 import type { ContentBlock } from "../types/chat";
 import {
   MessageRole,
@@ -12,7 +7,7 @@ import {
   StreamingState,
   ChatState,
 } from "../gen/reliant/v1/chat_pb";
-import { ApprovalStatus, ApprovalType } from "../gen/reliant/v1/approval_pb";
+import { ApprovalStatus, ApprovalType, type Approval } from "../gen/reliant/v1/approval_pb";
 import type { ToolResultsByCallId } from "../lib/messageProcessor";
 import {
   foldToolResultImages,
@@ -118,10 +113,8 @@ import { isDaemonConnectingError } from "../lib/daemon-errors";
 import { sendWithDaemonWait } from "../lib/daemon-retry";
 import { sendOnExistingChat } from "../lib/chatSendRouting";
 import { QUEUED_SENDER_KIND_HUMAN } from "../api/chat-grpc";
-import {
-  approvalKeys,
-  upsertApprovalInCache,
-} from "../hooks/approval-queries";
+import { approvalsFromCache, upsertApprovalInCache, type ApprovalFields } from "../hooks/approval-queries";
+import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
 import {
   chatKeys,
@@ -190,12 +183,12 @@ function toApprovalStatus(
  * update actually has: a status-only update (approved, denied) is merged over
  * the cached approval and must not blank its title.
  */
-function approvalFields(update: ToolApprovalUpdate): Partial<ToolApprovalRequest> {
-  const fields: Partial<ToolApprovalRequest> = {};
+function approvalFields(update: ToolApprovalUpdate): ApprovalFields {
+  const fields: ApprovalFields = {};
   if (update.title) fields.title = update.title;
   // ApprovalCreate sends the name; Approve/Deny echo the row's enum value.
   const kind: unknown = update.approval_type;
-  if (kind === "workflow_step" || kind === ApprovalType.WORKFLOW_STEP) fields.approval_type = ApprovalType.WORKFLOW_STEP;
+  if (kind === "workflow_step" || kind === ApprovalType.WORKFLOW_STEP) fields.approvalType = ApprovalType.WORKFLOW_STEP;
   return fields;
 }
 
@@ -818,7 +811,7 @@ export interface ToolCallState {
   childWorkflowId?: string;
   error?: string;
   // Unified approval state
-  approval?: ToolApprovalRequest;
+  approval?: Approval;
   needsApproval?: boolean;
   // Tool call data from messages (for UI rendering)
   toolCall?: {
@@ -1061,7 +1054,7 @@ interface ChatStoreState {
           | "completed"
           | "denied"
           | "failed";
-        approval?: ToolApprovalRequest;
+        approval?: Approval;
         needsApproval?: boolean;
       }
     | undefined;
@@ -2011,9 +2004,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // This is critical - without this, each ChatMessage parses JSON on every render
       // which causes 800ms+ delays when switching to chats with many messages
       const approvals =
-        queryClient.getQueryData<ToolApprovalRequest[]>(
-          approvalKeys.list(chatId),
-        ) ?? [];
+        approvalsFromCache(chatId);
       // Build the normalized tool-result index from the loaded TOOL messages,
       // merged over anything already known for this chat, so processMessage can
       // resolve call→result the same way the live stream path does. (Loaded
@@ -2154,9 +2145,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // inserted rows render from cached parses instead of parsing during the
       // scroll that requested them.
       const approvals =
-        queryClient.getQueryData<ToolApprovalRequest[]>(
-          approvalKeys.list(chatId),
-        ) ?? [];
+        approvalsFromCache(chatId);
       for (const message of older) {
         getProcessedMessage(message, pageToolResults, approvals);
       }
@@ -3403,19 +3392,17 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // client-side select, so one list upsert updates both. The patch IS
         // the sync; no invalidate/refetch round-trip.
         allApprovals.forEach((approvalUpdate) => {
-          const approval: ToolApprovalRequest = {
+          upsertApprovalInCache(chatId, {
             id: approvalUpdate.id,
-            chat_id: approvalUpdate.chat_id,
-            content_block_id:
-              approvalUpdate.content_block_id || approvalUpdate.entity_id,
+            chatId: approvalUpdate.chat_id,
+            entityId: approvalUpdate.content_block_id || approvalUpdate.entity_id,
             status: toApprovalStatus(approvalUpdate.status),
-            denial_reason: approvalUpdate.denial_reason,
-            created_at: approvalUpdate.created_at,
-            responded_at: approvalUpdate.responded_at,
-            action_taken: approvalUpdate.action_taken, // Which action was clicked
+            denialReason: approvalUpdate.denial_reason,
+            createdAt: approvalUpdate.created_at,
+            resolvedAt: approvalUpdate.responded_at,
+            actionTaken: approvalUpdate.action_taken, // Which action was clicked
             ...approvalFields(approvalUpdate),
-          };
-          upsertApprovalInCache(chatId, approval);
+          });
         });
 
         // Question updates patch the chat's pending-question list (server
@@ -3451,9 +3438,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // (including this batch's upserts above) to embed approval status
         // into processed tool calls.
         const approvalsForProcessing =
-          queryClient.getQueryData<ToolApprovalRequest[]>(
-            approvalKeys.list(chatId),
-          ) ?? [];
+          approvalsFromCache(chatId);
         messagesToProcess.forEach((message) => {
           const processed = getProcessedMessage(
             message,
@@ -3758,7 +3743,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Clear thread activity in the dedicated store
     useThreadActivityStore.getState().clearThreads(chatId);
     // Approvals are server data in the RQ cache; reconcile from the server.
-    queryClient.invalidateQueries({ queryKey: approvalKeys.list(chatId) });
+    queryClient.invalidateQueries({ queryKey: approvalServiceKeys.all });
 
     // Mark any incomplete messages as finished in the RQ message cache.
     patchMessagesCache(chatId, (msgs) =>

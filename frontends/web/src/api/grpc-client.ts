@@ -21,7 +21,6 @@ import { TaskService } from "../gen/reliant/v1/task_pb";
 import { CatalogService } from "../gen/reliant/v1/catalog_pb";
 import { ProjectService } from "../gen/reliant/v1/project_pb";
 import { WorktreeService } from "../gen/reliant/v1/worktree_pb";
-import { ApprovalService } from "../gen/reliant/v1/approval_pb";
 import { ChatService } from "../gen/reliant/v1/chat_pb";
 import { MessageService } from "../gen/reliant/v1/message_pb";
 import { SettingsService } from "../gen/reliant/v1/settings_pb";
@@ -71,7 +70,6 @@ export const createTaskClient = (): Client<typeof TaskService> => connectClient(
 export const createCatalogClient = (): Client<typeof CatalogService> => connectClient(CatalogService);
 export const createProjectClient = (): Client<typeof ProjectService> => connectClient(ProjectService);
 export const createWorktreeClient = (): Client<typeof WorktreeService> => connectClient(WorktreeService);
-export const createApprovalClient = (): Client<typeof ApprovalService> => connectClient(ApprovalService);
 export const createChatClient = (): Client<typeof ChatService> => connectClient(ChatService);
 export const createMessageClient = (): Client<typeof MessageService> => connectClient(MessageService);
 export const createSettingsClient = (): Client<typeof SettingsService> => connectClient(SettingsService);
@@ -111,7 +109,6 @@ export const getTaskClient = createTaskClient;
 export const getCatalogClient = createCatalogClient;
 export const getProjectClient = createProjectClient;
 export const getWorktreeClient = createWorktreeClient;
-export const getApprovalClient = createApprovalClient;
 export const getChatClient = createChatClient;
 export const getMessageClient = createMessageClient;
 export const getSettingsClient = createSettingsClient;
@@ -140,7 +137,6 @@ export const grpcClient = {
   catalog: getCatalogClient,
   project: getProjectClient,
   worktree: getWorktreeClient,
-  approval: getApprovalClient,
   chat: getChatClient,
   message: getMessageClient,
   settings: getSettingsClient,

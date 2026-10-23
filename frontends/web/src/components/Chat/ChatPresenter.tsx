@@ -36,7 +36,8 @@ import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { InterleavedTimeline } from "./thread-views";
 import { WorkflowViewerPanel } from "../workflow/WorkflowViewerPanel";
 
-import type { Message, ToolApprovalRequest } from "../../api/client";
+import type { Message } from "../../api/client";
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import type {
   ErrorUpdate,
   InfoUpdate,
@@ -64,7 +65,7 @@ import { TakeOverRunBar, useAdoptOnSend } from "./TakeOverRunBar";
 interface ChatPresenterProps {
   // Message data
   messages: Message[];
-  approvals: ToolApprovalRequest[];
+  approvals: Approval[];
   errorEvents: ErrorUpdate[];
   infoEvents: InfoUpdate[];
   runOutputs: RunOutputUpdate[];
@@ -72,7 +73,7 @@ interface ChatPresenterProps {
   // Chat state
   chatId: string | null;
   isChatBusy: boolean;
-  pendingApprovals: ToolApprovalRequest[];
+  pendingApprovals: Approval[];
   connectionStatus: string;
 
   // Chat metadata

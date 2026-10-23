@@ -39,6 +39,11 @@ import { sendWithDaemonWait } from "../../lib/daemon-retry";
 import { newClientMessageId } from "../../lib/pendingSends";
 import { isTimelineCatchingUp } from "../../lib/timelineCatchUp";
 
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
+
+/** One empty list, so a chat with no approvals keeps a stable reference. */
+const NO_APPROVALS: Approval[] = [];
+
 // Stable empty references
 const EMPTY_ARRAY: never[] = [];
 
@@ -86,14 +91,14 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
     return msgs;
   }, [storeMessages, streamingMessages]);
 
-  const { data: approvals = [] } = useApprovals(chatId);
+  const approvals = useApprovals(chatId).data?.approvals ?? NO_APPROVALS;
   const errorEvents = useErrorEvents(chatId);
   const infoEvents = useInfoEvents(chatId);
   const runOutputs = useRunOutputs(chatId);
   const currentChat = useChat(chatId);
   const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
   const isChatBusy = useIsChatRunning(chatId);
-  const { data: pendingApprovals = [] } = usePendingApprovals(chatId);
+  const pendingApprovals = usePendingApprovals(chatId).data?.approvals ?? NO_APPROVALS;
   const isChatSyncing = useIsChatSyncing(chatId);
   const timelineCatchingUp = isTimelineCatchingUp({
     syncPending: isChatSyncing,

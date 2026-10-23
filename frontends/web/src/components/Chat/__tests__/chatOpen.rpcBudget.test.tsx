@@ -68,7 +68,13 @@ function spyRpcs() {
   const chat = (id: string) => ({ id, projectId: PROJECT_ID, title: id });
   // Services on their generated hooks are counted where they reach the wire.
   const listPendingQuestions = vi.fn(() => ({ questions: [] }));
-  setTransport(mockTransport({ "QuestionService.ListPendingQuestions": listPendingQuestions }));
+  const listApprovalsByChat = vi.fn(() => ({ approvals: [] }));
+  setTransport(
+    mockTransport({
+      "QuestionService.ListPendingQuestions": listPendingQuestions,
+      "ApprovalService.ListApprovalsByChat": listApprovalsByChat,
+    }),
+  );
   counters = [
     { name: "GetChat", spy: vi.spyOn(api.chatsV2, "get").mockImplementation(async (id: string) => chat(id) as never) },
     {
@@ -80,7 +86,7 @@ function spyRpcs() {
         oldestSeq: 0,
       } as never),
     },
-    { name: "ListApprovalsByChat", spy: vi.spyOn(api.approvals, "listByChat").mockResolvedValue([] as never) },
+    { name: "ListApprovalsByChat", spy: listApprovalsByChat },
     { name: "ListPendingQuestions", spy: listPendingQuestions },
     {
       name: "GetWorkflowExecutions",
