@@ -386,11 +386,6 @@ func (s *Service) forgeDispatch(
 		}
 		return forgeReportReply{}, "", remapForgeDispatchError(commandType, err)
 	}
-	// forge ran but could not authenticate to the control plane: that is
-	// this rpc's error, with forge's reason (authz_refusal.go), not a report.
-	if refusal := forgeAuthzRefusal(commandType, reply); refusal != nil {
-		return forgeReportReply{}, "", refusal
-	}
 	return reply, "", nil
 }
 
@@ -1218,6 +1213,11 @@ func (s *Service) PlanDeploy(
 		ctx, userID, "forge.deploy_plan", payload, forgeDeployPlanTimeoutMs, true)
 	if err != nil {
 		return nil, err
+	}
+	// forge ran but could not authenticate to the control plane: that is
+	// this rpc's error, with forge's reason (authz_refusal.go), not a report.
+	if refusal := forgeAuthzRefusal("forge.deploy_plan", reply); refusal != nil {
+		return nil, refusal
 	}
 
 	return connect.NewResponse(&reliantv1.PlanForgeDeployResponse{

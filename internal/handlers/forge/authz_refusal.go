@@ -20,6 +20,10 @@ import (
 // (13-p9-frontend-plan.md §7.1 #7), rather than as a report document the panel
 // would render as a deploy that failed.
 //
+// Only PlanDeploy reads it: the deploy panel's pre-plan call
+// (frontends/web/src/services/forge/deployAuthz.ts). The other forge rpcs keep
+// returning forge's document whatever it says.
+//
 // forge reports it in its --json document as error_reason / error_scopes
 // beside `error` (forge's json_error_facts.go). This is the only place this
 // layer reads forge's document, and it reads only those fields: everything
@@ -43,12 +47,12 @@ type forgeErrorFacts struct {
 // refused authentication or authority by the control plane, and nil for every
 // other report — including every other failure, which stays data.
 //
-// The message is the sentence a client read before forge reported the reason:
-// forge exited without a document, and the daemon relayed its stderr as
+// The message keeps the shape a client read before forge emitted a document for
+// this failure: forge exited without one, and the daemon relayed its stderr as
 // "forge command failed: exit N: …", which the shared mapper prefixed with the
-// command. Desktop builds from before the reason still match on the words
-// inside it ("no control-plane credential", "permissions do not include"),
-// which are forge's and the control plane's own and are carried through.
+// command. forge's own error text now stands where its stderr excerpt did, and
+// it carries the words desktop builds from before the reason match on ("no
+// control-plane credential", "permissions do not include").
 //
 // The code is never Unauthenticated, whatever the control plane said: on a
 // reliant rpc that code means "your Reliant session is invalid", and the web
