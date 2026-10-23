@@ -493,14 +493,6 @@ func (r *runner) webSteps(pl *Plan) []step {
 	return []step{{name: "web", dir: web, argv: append([]string{"npx", "vitest", "run"}, pl.Web.Tests...)}}
 }
 
-func setOf(l []string) map[string]bool {
-	out := map[string]bool{}
-	for _, s := range l {
-		out[s] = true
-	}
-	return out
-}
-
 func (r *runner) run(ctx context.Context, pl *Plan, enabled map[lane]bool) int {
 	steps := r.steps(pl, enabled)
 	if len(steps) == 0 {
