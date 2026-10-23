@@ -245,18 +245,13 @@ const streamingBuffers = new Map<string, StreamingBuffer>();
 // open for them. That's intentional: the user owns those billing
 // relationships, not us.
 
-const DEFAULT_RELIANT_UPGRADE_URL = "/billing/plans";
-
 // Single-fire guard: a burst of error events (one per workflow retry attempt
 // before the workflow gives up) opens exactly one modal, not N. Mirrors the
 // upgradeInterceptor pattern in api/grpc-client.ts. Reset when the modal
 // closes so a later quota hit in a different chat still surfaces a modal.
 let _reliantManagedQuotaModalInFlight = false;
 
-function openReliantManagedQuotaModal(
-  errorMessage: string,
-  upgradeUrl: string,
-): void {
+function openReliantManagedQuotaModal(errorMessage: string): void {
   if (_reliantManagedQuotaModalInFlight) return;
   // Don't reopen if the modal is already up (e.g. a fresh chat hits the same
   // wall while the previous chat's modal is still showing).
@@ -278,7 +273,7 @@ function openReliantManagedQuotaModal(
     // This path has NO headers to read: the error reaches us as a
     // Temporal-serialized marker string in the chat-error stream, so unlike
     // the Connect path (api/upgradeInterceptor.ts, which forwards the server's
-    // X-Reliant-Reason verbatim) the reason has to be supplied here.
+    // reason verbatim) the reason has to be supplied here.
     //
     // It used to claim `free_tier_global_budget` — the service-wide operator
     // cap — on the grounds of matching the enforcement path's copy. That was
@@ -292,7 +287,6 @@ function openReliantManagedQuotaModal(
     // the genuine cause was the global cap the user sees that text too.
     reason: "reliant_credit_exhausted",
     message: cleanMessage,
-    upgradeUrl,
   });
   const unsub = useModalStore.subscribe((s) => {
     if (s.activeModal !== "upgrade-required") {
@@ -329,9 +323,7 @@ function routeChatErrorMarker(
       // Modal is a LIVE side-effect — skip on snapshot replays so switching
       // back into the chat doesn't re-pop the modal.
       if (!isSnapshot) {
-        const upgradeUrl =
-          marker.payload.trim() || DEFAULT_RELIANT_UPGRADE_URL;
-        openReliantManagedQuotaModal(errorUpdate.error_message, upgradeUrl);
+        openReliantManagedQuotaModal(errorUpdate.error_message);
       }
       // Note: the quota modal helper strips the marker for its OWN displayed
       // copy via stripChatMarker, but the underlying chat-error event still
@@ -1186,14 +1178,9 @@ function withdrawFromQueueStrip(chatId: string, thread: string, rowId: string): 
 }
 
 // Shared by startChat and startExistingChat: home the chat the server returned,
-// flip activity to RUNNING and track the send. The optimistic first message is
+// flip activity to RUNNING. The optimistic first message is
 // each caller's job, because the two must write it at different times.
-function applyFirstSend(
-  chat: Chat,
-  projectId: string,
-  firstMessage: string,
-  attachmentIds: string[] | undefined,
-): void {
+function applyFirstSend(chat: Chat, projectId: string): void {
   const chatId = chat.id;
 
   // Home the new chat into the React Query caches immediately so both
@@ -1209,13 +1196,6 @@ function applyFirstSend(
   // Optimistically mark as RUNNING so the thinking indicator shows immediately
   // The backend will confirm via CHAT_ACTIVITY_CHANGED event shortly
   useActivityStore.getState().setActivity(chatId, ChatActivity.RUNNING);
-
-  trackEvent("message_sent", {
-    chatId,
-    contentLength: firstMessage.length,
-    hasAttachments: (attachmentIds?.length ?? 0) > 0,
-    isFirstInChat: true,
-  });
 }
 
 export const useChatStore = create<ChatStoreState>((set, get) => ({
@@ -1363,7 +1343,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
     endAttempt(attemptKey);
 
-    applyFirstSend(chat, projectId, firstMessage, attachmentIds);
+    applyFirstSend(chat, projectId);
     // Safe to seed after the request: a brand-new chat has no id until
     // StartChat returns, so nothing is subscribed to it yet and no echo can
     // beat this write. It replaces the empty list initChatState seeded.
@@ -1438,7 +1418,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
     sendPayloads.delete(clientMessageId);
 
-    applyFirstSend(chat, chat.projectId, firstMessage, attachmentIds);
+    applyFirstSend(chat, chat.projectId);
     return chat;
   },
 
@@ -1873,17 +1853,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       }
 
       logger.debug("Message sent successfully", { chatId: chatId.slice(0, 8) });
-
-      const existingMessages = getMessagesFromCache(chatId);
-      const isFirstInChat = existingMessages.filter(
-        (m) => m.role === MessageRole.USER && !m.id.startsWith("optimistic-"),
-      ).length === 0;
-      trackEvent("message_sent", {
-        chatId,
-        contentLength: content.length,
-        hasAttachments: (attachmentIds?.length ?? 0) > 0,
-        isFirstInChat,
-      });
 
       // Note: Optimistic user message will be replaced when the real message arrives via WebSocket
       // The hasRealUserMessage check in the WebSocket handler handles this automatically
