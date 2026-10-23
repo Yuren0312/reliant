@@ -212,7 +212,7 @@ async function start(): Promise<boolean> {
     // frontend build id when it builds the bundle. It names these bytes, so
     // it is the same in every environment the build is promoted to, and the
     // runtime config (per environment) is the wrong home for it.
-    // forge:lint-disable-next-line forgeconv-frontend-process-env -- a build stamp, not deployment config
+    // forge:lint-disable-next-line forgeconv-frontend-process-env: a build stamp, not deployment config
     appVersion: import.meta.env.VITE_APP_VERSION as string | undefined,
     prerelease,
     buildVersion,
