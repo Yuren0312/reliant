@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import { Button } from "../ui/Button";
 import { ExternalLink } from "lucide-react";
 import { FormError, FormField } from "../forge-ui/form";
@@ -263,7 +263,7 @@ export function MCPSetupWizard({
 
   return (
     <Modal
-      isOpen={true}
+      open={true}
       onClose={onClose}
       size="lg"
       title={`${mode === "install" ? "Install" : "Edit"} ${server.displayName}`}

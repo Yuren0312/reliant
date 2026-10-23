@@ -5,9 +5,9 @@
  * Written against reliant's own ui/Modal first (what its 56 call sites relied
  * on), then run against forge-ui/modal before those sites moved to it (R5 S2,
  * research/forge-migration/13-p9-frontend-plan.md §6). Each gap forge's modal
- * had was fixed IN FORGE rather than worked around here; ui/Modal's own gaps
- * are listed in GAPS and asserted as failing, so the list stays honest — a
- * gap that closes turns its `it.fails` red.
+ * had was fixed IN FORGE (forge#1227) rather than worked around here. An
+ * implementation's known gaps are asserted as failing (`gaps`), so the list
+ * stays honest — a gap that closes turns its `it.fails` red.
  *
  * The dispatcher cases mount the app's real keyboard dispatcher the way
  * useAppKeyboardShortcuts does (one capture-phase listener on document), so
@@ -19,7 +19,6 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState, type ReactNode } from "react";
 
 import ForgeModal from "../modal";
-import { Modal as ReliantModal } from "../../ui/Modal";
 import { ImagePreviewModal } from "../../Chat/ImagePreviewModal";
 import { defaultShortcuts } from "../../../store/shortcutsData.generated";
 import { parseBinding } from "../../../lib/keyboard/chord";
@@ -45,19 +44,11 @@ interface Impl {
 }
 
 const IMPLS: Impl[] = [
-  {
-    name: "reliant ui/Modal",
-    Dialog: ({ open, ...rest }) => <ReliantModal isOpen={open} size="md" {...rest} />,
-    gaps: new Set([
-      // It saves <body> as the opener when the opener unmounted in the same
-      // render, then "restores" focus to <body> instead of falling back.
-      "falls back when the opener is gone",
-      "traps Tab inside the dialog",
-      "leaves Escape to an inner control that handled it",
-      "closes only the top dialog when two are stacked",
-      "keeps the page locked after a stacked dialog closes",
-    ]),
-  },
+  // reliant's ui/Modal ran here too until R5 S2 moved its 56 call sites onto
+  // forge's and deleted it. Its gaps, for the record: no Tab trap; both of two
+  // stacked dialogs closed on Escape; an Escape an inner control had handled
+  // still closed it; a stacked dialog closing unlocked the page; it "restored"
+  // focus to <body> when the opener unmounted in the same render.
   {
     name: "forge-ui/modal",
     Dialog: (props) => <ForgeModal size="md" fallbackFocus={fallback} {...props} />,
@@ -187,12 +178,7 @@ describe.each(IMPLS)("$name", ({ Dialog, gaps }) => {
     render(<Form onClose={onClose} />);
     fireEvent.click(screen.getByLabelText("Name"));
     expect(onClose).not.toHaveBeenCalled();
-    // forge's scrim is the role="presentation" wrapper; ui/Modal's is an
-    // aria-hidden sibling of the panel inside its dialog root.
-    const scrim =
-      document.querySelector<HTMLElement>('[role="presentation"]') ??
-      screen.getByRole("dialog").querySelector<HTMLElement>(':scope > [aria-hidden="true"]');
-    fireEvent.click(scrim!);
+    fireEvent.click(document.querySelector<HTMLElement>('[role="presentation"]')!);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -230,8 +216,6 @@ describe.each(IMPLS)("$name", ({ Dialog, gaps }) => {
     fireEvent.click(opener);
     expect(document.activeElement).toBe(screen.getByLabelText("field"));
     press("Escape");
-    // ui/Modal restores on the next frame.
-    await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(document.activeElement).toBe(opener);
   });
 

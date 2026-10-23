@@ -18,12 +18,12 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 
 import { Button } from "../ui/Button";
-import { Modal } from "../ui/Modal";
 import { RowMenu } from "../workflows/RowMenu";
 import { MultiSelectFilter } from "../workflows/FilterMenu";
 import { FormError, FormField } from "./form";
 import Input from "./input";
 import Label from "./label";
+import Modal from "./modal";
 import Textarea from "./textarea";
 import ToggleSwitch from "./toggle_switch";
 
@@ -140,7 +140,7 @@ export function S2Modal() {
         Open dialog
       </button>
       <Modal
-        isOpen={open}
+        open={open}
         onClose={() => setOpen(false)}
         title="Add custom MCP server"
         size="md"

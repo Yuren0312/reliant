@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Modal } from "../ui/Modal";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
 import { Button } from "../ui/Button";
 import Input from "../forge-ui/input";
 import Textarea from "../forge-ui/textarea";
@@ -115,7 +116,8 @@ export function PRDialog({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
+      fallbackFocus={focusChatInput}
       onClose={onClose}
       title="Create Pull Request"
       size="md"

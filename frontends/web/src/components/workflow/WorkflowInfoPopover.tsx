@@ -1,4 +1,4 @@
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import Textarea from "../forge-ui/textarea";
 import { Calendar, Lock } from "lucide-react";
 
@@ -50,7 +50,7 @@ export function WorkflowInfoPopover({
   const isEditable = !!onChange;
   const slugChanged = !!savedSlug && slug !== savedSlug;
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Workflow Info" size="sm">
+    <Modal open={isOpen} onClose={onClose} title="Workflow Info" size="sm">
       <div className="space-y-4">
         <div className="space-y-1.5">
           <label htmlFor="workflow-info-title" className="block text-sm font-medium text-muted-foreground">

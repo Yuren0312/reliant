@@ -22,7 +22,7 @@ import DropdownMenu from "@/components/forge-ui/dropdown_menu";
 import { FormField } from "@/components/forge-ui/form";
 import Input from "@/components/forge-ui/input";
 import Label from "@/components/forge-ui/label";
-import { Modal } from "@/components/ui/Modal";
+import Modal from "@/components/forge-ui/modal";
 import { useDeleteEnvironment, useSetEnvironmentRunState } from "@/hooks/forge-queries";
 import { cloudErrorDetail, type CloudEnvStatus } from "@/services/forge/cloudEnvs";
 
@@ -152,7 +152,7 @@ export function StopEnvironmentDialog({
   onConfirm: () => void;
 }) {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="sm" title={`Stop ${envName}?`}>
+    <Modal open={isOpen} onClose={onClose} size="sm" title={`Stop ${envName}?`}>
       <div className="space-y-4" data-testid="stop-environment-dialog">
         <p className="text-sm text-foreground">
           Compute stops. Data and URLs are kept. Start brings it back.
@@ -206,7 +206,7 @@ export function DeleteEnvironmentDialog({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={close} size="md" title={`Delete ${envName}?`}>
+    <Modal open={isOpen} onClose={close} size="md" title={`Delete ${envName}?`}>
       <div className="space-y-4" data-testid="delete-environment-dialog">
         <div className="space-y-2 text-sm text-foreground">
           <p>

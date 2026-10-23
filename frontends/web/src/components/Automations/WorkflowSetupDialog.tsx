@@ -68,7 +68,7 @@ import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";
 import { Button } from "../ui/Button";
 import { ErrorSummary, focusField, type ErrorSummaryItem } from "./ErrorSummary";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import ToggleSwitch from "../forge-ui/toggle_switch";
 import { ProtoFieldRenderer } from "../workflow/ProtoFieldRenderer";
 import { ConnectionPicker } from "../workflow/connections/ConnectionPicker";
@@ -463,7 +463,7 @@ function SetupBody({
       .filter((i) => i.scopes.length > 0)
       .flatMap((i) => (Array.isArray(flat[i.name]) ? (flat[i.name] as unknown[]).map(String) : flat[i.name] ? [String(flat[i.name])] : []));
     return (
-      <Modal isOpen onClose={onClose} size="lg" title={mode === "settings" ? `${title} in ${projectName}` : `${title} is on`}>
+      <Modal open onClose={onClose} size="lg" title={mode === "settings" ? `${title} in ${projectName}` : `${title} is on`}>
         <SetupSuccess
           workflowTitle={title}
           projectName={projectName}
@@ -549,7 +549,7 @@ function SetupBody({
   };
 
   return (
-    <Modal isOpen onClose={onClose} size="lg" title={dialogTitle} footer={footer}>
+    <Modal open onClose={onClose} size="lg" title={dialogTitle} footer={footer}>
       <TypedInputsProvider
         value={{
           connectionIds: connections,

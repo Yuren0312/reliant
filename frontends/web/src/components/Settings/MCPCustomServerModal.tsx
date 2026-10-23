@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import { Button } from "../ui/Button";
 import { FormField } from "../forge-ui/form";
 import Input from "../forge-ui/input";
@@ -414,7 +414,7 @@ export function MCPCustomServerModal({
 
   return (
     <Modal
-      isOpen={true}
+      open={true}
       onClose={onClose}
       title="Add Custom MCP Server"
       size="lg"
