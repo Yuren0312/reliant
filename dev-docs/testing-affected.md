@@ -17,7 +17,7 @@ It is the first thing to run before pushing. It does not replace the full lane
 
 | Lane | Command it runs | Selected by |
 |---|---|---|
-| Go | `go test -short -timeout 10m <pkgs>` (cached, no `-race`) | the changed package, **plus every package whose test binary imports it** |
+| Go | `go test -short -timeout 5m <pkgs>` (cached, no `-race`) | the changed package, **plus every package whose test binary imports it** |
 | web | `npx vitest run <files>` in `web/` | every vitest file that imports a changed module, transitively |
 | electron | `npm test` in `electron/` | any change under `electron/`, or a changed file an electron test names |
 | forge-generate | `make forge-generate-check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**`, `*_gen.go`, `gen/**`, `deploy/**`, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml` (`forgeInputs` in `rules.go`) |

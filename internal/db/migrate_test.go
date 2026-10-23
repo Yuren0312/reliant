@@ -116,6 +116,8 @@ func requireCurrent(t *testing.T, db *sql.DB) {
 
 // A fresh database runs the baseline, and everything after it.
 func TestMigrate_FreshDatabaseAppliesEveryMigration(t *testing.T) {
+	t.Parallel()
+
 	dsn := newEmptyTestDB(t)
 
 	res, err := migrate(dsn)
@@ -137,6 +139,8 @@ func TestMigrate_FreshDatabaseAppliesEveryMigration(t *testing.T) {
 // A migrated database is left alone: the next boot applies nothing and runs
 // no DDL.
 func TestMigrate_CurrentDatabaseIsANoOp(t *testing.T) {
+	t.Parallel()
+
 	dsn, db := newMigratedTestDB(t)
 	fp := schemaFingerprint(t, db)
 
@@ -152,6 +156,8 @@ func TestMigrate_CurrentDatabaseIsANoOp(t *testing.T) {
 // That leftover table is never read: a run over such a database is a no-op,
 // and leaves the table exactly as it was.
 func TestMigrate_AdoptedDatabaseIsANoOp(t *testing.T) {
+	t.Parallel()
+
 	dsn, db := newMigratedTestDB(t)
 	_, err := db.Exec(`CREATE TABLE goose_db_version (id serial PRIMARY KEY, version_id bigint NOT NULL, is_applied boolean NOT NULL, tstamp timestamp DEFAULT now());
 		INSERT INTO goose_db_version (version_id, is_applied) VALUES (0, true), (20261014142537, true), (20990101000000, true)`)
@@ -181,6 +187,8 @@ func TestMigrate_AdoptedDatabaseIsANoOp(t *testing.T) {
 // that upgrades the first kind, rather than left dirty by a baseline that fails
 // on its first CREATE TABLE.
 func TestMigrate_RefusesReliantTablesWithoutARecord(t *testing.T) {
+	t.Parallel()
+
 	dsn, db := newMigratedTestDB(t)
 	_, err := db.Exec(`DROP TABLE IF EXISTS schema_migrations, schema_migrations_applied, schema_migrations_compat`)
 	require.NoError(t, err)
@@ -204,6 +212,8 @@ func TestMigrate_RefusesReliantTablesWithoutARecord(t *testing.T) {
 // api-server — take turns and all succeed: exactly one builds, and the rest
 // find nothing to do.
 func TestMigrate_ConcurrentRunsTakeTurns(t *testing.T) {
+	t.Parallel()
+
 	const runners = 4
 	dsn := newEmptyTestDB(t)
 	var (
@@ -233,6 +243,8 @@ func TestMigrate_ConcurrentRunsTakeTurns(t *testing.T) {
 // PlanMigration is what `reliant db migrate status` prints. Its verdict for
 // each state must be what Migrate then does.
 func TestPlanMigration_Verdicts(t *testing.T) {
+	t.Parallel()
+
 	verdict := func(t *testing.T, db *sql.DB) (string, bool) {
 		t.Helper()
 		// The command runs it in a READ ONLY transaction; so does this.
