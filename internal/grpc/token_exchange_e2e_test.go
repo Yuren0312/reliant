@@ -42,9 +42,10 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 		userID       = "user-e2e-forge"
 		controlPlane = "https://admin.example.com"
 	)
-	// The member holds deploy and secret authority, but no domain grant.
+	// The member holds the whole deploy family, but no db:query grant.
 	cp := &fakeControlPlane{t: t, secret: secret, store: tokenauthority.NewMemory(), grants: map[string]fat.Set{
-		userID: fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite),
+		userID: fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite,
+			fat.ScopeDomainRead, fat.ScopeDomainWrite),
 	}}
 	cpSrv := httptest.NewServer(cp)
 	t.Cleanup(cpSrv.Close)
@@ -75,7 +76,9 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, parent.Scopes.Has(fat.ScopeDaemonConnect))
 	require.True(t, parent.Scopes.Has(fat.ScopeDeployWrite), "the daemon credential carries its user's deploy authority: %s", parent.Scopes)
-	require.False(t, parent.Scopes.Has(fat.ScopeDomainWrite), "a grant the member lacks must be clipped: %s", parent.Scopes)
+	for _, derived := range []fat.Scope{fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeDBQuery} {
+		require.False(t, parent.Scopes.Has(derived), "a long-lived daemon credential never carries %s: %s", derived, parent.Scopes)
+	}
 	require.False(t, parent.Scopes.Has(fat.ScopeReliantAPI), "a daemon credential stays a daemon's, not an API credential")
 	require.Equal(t, reliantv1.TokenKind_TOKEN_KIND_DAEMON, created.Msg.GetInfo().GetKind())
 	msg, err := connectDaemon(t, gatewayURL, daemonToken)
@@ -102,13 +105,13 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 	forgeToken := exchanged.Msg.GetToken()
 	require.True(t, fat.HasFormat(forgeToken))
 	require.NotEqual(t, daemonToken, forgeToken)
-	require.ElementsMatch(t, []string{"deploy:read", "deploy:write", "secret:read", "secret:write"}, exchanged.Msg.GetScopes(),
-		"granted = requested ∩ held: the domain scopes the daemon credential lacks are not granted")
+	require.ElementsMatch(t, []string{"deploy:read", "deploy:write", "secret:read", "secret:write", "domain:read", "domain:write"}, exchanged.Msg.GetScopes())
 	child, err := cp.store.Introspect(ctx, forgeToken)
 	require.NoError(t, err)
 	require.Equal(t, userID, child.ActingUserID)
 	require.Equal(t, parent.OrgID, child.OrgID)
-	require.Equal(t, fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite), child.Scopes)
+	require.Equal(t, fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite,
+		fat.ScopeDomainRead, fat.ScopeDomainWrite), child.Scopes)
 	require.NotNil(t, child.ExpiresAt)
 	require.WithinDuration(t, time.Now().Add(time.Hour), *child.ExpiresAt, time.Minute, "an exchanged token lives an hour")
 	expiresAt, err := time.Parse(time.RFC3339, exchanged.Msg.GetExpiresAt())

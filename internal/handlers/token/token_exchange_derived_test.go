@@ -3,6 +3,7 @@ package token
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 
@@ -15,14 +16,23 @@ import (
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
-// cpAuthority is tokenauthority.Memory behind control-plane's two decisions
-// that matter to a derived scope:
+// orgScopes mirrors control-plane's orggrants.OrgScopes: the permissions that
+// need a per-member grant. obs:read/obs:triage are deliberately absent (every
+// member holds them) and so are the session scopes.
+var orgScopes = []fat.Scope{
+	fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite,
+	fat.ScopeDomainRead, fat.ScopeDomainWrite, fat.ScopeClusterManage, fat.ScopeTokenRead,
+	fat.ScopeTokenWrite, fat.ScopeIdentityRead, fat.ScopeIdentityManage, fat.ScopeDBQuery,
+}
+
+// cpAuthority is tokenauthority.Memory behind control-plane's REAL semantics
+// (access_token_internal), which the first version of these tests got wrong:
 //
 //   - MintForUser acts in the user's primary org, which exists only while they
-//     are a member (members). A non-member's mint fails as control-plane's
-//     "has no organization" does.
-//   - UpdateForUser refuses an org permission the user's grants (grants) do not
-//     include, as access_token_internal.requireUserHolds does.
+//     are a member (members), and CLIPS every org scope the user's grants do
+//     not include, reporting what it minted. Nothing surviving is refused.
+//   - UpdateForUser does NOT clip: it REFUSES the whole request with
+//     permission_denied if ANY org scope in it is not held.
 //
 // Both maps are read at call time, so a test can revoke a grant or remove a
 // member between calls.
@@ -34,19 +44,42 @@ type cpAuthority struct {
 	// (not minted children), to model a caller shape Memory cannot mint.
 	asParent func(*fat.Principal)
 	parent   string
+	// mintedByCP counts MintForUser calls that reached control-plane.
+	mintedByCP int
 }
 
 func (a *cpAuthority) MintForUser(ctx context.Context, req tokenauthority.MintRequest) (tokenauthority.Minted, error) {
+	a.mintedByCP++
 	if !a.members[req.UserID] {
 		return tokenauthority.Minted{}, &accesstokenclient.RPCError{Code: "failed_precondition", Message: "user " + req.UserID + " has no organization"}
 	}
+	kept := make([]fat.Scope, 0, len(req.Scopes))
+	var clipped []fat.Scope
+	for _, sc := range req.Scopes {
+		if slices.Contains(orgScopes, sc) && !a.grants[req.UserID].Has(sc) {
+			clipped = append(clipped, sc)
+			continue
+		}
+		kept = append(kept, sc)
+	}
+	if len(kept) == 0 {
+		return tokenauthority.Minted{}, &accesstokenclient.RPCError{Code: "permission_denied",
+			Message: "your organization permissions do not include " + fat.JoinScopes(clipped)}
+	}
+	req.Scopes = kept
 	return a.Memory.MintForUser(ctx, req)
 }
 
 func (a *cpAuthority) UpdateForUser(ctx context.Context, userID, tokenID string, name *string, scopes fat.Set) (tokenauthority.TokenInfo, error) {
-	if scopes.Has(fat.ScopeDBQuery) && !a.grants[userID].Has(fat.ScopeDBQuery) {
+	var missing []fat.Scope
+	for _, sc := range orgScopes {
+		if scopes.Has(sc) && !a.grants[userID].Has(sc) {
+			missing = append(missing, sc)
+		}
+	}
+	if len(missing) > 0 {
 		return tokenauthority.TokenInfo{}, &accesstokenclient.RPCError{Code: "permission_denied",
-			Message: "your organization permissions do not include db:query"}
+			Message: "your organization permissions do not include " + fat.JoinScopes(missing)}
 	}
 	return a.Memory.UpdateForUser(ctx, userID, tokenID, name, scopes)
 }
@@ -240,25 +273,160 @@ func TestExchangeToken_DerivedScopesOnlyWhereControlPlaneClips(t *testing.T) {
 	}
 }
 
-func TestExchangeToken_UnavailableGrantCheckNeverGrantsDBQuery(t *testing.T) {
-	a := &flakyUpdate{cpAuthority: newCP([]string{"user-1"}, map[string]fat.Set{"user-1": fat.SetOf(fat.ScopeDBQuery)})}
+func TestExchangeToken_UnavailableGrantStoreNeverGrantsDBQuery(t *testing.T) {
+	a := &grantsDown{cpAuthority: newCP([]string{"user-1"}, map[string]fat.Set{"user-1": fat.SetOf(fat.ScopeDBQuery)})}
 	bearer := mintSession(t, a.cpAuthority, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
 	if resp, err := exchange(t, a, bearer, "obs:read", "db:query"); err == nil {
-		t.Fatalf("granted %v although the grant could not be checked", resp.GetScopes())
+		t.Fatalf("granted %v although control-plane could not read the grants", resp.GetScopes())
 	}
 	if n := len(liveTokens(t, a, "user-1")); n != 1 {
-		t.Fatalf("live tokens = %d, want the parent alone (the unverified token revoked)", n)
+		t.Fatalf("live tokens = %d, want the parent alone", n)
 	}
 }
 
-type flakyUpdate struct{ *cpAuthority }
+type grantsDown struct{ *cpAuthority }
 
-func (f *flakyUpdate) UpdateForUser(context.Context, string, string, *string, fat.Set) (tokenauthority.TokenInfo, error) {
-	return tokenauthority.TokenInfo{}, &accesstokenclient.RPCError{Code: "unavailable", Message: "down"}
+func (g *grantsDown) MintForUser(context.Context, tokenauthority.MintRequest) (tokenauthority.Minted, error) {
+	return tokenauthority.Minted{}, &accesstokenclient.RPCError{Code: "internal", Message: "reading organization permissions"}
+}
+
+func TestExchangeToken_MintsOnceAndNeverRevokes(t *testing.T) {
+	a := &revokeCounter{cpAuthority: newCP([]string{"user-1"}, map[string]fat.Set{"user-1": fat.SetOf(fat.ScopeDeployRead)})}
+	bearer := mintSession(t, a.cpAuthority, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
+	a.mintedByCP = 0
+	resp, err := exchange(t, a, bearer, "obs:read", "db:query")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(resp.GetScopes(), []string{"obs:read"}) {
+		t.Fatalf("granted %v", resp.GetScopes())
+	}
+	if a.mintedByCP != 1 || a.revokes != 0 || a.updates != 0 {
+		t.Fatalf("mints=%d revokes=%d updates=%d: the clip belongs to the mint, so one call and no cleanup", a.mintedByCP, a.revokes, a.updates)
+	}
+}
+
+type revokeCounter struct {
+	*cpAuthority
+	revokes, updates int
+}
+
+func (r *revokeCounter) RevokeForUser(ctx context.Context, u, id string) error {
+	r.revokes++
+	return r.cpAuthority.RevokeForUser(ctx, u, id)
+}
+
+func (r *revokeCounter) UpdateForUser(ctx context.Context, u, id string, n *string, s fat.Set) (tokenauthority.TokenInfo, error) {
+	r.updates++
+	return r.cpAuthority.UpdateForUser(ctx, u, id, n, s)
+}
+
+// An older control plane does not clip a mint and does not report what it
+// minted. It must never leave a db:query token behind for a user without the
+// grant: the exchange is redone without it, and fails if that cannot be done.
+type oldCP struct {
+	*cpAuthority
+	revokeErr error
+}
+
+func (o *oldCP) MintForUser(ctx context.Context, req tokenauthority.MintRequest) (tokenauthority.Minted, error) {
+	m, err := o.Memory.MintForUser(ctx, req) // no membership check, no clip
+	m.Scopes = nil                           // and it does not say what it minted
+	return m, err
+}
+
+func (o *oldCP) RevokeForUser(ctx context.Context, u, id string) error {
+	if o.revokeErr != nil {
+		return o.revokeErr
+	}
+	return o.cpAuthority.RevokeForUser(ctx, u, id)
+}
+
+func TestExchangeToken_OlderControlPlaneFailsClosedOnDBQuery(t *testing.T) {
+	newOld := func() (*oldCP, string) {
+		o := &oldCP{cpAuthority: newCP([]string{"user-1"}, nil)}
+		return o, mintSession(t, o.Memory, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
+	}
+
+	o, bearer := newOld()
+	resp, err := exchange(t, o, bearer, "obs:read", "db:query")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(resp.GetScopes(), []string{"obs:read"}) {
+		t.Fatalf("granted %v, want obs:read only", resp.GetScopes())
+	}
+	for _, info := range liveTokens(t, o, "user-1") {
+		if slices.Contains(info.Scopes, "db:query") {
+			t.Fatalf("a live db:query token %q survived against an older control plane", info.Name)
+		}
+	}
+
+	// db:query alone: nothing to fall back to, and nothing left behind.
+	o, bearer = newOld()
+	if _, err := exchange(t, o, bearer, "db:query"); svcerr.Code(err) != connect.CodePermissionDenied {
+		t.Fatalf("err = %v, want PermissionDenied", err)
+	}
+	if n := len(liveTokens(t, o, "user-1")); n != 1 {
+		t.Fatalf("live tokens = %d, want the parent alone", n)
+	}
+
+	// The unverifiable token cannot be revoked: fail, return nothing.
+	o, bearer = newOld()
+	o.revokeErr = errors.New("revoke failed")
+	if resp, err := exchange(t, o, bearer, "obs:read", "db:query"); err == nil {
+		t.Fatalf("returned %v although the unverified token could not be revoked", resp.GetScopes())
+	}
+
+	// Without db:query an older control plane is fine: nothing to verify.
+	o, bearer = newOld()
+	if resp, err := exchange(t, o, bearer, "obs:read", "obs:triage"); err != nil || len(resp.GetScopes()) != 2 {
+		t.Fatalf("obs only: %v %v", resp.GetScopes(), err)
+	}
+}
+
+// The permanent daemon credential is widened with deploy/secret/domain ONLY.
+// control-plane refuses an UpdateForUser naming a permission the user lacks, so
+// a ceiling with db:query would also cost a member without that grant the
+// deploy authority, and would put db:query on a long-lived credential that
+// lives on a remote machine.
+func TestWidenDaemonCredential_DeployFamilyOnly(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		grants fat.Set
+	}{
+		{"member: deploy family, no db:query", fat.SetOf(fullDaemon[1:]...)},
+		{"admin: everything including db:query", fat.SetOf(append([]fat.Scope{fat.ScopeDBQuery}, fullDaemon[1:]...)...)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newCP([]string{"user-1"}, map[string]fat.Set{"user-1": tc.grants})
+			svc := newTokenService(t, a, TokenControlPlane{Issuer: testControlPlane, ClipsGrants: true})
+			resp, err := svc.CreateToken(tokenAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
+				Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			p, err := a.Introspect(context.Background(), resp.Msg.GetToken())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, derived := range derivedScopes {
+				if p.Scopes.Has(derived) {
+					t.Errorf("the daemon credential carries %s: %s", derived, p.Scopes)
+				}
+			}
+			for _, want := range fullDaemon {
+				if !p.Scopes.Has(want) {
+					t.Errorf("the daemon credential lacks %s: %s", want, p.Scopes)
+				}
+			}
+		})
+	}
 }
 
 func TestExchangeToken_DefaultRequestStaysDeployOnly(t *testing.T) {
-	a := newCP([]string{"user-1"}, map[string]fat.Set{"user-1": fat.SetOf(fat.ScopeDBQuery)})
+	a := newCP([]string{"user-1"}, map[string]fat.Set{"user-1": fat.SetOf(append([]fat.Scope{fat.ScopeDBQuery}, fullDaemon[1:]...)...)})
 	bearer := mintSession(t, a, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
 	resp, err := exchange(t, a, bearer)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -16,9 +17,11 @@ import (
 
 // fakeExchanger answers per server and counts calls.
 type fakeExchanger struct {
-	now     func() time.Time
-	ttl     time.Duration
-	refuse  map[string]error
+	now    func() time.Time
+	ttl    time.Duration
+	refuse map[string]error
+	// grant, when set, is the most the server hands out (it omits the rest).
+	grant   []string
 	calls   []string
 	minted  int
 	lastAud string
@@ -34,8 +37,21 @@ func (f *fakeExchanger) Exchange(_ context.Context, server, bearer, audience str
 	return Exchanged{
 		Token:     "rlat_exchanged_" + strings.Repeat("x", f.minted) + "_from_" + bearer[len(bearer)-4:],
 		ExpiresAt: f.now().Add(f.ttl),
-		Scopes:    scopes,
+		Scopes:    f.narrow(scopes),
 	}, nil
+}
+
+func (f *fakeExchanger) narrow(asked []string) []string {
+	if f.grant == nil {
+		return asked
+	}
+	var out []string
+	for _, s := range asked {
+		if slices.Contains(f.grant, s) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func newTestHelper(t *testing.T, sessions []Session, ex *fakeExchanger, clock *time.Time) Service {
@@ -196,5 +212,28 @@ func TestMint_RequestedScopesPassThroughAndKeyTheCache(t *testing.T) {
 	}
 	if again := ask("deploy:write"); again.Token != deploy.Token || ex.minted != 2 {
 		t.Fatalf("alternating requests must not evict each other (minted=%d)", ex.minted)
+	}
+}
+
+func TestMint_ANarrowerTokenThanAskedIsNotCached(t *testing.T) {
+	clock := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
+	ex := &fakeExchanger{ttl: time.Hour, grant: []string{"obs:read"}}
+	h := newTestHelper(t, []Session{{Server: "https://api.example.com", Token: "rlat_session_AAAA", Kind: "daemon"}}, ex, &clock)
+	ask := cloudcred.Request{Endpoint: req.Endpoint, Scopes: []string{"obs:read", "db:query"}}
+
+	first, err := h.Mint(context.Background(), ask)
+	if err != nil || strings.Join(first.Scopes, ",") != "obs:read" {
+		t.Fatalf("first = %+v %v", first, err)
+	}
+	// The admin grants db:query a minute later: the next command must ask again.
+	ex.grant = []string{"obs:read", "db:query"}
+	clock = clock.Add(time.Minute)
+	second, err := h.Mint(context.Background(), ask)
+	if err != nil || strings.Join(second.Scopes, ",") != "obs:read,db:query" || ex.minted != 2 {
+		t.Fatalf("second = %+v %v minted=%d: the narrow token was served from the cache", second, err, ex.minted)
+	}
+	// A complete answer is cached as before.
+	if third, _ := h.Mint(context.Background(), ask); third.Token != second.Token || ex.minted != 2 {
+		t.Fatalf("a token that covered the ask must be reused (minted=%d)", ex.minted)
 	}
 }
