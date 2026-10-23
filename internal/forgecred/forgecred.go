@@ -64,7 +64,7 @@ func (h *helper) Mint(ctx context.Context, req cloudcred.Request) (cloudcred.Tok
 	// Any session's still-fresh token beats a mint: the candidates are all
 	// this machine's, and a cached token is one the server already scoped.
 	for _, s := range sessions {
-		if tok, ok := c.lookup(endpoint, s, now); ok {
+		if tok, ok := c.lookup(endpoint, req.Scopes, s, now); ok {
 			return tok, nil
 		}
 	}
@@ -88,7 +88,7 @@ func (h *helper) Mint(ctx context.Context, req cloudcred.Request) (cloudcred.Tok
 		if got.ExpiresAt.IsZero() {
 			tok.ExpiresAt = nil
 		}
-		c.store(endpoint, s, tok, now)
+		c.store(endpoint, req.Scopes, s, tok, now)
 		return tok, nil
 	}
 	return cloudcred.Token{}, refusal(endpoint, attempts)

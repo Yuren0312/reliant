@@ -177,3 +177,57 @@ func TestForgeCredential_NeverEscalates(t *testing.T) {
 	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "a session JWT: %v", err)
 	require.True(t, strings.Contains(err.Error(), "rlat_"), "the refusal names what it needs: %v", err)
 }
+
+// TestForgeCredential_DerivedScopesEndToEnd: obs:read reaches a member's daemon
+// credential through the exchange although the credential never held it, and
+// db:query only with the org grant — clipped by control-plane's UpdateForUser,
+// which this fake models.
+func TestForgeCredential_DerivedScopesEndToEnd(t *testing.T) {
+	const (
+		secret       = "e2e-internal-service-secret"
+		controlPlane = "https://admin.example.com"
+	)
+	cp := &fakeControlPlane{t: t, secret: secret, store: tokenauthority.NewMemory(), grants: map[string]fat.Set{
+		"with-grant":    fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeDBQuery),
+		"without-grant": fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite),
+	}}
+	cpSrv := httptest.NewServer(cp)
+	t.Cleanup(cpSrv.Close)
+	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(controlplane.Endpoint{URL: cpSrv.URL, InternalServiceSecret: secret}, nil))
+	require.NoError(t, err)
+	signer := newSessionSigner(t)
+	apiURL := serveTokenService(t, authority, signer.pubPEM, token.TokenControlPlane{
+		Issuer: controlPlane, ClipsGrants: mode == tokenauthority.ModeControlPlane,
+	})
+	tokens := func(bearer string) reliantv1connect.TokenServiceClient {
+		return reliantv1connect.NewTokenServiceClient(&http.Client{Transport: bearerTransport(bearer)}, apiURL)
+	}
+	ctx := context.Background()
+
+	for user, want := range map[string][]string{
+		"with-grant":    {"obs:read", "db:query"},
+		"without-grant": {"obs:read"},
+	} {
+		created, err := tokens(signer.sign(t, user)).CreateToken(ctx, connect.NewRequest(&reliantv1.CreateTokenRequest{
+			Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
+		}))
+		require.NoError(t, err)
+		exchanged, err := tokens(created.Msg.GetToken()).ExchangeToken(ctx, connect.NewRequest(&reliantv1.ExchangeTokenRequest{
+			Audience: controlPlane, Scopes: []string{"obs:read", "db:query"},
+		}))
+		require.NoError(t, err, user)
+		require.ElementsMatch(t, want, exchanged.Msg.GetScopes(), user)
+		child, err := cp.store.Introspect(ctx, exchanged.Msg.GetToken())
+		require.NoError(t, err)
+		require.Equal(t, fat.SetOf(scopesOf(want)...), child.Scopes, user)
+		require.Equal(t, user, child.ActingUserID)
+	}
+}
+
+func scopesOf(raw []string) []fat.Scope {
+	out := make([]fat.Scope, len(raw))
+	for i, s := range raw {
+		out[i] = fat.Scope(s)
+	}
+	return out
+}

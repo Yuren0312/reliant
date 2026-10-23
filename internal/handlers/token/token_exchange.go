@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -67,15 +68,37 @@ import (
 // this remains, so a command never starts on one about to lapse.
 const exchangeTTL = time.Hour
 
-// exchangeableScopes is the control-plane authority forge presents: deploy,
-// managed secrets, custom domains. Deliberately NOT cluster:manage or token:*
-// (org administration a deploy tool has no business holding), and never the
-// session scopes themselves (reliant:api, daemon:connect) — an exchanged token
-// that could connect a daemon would just be a second copy of the session.
-var exchangeableScopes = []fat.Scope{
+// deployScopes is the control-plane authority forge presents by default:
+// deploy, managed secrets, custom domains. A request that names no scope gets
+// these and nothing else.
+var deployScopes = []fat.Scope{
 	fat.ScopeDeployRead, fat.ScopeDeployWrite,
 	fat.ScopeSecretRead, fat.ScopeSecretWrite,
 	fat.ScopeDomainRead, fat.ScopeDomainWrite,
+}
+
+// derivedScopes are the feedback-loop scopes (`forge obs`, `forge db query`).
+// Unlike deployScopes they are NOT intersected with what the calling token
+// holds: no session credential carries them, and a ceiling cannot be widened
+// to include them (control-plane clips a login to its client's allowed set,
+// and an existing daemon credential predates them). They are DERIVED at
+// exchange time from control-plane's live state instead; see deriveGrants.
+var derivedScopes = []fat.Scope{fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeDBQuery}
+
+// exchangeableScopes is everything an exchange may produce. Deliberately NOT
+// cluster:manage or token:* (org administration a deploy tool has no business
+// holding), and never the session scopes themselves (reliant:api,
+// daemon:connect) — an exchanged token that could connect a daemon would just
+// be a second copy of the session.
+var exchangeableScopes = append(append([]fat.Scope{}, deployScopes...), derivedScopes...)
+
+func isDerived(scope fat.Scope) bool {
+	for _, d := range derivedScopes {
+		if d == scope {
+			return true
+		}
+	}
+	return false
 }
 
 // TokenControlPlane is what TokenService knows about the deployment's control
@@ -133,9 +156,18 @@ func (s *Service) ExchangeToken(
 			"a token bound to a %s cannot be exchanged", subject.Resource.Kind))
 	}
 
+	// Deploy-family scopes: requested ∩ exchangeable ∩ what the caller holds.
+	// Derived scopes: requested ∩ exchangeable, and only where control-plane
+	// clips grants (hosted); whether the USER may have them is decided below,
+	// against control-plane, after the mint.
 	granted := make([]fat.Scope, 0, len(requested))
 	for _, scope := range requested {
-		if subject.Scopes.Has(scope) {
+		switch {
+		case isDerived(scope):
+			if s.deps.ControlPlane.ClipsGrants {
+				granted = append(granted, scope)
+			}
+		case subject.Scopes.Has(scope):
 			granted = append(granted, scope)
 		}
 	}
@@ -151,28 +183,14 @@ func (s *Service) ExchangeToken(
 	if subject.ExpiresAt != nil && subject.ExpiresAt.Before(expiresAt) {
 		expiresAt = *subject.ExpiresAt
 	}
-	minted, err := s.deps.Authority.MintForUser(ctx, tokenauthority.MintRequest{
-		UserID: userID,
-		// The parent's id makes the audit trail one hop: which session
-		// produced this deploy credential.
-		Name:      "forge (exchanged from " + subject.TokenID + ")",
-		Scopes:    granted,
-		Resource:  subject.Resource,
-		Ephemeral: subject.Ephemeral,
-		ExpiresAt: &expiresAt,
-		// Never rotate: replacing the previous exchange would revoke a token
-		// a long deploy in another process is still presenting.
-	})
+	minted, granted, err := s.mintExchanged(ctx, userID, subject, granted, expiresAt)
 	if err != nil {
-		return nil, authorityError("exchange", err)
-	}
-
-	// The org is the one dimension the mint does not take as input:
-	// MintForUser acts in the user's PRIMARY org, the caller's token in the
-	// org it was issued for. They agree unless the user's primary org changed
-	// in between, and an exchange must never move authority across orgs.
-	if err := s.confirmSameOrg(ctx, userID, minted, subject); err != nil {
 		return nil, err
+	}
+	if len(granted) == 0 {
+		return nil, svcerr.PermissionDenied(fmt.Sprintf(
+			"your organization permissions do not include %s; ask an organization admin to grant it",
+			fat.JoinScopes(requested)))
 	}
 
 	logging.InfoContext(ctx, "access token exchanged", "user_id", userID, "subject_token_id", subject.TokenID,
@@ -187,6 +205,120 @@ func (s *Service) ExchangeToken(
 		out.ExpiresAt = formatTime(minted.ExpiresAt)
 	}
 	return connect.NewResponse(out), nil
+}
+
+// mintExchanged mints the exchanged token and settles the derived scopes.
+//
+// ── DERIVED SCOPES ARE CHECKED AGAINST CONTROL-PLANE, NOT THE CALLER ──
+//
+//   - MEMBERSHIP (obs:read, obs:triage — implied for every org member).
+//     MintForUser acts in the user's PRIMARY org, which control-plane reads
+//     from org_memberships, and confirmSameOrg refuses (and revokes) a token
+//     that landed anywhere but the calling credential's org. So a token that
+//     survives it was minted for a CURRENT member of that org; a removed user
+//     mints nothing.
+//   - THE GRANT (db:query — an org permission). control-plane's UpdateForUser
+//     re-reads org_member_grants and refuses a scope the user does not hold,
+//     so re-asserting the minted set is an authoritative, point-of-exchange
+//     check that neither the request nor the calling token's claims (which
+//     can be stale) can influence. Absent the grant, db:query is OMITTED and
+//     the rest of the exchange proceeds. control-plane additionally re-checks
+//     the grant on every use of a personal token.
+//
+// The result never exceeds the acting user's org permissions, and the token
+// keeps the caller's binding (so a non-daemon resource-bound caller never
+// reaches here), org, expiry and ephemerality.
+func (s *Service) mintExchanged(
+	ctx context.Context, userID string, subject *fat.Principal, scopes []fat.Scope, expiresAt time.Time,
+) (tokenauthority.Minted, []fat.Scope, error) {
+	mint := func(scopes []fat.Scope) (tokenauthority.Minted, error) {
+		minted, err := s.deps.Authority.MintForUser(ctx, tokenauthority.MintRequest{
+			UserID: userID,
+			// The parent's id makes the audit trail one hop: which session
+			// produced this deploy credential.
+			Name:      "forge (exchanged from " + subject.TokenID + ")",
+			Scopes:    scopes,
+			Resource:  subject.Resource,
+			Ephemeral: subject.Ephemeral,
+			ExpiresAt: &expiresAt,
+			// Never rotate: replacing the previous exchange would revoke a
+			// token a long deploy in another process is still presenting.
+		})
+		if err != nil {
+			return tokenauthority.Minted{}, authorityError("exchange", err)
+		}
+		// The org is the one dimension the mint does not take as input:
+		// MintForUser acts in the user's PRIMARY org, the caller's token in
+		// the org it was issued for. They agree unless the user's primary org
+		// changed in between, and an exchange must never move authority
+		// across orgs. It is also the membership check described above.
+		if err := s.confirmSameOrg(ctx, userID, minted, subject); err != nil {
+			return tokenauthority.Minted{}, err
+		}
+		return minted, nil
+	}
+
+	minted, err := mint(scopes)
+	if err != nil {
+		return tokenauthority.Minted{}, nil, err
+	}
+	if !slices.Contains(scopes, fat.ScopeDBQuery) {
+		return minted, scopes, nil
+	}
+
+	stored, held, err := s.recheckGrant(ctx, userID, minted.TokenID, scopes)
+	if err != nil {
+		s.revokeQuietly(ctx, userID, minted.TokenID)
+		return tokenauthority.Minted{}, nil, err
+	}
+	if held {
+		// Report what the token now carries, which is what control-plane
+		// settled — not what was asked.
+		return minted, stored, nil
+	}
+
+	// The grant is absent: drop db:query and mint again without it. The first
+	// token's plaintext never left this process.
+	s.revokeQuietly(ctx, userID, minted.TokenID)
+	narrower := slices.DeleteFunc(slices.Clone(scopes), func(sc fat.Scope) bool { return sc == fat.ScopeDBQuery })
+	logging.InfoContext(ctx, "exchange omitted db:query: the acting user does not hold the grant", "user_id", userID,
+		"subject_token_id", subject.TokenID)
+	if len(narrower) == 0 {
+		return tokenauthority.Minted{}, nil, nil
+	}
+	minted, err = mint(narrower)
+	if err != nil {
+		return tokenauthority.Minted{}, nil, err
+	}
+	return minted, narrower, nil
+}
+
+// recheckGrant re-asserts the minted token's scope set through the authority's
+// UpdateForUser, which control-plane checks against the user's grants as of
+// now. It returns the scopes the token then carries and whether db:query is
+// among them. A refusal for a permission the user lacks (permission_denied), or
+// a clip that dropped db:query, is "not held"; anything else is a failure to
+// check, never "held".
+func (s *Service) recheckGrant(ctx context.Context, userID, tokenID string, scopes []fat.Scope) ([]fat.Scope, bool, error) {
+	info, err := s.deps.Authority.UpdateForUser(ctx, userID, tokenID, nil, fat.SetOf(scopes...))
+	if err != nil {
+		if tokenauthority.IsPermissionDenied(err) {
+			return nil, false, nil
+		}
+		return nil, false, authorityError("exchange", err)
+	}
+	stored := make([]fat.Scope, 0, len(info.Scopes))
+	for _, raw := range info.Scopes {
+		stored = append(stored, fat.Scope(raw))
+	}
+	return stored, slices.Contains(stored, fat.ScopeDBQuery), nil
+}
+
+func (s *Service) revokeQuietly(ctx context.Context, userID, tokenID string) {
+	if err := s.deps.Authority.RevokeForUser(ctx, userID, tokenID); err != nil {
+		logging.ErrorContext(ctx, "could not revoke a superseded exchanged token", "token_id", tokenID,
+			"error", tokenauthority.Describe(err))
+	}
 }
 
 // sessionCredential authenticates the request's bearer against the authority,
@@ -239,7 +371,7 @@ func (s *Service) confirmSameOrg(ctx context.Context, userID string, minted toke
 // not a scope at all is a malformed request.
 func requestedExchangeScopes(raw []string) ([]fat.Scope, error) {
 	if len(raw) == 0 {
-		return exchangeableScopes, nil
+		return deployScopes, nil
 	}
 	asked, err := fat.NewSet(raw)
 	if err != nil {

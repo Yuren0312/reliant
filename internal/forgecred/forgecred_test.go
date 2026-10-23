@@ -169,3 +169,32 @@ func TestForgetServer(t *testing.T) {
 		t.Fatalf("after ForgetServer the next request must mint again (minted=%d, %v)", ex.minted, err)
 	}
 }
+
+func TestMint_RequestedScopesPassThroughAndKeyTheCache(t *testing.T) {
+	clock := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
+	ex := &fakeExchanger{ttl: time.Hour}
+	h := newTestHelper(t, []Session{{Server: "https://api.example.com", Token: "rlat_session_AAAA", Kind: "daemon"}}, ex, &clock)
+	ask := func(scopes ...string) cloudcred.Token {
+		t.Helper()
+		tok, err := h.Mint(context.Background(), cloudcred.Request{Endpoint: req.Endpoint, Scopes: scopes})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tok
+	}
+
+	deploy := ask("deploy:write")
+	obs := ask("obs:read", "db:query")
+	if strings.Join(obs.Scopes, ",") != "obs:read,db:query" {
+		t.Fatalf("requested scopes must reach the exchange unchanged, got %v", obs.Scopes)
+	}
+	if obs.Token == deploy.Token || ex.minted != 2 {
+		t.Fatalf("a deploy token answered an obs request (minted=%d)", ex.minted)
+	}
+	if again := ask("db:query", "obs:read"); again.Token != obs.Token || ex.minted != 2 {
+		t.Fatalf("the same scope set in another order must reuse the token (minted=%d)", ex.minted)
+	}
+	if again := ask("deploy:write"); again.Token != deploy.Token || ex.minted != 2 {
+		t.Fatalf("alternating requests must not evict each other (minted=%d)", ex.minted)
+	}
+}

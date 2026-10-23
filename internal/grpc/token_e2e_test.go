@@ -227,7 +227,9 @@ func (cp *fakeControlPlane) clipToGrants(userID string, requested fat.Set) fat.S
 	out := fat.Set{}
 	for s := range requested {
 		switch s {
-		case fat.ScopeDaemonConnect, fat.ScopeReliantAPI, fat.ScopeLLMInvoke:
+		// obs:read and obs:triage are implied for every member (not in
+		// orggrants.OrgScopes), so control-plane's clip passes them.
+		case fat.ScopeDaemonConnect, fat.ScopeReliantAPI, fat.ScopeLLMInvoke, fat.ScopeObsRead, fat.ScopeObsTriage:
 			out[s] = struct{}{}
 		default:
 			if held.Has(s) {
