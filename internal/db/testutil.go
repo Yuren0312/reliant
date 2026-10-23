@@ -197,20 +197,11 @@ func newTestDatabase(tb testing.TB) (*sql.DB, string, func()) {
 // it returns. key must change whenever what build produces does.
 func cloneTestTemplate(tb testing.TB, key string, build func(dsn string, db *sql.DB) error) (*sql.DB, string, func()) {
 	tb.Helper()
-	raw, cleanup, err := pgtest.NewFromTemplate(key, func(b *sql.DB) error {
-		dsn, err := testDSNOf(b)
-		if err != nil {
-			return err
-		}
+	raw, dsn, cleanup, err := pgtest.NewFromTemplate(key, func(b *sql.DB, dsn string) error {
 		return build(dsn, b)
 	})
 	if err != nil {
 		tb.Fatalf("test database (template %s): %v", key, err)
-	}
-	dsn, err := testDSNOf(raw)
-	if err != nil {
-		cleanup()
-		tb.Fatalf("test database: %v", err)
 	}
 	return raw, dsn, cleanup
 }
