@@ -468,11 +468,6 @@ export const api = {
     },
   },
 
-  health: async () => {
-    const { systemGrpc } = await import("./system-grpc");
-    return systemGrpc.health();
-  },
-
   approvals: {
     listByChat: async (chatId: string) =>
       approvalGrpc.listByChat(chatId),
