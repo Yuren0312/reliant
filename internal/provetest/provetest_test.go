@@ -3,6 +3,7 @@ package provetest
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,14 +23,63 @@ const (
 	fixedCalc = "package calc\n\nfunc Add(a, b int) int { return a + b }\n"
 )
 
+// gitRepoTemplate is the repository gitRepo hands out, built once per test
+// binary and copied per test. Every git process is a fork and an exec, and on a
+// machine with every heavy slot busy the box sustains only a few execs a second
+// across all its processes: building the same three-command repository in
+// each of ~30 tests was a large share of the package's -short run.
+var gitRepoTemplate struct {
+	once sync.Once
+	dir  string
+	err  error
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if gitRepoTemplate.dir != "" {
+		_ = os.RemoveAll(gitRepoTemplate.dir)
+	}
+	os.Exit(code)
+}
+
+func buildGitRepoTemplate() (string, error) {
+	dir, err := os.MkdirTemp("", "provetest-template-")
+	if err != nil {
+		return "", err
+	}
+	gitRepoTemplate.dir = dir
+	for _, step := range [][]string{
+		{"init", "-q"},
+		// No housekeeping child after the commit: nothing here needs it.
+		{"config", "maintenance.auto", "false"},
+		{"config", "gc.auto", "0"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, step...)...).CombinedOutput(); err != nil {
+			return "", fmt.Errorf("git %v: %v: %s", step, err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "calc.go"), []byte(buggyCalc), 0o644); err != nil {
+		return "", err
+	}
+	for _, step := range [][]string{
+		{"add", "-A"},
+		{"-c", "user.name=prove-test", "-c", "user.email=prove-test@example.com", "-c", "commit.gpgsign=false", "commit", "-qm", "buggy add"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, step...)...).CombinedOutput(); err != nil {
+			return "", fmt.Errorf("git %v: %v: %s", step, err, out)
+		}
+	}
+	return dir, nil
+}
+
 // gitRepo creates a repository whose HEAD holds the buggy calc.go and whose
 // working tree holds the fix — the state an agent is in after writing a fix.
 func gitRepo(t *testing.T) string {
 	t.Helper()
+	gitRepoTemplate.once.Do(func() { _, gitRepoTemplate.err = buildGitRepoTemplate() })
+	require.NoError(t, gitRepoTemplate.err, "build the repository template")
 	dir := t.TempDir()
-	git(t, dir, "init", "-q")
-	writeFile(t, dir, "calc.go", buggyCalc)
-	commitAll(t, dir, "buggy add")
+	require.NoError(t, os.CopyFS(dir, os.DirFS(gitRepoTemplate.dir)))
 	writeFile(t, dir, "calc.go", fixedCalc)
 	return dir
 }
@@ -250,6 +300,8 @@ func TestProve_RestoresWhenTheRunnerPanics(t *testing.T) {
 	assert.Equal(t, fixedCalc, readFile(t, dir, "calc.go"))
 }
 
+// Not parallel: testHookAfterSwap is package state, and a parallel proof would
+// panic in it too. Parallel tests wait until every serial one has finished.
 func TestProve_RestoresWhenProveItselfPanics(t *testing.T) {
 	dir := gitRepo(t)
 	testHookAfterSwap = func() { panic("boom after swap") }
