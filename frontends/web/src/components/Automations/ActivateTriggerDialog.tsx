@@ -31,7 +31,7 @@ import { Check, Copy, KeyRound, RotateCw } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { CardInset } from "../forge-ui/card";
-import { Toggle } from "../ui/Toggle";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import { useProjectStore } from "@/store/projectStore";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useProjectDaemonInstalls, triggerKeys } from "@/hooks/trigger-queries";
@@ -352,14 +352,8 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
         <ActingIdentityField value={actingIdentity} onChange={setActingIdentity} />
 
         <div className="flex flex-wrap items-center gap-6">
-          <div className="flex items-center gap-2">
-            <Toggle checked={enabled} onChange={setEnabled} srLabel="Enabled" />
-            <span className="text-sm text-foreground" aria-hidden>Enabled</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Toggle checked={notify} onChange={setNotify} srLabel="Notify me when a run completes" />
-            <span className="text-sm text-foreground" aria-hidden>Notify me when a run completes</span>
-          </div>
+          <ToggleSwitch checked={enabled} onChange={setEnabled} label="Enabled" size="lg" className="forge-ui" />
+          <ToggleSwitch checked={notify} onChange={setNotify} label="Notify me when a run completes" size="lg" className="forge-ui" />
         </div>
 
         {error && (

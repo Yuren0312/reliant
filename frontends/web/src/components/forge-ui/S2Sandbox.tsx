@@ -21,9 +21,9 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
 import { Textarea } from "../ui/Textarea";
-import { Toggle } from "../ui/Toggle";
 import { RowMenu } from "../workflows/RowMenu";
 import { MultiSelectFilter } from "../workflows/FilterMenu";
+import ToggleSwitch from "./toggle_switch";
 
 const noop = () => undefined;
 
@@ -39,7 +39,7 @@ function SettingRow({ title, checked, disabled }: { title: string; checked: bool
         <p className="text-sm font-medium text-foreground">{title}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">Applies to every chat in this project.</p>
       </div>
-      <Toggle checked={checked} onChange={noop} disabled={disabled} label={title} />
+      <ToggleSwitch checked={checked} onChange={noop} disabled={disabled} ariaLabel={title} size="lg" className="forge-ui" />
     </div>
   );
 }
@@ -56,14 +56,9 @@ export function S2Sites() {
           <SettingRow title="Notify when unfocused" checked={false} disabled />
         </div>
         <div className="mt-3 flex items-center gap-6">
-          <Toggle checked onChange={noop} srLabel="Start from chat" className="h-5 w-9 scale-90" />
-          <Toggle checked={false} onChange={noop} srLabel="nightly enabled" className="h-5 w-9 flex-shrink-0 scale-90" />
-          <div className="flex items-center gap-2">
-            <Toggle checked onChange={noop} srLabel="Notify me when a run completes" />
-            <span className="text-sm text-foreground" aria-hidden>
-              Notify me when a run completes
-            </span>
-          </div>
+          <ToggleSwitch checked onChange={noop} ariaLabel="Start from chat" size="md" className="forge-ui" />
+          <ToggleSwitch checked={false} onChange={noop} ariaLabel="nightly enabled" size="md" className="forge-ui flex-shrink-0" />
+          <ToggleSwitch checked onChange={noop} label="Notify me when a run completes" size="lg" className="forge-ui" />
         </div>
       </div>
 
