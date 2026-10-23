@@ -536,6 +536,10 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		ControlPlane:   g.ServerProcessConfig.GetControlPlane(),
 		Recorder:       g.AccountRecorder(),
 		DB:             g.Database(),
+		// Read here, not in workersetup, so the worker root's config reach
+		// names them (pkg/config Roots).
+		WorkflowTaskSlots:   g.WorkerConfig.GetMaxConcurrentWorkflowTasks(),
+		WorkflowTaskPollers: g.WorkerConfig.GetWorkflowTaskPollers(),
 	})
 }
 
@@ -548,7 +552,8 @@ func (g *Graph) newWorkflowEventRelay() (*workflowevent.Relay, error) {
 
 func (g *Graph) newAccountUsagePoller() (*accountlimits.Poller, error) {
 	return NewAccountUsagePoller(AccountUsagePollerDeps{
-		DB: g.Database(),
+		DB:       g.Database(),
+		Temporal: g.TemporalClient(),
 	})
 }
 
@@ -1130,11 +1135,19 @@ func (g *Graph) newProject() (*project.Service, error) {
 // a live request.
 func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 	return provider_account.New(provider_account.Deps{
-		Logger:         g.Log,
-		Config:         g.Cfg,
-		Store:          g.Database(),
-		ValidateKey:    keyvalidate.Validate,
-		UsageRefresher: &accountlimits.Fetcher{Store: g.Database(), Tokens: drivers.RefreshingTokens{Store: g.Database()}},
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Store:       g.Database(),
+		ValidateKey: keyvalidate.Validate,
+		UsageRefresher: &accountlimits.Fetcher{
+			Store:  g.Database(),
+			Tokens: drivers.RefreshingTokens{Store: g.Database()},
+			// A refresh that lifts a bench wakes the user's blocked chats.
+			OnCapacity: func(ctx context.Context, userID, _ string) {
+				g.Chat().WakeUserChats(ctx, userID, "a usage refresh found a limited account serving again")
+			},
+		},
+		ChatWaker: g.Chat(),
 	})
 }
 
@@ -1185,6 +1198,7 @@ func (g *Graph) newSettings() (*settings.Service, error) {
 			return providerusage.ClaudeProfile(ctx, nil, accessToken)
 		},
 		GitHubIdentity: settings.FetchGitHubUser,
+		ChatWaker:      g.Chat(),
 	})
 }
 
