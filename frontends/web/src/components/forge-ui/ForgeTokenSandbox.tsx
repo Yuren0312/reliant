@@ -16,11 +16,15 @@
  * e2e/color-schemes.spec.ts screenshots three regions of it in all ten
  * schemes, light and dark:
  *
- *   forge-library  every forge-ui component the app uses
+ *   forge-library  every forge-ui component the app used before R5 S1 (the
+ *                  two S1 brought in, alert_banner and progress_bar, are
+ *                  exercised in s1-sites, so this region's baselines did not
+ *                  move when S1 landed — which is what showed it changed
+ *                  nothing it did not mean to)
  *   s1-sites       the call sites the R5 S1 wave moved off components/ui
- *                  (Card, Badge, ErrorSummary, Progress), rendered with the
- *                  props those sites pass — real components where they are
- *                  pure, the site's own markup where they are not
+ *                  onto forge (card, badge/tag, alert_banner, progress_bar),
+ *                  rendered with the props those sites pass — real components
+ *                  where they are pure, the site's own markup where not
  *   ?view=overlays the components that cover the viewport (sidebar_layout,
  *                  modal, confirmation_dialog), each pinned inside its own
  *                  box so all three fit one screenshot
@@ -36,13 +40,11 @@ import { ConfigScope } from "../../api/mcp-grpc";
 import { CheckRow } from "../Forge/Status/CheckRow";
 import { DispositionLegend } from "../Forge/Status/DispositionLegend";
 import { MCPServerListItem } from "../Settings/MCPServerListItem";
-import { Badge as ReliantBadge } from "../ui/Badge";
-import { Card as ReliantCard } from "../ui/Card";
-import { ErrorSummary } from "../ui/ErrorSummary";
-import { Progress } from "../ui/Progress";
+import { ErrorSummary } from "../Automations/ErrorSummary";
 import { COLOR_SCHEMES } from "../../lib/forgeTokens";
 import { checksOf, type ForgeEnvStatusReport } from "../../services/forge/status";
 
+import AlertBanner from "./alert_banner";
 import Badge from "./badge";
 import Card, { CardBody, CardFooter, CardHeader, CardInset } from "./card";
 import ConfirmationDialog from "./confirmation_dialog";
@@ -53,6 +55,7 @@ import Link from "./link";
 import Modal from "./modal";
 import Mono from "./mono";
 import PageHeader from "./page_header";
+import ProgressBar from "./progress_bar";
 import SidebarLayout from "./sidebar_layout";
 import SkeletonLoader from "./skeleton_loader";
 import StatGrid from "./stat_grid";
@@ -252,7 +255,7 @@ function ForgeLibrary() {
 }
 
 /**
- * The call sites the R5 S1 wave migrates, with the props they pass today.
+ * The call sites the R5 S1 wave migrated, with the props they pass.
  * Pure components render for real; the rest reproduce their site's markup.
  */
 function S1Sites() {
@@ -296,16 +299,16 @@ function S1Sites() {
         </div>
         <div className="mt-3 flex items-center gap-1.5 text-sm">
           <span className="font-medium">filesystem</span>
-          <ReliantBadge variant="warning">Shell</ReliantBadge>
+          <Badge variant="warning" label="Shell" />
           <span className="ml-4 font-mono">write_file</span>
-          <ReliantBadge variant="warning">writes</ReliantBadge>
+          <Badge variant="warning" label="writes" />
         </div>
       </div>
 
       <div>
         <SectionTitle>Badge — forge status legend and check rows</SectionTitle>
         <DispositionLegend report={REPORT} />
-        <ReliantCard variant="default" size="sm" hover={false} className="mt-3 overflow-hidden border-border p-0">
+        <Card padding="none" className="mt-3 overflow-hidden">
           <table className="w-full border-collapse text-left">
             <tbody>
               {checksOf(REPORT).map((check) => (
@@ -313,43 +316,34 @@ function S1Sites() {
               ))}
             </tbody>
           </table>
-        </ReliantCard>
+        </Card>
       </div>
 
       <div>
-        <SectionTitle>Card — DeveloperSettings, MCPSetupWizard, DevStackPanel notices</SectionTitle>
+        <SectionTitle>Card / alert_banner — DeveloperSettings, MCPSetupWizard, DevStackPanel notices</SectionTitle>
         <div className="grid grid-cols-2 gap-4">
-          <ReliantCard>
+          <Card padding="none">
             <div className="p-4">
               <h3 className="mb-3 text-sm font-semibold">Backend Status</h3>
               <p className="text-xs text-muted-foreground">Connected to localhost:8080</p>
             </div>
-          </ReliantCard>
-          <ReliantCard size="sm" className="space-y-2" hover={false}>
+          </Card>
+          <Card padding="sm" className="space-y-2">
             <p className="text-sm text-muted-foreground">Read and write issues in your GitHub repositories.</p>
             <p className="whitespace-pre-line text-xs text-muted-foreground">Create a token with the repo scope.</p>
-          </ReliantCard>
-          <ReliantCard
-            variant="outlined"
-            size="lg"
-            hover={false}
-            className="border border-dashed border-border text-center text-sm text-muted-foreground"
-          >
+          </Card>
+          <Card padding="lg" className="border-dashed text-center text-sm text-ink-muted">
             Running runtime checks for <span className="font-mono">dev</span>…
-          </ReliantCard>
-          <ReliantCard
-            variant="outlined"
-            size="lg"
-            hover={false}
-            className="border border-destructive/40 bg-destructive/10 text-center text-sm text-destructive-ink"
-          >
-            Could not reach your daemon to run forge&apos;s runtime checks: connection refused
-          </ReliantCard>
+          </Card>
+          <AlertBanner
+            variant="error"
+            message={<>Could not reach your daemon to run forge&apos;s runtime checks: connection refused</>}
+          />
         </div>
       </div>
 
       <div>
-        <SectionTitle>ErrorSummary — WorkflowSetupDialog</SectionTitle>
+        <SectionTitle>ErrorSummary (on alert_banner) — WorkflowSetupDialog</SectionTitle>
         <div className="max-w-xl">
           <ErrorSummary
             title="Fix these to continue"
@@ -366,17 +360,17 @@ function S1Sites() {
         <SectionTitle>Progress — OnboardingChecklist, MachineDiskCard, FreeDiskSpaceDialog</SectionTitle>
         <div className="grid max-w-xl gap-4">
           <div>
-            <Progress value={60} variant="primary" size="sm" className="mb-1.5" />
+            <ProgressBar value={60} variant="default" size="sm" ariaLabel="Setup progress" className="forge-ui mb-1.5" />
             <p className="text-xs text-muted-foreground">3 of 5 completed</p>
           </div>
-          <Progress value={100} variant="primary" size="sm" />
+          <ProgressBar value={100} variant="default" size="sm" ariaLabel="Setup progress" className="forge-ui" />
           <div className="flex flex-col gap-1.5">
             <span className="text-sm text-foreground">Workspace disk · 42 GB of 100 GB used</span>
-            <Progress value={42} size="sm" variant="primary" />
+            <ProgressBar value={42} size="sm" variant="default" ariaLabel="Workspace disk usage" className="forge-ui" />
           </div>
           <div className="flex flex-col gap-1.5">
             <span className="text-sm text-foreground">Docker disk · 93 GB of 100 GB used</span>
-            <Progress value={93} size="sm" variant="warning" />
+            <ProgressBar value={93} size="sm" variant="warning" ariaLabel="Docker disk usage" className="forge-ui" />
           </div>
         </div>
       </div>

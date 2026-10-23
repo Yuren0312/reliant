@@ -13,7 +13,7 @@ import { COLOR_SCHEMES, FORGE_COLOR_TOKENS } from '../src/lib/forgeTokens';
 // Three regions per scheme × mode — 60 baselines in
 // color-schemes.spec.ts-snapshots/:
 //
-//   library   every forge-ui component the app imports
+//   library   every forge-ui component the app imported before R5 S1
 //   s1        the call sites R5 S1 moved off components/ui (Card, Badge,
 //             ErrorSummary, Progress), outside .forge-ui as in the app
 //   overlays  sidebar_layout, modal and confirmation_dialog, each pinned in
@@ -86,6 +86,9 @@ test.describe('forge components across color schemes', () => {
   // screenshot that has to scroll lands on a fractional offset, and two
   // consecutive captures then round to different heights and never settle.
   test.use({ viewport: { width: 1280, height: 4000 }, deviceScaleFactor: 1 });
+  // Two navigations and three captures per test; on a loaded machine the
+  // default 30s is spent before the last capture settles.
+  test.setTimeout(120_000);
 
   for (const scheme of SCHEMES) {
     for (const mode of MODES) {
