@@ -16,7 +16,6 @@
  * `lib/__tests__/connect.routing.test.ts`.
  */
 import type { Client, Transport } from "@connectrpc/connect";
-import { PlanService } from "../gen/reliant/v1/plan_pb";
 import { TaskService } from "../gen/reliant/v1/task_pb";
 import { CatalogService } from "../gen/reliant/v1/catalog_pb";
 import { ProjectService } from "../gen/reliant/v1/project_pb";
@@ -65,7 +64,6 @@ export const getTransport = (): Transport => transport;
 /** StreamingService's binary route is chosen by connect.ts's routeFor. */
 export const getStreamingTransport = (): Transport => transport;
 
-export const createPlanClient = (): Client<typeof PlanService> => connectClient(PlanService);
 export const createTaskClient = (): Client<typeof TaskService> => connectClient(TaskService);
 export const createCatalogClient = (): Client<typeof CatalogService> => connectClient(CatalogService);
 export const createProjectClient = (): Client<typeof ProjectService> => connectClient(ProjectService);
@@ -104,7 +102,6 @@ export const createInboxClient = (): Client<typeof InboxService> => connectClien
 
 // connectClient memoizes per service, so the "get" and "create" spellings
 // return the same client.
-export const getPlanClient = createPlanClient;
 export const getTaskClient = createTaskClient;
 export const getCatalogClient = createCatalogClient;
 export const getProjectClient = createProjectClient;
@@ -132,7 +129,6 @@ export const getInboxClient = createInboxClient;
 export const getConnectionClient = createConnectionClient;
 
 export const grpcClient = {
-  plan: getPlanClient,
   task: getTaskClient,
   catalog: getCatalogClient,
   project: getProjectClient,

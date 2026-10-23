@@ -1,13 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { planGrpc } from "../api/plan-grpc";
+import { queryClient } from "../lib/query-client";
+import { planServiceKeys, useGetPlanByChatId } from "./plan-service-hooks_gen";
 import {
   taskGrpc,
   type Task as V2Task,
   TaskStatus as ProtoTaskStatus,
 } from "../api/task-grpc";
-
-// Re-export types that consumers need
-export type { Plan } from "../api/plan-grpc";
 
 export type TaskStatus =
   | "pending"
@@ -34,8 +32,6 @@ export interface TaskItem {
 
 export const taskKeys = {
   all: ["tasks"] as const,
-  plans: () => [...taskKeys.all, "plans"] as const,
-  plan: (chatId: string) => [...taskKeys.plans(), chatId] as const,
   lists: () => [...taskKeys.all, "list"] as const,
   list: (planId: string) => [...taskKeys.lists(), planId] as const,
 };
@@ -102,20 +98,15 @@ function v2TaskToTaskItem(task: V2Task): TaskItem {
 
 // ── Query hooks ─────────────────────────────────────────────────────────────
 
-/** Fetch the plan for a chat. Returns null when no plan exists. */
+/** The plan for a chat (`data.plan`, unset when the chat has none). */
 export function usePlanForChat(chatId?: string | null) {
-  return useQuery({
-    queryKey: taskKeys.plan(chatId!),
-    queryFn: () => planGrpc.getByChatId(chatId!),
-    enabled: !!chatId,
-    staleTime: 30_000,
-  });
+  return useGetPlanByChatId({ chatId: chatId ?? "" }, { enabled: !!chatId });
 }
 
 /** Fetch all tasks for a chat (resolves plan automatically). */
 export function useTasksForChat(chatId?: string | null) {
   const planQuery = usePlanForChat(chatId);
-  const planId = planQuery.data?.id;
+  const planId = planQuery.data?.plan?.id;
 
   return useQuery({
     queryKey: taskKeys.list(planId!),
@@ -192,4 +183,16 @@ export function useDeleteTask() {
       queryClient.invalidateQueries({ queryKey: taskKeys.list(vars.planId) });
     },
   });
+}
+
+// ── Stream ──────────────────────────────────────────────────────────────────
+
+/**
+ * The chat stream's `plan_tasks` refetch: the server emits it whenever a
+ * chat's plan or its tasks change (the plan/task tools, PlanService writes).
+ * It carries no payload, so it marks the services' reads stale; only the
+ * mounted ones refetch.
+ */
+export function invalidatePlanTasks(): void {
+  void queryClient.invalidateQueries({ queryKey: planServiceKeys.all });
 }

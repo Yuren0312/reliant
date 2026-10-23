@@ -85,7 +85,6 @@ import { useProjectStore } from "./projectStore";
 import { useActivityStore, ChatActivity, isBusyActivity } from "./activityStore";
 import { useThreadActivityStore } from "./threadActivityStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
-import { useTasksStore } from "./tasksStore";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useChatParamsStore } from "./chatParamsStore";
@@ -116,6 +115,7 @@ import { QUEUED_SENDER_KIND_HUMAN } from "../api/chat-grpc";
 import { approvalsFromCache, upsertApprovalInCache, type ApprovalFields } from "../hooks/approval-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
+import { invalidatePlanTasks } from "../hooks/task-queries";
 import {
   chatKeys,
   seedChatDetail,
@@ -704,10 +704,6 @@ function getAttachmentsFromStore(attachmentIds: string[]): Attachment[] {
 
   return allAttachments;
 }
-
-// Track which task-related tool call IDs have already been processed
-// to prevent duplicate API calls when messages are reprocessed (cross-matching, streaming updates)
-const processedTaskToolCallIds = new Set<string>();
 
 // How many older messages loadOlderMessages fetches per scroll-back page.
 // Smaller than the 200-message initial snapshot bound: paging happens while the
@@ -1601,25 +1597,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       tabSwitchProfiler.mark("subscribeToChatDetails-end");
     }
 
-    // Load plan and tasks for this chat (fire-and-forget, cached)
-    void (async () => {
-      try {
-        const { useTasksStore } = await import("./tasksStore");
-        const { loadPlanAndTasks } = useTasksStore.getState();
-        await loadPlanAndTasks(chat.id);
-      } catch (error) {
-        logger.error("[ChatStore] Failed to load plan/tasks:", error);
-        Sentry.captureMessage('Failed to load plan and tasks', {
-          level: 'warning',
-          tags: { component: 'chat', operation: 'load_plan_tasks' },
-        });
-      }
-    })();
-
-    // Pending approvals and the pending question are server data owned by the
-    // React Query cache: useApprovals / usePendingApprovals / usePendingQuestions
-    // fetch them on mount and the chat stream patches the cache live (see
-    // approval-queries.ts). No store-side prefetch needed here.
+    // The plan and its tasks, pending approvals and pending questions are
+    // server data owned by the React Query cache: their hooks fetch them on
+    // mount and the chat stream patches or invalidates the cache live (see
+    // task-queries.ts, approval-queries.ts, question-queries.ts). No
+    // store-side prefetch needed here.
 
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("selectChat-end");
@@ -2395,6 +2377,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             const refetchType = (u as unknown as { type: string }).type as RefetchType;
             if (refetchType) {
               triggerRefetch(refetchType, chatId);
+              // The plan and its tasks are on the generated hooks: the
+              // signal marks their reads stale directly.
+              if (refetchType === "plan_tasks") invalidatePlanTasks();
             }
           }
         }
@@ -3339,7 +3324,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
         // ---- External writes (post-commit) ----
         // Everything below writes to stores OTHER than this one (RQ caches,
-        // threadActivityStore, tasksStore). They run after the Zustand commit
+        // threadActivityStore). They run after the Zustand commit
         // but in the same synchronous task, so React batches all of it into
         // one render — same observable ordering as before.
 
@@ -3428,8 +3413,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         }
 
         // Pre-parse message content so the render layer reads from the
-        // reference-keyed processMessage memo without reparsing, and drive
-        // the real-time task side effects (tasksStore writes). Rendering
+        // reference-keyed processMessage memo without reparsing. Rendering
         // invalidation is handled by the memo itself (keyed on message /
         // tool-result index / approvals references), so there is no
         // store-side parsed cache to keep in sync.
@@ -3440,48 +3424,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         const approvalsForProcessing =
           approvalsFromCache(chatId);
         messagesToProcess.forEach((message) => {
-          const processed = getProcessedMessage(
-            message,
-            updatedToolResults,
-            approvalsForProcessing,
-          );
-
-          // Process task-related tool calls in real-time as messages arrive
-          // This ensures tasks appear immediately in the sidebar without needing ChatMessage to render
-          // Only process each tool result once (messages may be reprocessed on cross-matching)
-          if (
-            processed.toolExecutions &&
-            processed.toolExecutions.length > 0
-          ) {
-            const tasksStore = useTasksStore.getState();
-            processed.toolExecutions.forEach((exec) => {
-              const toolCallId = exec.call?.id;
-              if (!toolCallId) return;
-              const toolName = exec.call?.name?.toLowerCase?.();
-              const content = exec.result?.content;
-              if (!content || typeof content !== "string") return;
-
-              // Skip if we've already processed this tool result
-              if (processedTaskToolCallIds.has(toolCallId)) return;
-
-              if (toolName === "update_task") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processUpdateTaskContent(chatId, content);
-              } else if (toolName === "add_task") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processAddTaskContent(chatId, content);
-              } else if (toolName === "create_subtask") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processCreateSubtaskContent(chatId, content);
-              } else if (toolName === "list_tasks") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processListTasksContent(chatId, content);
-              } else if (toolName === "create_plan") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processCreatePlanContent(chatId, content);
-              }
-            });
-          }
+          getProcessedMessage(message, updatedToolResults, approvalsForProcessing);
         });
 
         // CRITICAL FIX: Clear streaming buffers when complete messages arrive
@@ -4162,8 +4105,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Clear thread activity store
     useThreadActivityStore.getState().clearAll();
 
-    // Clear module-scoped set that tracks processed task tool calls
-    processedTaskToolCallIds.clear();
     olderMessagesInFlight.clear();
     chatStreamCursors.clear();
     sendPayloads.clear();
