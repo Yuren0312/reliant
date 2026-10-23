@@ -23,7 +23,9 @@ import {
   StartOAuthSignInRequestSchema,
   SystemService,
 } from "../gen/reliant/v1/system_pb";
+import { loadConfig } from "../lib/config_gen";
 import {
+  API_SERVER_DEFAULT_PORT,
   buildLocalhostUrl,
   isPackagedRendererOrigin,
   isSameOriginTransport,
@@ -63,13 +65,9 @@ const getGRPCBaseURL = (): string | null => {
     return null;
   }
 
-  // Fallback for development/browser - protocol based on VITE_DISABLE_TLS
-  const grpcPort = import.meta.env.VITE_GRPC_PORT || "9090";
-  const fallbackUrl =
-    import.meta.env.VITE_GRPC_URL ||
-    import.meta.env.VITE_API_URL ||
-    buildLocalhostUrl(grpcPort);
-  return fallbackUrl;
+  // The runtime config's API origin, else the api-server's default port on
+  // loopback — the same choice as grpc-client.ts.
+  return loadConfig().API_URL || buildLocalhostUrl(API_SERVER_DEFAULT_PORT);
 };
 
 // Lazy-initialized transport

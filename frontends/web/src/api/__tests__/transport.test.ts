@@ -19,6 +19,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setRuntimeConfig } from '@/test/runtimeConfig'
 import type { Interceptor } from '@connectrpc/connect'
 import type { TransportBackend } from '../transport'
 
@@ -268,9 +269,9 @@ describe('transport call sites', () => {
     // fall through to the same-origin getTransport() — their
     // `reliant.v1.*` paths are proxied to reliant-api, CORS-free. jsdom's
     // window.location.protocol is "http:", so isSameOriginTransport() is true
-    // here. The absolute VITE_CONTROL_PLANE_API_URL is never used as a transport
+    // here. The absolute CONTROL_PLANE_API_URL is never used as a transport
     // baseUrl in this mode (it stays the proxy target + hasControlPlane gate).
-    vi.stubEnv('VITE_CONTROL_PLANE_API_URL', 'https://cp.example.test')
+    setRuntimeConfig({ CONTROL_PLANE_API_URL: 'https://cp.example.test' })
     try {
       const { getControlPlaneTransport } = await import('../grpc-client')
       const transport = getControlPlaneTransport()
@@ -278,7 +279,7 @@ describe('transport call sites', () => {
       // No transport built — DaemonRegistry will use getTransport() instead.
       expect(mocks.createConnectTransport).not.toHaveBeenCalled()
     } finally {
-      vi.unstubAllEnvs()
+      setRuntimeConfig({})
     }
   })
 
@@ -300,7 +301,7 @@ describe('transport call sites', () => {
     // Same-origin (Vite-proxy) model: served over http(s) (jsdom is "http:"),
     // so the control-plane client points at the document origin and Vite's
     // `/controlplane.v1.*` proxy forwards to admin-server — CORS-free. The
-    // absolute VITE_CONTROL_PLANE_API_URL stays the hasControlPlane gate + proxy
+    // absolute CONTROL_PLANE_API_URL stays the hasControlPlane gate + proxy
     // target; it's only the direct baseUrl in packaged Electron (file://).
     expect(options.baseUrl).toBe(window.location.origin)
     expect(options.interceptors).toHaveLength(expected.length)

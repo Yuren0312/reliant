@@ -33,8 +33,10 @@ import { TriggerService } from "../gen/reliant/v1/trigger_pb";
 import { RunService } from "../gen/reliant/v1/run_pb";
 import { InboxService } from "../gen/reliant/v1/inbox_pb";
 import { ConnectionService } from "../gen/reliant/v1/connection_pb";
+import { loadConfig } from "../lib/config_gen";
 import { logger } from "../lib/logger";
 import {
+  API_SERVER_DEFAULT_PORT,
   buildLocalhostUrl,
   isPackagedRendererOrigin,
   isSameOriginTransport,
@@ -83,16 +85,10 @@ const getGRPCBaseURL = (): string | null => {
     return null;
   }
 
-  // Use port from env, protocol based on VITE_DISABLE_TLS
-  const grpcPort = import.meta.env.VITE_GRPC_PORT || "9090";
-  const fallbackUrl =
-    import.meta.env.VITE_GRPC_URL ||
-    import.meta.env.VITE_API_URL ||
-    buildLocalhostUrl(grpcPort);
-  logger.info("[gRPC Client] Using direct gRPC connection:", {
-    fallbackUrl,
-    grpcPort,
-  });
+  // The runtime config's API origin (config.js), else the api-server's
+  // default port on loopback (protocol per DISABLE_TLS).
+  const fallbackUrl = loadConfig().API_URL || buildLocalhostUrl(API_SERVER_DEFAULT_PORT);
+  logger.info("[gRPC Client] Using direct gRPC connection:", { fallbackUrl });
   return fallbackUrl;
 };
 
@@ -140,7 +136,7 @@ const clearClientCache = () => {
 export const getGRPCBaseURLPublic = (): string | null => getGRPCBaseURL();
 
 // The control-plane admin-server transport, for controlplane.v1 clients that
-// opt into it. When VITE_CONTROL_PLANE_API_URL is unset (or the renderer is
+// opt into it. When CONTROL_PLANE_API_URL is unset (or the renderer is
 // same-origin) it is null and callers fall through to the regular reliant
 // api-server transport.
 let _controlPlaneTransport: ReturnType<typeof createConnectTransport> | null = null;
@@ -155,7 +151,7 @@ export const getControlPlaneTransport = () => {
   // reach the hosted admin-server for cloud-managed daemons.
   if (isSameOriginTransport()) return null;
 
-  const cpURL = import.meta.env.VITE_CONTROL_PLANE_API_URL;
+  const cpURL = loadConfig().CONTROL_PLANE_API_URL;
   if (!cpURL) return null;
   if (!_controlPlaneTransport) {
     // interceptors via buildInterceptors — see api/transport.ts
