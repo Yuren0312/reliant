@@ -467,11 +467,9 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 }
 
 func (r *runner) goSteps(pl *Plan) []step {
-	// -timeout is per package binary: the DB-backed packages run hundreds of
-	// serial tests under -short, so their budget is PR CI's short tier's (10m),
-	// not one sized for a package of hermetic unit tests (Taskfile.yml,
-	// test:short).
-	base := []string{"go", "test", "-buildvcs=false", "-short", "-timeout", "10m"}
+	// -timeout is per package binary and matches task test:short's (5m): the
+	// DB-backed packages run under -short too (sized in Taskfile.yml).
+	base := []string{"go", "test", "-buildvcs=false", "-short", "-timeout", "5m"}
 	if r.goP > 0 {
 		base = append(base, "-p", fmt.Sprint(r.goP))
 	}
@@ -485,7 +483,7 @@ func (r *runner) goSteps(pl *Plan) []step {
 }
 
 func (r *runner) webSteps(pl *Plan) []step {
-	web := filepath.Join(r.root, "web")
+	web := filepath.Join(r.root, "frontends", "web")
 	switch {
 	case pl.Web.Full:
 		return []step{{name: "web (full)", dir: web, argv: r.heavy([]string{"npx", "vitest", "run"})}}
@@ -493,14 +491,6 @@ func (r *runner) webSteps(pl *Plan) []step {
 		return nil
 	}
 	return []step{{name: "web", dir: web, argv: append([]string{"npx", "vitest", "run"}, pl.Web.Tests...)}}
-}
-
-func setOf(l []string) map[string]bool {
-	out := map[string]bool{}
-	for _, s := range l {
-		out[s] = true
-	}
-	return out
 }
 
 func (r *runner) run(ctx context.Context, pl *Plan, enabled map[lane]bool) int {

@@ -17,6 +17,8 @@ import (
 // newest embedded migration.
 
 func TestPendingVersions(t *testing.T) {
+	t.Parallel()
+
 	want := []int64{10, 20, 30}
 	for _, tc := range []struct {
 		name  string
@@ -40,6 +42,8 @@ func TestPendingVersions(t *testing.T) {
 }
 
 func TestPendingMigrations_FullyMigratedDBHasNone(t *testing.T) {
+	t.Parallel()
+
 	_, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 
@@ -53,6 +57,8 @@ func TestPendingMigrations_FullyMigratedDBHasNone(t *testing.T) {
 }
 
 func TestWaitForSchema_ReturnsImmediatelyWhenCurrent(t *testing.T) {
+	t.Parallel()
+
 	_, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 
@@ -71,6 +77,8 @@ func TestWaitForSchema_ReturnsImmediatelyWhenCurrent(t *testing.T) {
 // from to_regclass, putting the connection in the same state as a database
 // nobody has migrated — without needing to create and drop one.
 func TestWaitForSchema_TimesOutWhenNoMigratorRuns(t *testing.T) {
+	t.Parallel()
+
 	_, _, dsn, cleanup := setupTestRepoWithDSN(t)
 	defer cleanup()
 

@@ -13,13 +13,15 @@ import (
 )
 
 // The UI treats a thread as active only when its record says "running" or
-// "active" (useIsThreadActive, web/src/store/threadActivityStore.ts). The
+// "active" (useIsThreadActive, frontends/web/src/store/threadActivityStore.ts). The
 // spawn path writes a "running" record when the sub-thread is created, and
 // ThreadStatus then emits its own update for the same thread — so if that
 // second update carries the raw lifecycle verb "started", it OVERWRITES the
 // good record with one the UI reads as inactive, and the spawned sub-thread
 // shows no thinking indicator for its entire run.
 func TestThreadStatus_StartedEmitsRunningForTheUI(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -53,6 +55,8 @@ func TestThreadStatus_StartedEmitsRunningForTheUI(t *testing.T) {
 // Terminal verbs must survive untouched — the UI compares those by name to
 // decide a thread has finished.
 func TestThreadStatus_TerminalVerbsPassThrough(t *testing.T) {
+	t.Parallel()
+
 	// No "expired": nothing ever produced that verb, so it was removed along
 	// with the vestigial EXPIRED status. Temporal's TIMED_OUT is recorded as a
 	// failure.
@@ -97,6 +101,8 @@ func TestThreadStatus_TerminalVerbsPassThrough(t *testing.T) {
 // and BackgroundWorkPill silently drops every running spawn; without title, the
 // same pill falls back to generic "Agent".
 func TestThreadStatus_UpdateCarriesPersistedMetadata(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -144,6 +150,8 @@ func TestThreadStatus_UpdateCarriesPersistedMetadata(t *testing.T) {
 // A caller that DOES state an origin is authoritative over the stored column —
 // the fork case, where the executor genuinely knows what it created.
 func TestThreadStatus_ExplicitOriginWins(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()

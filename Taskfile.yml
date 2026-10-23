@@ -145,7 +145,7 @@ tasks:
     cmds:
       - go mod download
       - task: deps:protoc-gen-es
-      - cd web && npm ci
+      - cd frontends/web && npm ci
       - cd electron && npm ci
 
   deps:protoc-gen-es:
@@ -217,8 +217,8 @@ tasks:
       - go build -buildvcs=false -o dist/reliant-dev ./tools/reliant-dev
 
   build:web:
-    desc: Build the web application (web/dist)
-    dir: web
+    desc: Build the web application (frontends/web/dist)
+    dir: frontends/web
     cmds:
       - npm run build
 
@@ -277,18 +277,19 @@ tasks:
     #                 -short, or this tier can report a stale pass.
     #   no -race      the race detector rebuilds every package under its own
     #                 cache key and slows tests 2-10x; `task test` keeps it on.
-    #   -timeout 10m  per package BINARY, not per test, and the budget PR CI's
-    #                 short tier has always used. The DB-backed packages are
-    #                 hundreds of serial ~0.3s tests (internal/db: 426), so
-    #                 their total, not any one test, is what takes minutes on
-    #                 a loaded machine. A single test that needs seconds under
-    #                 -short still wants a testing.Short() gate.
+    #   -timeout 5m   per package BINARY, not per test. The DB-backed
+    #                 packages run in this tier too (D-P8-3), and their tests
+    #                 are t.Parallel() (each owns its database), so the
+    #                 slowest package takes ~50s on an idle machine and ~130s
+    #                 at load 100; 5m is about twice the worst seen. A single
+    #                 test that needs seconds under -short still wants a
+    #                 testing.Short() gate, not a bigger budget.
     #   no stop       nothing here stops another agent's environment.
     #
     # Go only — web and electron run in `task test` / `task test:web`.
     desc: "Inner-loop Go tests: -short, cached, no race. Scope it: task test:short -- ./internal/foo/..."
     cmds:
-      - go test -short -timeout 10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+      - go test -short -timeout 5m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
 
   test:
     # Everything after `--` REPLACES the default `./...`, so it takes both
@@ -378,19 +379,19 @@ tasks:
 
   test:web:
     desc: Run the web unit tests (vitest, every file — prefer task test:affected LANES=web)
-    dir: web
+    dir: frontends/web
     cmds:
       - '{{.SLOT}} npm test -- --run'
 
   test:web:coverage:
     desc: Run the web unit tests with coverage
-    dir: web
+    dir: frontends/web
     cmds:
       - '{{.SLOT}} npm test -- --run --coverage'
 
   test:web:watch:
     desc: Run the web unit tests in watch mode
-    dir: web
+    dir: frontends/web
     cmds:
       - npm test
 
@@ -443,7 +444,7 @@ tasks:
 
   lint:web:
     desc: Lint the web app
-    dir: web
+    dir: frontends/web
     cmds:
       - npm run lint
 
@@ -467,7 +468,7 @@ tasks:
 
   fmt:web:
     desc: Format the web app (eslint --fix)
-    dir: web
+    dir: frontends/web
     cmds:
       - npm run lint -- --fix
 
@@ -517,10 +518,10 @@ tasks:
     # control-plane's public contract. To pull a new contract first:
     # node .github/scripts/sync-controlplane-proto.mjs. Both output dirs are
     # replaced wholesale, but only after buf succeeds.
-    desc: Regenerate the control-plane clients (gen/controlplane, web/src/gen/controlplane) from proto-vendor/
+    desc: Regenerate the control-plane clients (gen/controlplane, frontends/web/src/gen/controlplane) from proto-vendor/
     deps: [deps:protoc-gen-es]
     cmds:
-      - '{{.GEN_ENV}} scripts/proto-generate-atomic.sh buf.gen.controlplane.yaml gen/controlplane web/src/gen/controlplane'
+      - '{{.GEN_ENV}} scripts/proto-generate-atomic.sh buf.gen.controlplane.yaml gen/controlplane frontends/web/src/gen/controlplane'
 
   generate:docs:
     # Every docs generator — each tools/docgen program and the Mintlify
@@ -592,7 +593,7 @@ tasks:
   generate:docs:shortcuts:
     desc: Generate the keyboard shortcuts from config/shortcuts.yaml
     cmds:
-      - '{{.GEN_GO}} run ./tools/docgen/shortcuts/... config/shortcuts.yaml web/src/store/shortcutsData.generated.ts {{.SETTINGS_DIR}}/keyboard-shortcuts.generated.md'
+      - '{{.GEN_GO}} run ./tools/docgen/shortcuts/... config/shortcuts.yaml frontends/web/src/store/shortcutsData.generated.ts {{.SETTINGS_DIR}}/keyboard-shortcuts.generated.md'
 
   generate:docs:nodes:
     desc: Generate the node type I/O reference from the node type registry
