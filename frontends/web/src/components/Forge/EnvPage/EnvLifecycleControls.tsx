@@ -19,7 +19,9 @@ import { MoreHorizontal, Play, Square, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
 import { Dropdown } from "@/components/ui/Dropdown";
-import { Input } from "@/components/ui/Input";
+import { FormField } from "@/components/forge-ui/form";
+import Input from "@/components/forge-ui/input";
+import Label from "@/components/forge-ui/label";
 import { Modal } from "@/components/ui/Modal";
 import { useDeleteEnvironment, useSetEnvironmentRunState } from "@/hooks/forge-queries";
 import { cloudErrorDetail, type CloudEnvStatus } from "@/services/forge/cloudEnvs";
@@ -225,14 +227,16 @@ export function DeleteEnvironmentDialog({
             or use the Deploy button.
           </p>
         </div>
-        <Input
-          label={`Type ${envName} to confirm`}
-          value={typed}
-          onChange={(event) => setTyped(event.target.value)}
-          autoComplete="off"
-          spellCheck={false}
-          data-testid="delete-environment-confirm-input"
-        />
+        <FormField className="forge-ui">
+          <Label>Type {envName} to confirm</Label>
+          <Input
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            data-testid="delete-environment-confirm-input"
+          />
+        </FormField>
         {del.isError && (
           <p role="alert" className="text-xs text-foreground" data-testid="delete-environment-error">
             {cloudErrorDetail(del.error)}

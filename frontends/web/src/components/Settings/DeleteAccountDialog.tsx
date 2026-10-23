@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
-import { Input } from '../ui/Input'
+import Input from '../forge-ui/input'
 import { createAccountClient } from '../../api/grpc-client'
 import type {
   AccountDeletionWalletQuote,
@@ -215,6 +215,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
                   autoComplete="off"
                   spellCheck={false}
                   disabled={isDeleting}
+                  className="forge-ui"
                 />
               </div>
             )}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal } from "../ui/Modal";
-import { Input } from "../ui/Input";
+import Input from "../forge-ui/input";
 import { Button } from "../ui/Button";
 import { useUpdatePreferences } from "../../hooks/settings-queries";
 
@@ -171,7 +171,7 @@ export function FileOperationsModal({
             placeholder={getPlaceholder()}
             autoFocus
             disabled={isSubmitting}
-            className="font-mono"
+            className="forge-ui font-mono"
           />
         </div>
         <div className="flex justify-end gap-2">

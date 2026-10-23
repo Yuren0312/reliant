@@ -18,11 +18,13 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 
 import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
 import { Modal } from "../ui/Modal";
-import { Textarea } from "../ui/Textarea";
 import { RowMenu } from "../workflows/RowMenu";
 import { MultiSelectFilter } from "../workflows/FilterMenu";
+import { FormError, FormField } from "./form";
+import Input from "./input";
+import Label from "./label";
+import Textarea from "./textarea";
 import ToggleSwitch from "./toggle_switch";
 
 const noop = () => undefined;
@@ -65,15 +67,30 @@ export function S2Sites() {
       <div>
         <SectionTitle>Input / Textarea — MCP dialogs, token settings, search, confirm fields</SectionTitle>
         <div className="grid max-w-3xl grid-cols-2 gap-4">
-          <Input label="Server Name" placeholder="my-custom-mcp" description="Unique identifier used in tool names" />
-          <Input label="Header name" defaultValue="Authorization" state="error" error="A header name is required" />
-          <Input placeholder="Search installed servers" leftIcon={<Search className="h-4 w-4" />} aria-label="Search installed MCP servers" />
-          <Input defaultValue="rlnt_4be2d0a1c9f8e7d6" readOnly className="font-mono text-sm" aria-label="New token" />
-          <Input placeholder="ada@example.com" disabled aria-label="Confirm email" />
-          <Input placeholder="Token name (e.g. my-server)" aria-label="Token name" />
+          <FormField className="forge-ui">
+            <Label>Server Name</Label>
+            <Input placeholder="my-custom-mcp" />
+            <p className="mt-1 text-xs text-ink-muted">Unique identifier used in tool names</p>
+          </FormField>
+          <FormField className="forge-ui">
+            <Label>Header name</Label>
+            <Input defaultValue="Authorization" invalid />
+            <FormError message="A header name is required" />
+          </FormField>
+          <div className="forge-ui relative">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+              aria-hidden="true"
+            />
+            <Input type="search" placeholder="Search installed servers" aria-label="Search installed MCP servers" className="pl-10" />
+          </div>
+          <Input defaultValue="rlnt_4be2d0a1c9f8e7d6" readOnly className="forge-ui font-mono text-sm" aria-label="New token" />
+          <Input placeholder="ada@example.com" disabled className="forge-ui" aria-label="Confirm email" />
+          <Input placeholder="Token name (e.g. my-server)" className="forge-ui" aria-label="Token name" />
           <Textarea
-            className="col-span-2"
+            className="forge-ui col-span-2"
             rows={3}
+            resize="none"
             placeholder="Describe the changes in this pull request"
             aria-label="Description"
           />
@@ -136,9 +153,16 @@ export function S2Modal() {
         }
       >
         <div className="space-y-4">
-          <Input label="Server Name" placeholder="my-custom-mcp" description="Unique identifier used in tool names" />
-          <Input label="Command" placeholder="npx" />
-          <Textarea rows={3} placeholder="Environment variables, one per line" aria-label="Environment" />
+          <FormField className="forge-ui">
+            <Label>Server Name</Label>
+            <Input placeholder="my-custom-mcp" />
+            <p className="mt-1 text-xs text-ink-muted">Unique identifier used in tool names</p>
+          </FormField>
+          <FormField className="forge-ui">
+            <Label>Command</Label>
+            <Input placeholder="npx" />
+          </FormField>
+          <Textarea className="forge-ui" rows={3} placeholder="Environment variables, one per line" aria-label="Environment" />
         </div>
       </Modal>
     </div>
