@@ -408,7 +408,7 @@ function Overlays() {
         </SidebarLayout>
       </div>
       <div className={box} style={pin}>
-        <Modal open onClose={noop} title="Rename environment" description="Names are unique per project." footer={<Tag>footer</Tag>}>
+        <Modal open portal={false} onClose={noop} title="Rename environment" description="Names are unique per project." footer={<Tag>footer</Tag>}>
           <p className="text-sm text-ink">Modal body.</p>
         </Modal>
       </div>
