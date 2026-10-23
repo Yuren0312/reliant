@@ -9,6 +9,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
@@ -63,9 +65,6 @@ vi.mock("@/api/grpc-client", () => ({
 vi.mock("@/api/client", () => ({
   api: { approvals: { approve: mocks.approve, deny: mocks.deny } },
 }));
-vi.mock("@/api/question-grpc", () => ({
-  questionGrpc: { resolveQuestion: mocks.resolveQuestion, listPendingQuestions: vi.fn() },
-}));
 vi.mock("@/hooks/useOnboardingQueries", () => ({
   useResumeDaemon: (callbacks: { onError?: (error: unknown) => void } = {}) => ({
     mutate: (id: string) => {
@@ -112,6 +111,14 @@ beforeEach(() => {
   mocks.approve.mockResolvedValue({ success: true, message: "" });
   mocks.deny.mockResolvedValue({ success: true, message: "" });
   mocks.resolveQuestion.mockResolvedValue({});
+  setTransport(
+    mockTransport({
+      "QuestionService.ResolveQuestion": (req) => {
+        const { questionId, action, responseData } = req as { questionId: string; action: string; responseData?: string };
+        return mocks.resolveQuestion(questionId, action, responseData);
+      },
+    }),
+  );
   mocks.dismissInboxItem.mockResolvedValue({});
   mocks.restoreInboxItem.mockResolvedValue({});
   mocks.resumeDaemon.mockResolvedValue({});

@@ -37,7 +37,6 @@ import { ToolCallService } from "../gen/reliant/v1/tool_call_pb";
 import { PresetService } from "../gen/reliant/v1/preset_pb";
 import { DaemonRegistryService } from "../gen/reliant/v1/daemon_registry_pb";
 import { TokenService } from "../gen/reliant/v1/token_pb";
-import { QuestionService } from "../gen/reliant/v1/question_pb";
 import { ConnectorService } from "../gen/reliant/v1/connector_pb";
 import { AccountService } from "../gen/reliant/v1/account_pb";
 import { ForgeService } from "../gen/reliant/v1/forge_pb";
@@ -97,7 +96,6 @@ export const createForgeClient = (): Client<typeof ForgeService> => connectClien
 export const createDaemonRegistryClient = (): Client<typeof DaemonRegistryService> =>
   connectClient(DaemonRegistryService);
 export const createTokenClient = (): Client<typeof TokenService> => connectClient(TokenService);
-export const createQuestionClient = (): Client<typeof QuestionService> => connectClient(QuestionService);
 export const createConnectorClient = (): Client<typeof ConnectorService> =>
   connectClient(ConnectorService);
 export const createTriggerClient = (): Client<typeof TriggerService> => connectClient(TriggerService);
@@ -131,7 +129,6 @@ export const getScenarioClient = createScenarioClient;
 export const getDaemonRegistryClient = createDaemonRegistryClient;
 export const getTokenClient = createTokenClient;
 export const getConnectorClient = createConnectorClient;
-export const getQuestionClient = createQuestionClient;
 export const getTriggerClient = createTriggerClient;
 export const getRunClient = createRunClient;
 export const getInboxClient = createInboxClient;
@@ -160,7 +157,6 @@ export const grpcClient = {
   scenario: getScenarioClient,
   daemonRegistry: getDaemonRegistryClient,
   token: getTokenClient,
-  question: getQuestionClient,
   connector: getConnectorClient,
   trigger: getTriggerClient,
   run: getRunClient,

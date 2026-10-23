@@ -121,9 +121,8 @@ import { QUEUED_SENDER_KIND_HUMAN } from "../api/chat-grpc";
 import {
   approvalKeys,
   upsertApprovalInCache,
-  applyQuestionUpdate,
-  resolvePendingQuestion,
 } from "../hooks/approval-queries";
+import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
 import {
   chatKeys,
   seedChatDetail,

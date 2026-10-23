@@ -31,7 +31,7 @@ import { toast } from "sonner";
 
 import { api } from "@/api/client";
 import { InboxItemKind, type InboxItem as InboxItemData, type InboxStorage as InboxStorageData } from "@/gen/reliant/v1/inbox_pb";
-import { answerQuestion } from "@/hooks/approval-queries";
+import { answerQuestion } from "@/hooks/question-queries";
 import { inboxKeys, removeInboxItems } from "@/hooks/inbox-queries";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import { useSetTriggerEnabled, useTriggerById } from "@/hooks/trigger-queries";

@@ -53,7 +53,7 @@ import { useChat } from "../../hooks/chat-queries";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { isUnadoptedAutomation } from "../../lib/sidebarChatList";
 import { unansweredMessage } from "../../lib/awaitingReply";
-import { usePendingQuestions } from "../../hooks/approval-queries";
+import { usePendingQuestions } from "../../hooks/question-queries";
 import { questionForThread } from "../../lib/pendingQuestions";
 import { chatMachineNotice, resolveChatMachine } from "../../lib/chatMachineNotice";
 import { useWakingMachines } from "../../lib/machineWake";
@@ -200,7 +200,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   // background-work pill instead.
   const { data: pendingQuestions } = usePendingQuestions(chatId || undefined);
   const hasPendingQuestion = !!questionForThread(
-    pendingQuestions,
+    pendingQuestions?.questions,
     chatId || undefined,
     selectedThreadId,
     chatForQueue?.workflowId,
