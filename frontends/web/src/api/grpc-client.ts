@@ -32,7 +32,6 @@ import { FileSystemService } from "../gen/reliant/v1/filesystem_pb";
 import { BackgroundService } from "../gen/reliant/v1/background_pb";
 import { PackageCommandsService } from "../gen/reliant/v1/package_commands_pb";
 import { StreamingService } from "../gen/reliant/v1/streaming_pb";
-import { TerminalService } from "../gen/reliant/v1/terminal_pb";
 import { AttachmentService } from "../gen/reliant/v1/attachment_pb";
 import { ToolCallService } from "../gen/reliant/v1/tool_call_pb";
 import { PresetService } from "../gen/reliant/v1/preset_pb";
@@ -88,7 +87,6 @@ export const createPackageCommandsClient = (): Client<typeof PackageCommandsServ
   connectClient(PackageCommandsService);
 export const createStreamingClient = (): Client<typeof StreamingService> =>
   connectClient(StreamingService);
-export const createTerminalClient = (): Client<typeof TerminalService> => connectClient(TerminalService);
 export const createAttachmentClient = (): Client<typeof AttachmentService> =>
   connectClient(AttachmentService);
 export const createToolCallClient = (): Client<typeof ToolCallService> => connectClient(ToolCallService);
@@ -126,7 +124,6 @@ export const getDaemonFileSystemClient = createDaemonFileSystemClient;
 export const getBackgroundClient = createBackgroundClient;
 export const getPackageCommandsClient = createPackageCommandsClient;
 export const getStreamingClient = createStreamingClient;
-export const getTerminalClient = createTerminalClient;
 export const getAttachmentClient = createAttachmentClient;
 export const getToolCallClient = createToolCallClient;
 export const getPresetClient = createPresetClient;
@@ -157,7 +154,6 @@ export const grpcClient = {
   background: getBackgroundClient,
   packageCommands: getPackageCommandsClient,
   streaming: getStreamingClient,
-  terminal: getTerminalClient,
   attachment: getAttachmentClient,
   toolCall: getToolCallClient,
   preset: getPresetClient,
