@@ -386,6 +386,11 @@ func (s *Service) forgeDispatch(
 		}
 		return forgeReportReply{}, "", remapForgeDispatchError(commandType, err)
 	}
+	// forge ran but could not authenticate to the control plane: that is
+	// this rpc's error, with forge's reason (authz_refusal.go), not a report.
+	if refusal := forgeAuthzRefusal(commandType, reply); refusal != nil {
+		return forgeReportReply{}, "", refusal
+	}
 	return reply, "", nil
 }
 
