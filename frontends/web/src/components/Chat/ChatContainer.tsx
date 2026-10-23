@@ -18,7 +18,6 @@ import {
   useRunOutputs,
   useStreamingMessages,
   useHasOlderMessages,
-  useIsChatSyncing,
 } from "../../store/chatStoreHooks";
 import {
   usePendingApprovals,
@@ -37,7 +36,6 @@ import { toast } from "../../lib/toast-manager";
 import { isDaemonConnectingError } from "../../lib/daemon-errors";
 import { sendWithDaemonWait } from "../../lib/daemon-retry";
 import { newClientMessageId } from "../../lib/pendingSends";
-import { isTimelineCatchingUp } from "../../lib/timelineCatchUp";
 
 import type { Approval } from "../../gen/reliant/v1/approval_pb";
 
@@ -99,12 +97,6 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
   const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
   const isChatBusy = useIsChatRunning(chatId);
   const pendingApprovals = usePendingApprovals(chatId).data?.approvals ?? NO_APPROVALS;
-  const isChatSyncing = useIsChatSyncing(chatId);
-  const timelineCatchingUp = isTimelineCatchingUp({
-    syncPending: isChatSyncing,
-    messages,
-    connectionStatus,
-  });
 
   // Self-healing subscription invariant: this component renders the active
   // chat, so it's the natural place to assert "the rendered chat is the
@@ -337,7 +329,6 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
       onLoadOlderMessages={handleLoadOlderMessages}
       isLoadingOlderMessages={isLoadingOlderMessages}
       hasOlderMessages={hasOlderMessages}
-      isTimelineCatchingUp={timelineCatchingUp}
       hideChatTitle={hideChatTitle}
     />
   );
