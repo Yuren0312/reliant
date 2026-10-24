@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Loader2, ShieldAlert, ExternalLink } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { Button } from "../ui/Button";
@@ -93,6 +93,18 @@ export function OAuthConsent() {
   // redirect. The grant already exists at that point, so the user needs the
   // link rather than an apology.
   const [pendingRedirect, setPendingRedirect] = useState<string | null>(null);
+
+  // The redirect fallback's timer (see finish). It outlives a navigation that
+  // succeeded, so it is cleared on unmount: one left running fired into an
+  // unmounted component — and, in a test run, into a torn-down jsdom, where
+  // React's setState threw "window is not defined" as an unhandled error.
+  const redirectFallbackTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (redirectFallbackTimer.current !== null) window.clearTimeout(redirectFallbackTimer.current);
+    },
+    []
+  );
 
   const load = useCallback(async () => {
     if (!authorizationId) {
@@ -202,7 +214,7 @@ export function OAuthConsent() {
         // spinner sitting on top of a flow that actually succeeded. Delayed
         // rather than immediate so the fallback never flashes over a redirect
         // that is simply in progress.
-        window.setTimeout(() => setPendingRedirect(target), 2000);
+        redirectFallbackTimer.current = window.setTimeout(() => setPendingRedirect(target), 2000);
       } catch (err) {
         logger.error("[OAuthConsent] decision failed", err);
         setError("Could not record your decision.");
