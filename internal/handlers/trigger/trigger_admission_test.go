@@ -36,11 +36,17 @@ func TestEnableWorkflowRejectsInvalidTreeBeforeWrites(t *testing.T) {
 		{"root", strings.Replace(admissionWorkflow, "entry: [a]", "entry: [missing]", 1)},
 		{"child", strings.Replace(admissionWorkflow, "type: approval\n    args: {title: ok}", "type: workflow\n    ref: child", 1)},
 		{"unknown_key", admissionWorkflow + "invented_runtime_field: true\n"},
+		{"draft", admissionWorkflow},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			env := setupTriggerTest(t)
 			env.saveWorkflow(t, "child", "name: child\nentry: [missing]\nnodes:\n  - {id: a, type: approval, args: {title: ok}}\n")
 			env.saveWorkflow(t, "triage", tc.definition)
+			if tc.name == "draft" {
+				stored, err := env.repo.GetWorkflowDraftBySlug(env.ctx, env.userID, "triage")
+				require.NoError(t, err)
+				require.NoError(t, env.repo.UpdateWorkflowDraftDefinition(env.ctx, stored.ID, "triage", "triage", tc.definition, db.WorkflowDraftStatusDraft))
+			}
 			resp, err := env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(nil)))
 			if err == nil {
 				require.False(t, resp.Msg.Enabled, "invalid tree was enabled")
