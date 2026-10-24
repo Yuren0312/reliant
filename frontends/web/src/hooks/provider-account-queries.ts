@@ -24,6 +24,7 @@ import {
 import { connectClient } from "../lib/connect";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "../store/authStore";
+import { invalidateProviderStatuses } from "./settings-queries";
 import {
   accountFromProto,
   isProviderAccountsUnavailable,
@@ -257,7 +258,8 @@ export function useProviderAccountActions(): ProviderAccountActions {
 // Settings' single-credential view (api.settings.updateProvider /
 // deleteProvider) adds and removes accounts imperatively. They invalidate the
 // same scope the generated mutations do, so the account list never shows what
-// they just changed as stale.
+// they just changed as stale — and the provider statuses that view renders,
+// which GetProviderStatuses derives from the accounts.
 
 /** Add an API key as a new account of the provider. The same key twice is one account. */
 export async function addProviderApiKey(provider: string, apiKey: string): Promise<{ created: boolean }> {
@@ -266,6 +268,7 @@ export async function addProviderApiKey(provider: string, apiKey: string): Promi
     return { created };
   } finally {
     void queryClient.invalidateQueries({ queryKey: providerAccountServiceKeys.all });
+    invalidateProviderStatuses();
   }
 }
 
@@ -280,5 +283,6 @@ export async function disconnectProvider(provider: string): Promise<void> {
     }
   } finally {
     void queryClient.invalidateQueries({ queryKey: providerAccountServiceKeys.all });
+    invalidateProviderStatuses();
   }
 }

@@ -527,7 +527,6 @@ export const api = {
       return settingsGrpc.setHiddenItem(itemType, slug, hidden);
     },
 
-
     getProviders: async () => {
       const providers = await settingsGrpc.getProviderStatuses();
       return providers.map((p) => ({
@@ -537,22 +536,6 @@ export const api = {
         accountCount: p.account_count,
         displayName: p.display_name,
       }));
-    },
-
-    getProvider: async (provider: string) => {
-      // Get all providers and filter - gRPC doesn't have a single-get endpoint
-      const providers = await settingsGrpc.getProviderStatuses();
-      const found = providers.find((p) => p.provider === provider);
-      if (!found) {
-        throw new Error(`Provider ${provider} not found`);
-      }
-      return {
-        provider: found.provider,
-        configured: found.configured,
-        hasApiKey: found.configured,
-        accountCount: found.account_count,
-        displayName: found.display_name,
-      };
     },
 
     /**
@@ -578,10 +561,6 @@ export const api = {
       return settingsGrpc.validateProviderAPIKey(provider, apiKey);
     },
 
-    completeCodexOAuth: async (code: string, codeVerifier: string, redirectURI: string) => {
-      return settingsGrpc.completeCodexOAuth(code, codeVerifier, redirectURI);
-    },
-
     syncReliantProvider: async (forceRotate = false) => {
       return settingsGrpc.syncReliantProvider(forceRotate);
     },
@@ -597,53 +576,8 @@ export const api = {
       return settingsGrpc.updatePrivacySettings(settings);
     },
 
-    trackPageVisited: (pageName: string, previousPage?: string) => {
-      return settingsGrpc.trackPageVisited(pageName, previousPage);
-    },
-
-
-    getPrompts: async () => {
-      return settingsGrpc.getPrompts();
-    },
-
-    savePrompts: async (
-      prompts: Array<{
-        id: string;
-        title: string;
-        content: string;
-        default?: boolean;
-        hotkey?: string;
-        category?: string;
-      }>
-    ) => {
-      return settingsGrpc.savePrompts(prompts);
-    },
-
-
-    createSetting: async (
-      key: string,
-      value: string,
-      valueType?: string,
-      projectId?: string
-    ) => {
-      return settingsGrpc.createSetting(key, value, valueType, projectId);
-    },
-
     listSettings: async (projectId?: string) => {
       return settingsGrpc.listSettings(projectId);
-    },
-
-    getSetting: async (key: string, projectId?: string) => {
-      return settingsGrpc.getSetting(key, projectId);
-    },
-
-    updateSetting: async (
-      key: string,
-      value?: string,
-      valueType?: string,
-      projectId?: string
-    ) => {
-      return settingsGrpc.updateSetting(key, value, valueType, projectId);
     },
 
     batchUpsertSettings: async (
