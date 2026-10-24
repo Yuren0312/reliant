@@ -174,10 +174,9 @@ export function useProviderAccountActions(): ProviderAccountActions {
     patchAccounts(qc, patch);
     return { prev };
   };
-  // TODO(forge NO_SIDE_EFFECTS/TContext): the generated mutation hooks take no
-  // TContext type parameter, so onError's context arrives as `unknown`.
-  const rollback = (_e: unknown, _v: unknown, ctx: unknown) =>
-    qc.setQueryData(listKey(), (ctx as Snapshot | undefined)?.prev);
+  // onMutate's Snapshot reaches onError typed: the generated hooks infer
+  // TanStack's TContext from onMutate.
+  const rollback = (_e: unknown, _v: unknown, ctx: Snapshot | undefined) => qc.setQueryData(listKey(), ctx?.prev);
   const applyAccount = (res: { account?: ProtoProviderAccount }) => {
     const account = res.account;
     if (account) patchAccounts(qc, (all) => replaceAccount(all, account));

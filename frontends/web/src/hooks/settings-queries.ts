@@ -230,11 +230,10 @@ export function useUpdatePreferences() {
       if (previous) qc.setQueryData(preferencesKey(), applyUpdate(previous, req));
       return { previous };
     },
-    // TODO(forge NO_SIDE_EFFECTS/TContext): the generated mutation hooks take
-    // no TContext type parameter, so the context arrives as `unknown`.
+    // onMutate's return reaches onError typed (the generated hooks infer
+    // TanStack's TContext from onMutate).
     onError: (_err, _req, context) => {
-      const previous = (context as { previous?: GetPreferencesResponse } | undefined)?.previous;
-      if (previous) qc.setQueryData(preferencesKey(), previous);
+      if (context?.previous) qc.setQueryData(preferencesKey(), context.previous);
     },
   });
   return {
