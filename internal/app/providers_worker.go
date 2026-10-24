@@ -569,7 +569,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	cp := ControlPlaneEndpoint(d.ControlPlane)
 	var hostedActions handlers.HostedActionExecutor
 	if cp.URL != "" && cp.InternalServiceSecret != "" {
-		client, err := hosteduse.New(hosteduse.Deps{
+		client, err := hosteduse.NewInstrumented(hosteduse.Deps{
 			Store: d.DB, BaseURL: cp.URL,
 			Sign: func() (string, error) { return auth.SignInternalServiceToken(cp.InternalServiceSecret) },
 		})

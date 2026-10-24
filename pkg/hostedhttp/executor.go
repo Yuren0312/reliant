@@ -7,6 +7,8 @@ package hostedhttp
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,13 +17,11 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
-	"crypto/tls"
-	"crypto/x509"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/pkg/guardedhttp"
 	"github.com/reliant-labs/reliant/pkg/secretredact"
-	"time"
 )
 
 // Endpoint authorizes one exact escaped path and method. Prefixes and globs
