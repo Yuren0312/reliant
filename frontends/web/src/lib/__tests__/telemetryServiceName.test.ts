@@ -34,7 +34,7 @@ interface HyperDXDashboard {
 
 describe("telemetry service.name", () => {
   const reported = buildTelemetryConfig({
-    env: {},
+    config: {},
     prerelease: false,
     buildVersion: "0.0.0",
     replayRate: 0,
