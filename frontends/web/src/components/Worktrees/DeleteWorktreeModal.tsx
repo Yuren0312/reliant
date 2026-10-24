@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { focusChatInput } from "../../hooks/useFocusManager";
 import Modal from "../forge-ui/modal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import type { Worktree } from "../../store/worktreeStore";
 import { usePreferences } from "../../hooks/settings-queries";
 
@@ -152,7 +152,7 @@ export function DeleteWorktreeModal({
             Cancel
           </Button>
           <Button
-            variant={isArchived ? "destructive" : "primary"}
+            variant={isArchived ? "danger" : "primary"}
             size="sm"
             onClick={handleConfirm}
             loading={isDeleting}

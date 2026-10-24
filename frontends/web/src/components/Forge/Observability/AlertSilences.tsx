@@ -14,8 +14,8 @@ import { useId, useState } from "react";
 import { BellOff, Plus, Trash2 } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
 import Modal from "@/components/forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { useAlertingMutation, useSilences } from "@/hooks/observability-queries";
 import type { CreateSilenceInput, Matcher, Silence } from "@/services/controlPlane/observability/alertingTypes";
 import { alertingErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";

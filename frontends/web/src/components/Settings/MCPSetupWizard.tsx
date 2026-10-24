@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import Modal from "../forge-ui/modal";
-import { Button } from "../ui/Button";
 import { ExternalLink } from "lucide-react";
 import { FormError, FormField } from "../forge-ui/form";
 import Input from "../forge-ui/input";
 import Label from "../forge-ui/label";
+import Button from "@/components/forge-ui/button";
 import Card from "../forge-ui/card";
 import { ConfigScopeSelector, getScopeLabel } from "./ConfigScopeSelector";
 import type { MCPServerConfig, RecommendedServer } from "../../api/mcp-grpc";
@@ -307,7 +307,7 @@ export function MCPSetupWizard({
               <Button
                 type="button"
                 size="sm"
-                variant={httpAuthPreset === "none" ? "default" : "outline"}
+                variant={httpAuthPreset === "none" ? "primary" : "outline"}
                 onClick={() => {
                   setHttpAuthPreset("none");
                   setHTTPAuthPresetTouched(true);
@@ -318,7 +318,7 @@ export function MCPSetupWizard({
               <Button
                 type="button"
                 size="sm"
-                variant={httpAuthPreset === "bearer" ? "default" : "outline"}
+                variant={httpAuthPreset === "bearer" ? "primary" : "outline"}
                 onClick={() => {
                   setHttpAuthPreset("bearer");
                   setHTTPAuthPresetTouched(true);

@@ -15,8 +15,8 @@ import { toast } from "sonner";
 
 import { useCreateWorkflowDraft } from "@/hooks/workflow-library-queries";
 import { cn } from "@/lib/utils";
-import { Button } from "../ui/Button";
 import Modal from "../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 
 /** A start the dialog offers. `template` is the server's CreateWorkflowDraft template. */
 export interface NewWorkflowStart {

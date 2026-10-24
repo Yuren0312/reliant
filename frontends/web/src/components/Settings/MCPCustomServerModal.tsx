@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import Modal from "../forge-ui/modal";
-import { Button } from "../ui/Button";
 import { FormField } from "../forge-ui/form";
 import Input from "../forge-ui/input";
 import Label from "../forge-ui/label";
 import Textarea from "../forge-ui/textarea";
+import Button from "@/components/forge-ui/button";
 import { ConfigScopeSelector } from "./ConfigScopeSelector";
 import { ConfigScope } from "../../api/mcp-grpc";
 import { toast } from "sonner";
@@ -427,14 +427,14 @@ export function MCPCustomServerModal({
           <div className="flex gap-2">
             <Button
               size="sm"
-              variant={mode === "form" ? "default" : "outline"}
+              variant={mode === "form" ? "primary" : "outline"}
               onClick={() => setMode("form")}
             >
               Guided Form
             </Button>
             <Button
               size="sm"
-              variant={mode === "json" ? "default" : "outline"}
+              variant={mode === "json" ? "primary" : "outline"}
               onClick={() => setMode("json")}
             >
               JSON Snippet
@@ -465,14 +465,14 @@ export function MCPCustomServerModal({
               <div className="flex gap-2">
                 <Button
                   size="sm"
-                  variant={transportType === "stdio" ? "default" : "outline"}
+                  variant={transportType === "stdio" ? "primary" : "outline"}
                   onClick={() => setTransportType("stdio")}
                 >
                   stdio
                 </Button>
                 <Button
                   size="sm"
-                  variant={transportType === "http" ? "default" : "outline"}
+                  variant={transportType === "http" ? "primary" : "outline"}
                   onClick={() => setTransportType("http")}
                 >
                   http/sse

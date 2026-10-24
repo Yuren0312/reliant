@@ -1,8 +1,8 @@
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { type MCPServer, type RecommendedServer, ConfigScope } from "../../api/mcp-grpc";
-import { Button } from "../ui/Button";
 import Input from "../forge-ui/input";
+import Button from "@/components/forge-ui/button";
 import { MCPServerListItem } from "./MCPServerListItem";
 import { MCPTabs } from "./MCPTabs";
 import { getMcpIconUrl } from "./mcpAvatar";

@@ -17,7 +17,7 @@
 import { useState } from "react";
 import { Search } from "lucide-react";
 
-import { Button } from "../ui/Button";
+import Button from "./button";
 import { RowMenu } from "../workflows/RowMenu";
 import { MultiSelectFilter } from "../workflows/FilterMenu";
 import { FormError, FormField } from "./form";

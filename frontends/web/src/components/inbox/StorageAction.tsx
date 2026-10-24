@@ -26,8 +26,8 @@ import { useCleanupStorage } from "@/hooks/inbox-queries";
 import { formatBytes } from "@/lib/formatBytes";
 import { pressuredVolume } from "@/lib/machineDisk";
 import { FreeDiskSpaceDialog } from "../MachineDisk/FreeDiskSpaceDialog";
-import { Button } from "../ui/Button";
 import Modal from "../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { CardInset } from "../forge-ui/card";
 
 const REASON_LABEL: Record<string, string> = {

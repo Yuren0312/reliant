@@ -10,12 +10,14 @@ import { COLOR_SCHEMES, FORGE_COLOR_TOKENS } from '../src/lib/forgeTokens';
 // a dev-only harness: no backend, no session. Against CI's `vite preview` of
 // a production build the route redirects to / and this suite skips.
 //
-// Seven captures per scheme × mode — 140 baselines in
+// Eight captures per scheme × mode — 160 baselines in
 // color-schemes.spec.ts-snapshots/:
 //
 //   library   every forge-ui component the app imported before R5 S1
 //   s1        the call sites R5 S1 moved off components/ui (Card, Badge,
 //             ErrorSummary, Progress), outside .forge-ui as in the app
+//   buttons   forge's Button: every variant, size and state, outside
+//             .forge-ui on a card and on the page background
 //   overlays  sidebar_layout, modal and confirmation_dialog, each pinned in
 //             a box
 //   s2        the R5 S2 primitives as their call sites render them
@@ -106,6 +108,7 @@ test.describe('forge components across color schemes', () => {
         expect(await unresolvedTokens(page), 'forge tokens that paint transparent').toEqual([]);
         await expect(page.getByTestId('forge-library')).toHaveScreenshot(`library-${scheme}-${mode}.png`, SHOT);
         await expect(page.getByTestId('s1-sites')).toHaveScreenshot(`s1-${scheme}-${mode}.png`, SHOT);
+        await expect(page.getByTestId('buttons')).toHaveScreenshot(`buttons-${scheme}-${mode}.png`, SHOT);
 
         await expect(page.getByTestId('s2-sites')).toHaveScreenshot(`s2-sites-${scheme}-${mode}.png`, SHOT);
 

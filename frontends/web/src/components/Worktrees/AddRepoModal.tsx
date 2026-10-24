@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { AlertCircle, GitBranch, FolderOpen, Link, Loader2, CheckCircle2, Github } from "lucide-react";
 import { focusChatInput } from "../../hooks/useFocusManager";
 import Modal from "../forge-ui/modal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { gitService } from "../../services/controlPlane/git";
 import type { GitAccount } from "../../services/controlPlane/git";
 import { supabase } from "../../lib/supabase";

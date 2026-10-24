@@ -17,8 +17,8 @@ import { ListDaemonsRequestSchema } from "../../gen/reliant/v1/daemon_registry_p
 import type { DaemonInfo } from "../../gen/reliant/v1/daemon_registry_pb";
 import { RepoSelector } from "../Projects/RepoSelector";
 import type { GitRepo } from "../../services/controlPlane/git";
-import { Button } from "../ui/Button";
 import Input from "../forge-ui/input";
+import Button from "@/components/forge-ui/button";
 import Badge from "../forge-ui/badge";
 import { cn } from "../../lib/utils";
 import { useAccountGate } from "@/hooks/useAccountGate";

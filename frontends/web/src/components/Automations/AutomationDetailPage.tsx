@@ -25,8 +25,8 @@ import { toast } from "sonner";
 
 import Card, { CardHeader, CardInset } from "../forge-ui/card";
 import ConfirmationDialog from "../forge-ui/confirmation_dialog";
-import { Button } from "../ui/Button";
 import ToggleSwitch from "../forge-ui/toggle_switch";
+import Button from "@/components/forge-ui/button";
 import { useProjectStore } from "@/store/projectStore";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
@@ -238,7 +238,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
           )}
           {(!activation || health.key === "broken") && (
             <Button
-              variant="destructive"
+              variant="danger"
               leftIcon={<Trash2 className="h-4 w-4" />}
               onClick={() => setConfirmingDelete(true)}
             >

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { focusChatInput } from "../../hooks/useFocusManager";
 import Modal from "../forge-ui/modal";
 import Input from "../forge-ui/input";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useUpdatePreferences } from "../../hooks/settings-queries";
 
 interface FileOperationsModalProps {
@@ -141,7 +141,7 @@ export function FileOperationsModal({
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              variant="danger"
               onClick={handleDeleteConfirm}
               disabled={isSubmitting}
             >

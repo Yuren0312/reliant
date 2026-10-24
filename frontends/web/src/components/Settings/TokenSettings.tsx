@@ -11,8 +11,8 @@ import {
   TokenKind,
 } from "../../gen/reliant/v1/token_pb";
 import type { TokenInfo } from "../../gen/reliant/v1/token_pb";
-import { Button } from "../ui/Button";
 import Input from "../forge-ui/input";
+import Button from "@/components/forge-ui/button";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
 // The permissions a daemon credential can carry. Mirrors the org-administration
@@ -366,7 +366,7 @@ export function TokenSettings() {
                           : "Revoke? This cannot be undone."}
                       </span>
                       <Button
-                        variant="destructive"
+                        variant="danger"
                         size="xs"
                         onClick={() => handleRevoke(token.id)}
                       >

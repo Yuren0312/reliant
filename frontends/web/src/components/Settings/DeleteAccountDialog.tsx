@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import Modal from '../forge-ui/modal'
-import { Button } from '../ui/Button'
 import Input from '../forge-ui/input'
+import Button from '@/components/forge-ui/button';
 import { createAccountClient } from '../../api/grpc-client'
 import type {
   AccountDeletionWalletQuote,
@@ -233,7 +233,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant="danger"
             onClick={handleDelete}
             disabled={!preview || !confirmationMatches || isDeleting}
             leftIcon={isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : undefined}

@@ -39,6 +39,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant db migrate force`](#reliant-db-migrate-force) | Clear a dirty migration state by recording a version without running SQL |
 | [`reliant db migrate status`](#reliant-db-migrate-status) | Preview what `db migrate up` would do, changing nothing |
 | [`reliant db migrate up`](#reliant-db-migrate-up) | Apply every pending migration |
+| [`reliant db vault`](#reliant-db-vault) | Rotate the credential vault's key-encryption key |
+| [`reliant db vault rewrap`](#reliant-db-vault-rewrap) | Re-wrap every data key under the keyring's primary KEK |
+| [`reliant db vault verify`](#reliant-db-vault-verify) | Prove every data key is wrapped under the primary KEK and opens |
 | [`reliant forge`](#reliant-forge) | Build, run and ship static sites, SPAs, web/mobile apps and APIs, LLM-first |
 | [`reliant forge api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
 | [`reliant forge api curl`](#reliant-forge-api-curl) | Print a copy-pasteable curl command for a Connect RPC method |
@@ -788,6 +791,7 @@ reliant db
 | Command | Description |
 |---------|-------------|
 | [`migrate`](#reliant-db-migrate) | Manage database migrations |
+| [`vault`](#reliant-db-vault) | Rotate the credential vault's key-encryption key |
 
 ---
 
@@ -872,6 +876,79 @@ nothing applied. `db migrate status` previews what `up` will do.
 
 ```
 reliant db migrate up
+```
+
+---
+
+### reliant db vault
+
+Rotate the credential vault's key-encryption key
+
+Rotate the key-encryption key (KEK) in RELIANT_VAULT_KEY.
+
+The KEK wraps one data key per user; the data keys seal the credentials. A
+rotation re-wraps the data keys and leaves every sealed value as it is:
+
+  1. Set RELIANT_VAULT_KEY to "<new-id>:<new>,<old-id>:<old>" on every server
+     and roll them, so the new KEK is primary and the old one still unwraps.
+  2. `reliant db vault rewrap` moves every data key onto the new KEK.
+  3. `reliant db vault verify` proves none still needs the old KEK.
+  4. Set RELIANT_VAULT_KEY to "<new-id>:<new>", roll the servers, and run
+     `verify` again under it. Only then destroy the old key.
+
+```
+reliant db vault
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`rewrap`](#reliant-db-vault-rewrap) | Re-wrap every data key under the keyring's primary KEK |
+| [`verify`](#reliant-db-vault-verify) | Prove every data key is wrapped under the primary KEK and opens |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
+
+---
+
+#### reliant db vault rewrap
+
+Re-wrap every data key under the keyring's primary KEK
+
+Re-wrap every stored data key under RELIANT_VAULT_KEY's primary (first)
+KEK, in one transaction. The keyring must still hold every KEK a data key is
+wrapped under; a key that does not open fails the run and nothing is written.
+Keys already on the primary are skipped, so a rerun is a no-op.
+
+--dry-run opens every data key and reports what would move, writing nothing.
+
+```
+reliant db vault rewrap [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | - | Open every data key and report what would move; write nothing |
+
+---
+
+#### reliant db vault verify
+
+Prove every data key is wrapped under the primary KEK and opens
+
+Read every stored data key in one READ ONLY transaction and check it is
+wrapped under RELIANT_VAULT_KEY's primary KEK and opens under it. Exits
+non-zero, naming the first offending key id, otherwise. When it passes, every
+other KEK in the keyring can be dropped.
+
+```
+reliant db vault verify
 ```
 
 ---
@@ -4789,7 +4866,7 @@ env is created with --bind <name>=<binder>. A frontend binds the same way
                           Restricted profile)
   --bind api=cluster      run api on the env's cluster
   --bind web=hosted       serve the web frontend from the control plane's
-                          static hosting (it owns the bucket and the CDN)
+                          static hosting (it owns the bucket)
   --bind web=bucket       publish the web frontend to your own bucket
 
 Examples:
@@ -8086,6 +8163,11 @@ Grouped errors: what is failing, how often, since which release
 List the env's error issues: ERROR logs grouped by fingerprint (sfp1), with how
 often each fired, how many traces it touched and when. [env] defaults to dev.
 
+--source <name> lists the issues of an issue source instead: records of any
+level that carry issue.source=<name> (observe.IssueSource), such as the reports
+agents file (--source llm_bug_report). They are grouped the same way, never
+count as errors, and are listed only when asked for.
+
 On a hosted env the control plane keeps the issues, so they have a status
 (new, unresolved, resolved, regressed, ignored) that survives log retention, and
 --since-release / --since-deploy ask "what did this release open". On a local
@@ -8096,6 +8178,7 @@ issue is unresolved, and the counts are those of the range.
   cli forge obs issues prod --status regressed
   cli forge obs issues prod --since-release v1.4.0   # first seen in that release
   cli forge obs issues dev --service api --sort events
+  cli forge obs issues prod --source llm_bug_report  # agent-filed bug reports
 
 JSON schema forge.obs.issues/v1. --fields takes dotted paths of:
   issues
@@ -8115,6 +8198,7 @@ JSON schema forge.obs.issues/v1. --fields takes dotted paths of:
   issues.resolved_at
   issues.resolved_version
   issues.service
+  issues.source
   issues.status
   issues.title
   query_mode
@@ -8157,6 +8241,7 @@ reliant forge obs issues [env] [flags]
 | `--since-deploy` | `string` | - | only issues first seen at or after this promotion id (hosted env) |
 | `--since-release` | `string` | - | only issues first seen in this release version (hosted env) |
 | `--sort` | `string` | `last` | last | first | events |
+| `--source` | `string` | - | list the issues of this issue source (issue.source) instead of errors, e.g. llm_bug_report |
 | `--status` | `stringArray` | `[]` | only issues in this state: new, unresolved, resolved, regressed, ignored (repeatable; default the open ones) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 

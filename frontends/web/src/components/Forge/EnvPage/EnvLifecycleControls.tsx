@@ -17,12 +17,12 @@
 import { useState } from "react";
 import { MoreHorizontal, Play, Square, Trash2 } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
 import DropdownMenu from "@/components/forge-ui/dropdown_menu";
 import { FormField } from "@/components/forge-ui/form";
 import Input from "@/components/forge-ui/input";
 import Label from "@/components/forge-ui/label";
 import Modal from "@/components/forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { useDeleteEnvironment, useSetEnvironmentRunState } from "@/hooks/forge-queries";
 import { cloudErrorDetail, type CloudEnvStatus } from "@/services/forge/cloudEnvs";
 
@@ -242,7 +242,7 @@ export function DeleteEnvironmentDialog({
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant="danger"
             size="sm"
             loading={del.isPending}
             disabled={!matches || del.isPending}
