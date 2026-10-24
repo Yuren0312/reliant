@@ -1247,6 +1247,7 @@ reliant forge ci gate [checks|test|integration|all|<lane>] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--base` | `string` | - | Ref a branch's changes are measured from for affected unit tests (default origin/<default branch>; a stacked branch names its parent; also CI_BASE) |
 | `--full` | `bool` | - | Run the whole unit suite on a branch instead of the affected packages (also CI_FULL=1) |
 | `--groups` | `bool` | - | Print each check's output in a GitHub Actions ::group:: (automatic under GITHUB_ACTIONS) |
@@ -1266,8 +1267,14 @@ Run SQL migration safety checks based on forge.yaml config
 Checks SQL migrations for patterns that pass on empty databases but fail or lock populated databases.
 
 ```
-reliant forge ci migration-safety
+reliant forge ci migration-safety [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -1414,8 +1421,14 @@ Shares its implementation with `forge doctor --signal deploy`, so CI and
 the doctor cannot disagree about whether a project can be deployed.
 
 ```
-reliant forge ci validate-kcl
+reliant forge ci validate-kcl [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -1450,6 +1463,7 @@ reliant forge ci verify-generated [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--no-cache` | `bool` | - | Make the regenerate run every step, even when the committed tree is one a full forge generate already verified as its own output (FORGE_GENERATE_NO_CACHE=1 does the same) |
 
 ---
@@ -1552,6 +1566,7 @@ reliant forge ci vuln-scan [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--all` | `bool` | - | Run all scanners enabled in forge.yaml (default) |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--go` | `bool` | - | Run govulncheck only |
 | `--npm` | `bool` | - | Run npm audit only |
 
@@ -2958,8 +2973,12 @@ files are moved with `git mv`. A batch keeps its relative order.
 WHAT IT REFUSES. A migration already on the default branch keeps its version,
 always. Some database has recorded it as applied under its current filename,
 and renaming it would leave that database with a recorded version whose file
-no longer exists — worse than the problem, and unrecoverable without editing
-schema_migrations by hand. Write a new forward migration instead.
+no longer exists, and the renamed copy re-runs SQL that database already holds.
+Write a new forward migration instead. When the merged file is the one a
+database has already passed (the migrator refuses it as never-applicable),
+replace it: delete it and add the same SQL, written re-runnably (IF NOT
+EXISTS), with `forge db migration new` — a database that ran it runs the
+copy as a no-op.
 
 Examples:
   forge db migration rebase db/migrations/20260101120000_add_users.up.sql
@@ -3692,6 +3711,7 @@ reliant forge doctor [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--json` | `bool` | - | Output results as JSON |
 | `--signal` | `string` | - | Run only the deployability gate (deploy). Environment-runtime signals live on 'forge env status <env> --signal'. |
 | `--timeout` | `duration` | `30s` | Overall timeout for all checks |
@@ -4129,6 +4149,7 @@ reliant forge env config <env> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--json` | `bool` | - | Emit machine-readable JSON |
 | `--strict` | `bool` | - | Fail (exit 1) when a declared secret is missing from the secret store, as env exec does, instead of reporting it |
 | `--workload` | `string` | - | Only this workload (service, job, frontend, operator or cronjob) |
@@ -4784,6 +4805,7 @@ reliant forge env diff <environment>|--all [flags]
 |------|------|---------|-------------|
 | `--against` | `string` | `live` | What to compare against. Only "live" (what is currently deployed) is implemented; a bundle reference is refused rather than silently compared against live |
 | `--all` | `bool` | - | Diff every environment declared in this checkout |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--charts` | `bool` | - | Also template Helm charts (needs helm and the network; off by default) |
 | `--json` | `bool` | - | Print the §8.2 document as JSON (the form the daemon's hook returns) |
 
@@ -4883,6 +4905,7 @@ reliant forge env exec <env> [--workload <name>] -- <command> [args...] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--workload` | `string` | `api` | Workload name (default: exactly api, the scaffold's _api.name) |
 
 ---
@@ -4993,6 +5016,7 @@ reliant forge env options <env> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--json` | `bool` | - | Emit machine-readable JSON (name/type/default/help/required) |
 
 ---
@@ -5045,7 +5069,7 @@ and obs:read).
 Every verb takes --json for one machine-readable document (--fields projects it).
 
 ```
-reliant forge env releases
+reliant forge env releases [flags]
 ```
 
 **Subcommands:**
@@ -5055,6 +5079,12 @@ reliant forge env releases
 | [`at`](#reliant-forge-env-releases-at) | Which release was live at a moment, and the releases either side |
 | [`list`](#reliant-forge-env-releases-list) | The release timeline of an environment, newest first |
 | [`show`](#reliant-forge-env-releases-show) | One release in full: commits and PRs, what changed, migrations, gates, health |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -5225,6 +5255,7 @@ reliant forge env releases at <env> <timestamp|trace-id> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 
@@ -5303,6 +5334,7 @@ reliant forge env releases list <env> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `20` | most items to return |
@@ -5421,6 +5453,7 @@ reliant forge env releases show <env> <version|promotion-id> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `50` | most items to return |
@@ -5483,6 +5516,7 @@ reliant forge env render <environment> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--cluster` | `string` | - | Print ONLY the objects that land on this cluster (the kubectl context named by forge.K8sCluster.cluster) |
 | `--count` | `bool` | - | Print how many objects land on each cluster (and per kind on each), instead of the YAML stream |
 | `--fail-on-write` | `bool` | - | Exit non-zero if any file in the project changed while rendering (the render is not guaranteed side-effect-free — see the command description) |
@@ -5517,7 +5551,7 @@ For a Secret ESO syncs from a store (forge.StoreSource), the migration steps are
   forge env secrets adopt  prod <ns>/<secret>                               # hand the verified Secret to ESO
 
 ```
-reliant forge env secrets
+reliant forge env secrets [flags]
 ```
 
 **Subcommands:**
@@ -5527,6 +5561,12 @@ reliant forge env secrets
 | [`adopt`](#reliant-forge-env-secrets-adopt) | Hand a verified, store-backed Secret to ESO (strip the stale last-applied annotation) |
 | [`sync`](#reliant-forge-env-secrets-sync) | Render + apply the k8s Secrets for an env's dotenv secret_provider (local clusters only) |
 | [`verify`](#reliant-forge-env-secrets-verify) | Compare a live Secret with its store copy, per key (match / no-match; never a value or hash) |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -5559,6 +5599,7 @@ reliant forge env secrets adopt <environment> <secret> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | Report what would change; patch nothing |
 | `--kube-context` | `string` | - | Kube context holding the Secret (default: the env's declared cluster) |
 
@@ -5590,6 +5631,7 @@ reliant forge env secrets sync <environment> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | Print the Secret manifests instead of applying them |
 
 ---
@@ -5638,6 +5680,7 @@ reliant forge env secrets verify <environment> [<secret>] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--against` | `string` | - | Compare with another store instead of the shadow Secret: gsm:<project> |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--kube-context` | `string` | - | Kube context to read the live Secrets from (default: the env's declared cluster) |
 | `--map` | `stringSlice` | `[]` | With --against gsm: key=gsm-secret-id for a key whose GSM id is not its store name (repeatable) |
 
@@ -5685,6 +5728,7 @@ reliant forge env shape <environment> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--json` | `bool` | - | Print {project, env, kind, shape, provenance} as JSON (the form the reliant daemon's forge.env_shape hook returns) |
 
 ---
@@ -5733,6 +5777,7 @@ reliant forge env smoke <environment> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--context` | `string` | - | kubectl context to read Gateway status from (overrides the env's declared K8sCluster.cluster). Read-only override: smoke only queries status, so it never risks a wrong-cluster write the way deploy would. |
 | `--json` | `bool` | - | Emit machine-readable JSON instead of the table |
 | `--namespace` | `string` | - | namespace the Gateways live in (overrides the env's declared K8sCluster.namespace) |
@@ -5895,6 +5940,7 @@ reliant forge env status [environment...] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--before` | `string` | - | --history only: return entries older than this promotion id (the previous page's next_before) |
 | `--fail-fast` | `bool` | - | --wait only: exit 1 on the FIRST degraded observation instead of waiting out --timeout |
 | `--history` | `bool` | - | Page the environment's promotion ledger, newest first |
@@ -6081,6 +6127,7 @@ reliant forge env up <environment> [-- <dev-server flags>] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--background` | `bool` | - | Detach long-running phases and return immediately (stop with 'forge env down <env>'). Beats --watch and the TTY default. |
 | `--host-ready-timeout` | `duration` | `2m0s` | Maximum wait for host services to bind their ports, including compilation; exited runners fail immediately |
 | `--no-build` | `bool` | - | Skip the build phase (use already-built images / binaries) |
@@ -6770,7 +6817,7 @@ CANNOT evaluate it. That is by design: the binary is the module version. These
 subcommands are how anything outside forge reads a value out of project KCL.
 
 ```
-reliant forge kcl
+reliant forge kcl [flags]
 ```
 
 **Subcommands:**
@@ -6779,6 +6826,12 @@ reliant forge kcl
 |---------|-------------|
 | [`eval`](#reliant-forge-kcl-eval) | Evaluate one KCL file of this project and print a selected field |
 | [`imports`](#reliant-forge-kcl-imports) | Show where each forge project this project's KCL imports resolves to |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
@@ -6842,6 +6895,7 @@ reliant forge kcl eval <file> [-S <path>]... [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--format` | `string` | `json` | Output format: [json yaml raw] (raw prints a scalar's own text, unquoted and with no trailing newline) |
 | `--option`, `-D` | `stringArray` | `[]` | Bind a top-level KCL option, key=value (repeatable) |
 | `--select`, `-S` | `stringArray` | `[]` | Print only this dotted field path (repeatable; repeated paths yield an object keyed by path) |
@@ -6877,6 +6931,7 @@ reliant forge kcl imports [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--json` | `bool` | - | Print the resolution as JSON |
 
 ---
@@ -7274,6 +7329,7 @@ reliant forge lint [paths...] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-skip` | `stringArray` | `[]` | Accept that a gating lane may NOT run here, by name and with a reason: LANE[,LANE...]=REASON (repeatable), e.g. --allow-skip 'frontend-typecheck=frontends typecheck in the web job'. A gating lane that could not run (a tool missing, a frontend with no node_modules) fails forge lint otherwise; an accepted one is listed as SKIPPED (allowed) in the verdict. forge.yaml lint.allow_skip is the project-level form. Accepts only could-not-run: a lane that ran and found problems still fails |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--check` | `bool` | - | Report only: write nothing, print the diff each fix would apply, and exit non-zero if any is pending. The default; beats --fix (also spelled --no-fix) |
 | `--closed-sets` | `bool` | - | Fail when a CHECK declared forge:closed-set <set> does not list exactly that Go set, and print the migration that fixes it |
 | `--column-markers` | `bool` | - | Fail on a COMMENT ON TABLE/VIEW/COLUMN/CONSTRAINT carrying a forge: marker that object does not read |
@@ -9730,6 +9786,7 @@ reliant forge project frontends [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--json` | `bool` | - | Print [{name, path}] as JSON |
 
 ---
