@@ -47,7 +47,7 @@ The first row is the time spent **queued** for a slot. That cost comes from the
 host, not from the gate: other agents' builds hold the slots. The five-minute
 target is measured on the `wall:` line, which starts once the slot is held.
 
-The phases run in this order:
+The phases:
 
 1. **plan**: `tools/test-affected plan -json`, which decides everything below.
 2. **generate** runs only if the plan's forge-generate lane is selected. It runs
