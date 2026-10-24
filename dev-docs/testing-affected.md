@@ -13,6 +13,10 @@ next to every selection, so a surprising test is one line away from its cause.
 It is the first thing to run before pushing. It does not replace the full lane
 (`go test ./...`, `npm test`): that is what a release or a `go.mod` bump needs.
 
+It is also the test step of the **merge gate** (`task ci:merge`), whose other
+half is the **release gate** (`task release:gate`) that runs everything on main
+before a release: `dev-docs/merge-and-release-gates.md`.
+
 ## What runs
 
 | Lane | Command it runs | Selected by |
@@ -61,6 +65,12 @@ selects it (`docGenInput` in `plan.go`):
   that `DOCGEN_TARGETS` names every docs generator and that CI runs
   `make docs-generate-check` instead of naming targets itself.
 
+`-reach direct` (or `TEST_REACH=direct`) stops the Go fan-out after one hop:
+the changed packages and the packages that import one by name. The plan lists
+what it left out as `deferred`. The merge gate runs that mode
+(`dev-docs/merge-and-release-gates.md`). The default, `-reach all`, is the full
+closure described below.
+
 Knobs (environment): `TEST_BASE=<rev>` moves the diff base (a stacked branch),
 `TEST_FULL=1` runs every lane in full, `LANES=go,web` picks lanes. For other
 flags: `go run ./tools/test-affected -h` (`-json` prints the plan,
@@ -90,7 +100,8 @@ rule claims and no Go package owns runs **everything** (fail-safe).
 | `go.mod`, `go.sum`, `tools/tools.go` | **Go: full** (`go.mod`/`go.sum` also run forge-generate and docs-generate) |
 | `package.json`, lockfiles at the root | **web and electron: full** |
 | `frontends/web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `frontends/web/src/test/setup.ts` | **web: full** |
-| `Makefile`, `buf*.yaml` | **everything: full** |
+| `buf*.yaml` | **everything: full** |
+| `Taskfile.yml`, `Makefile` | **forge-generate and docs-generate: full** (the tasks they run); the test lanes do not run through the Taskfile |
 | `forge.yaml` (the forge pin) | Go and forge-generate: full |
 | `proto/**` that is not a `.proto` | **Go and web: full** |
 | a deleted web module | **web: full** (its importers can no longer be found) |
