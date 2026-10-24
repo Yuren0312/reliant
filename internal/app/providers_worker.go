@@ -16,9 +16,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
+	"github.com/reliant-labs/reliant/internal/hosteduse"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
@@ -44,6 +46,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -491,6 +494,9 @@ func resolveVideoGenerator(ctx context.Context, userID string, selector models.M
 type RemoteExecutorDeps struct {
 	Router *WorkerDaemonRouter
 	Tools  *WorkerToolsFactory
+	// Egress bounds the egress tools the executor runs in this process.
+	// compose.go builds it from WorkerConfig's RELIANT_WORKER_EGRESS_*.
+	Egress egresslimit.Limits
 }
 
 // NewRemoteExecutor is the worker's tool executor: daemon-placed tools go to
@@ -506,6 +512,15 @@ func NewRemoteExecutor(d RemoteExecutorDeps) (*toolexec.RemoteExecutor, error) {
 	server.SetMCPContextBinder(toolexec.NewDaemonMCPContextBinder(d.Router))
 	executor.SetServerExecutor(server)
 	executor.SetDaemonClientFactory(toolexec.RemoteDaemonClients(d.Router))
+	// Fetch, websearch, sourcegraph and the integration actions leave through
+	// one shared NAT address; bound what one user, org, host and turn may
+	// push through it. In-process state, budgets divided by Replicas: see
+	// internal/egresslimit.
+	limiter, err := egresslimit.NewInstrumented(egresslimit.Deps{Logger: slog.Default(), Limits: d.Egress})
+	if err != nil {
+		return nil, fmt.Errorf("egress limiter: %w", err)
+	}
+	executor.SetEgressLimiter(limiter)
 	return executor, nil
 }
 
@@ -564,6 +579,20 @@ type TemporalWorkerDeps struct {
 //forge:root-only worker
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
+	// Hosted actions have a separate fixed-node execution path. They are never
+	// installed in WorkerIntegrationCredentials or the tool factory.
+	cp := ControlPlaneEndpoint(d.ControlPlane)
+	var hostedActions handlers.HostedActionExecutor
+	if cp.URL != "" && cp.InternalServiceSecret != "" {
+		client, err := hosteduse.NewInstrumented(hosteduse.Deps{
+			Store: d.DB, BaseURL: cp.URL,
+			Sign: func() (string, error) { return auth.SignInternalServiceToken(cp.InternalServiceSecret) },
+		})
+		if err != nil {
+			return nil, fmt.Errorf("hosted HTTP execution: %w", err)
+		}
+		hostedActions = client
+	}
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,
@@ -576,6 +605,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		ConfigProvider:         d.ConfigProvider,
 		TriggerLauncher:        d.Launcher,
 		IntegrationCredentials: creds,
+		HostedActions:          hostedActions,
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerCredentials:     triggerCredentials(creds),
