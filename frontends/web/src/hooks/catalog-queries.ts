@@ -39,7 +39,7 @@ import {
   type AuthKind,
   type AuthMethod,
   type ConnectionParam,
-} from "../api/connection-grpc";
+} from "./connection-queries";
 import { catalogServiceKeys, useGetCatalogEntry, useSearchCatalog } from "./catalog-service-hooks_gen";
 
 const client = connectClient(CatalogService);

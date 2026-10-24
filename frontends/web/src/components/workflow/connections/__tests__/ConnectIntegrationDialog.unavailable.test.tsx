@@ -27,7 +27,8 @@ vi.mock('@/hooks/catalog-queries', () => ({
   }),
 }))
 
-vi.mock('@/hooks/connection-queries', () => ({
+vi.mock('@/hooks/connection-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/connection-queries')>()),
   useCreateApiKeyConnection: () => ({ mutateAsync: vi.fn(), isPending: false }),
   invalidateConnectionQueries: vi.fn(),
 }))

@@ -30,14 +30,14 @@ vi.mock("@/api/grpc-client", () => ({
     daemonRegistry: () => ({ listDaemons: vi.fn(async () => ({ daemons: [] })) }),
     project: () => ({ listProjectDaemons: vi.fn(async () => ({ projectDaemons: [] })) }),
     worktree: () => ({ listWorktrees: vi.fn(async () => ({ worktrees: [] })) }),
-    connection: () => ({ listConnections: vi.fn(async () => ({ connections: [] })) }),
   },
 }));
 
-// CatalogService is on its generated hooks, so it is answered at the transport.
+// CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
 setTransport(
   mockTransport({
     "CatalogService.SearchCatalog": { response: create(SearchCatalogResponseSchema) },
+    "ConnectionService.ListConnections": { response: {} },
   }),
 );
 

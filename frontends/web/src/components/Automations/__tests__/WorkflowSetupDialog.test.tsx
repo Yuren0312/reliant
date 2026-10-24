@@ -59,7 +59,6 @@ const listRepos = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    connection: () => ({ listConnections }),
     trigger: () => ({ enableWorkflow, listTriggers }),
     workflow: () => ({ getWorkflow, listWorkflows }),
     preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
@@ -70,13 +69,14 @@ vi.mock("@/api/grpc-client", () => ({
   getGRPCBaseURLPublic: () => "https://api.example.com",
 }));
 
-// RepoService and CatalogService are on their generated hooks, so they are answered at the transport.
+// RepoService, CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
 setTransport(
   mockTransport({
     "RepoService.ListRepos": (req) => listRepos(req),
     "CatalogService.SearchCatalog": (req) => searchCatalog(req),
     "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
     "CatalogService.ListInputOptions": (req) => listInputOptions(req),
+    "ConnectionService.ListConnections": (req) => listConnections(req),
   }),
 );
 

@@ -32,16 +32,16 @@ const resolveTriggerSenders = vi.fn();
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     trigger: () => ({ setTriggerEnabled, resolveTriggerSenders }),
-    connection: () => ({ listConnections }),
   },
   getGRPCBaseURLPublic: () => null,
 }));
 
-// CatalogService is on its generated hooks, so it is answered at the transport.
+// CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
 setTransport(
   mockTransport({
     "CatalogService.SearchCatalog": (req) => searchCatalog(req),
     "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
+    "ConnectionService.ListConnections": (req) => listConnections(req),
   }),
 );
 
