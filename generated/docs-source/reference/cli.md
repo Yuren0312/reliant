@@ -39,6 +39,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant db migrate force`](#reliant-db-migrate-force) | Clear a dirty migration state by recording a version without running SQL |
 | [`reliant db migrate status`](#reliant-db-migrate-status) | Preview what `db migrate up` would do, changing nothing |
 | [`reliant db migrate up`](#reliant-db-migrate-up) | Apply every pending migration |
+| [`reliant db vault`](#reliant-db-vault) | Rotate the credential vault's key-encryption key |
+| [`reliant db vault rewrap`](#reliant-db-vault-rewrap) | Re-wrap every data key under the keyring's primary KEK |
+| [`reliant db vault verify`](#reliant-db-vault-verify) | Prove every data key is wrapped under the primary KEK and opens |
 | [`reliant forge`](#reliant-forge) | Build, run and ship static sites, SPAs, web/mobile apps and APIs, LLM-first |
 | [`reliant forge api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
 | [`reliant forge api curl`](#reliant-forge-api-curl) | Print a copy-pasteable curl command for a Connect RPC method |
@@ -77,10 +80,12 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge cluster down`](#reliant-forge-cluster-down) | Delete the k3d cluster |
 | [`reliant forge cluster info`](#reliant-forge-cluster-info) | Print static dev-loop config (cluster name, expected context, declared ports) |
 | [`reliant forge cluster instances`](#reliant-forge-cluster-instances) | List every forge dev namespace on every reachable cluster |
+| [`reliant forge cluster list`](#reliant-forge-cluster-list) | List the clusters connected to the control plane, with their state and env bindings |
 | [`reliant forge cluster logs`](#reliant-forge-cluster-logs) | Stream kubectl logs for one or all services in the dev namespace |
 | [`reliant forge cluster recover-chart-lock`](#reliant-forge-cluster-recover-chart-lock) | Explicitly recover an inspected chart lock after terminating its writer |
 | [`reliant forge cluster reload`](#reliant-forge-cluster-reload) | Re-render deploy/kcl/dev + kubectl apply + wait rollout |
 | [`reliant forge cluster reset`](#reliant-forge-cluster-reset) | Delete then recreate the cluster |
+| [`reliant forge cluster show`](#reliant-forge-cluster-show) | Show one connected cluster |
 | [`reliant forge cluster status`](#reliant-forge-cluster-status) | Print dynamic dev-loop state (cluster up/down, pods, ingress URLs) |
 | [`reliant forge cluster up`](#reliant-forge-cluster-up) | Create the k3d cluster from deploy/k3d.yaml |
 | [`reliant forge cluster urls`](#reliant-forge-cluster-urls) | Print the ingress URL table for the dev env |
@@ -180,6 +185,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge generate`](#reliant-forge-generate) | Generate code from proto files |
 | [`reliant forge kcl`](#reliant-forge-kcl) | Evaluate this project's KCL directly |
 | [`reliant forge kcl eval`](#reliant-forge-kcl-eval) | Evaluate one KCL file of this project and print a selected field |
+| [`reliant forge kcl imports`](#reliant-forge-kcl-imports) | Show where each forge project this project's KCL imports resolves to |
 | [`reliant forge ledger`](#reliant-forge-ledger) | Move and inspect deploy ledgers |
 | [`reliant forge ledger export`](#reliant-forge-ledger-export) | Write the selected ledger to a directory, to VERIFY an import |
 | [`reliant forge ledger import`](#reliant-forge-ledger-import) | Import a ledger from a checkout's committed history, or from another ledger directory |
@@ -788,6 +794,7 @@ reliant db
 | Command | Description |
 |---------|-------------|
 | [`migrate`](#reliant-db-migrate) | Manage database migrations |
+| [`vault`](#reliant-db-vault) | Rotate the credential vault's key-encryption key |
 
 ---
 
@@ -872,6 +879,79 @@ nothing applied. `db migrate status` previews what `up` will do.
 
 ```
 reliant db migrate up
+```
+
+---
+
+### reliant db vault
+
+Rotate the credential vault's key-encryption key
+
+Rotate the key-encryption key (KEK) in RELIANT_VAULT_KEY.
+
+The KEK wraps one data key per user; the data keys seal the credentials. A
+rotation re-wraps the data keys and leaves every sealed value as it is:
+
+  1. Set RELIANT_VAULT_KEY to "<new-id>:<new>,<old-id>:<old>" on every server
+     and roll them, so the new KEK is primary and the old one still unwraps.
+  2. `reliant db vault rewrap` moves every data key onto the new KEK.
+  3. `reliant db vault verify` proves none still needs the old KEK.
+  4. Set RELIANT_VAULT_KEY to "<new-id>:<new>", roll the servers, and run
+     `verify` again under it. Only then destroy the old key.
+
+```
+reliant db vault
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`rewrap`](#reliant-db-vault-rewrap) | Re-wrap every data key under the keyring's primary KEK |
+| [`verify`](#reliant-db-vault-verify) | Prove every data key is wrapped under the primary KEK and opens |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
+
+---
+
+#### reliant db vault rewrap
+
+Re-wrap every data key under the keyring's primary KEK
+
+Re-wrap every stored data key under RELIANT_VAULT_KEY's primary (first)
+KEK, in one transaction. The keyring must still hold every KEK a data key is
+wrapped under; a key that does not open fails the run and nothing is written.
+Keys already on the primary are skipped, so a rerun is a no-op.
+
+--dry-run opens every data key and reports what would move, writing nothing.
+
+```
+reliant db vault rewrap [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | - | Open every data key and report what would move; write nothing |
+
+---
+
+#### reliant db vault verify
+
+Prove every data key is wrapped under the primary KEK and opens
+
+Read every stored data key in one READ ONLY transaction and check it is
+wrapped under RELIANT_VAULT_KEY's primary KEK and opens under it. Exits
+non-zero, naming the first offending key id, otherwise. When it passes, every
+other KEK in the keyring can be dropped.
+
+```
+reliant db vault verify
 ```
 
 ---
@@ -1912,6 +1992,8 @@ Examples:
 
   forge cluster connect prod-us --context gke_acme_us-central1_prod --env prod
   forge cluster disconnect prod-us --env prod   # a cluster YOU operate, as a deploy target
+  forge cluster list --env prod                 # what the control plane holds for them
+  forge cluster show prod-us --env prod --json
 
 ```
 reliant forge cluster
@@ -1926,10 +2008,12 @@ reliant forge cluster
 | [`down`](#reliant-forge-cluster-down) | Delete the k3d cluster |
 | [`info`](#reliant-forge-cluster-info) | Print static dev-loop config (cluster name, expected context, declared ports) |
 | [`instances`](#reliant-forge-cluster-instances) | List every forge dev namespace on every reachable cluster |
+| [`list`](#reliant-forge-cluster-list) | List the clusters connected to the control plane, with their state and env bindings |
 | [`logs`](#reliant-forge-cluster-logs) | Stream kubectl logs for one or all services in the dev namespace |
 | [`recover-chart-lock`](#reliant-forge-cluster-recover-chart-lock) | Explicitly recover an inspected chart lock after terminating its writer |
 | [`reload`](#reliant-forge-cluster-reload) | Re-render deploy/kcl/dev + kubectl apply + wait rollout |
 | [`reset`](#reliant-forge-cluster-reset) | Delete then recreate the cluster |
+| [`show`](#reliant-forge-cluster-show) | Show one connected cluster |
 | [`status`](#reliant-forge-cluster-status) | Print dynamic dev-loop state (cluster up/down, pods, ingress URLs) |
 | [`up`](#reliant-forge-cluster-up) | Create the k3d cluster from deploy/k3d.yaml |
 | [`urls`](#reliant-forge-cluster-urls) | Print the ingress URL table for the dev env |
@@ -2182,6 +2266,40 @@ reliant forge cluster instances [flags]
 
 ---
 
+#### reliant forge cluster list
+
+List the clusters connected to the control plane, with their state and env bindings
+
+List every cluster the organization has connected, as the control plane sees it:
+name, id, state, auth, registered address and CA fingerprint, the secret-store
+issuer registration, the environments bound to it, and created/updated times.
+
+  forge cluster list --env prod
+  forge cluster list --env prod --json
+
+State is the control plane's own: CONNECTED (it holds usable connection
+material), WAITING (it holds nothing to try with) or STALE (the token's expiry
+has passed). Use it to verify a 'forge cluster connect'.
+
+--json prints one document, schema forge.cluster.list/v1. A member the control plane did not
+report is null. No token or certificate is ever printed.
+
+--env names which control plane to talk to (required).
+
+```
+reliant forge cluster list [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--env` | `string` | - | Environment whose control plane to talk to (required) |
+| `--json` | `bool` | - | Print one machine-readable document |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
+
+---
+
 #### reliant forge cluster logs
 
 Stream kubectl logs for one or all services in the dev namespace
@@ -2289,6 +2407,32 @@ reliant forge cluster reset [flags]
 |------|------|---------|-------------|
 | `--config` | `string` | `deploy/k3d.yaml` | k3d config file |
 | `--wait` | `bool` | `true` | Wait until cluster nodes are ready after recreate |
+
+---
+
+#### reliant forge cluster show
+
+Show one connected cluster
+
+Show one connected cluster by exact name: the same fields as 'forge cluster list',
+read through the control plane's GetCluster.
+
+  forge cluster show prod-us --env prod
+  forge cluster show prod-us --env prod --json
+
+--json prints one document, schema forge.cluster.show/v1. No token or certificate is ever printed.
+
+```
+reliant forge cluster show <name> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--env` | `string` | - | Environment whose control plane to talk to (required) |
+| `--json` | `bool` | - | Print one machine-readable document |
+| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
 
 ---
 
@@ -6634,6 +6778,7 @@ reliant forge kcl
 | Command | Description |
 |---------|-------------|
 | [`eval`](#reliant-forge-kcl-eval) | Evaluate one KCL file of this project and print a selected field |
+| [`imports`](#reliant-forge-kcl-imports) | Show where each forge project this project's KCL imports resolves to |
 
 ---
 
@@ -6659,6 +6804,11 @@ subdirectory.
 `kcl run -S`, a selected LIST comes back as one list rather than as one YAML
 document per element, and a path that does not exist is an ERROR naming what
 the document does have — not an empty result that a caller reads as a value.
+
+--format json prints the document the way `kcl run --format json` does: keys in the
+order the KCL declares them (never alphabetised), numbers as KCL wrote them,
+four-space indent. A committed JSON file generated by kcl can be compared
+byte for byte. --format yaml keeps the same order.
 
 --format raw prints a scalar's own text: no quotes, no trailing newline. It is
 what makes `$(...)` capture the value exactly, replacing the
@@ -6695,6 +6845,39 @@ reliant forge kcl eval <file> [-S <path>]... [flags]
 | `--format` | `string` | `json` | Output format: [json yaml raw] (raw prints a scalar's own text, unquoted and with no trailing newline) |
 | `--option`, `-D` | `stringArray` | `[]` | Bind a top-level KCL option, key=value (repeatable) |
 | `--select`, `-S` | `stringArray` | `[]` | Print only this dotted field path (repeatable; repeated paths yield an object keyed by path) |
+
+---
+
+#### reliant forge kcl imports
+
+Show where each forge project this project's KCL imports resolves to
+
+List the forge projects deploy/kcl/kcl.mod imports under [forge_projects],
+and where each one resolves.
+
+An imported project's KCL is read at the version this project's go.mod pins
+its Go module to — a go.work use or a directory replace reads that directory
+(a sibling checkout), otherwise the module cache at the required version,
+verified against go.sum. There is no separate KCL pin. Resolution refuses an
+imported project that pins a different forge than this one (version skew).
+
+--json prints the resolution as a JSON array: name, module, version (empty
+for a directory), via (the declaration that decided it), module_dir, dir (the
+KCL package root) and forge_pin.
+
+Examples:
+  cli forge kcl imports
+  cli forge kcl imports --json | jq -r '.[].dir'
+
+```
+reliant forge kcl imports [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print the resolution as JSON |
 
 ---
 
@@ -6968,6 +7151,15 @@ config-deps lane gate; {forgeconv-handler-file-size: warn} lets a gating rule
 be adopted gradually; "*" sets every forge rule. Another tool's linters keep
 their own config (.golangci.yml, buf.yaml, eslint), and a key forge does not
 grade — a typo, another tool's rule, a lane's could-not-run — is a lint error.
+
+NEW RULES WARN FIRST: a rule that joined forge lint (or was tightened) in a
+release your forge.yaml forge_version has not been through yet reports its
+findings as WARNINGS — "warn: [rule] is new in v0.1.47 and gates from
+v0.1.48" — and they do not fail the lane, the exit code or --gate-json. Bump
+the pin to the gates-from release and they gate. lint.rules wins: {rule: error}
+gates a new rule today, {rule: warn} keeps it a warning past its gates-from
+release, {rule: off} drops it. --json carries the note as a "grace" object on
+the finding. A project with no pin (or forge's own tree) gates everything.
 
 Examples:
   forge lint                     # Report only: print the diffs, write nothing
@@ -8403,6 +8595,11 @@ default, either side) or --from and --to. Without them it is the whole range.
   cli forge obs metrics exemplars dev rpc.server.duration --since 1h --where metric.attr.status=error
 
 --where is key=value or key!=value over the metric's attributes (repeatable).
+--group KEY=VALUE narrows to one series of a grouped panel: KEY is a --group-by
+key of `cli forge obs metrics query` and VALUE that series' label (repeatable, one per key).
+
+  cli forge obs metrics exemplars dev rpc.server.duration --group rpc.method=List --group service.name=api
+
 A stored trace's next command is in "suggested":
   cli forge obs trace <trace-id> <env>
 
@@ -8448,6 +8645,7 @@ reliant forge obs metrics exemplars [env] <metric> [flags]
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--group` | `stringArray` | `[]` | narrow to one series group: a --group-by KEY=VALUE (repeatable, one per key) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `20` | most items to return |
 | `--min-value` | `float64` | `0` | only exemplars at or above this value |
@@ -11975,6 +12173,7 @@ reliant project
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--daemon-session` | `bool` | - | Use this server's existing signed-in daemon account without widening its permissions |
 | `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
 | `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
 
@@ -12174,6 +12373,7 @@ reliant trigger
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--daemon-session` | `bool` | - | Use this server's existing signed-in daemon account without widening its permissions |
 | `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
 | `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
 
