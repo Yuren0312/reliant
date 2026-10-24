@@ -122,18 +122,54 @@ func (e *reclaimEnv) worktree(t *testing.T, name string) (*db.Worktree, string) 
 	return wt, path
 }
 
-// age makes a worktree look untouched for two days: its directory, and the
-// index, HEAD and reflog of its git admin directory.
+// age makes a worktree look untouched for two days: its directory, the index
+// and HEAD of its git admin directory, and its reflog. The reclaimer reads the
+// reflog's EVENT times, not its mtime (gc and `reflog expire` rewrite the file
+// without any user activity), so every entry is re-dated as well.
 func age(t *testing.T, path string) {
 	t.Helper()
 	old := time.Now().Add(-48 * time.Hour)
 	_ = os.Chtimes(path, old, old)
 	if b, err := os.ReadFile(filepath.Join(path, ".git")); err == nil {
 		dir := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(b)), "gitdir:"))
+		redateReflog(t, filepath.Join(dir, "logs", "HEAD"), old)
 		for _, n := range []string{"index", "HEAD", "logs/HEAD", "."} {
 			_ = os.Chtimes(filepath.Join(dir, n), old, old)
 		}
 	}
+}
+
+// redateReflog rewrites every entry of the reflog at path to have happened at
+// at. An entry is "<old> <new> <name> <<email>> <unix> <tz>[\t<message>]": the
+// first entry of a linked worktree (git worktree add) has no message.
+func redateReflog(t *testing.T, path string, at time.Time) {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return
+	}
+	require.NoError(t, err)
+	lines := strings.SplitAfter(string(b), "\n")
+	for i, line := range lines {
+		if line == "" {
+			continue
+		}
+		entry, nl := strings.CutSuffix(line, "\n")
+		head, msg, hasMsg := strings.Cut(entry, "\t")
+		end := strings.LastIndex(head, "> ")
+		require.GreaterOrEqual(t, end, 0, "reflog entry %q", entry)
+		when := strings.Fields(head[end+2:])
+		require.Len(t, when, 2, "reflog entry %q", entry)
+		entry = head[:end+2] + strconv.FormatInt(at.Unix(), 10) + " " + when[1]
+		if hasMsg {
+			entry += "\t" + msg
+		}
+		if nl {
+			entry += "\n"
+		}
+		lines[i] = entry
+	}
+	require.NoError(t, os.WriteFile(path, []byte(strings.Join(lines, "")), 0o644))
 }
 
 func exists(p string) bool { _, err := os.Lstat(p); return err == nil }
