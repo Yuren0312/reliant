@@ -42,7 +42,7 @@ func New(d Deps) (Service, error) {
 	}
 	ip := net.ParseIP(u.Hostname())
 	loopback := u.Hostname() == "localhost" || ip != nil && ip.IsLoopback()
-	if u.Scheme != "https" && !(u.Scheme == "http" && loopback && d.CAFile == "") {
+	if u.Scheme != "https" && (u.Scheme != "http" || !loopback || d.CAFile != "") {
 		return nil, errors.New("hosted HTTP controller requires HTTPS")
 	}
 	if d.Store == nil || d.Sign == nil {
