@@ -16,9 +16,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
+	"github.com/reliant-labs/reliant/internal/hosteduse"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
@@ -29,6 +31,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -44,6 +47,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -296,13 +300,14 @@ type WorkerChatDeps struct {
 //forge:root-only worker
 func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 	svc, err := chat.New(chat.Deps{
-		Logger:    d.Logger,
-		Config:    d.Config,
-		Repo:      d.DB,
-		Temporal:  d.Temporal.Client,
-		Pause:     d.Pause,
-		TaskQueue: v2workflow.SharedTaskQueue,
-		Router:    d.Router,
+		Logger:      d.Logger,
+		Config:      d.Config,
+		Repo:        d.DB,
+		Temporal:    d.Temporal.Client,
+		Pause:       d.Pause,
+		TaskQueue:   v2workflow.SharedTaskQueue,
+		Router:      d.Router,
+		LocalModels: local.NewRepoDirectory(d.DB),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("chat service: %w", err)
@@ -404,7 +409,7 @@ type WorkerToolsFactory struct{ *tools.ToolsFactory }
 // reaches.
 type WorkerToolsFactoryDeps struct {
 	DB            *db.Repo
-	ControlPlane  *configv1.ControlPlaneConfig
+	Network       *configv1.NetworkConfig
 	Temporal      *TemporalClient
 	AgentRuns     *agentruns.Runs
 	Triggers      *WorkerTrigger
@@ -421,8 +426,8 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 	repo, temporalClient := d.DB, d.Temporal.Client
 	runMachine := toolexec.NewRunMachine(d.Router)
 	return &WorkerToolsFactory{tools.NewToolsFactory(&tools.ToolsOptions{
-		Repo:            repo,
-		ControlPlaneURL: ControlPlaneEndpoint(d.ControlPlane).URL,
+		Repo:               repo,
+		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// The worker is where spawn_send actually executes (inside the
 		// ExecuteTools activity), so this is the wiring that matters most for
 		// agent-to-agent delivery.
@@ -447,8 +452,10 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		RunStarter:   d.AgentRuns,
 		RunLifecycle: d.AgentRuns,
 		RunMessenger: d.AgentRuns,
-		// list_triggers executes here too.
-		TriggerLister: triggertools.New(d.Triggers.Service),
+		// Trigger tools execute here through the owner-authorized service.
+		TriggerLister:      triggertools.New(d.Triggers.Service),
+		TriggerFirer:       triggertools.New(d.Triggers.Service),
+		TriggerEventLister: triggertools.New(d.Triggers.Service),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens
@@ -489,6 +496,9 @@ func resolveVideoGenerator(ctx context.Context, userID string, selector models.M
 type RemoteExecutorDeps struct {
 	Router *WorkerDaemonRouter
 	Tools  *WorkerToolsFactory
+	// Egress bounds the egress tools the executor runs in this process.
+	// compose.go builds it from WorkerConfig's RELIANT_WORKER_EGRESS_*.
+	Egress egresslimit.Limits
 }
 
 // NewRemoteExecutor is the worker's tool executor: daemon-placed tools go to
@@ -504,6 +514,15 @@ func NewRemoteExecutor(d RemoteExecutorDeps) (*toolexec.RemoteExecutor, error) {
 	server.SetMCPContextBinder(toolexec.NewDaemonMCPContextBinder(d.Router))
 	executor.SetServerExecutor(server)
 	executor.SetDaemonClientFactory(toolexec.RemoteDaemonClients(d.Router))
+	// Fetch, websearch, sourcegraph and the integration actions leave through
+	// one shared NAT address; bound what one user, org, host and turn may
+	// push through it. In-process state, budgets divided by Replicas: see
+	// internal/egresslimit.
+	limiter, err := egresslimit.NewInstrumented(egresslimit.Deps{Logger: slog.Default(), Limits: d.Egress})
+	if err != nil {
+		return nil, fmt.Errorf("egress limiter: %w", err)
+	}
+	executor.SetEgressLimiter(limiter)
 	return executor, nil
 }
 
@@ -546,6 +565,7 @@ type TemporalWorkerDeps struct {
 	WriteLedger    writeledger.Service
 	Pollers        *webhook.Registry
 	ControlPlane   *configv1.ControlPlaneConfig
+	Network        *configv1.NetworkConfig
 	Recorder       *AccountRecorder
 	// WorkflowTaskSlots and WorkflowTaskPollers are WorkerConfig's
 	// RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS and
@@ -562,6 +582,20 @@ type TemporalWorkerDeps struct {
 //forge:root-only worker
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
+	// Hosted actions have a separate fixed-node execution path. They are never
+	// installed in WorkerIntegrationCredentials or the tool factory.
+	cp := ControlPlaneEndpoint(d.ControlPlane)
+	var hostedActions handlers.HostedActionExecutor
+	if cp.URL != "" && cp.InternalServiceSecret != "" {
+		client, err := hosteduse.NewInstrumented(hosteduse.Deps{
+			Store: d.DB, BaseURL: cp.URL,
+			Sign: func() (string, error) { return auth.SignInternalServiceToken(cp.InternalServiceSecret) },
+		})
+		if err != nil {
+			return nil, fmt.Errorf("hosted HTTP execution: %w", err)
+		}
+		hostedActions = client
+	}
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,
@@ -574,10 +608,11 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		ConfigProvider:         d.ConfigProvider,
 		TriggerLauncher:        d.Launcher,
 		IntegrationCredentials: creds,
+		HostedActions:          hostedActions,
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerCredentials:     triggerCredentials(creds),
-		ControlPlaneURL:        ControlPlaneEndpoint(d.ControlPlane).URL,
+		AllowPrivateEgress:     AllowPrivateEgress(d.Network),
 		WorkflowTaskSlots:      int(d.WorkflowTaskSlots),
 		WorkflowTaskPollers:    int(d.WorkflowTaskPollers),
 	})
