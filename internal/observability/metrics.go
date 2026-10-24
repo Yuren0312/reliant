@@ -393,6 +393,7 @@ func initMetrics() {
 	Registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	// Application metrics.
+	Registry.MustRegister(daemonFleetCollector{})
 	Registry.MustRegister(
 		// HTTP
 		HTTPRequestsTotal,
