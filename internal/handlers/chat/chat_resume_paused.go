@@ -48,12 +48,8 @@ func (s *Service) resumePausedRun(
 	sent map[string]*structpb.Value,
 ) (runs.ResumeOutcome, error) {
 	workflowID := chat.MainThreadID()
-	runID := ""
-	if chat.RunID != nil {
-		runID = *chat.RunID
-	}
 
-	runInputs := s.runInputsForSend(ctx, workflowID, runID)
+	runInputs := s.runInputsForSend(ctx, workflowID)
 	inputUpdate, modelNotices, modelMoves := s.resumeInputUpdate(ctx, userID, chat.ID, chat.ProjectID, workflowName, workflowID,
 		s.underSelection(ctx, chat.ID, workflowName, stateUpdate), runInputs)
 	inputUpdate = s.withProviderPolicy(ctx, userID, chat, runInputs, inputUpdate)
@@ -74,6 +70,9 @@ func (s *Service) resumePausedRun(
 	if err != nil || outcome.Kind != runs.OutcomeResumed {
 		return outcome, err
 	}
+	// A message that resumes the chat resumes all of it: every sub-agent a
+	// provider stopped goes on too, without a message of its own.
+	s.wakeChatBestEffort(ctx, chat, "", "a message resumed the chat")
 
 	// Told only now: the run that has the moved models is awake. A fresh run
 	// (the caller's recovery) makes and announces its own.

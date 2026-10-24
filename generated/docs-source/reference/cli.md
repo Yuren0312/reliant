@@ -39,7 +39,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant db migrate force`](#reliant-db-migrate-force) | Clear a dirty migration state by recording a version without running SQL |
 | [`reliant db migrate status`](#reliant-db-migrate-status) | Preview what `db migrate up` would do, changing nothing |
 | [`reliant db migrate up`](#reliant-db-migrate-up) | Apply every pending migration |
-| [`reliant forge`](#reliant-forge) | Connect RPC development framework for LLM-optimized applications |
+| [`reliant forge`](#reliant-forge) | Build, run and ship static sites, SPAs, web/mobile apps and APIs, LLM-first |
 | [`reliant forge api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
 | [`reliant forge api curl`](#reliant-forge-api-curl) | Print a copy-pasteable curl command for a Connect RPC method |
 | [`reliant forge build`](#reliant-forge-build) | Compile the project's binaries and frontends locally (never publishes) |
@@ -195,6 +195,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs changes`](#reliant-forge-obs-changes) | What changed? Promotions, rollbacks, failed deploys and activity, newest first |
 | [`reliant forge obs check`](#reliant-forge-obs-check) | Did the deploy work? Judge a release by the window after it against the window before |
 | [`reliant forge obs dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
+| [`reliant forge obs dashboards add-panel`](#reliant-forge-obs-dashboards-add-panel) | Append a panel to a dashboard you own, creating it when missing |
 | [`reliant forge obs dashboards check`](#reliant-forge-obs-dashboards-check) | Validate the dashboards a release bundle would carry |
 | [`reliant forge obs endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
 | [`reliant forge obs issue`](#reliant-forge-obs-issue) | Everything needed to fix one issue; resolve, ignore and unresolve triage it |
@@ -875,17 +876,22 @@ reliant db migrate up
 
 ## reliant forge
 
-Connect RPC development framework for LLM-optimized applications
+Build, run and ship static sites, SPAs, web/mobile apps and APIs, LLM-first
 
-Forge is a development framework where everything communicates via
-Connect RPC interfaces, purpose-built for LLM-driven development.
+Forge takes a project from an empty directory to production, purpose-built
+for LLM-driven development: environments, build-once releases, hosting,
+observability and linters from day 0.
 
-It enables easy mocking, middleware injection, spec-driven development,
-and component swapping - all while maintaining a single, consistent
-interface pattern throughout the entire stack.
+A landing page, docs site, SPA or PWA with no backend is a complete forge
+project: one static frontend on hosted static hosting, no server to run.
+Adopt an existing Vite or Next.js app with
+'forge project new --in-place --kind site' ('forge skill load
+deploy/static-site').
 
-New here? Run 'forge start' — the whole path from an empty directory to
-authored protos, in one call.
+An app with an API adds Go services defined in proto and wired over Connect
+RPC — generated handlers, typed frontend hooks, mocks and middleware, one
+consistent interface pattern through the stack. 'forge start' walks that path
+from an empty directory to authored protos, in one call.
 
 ```
 reliant forge
@@ -1999,6 +2005,29 @@ namespace/name pairs, only as type Opaque, for the delivery identities only.
 --delivery-subject (user:<name> or serviceaccount:<ns>/<name>) binds a second,
 dedicated delivery identity alongside the binding's identity.
 
+SECRET-STORE ISSUER — connect also tells the control plane which service-account
+issuer the cluster's pods are signed by, so the secret store can verify the
+projected token an External Secrets Operator logs in with, against the cluster's
+OWN keys (no stored credential, no call back into the cluster). forge reads the
+issuer and key set from the API server through --context:
+
+  --issuer auto      (default) discover on GKE, upload elsewhere; if the issuer
+                     cannot be read or the control plane refuses it, the cluster
+                     still connects for deploys and forge says what is missing
+  --issuer discover  the store fetches <issuer>/.well-known/openid-configuration
+                     itself; the issuer must be reachable from the internet
+  --issuer upload    forge sends /openid/v1/jwks: for a cluster the store cannot
+                     reach (private, k3d). PUBLIC keys only; a set holding a
+                     private or symmetric key is never sent. A snapshot: re-run
+                     connect after a signing-key rotation to refresh it
+  --issuer skip      leave the registration as it is
+  --issuer withdraw  remove it; the store stops trusting the cluster
+
+The binding's grant gains 'get' on /openid/v1/jwks. The store's id for the
+cluster (its auth mount is jwt-<id>) is assigned by the control plane, is global
+across organizations, and is printed and kept in
+.forge/state/cluster-issuer-<name>.json; use it as the connected cluster name.
+
 ```
 reliant forge cluster connect <name> [flags]
 ```
@@ -2015,6 +2044,7 @@ reliant forge cluster connect <name> [flags]
 | `--delivery-subject` | `string` | - | Also bind the delivery grant to this dedicated identity: user:<name> or serviceaccount:<namespace>/<name> |
 | `--dry-run` | `bool` | - | Print the RBAC diff against the cluster and what would be sent; contact no control plane and change nothing |
 | `--env` | `string` | - | Environment whose binding this is, and whose control plane to talk to (required) |
+| `--issuer` | `string` | `auto` | Register the cluster's service-account issuer with the secret store: auto, discover, upload, skip or withdraw |
 | `--live-from` | `string` | - | With --dry-run: diff against this kubectl capture instead of reading the cluster |
 | `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
 
@@ -2807,17 +2837,34 @@ The connection follows the workload (`--workload`, default "api"):
                       ManagedDatabase (`--database` when it has several), as
                       the read-only forge_ro role; scratch envs only
                       (lifecycle local or ephemeral)
-Hosted databases, and the databases of real cluster envs, are not reachable
-from forge yet (exit 2).
+  OnHosted            the control plane runs it inside the platform
+                      (AppDatabaseService.QueryDatabase), as forge_ro, and
+                      records it in the audit log and the activity feed
+The databases of real (not scratch) cluster envs are not reachable from forge
+yet (exit 2), unless you bring your own route: --addr.
+
+--addr <host:port> dials that address directly instead of any transport above,
+for a database forge cannot route to itself. The route (a VPN, a kubectl
+port-forward, a bastion) is yours; forge builds none. Credentials and policy are
+the transport's own: a cluster database's read-only forge_ro role is read from
+its Secret through your kube context, an OnHost / OnCompose workload keeps its
+DATABASE_URL with the host and port replaced. TLS is sslmode=verify-full against
+the cluster CA (<database>-ca) with server name <database>-rw.<namespace>.svc, a
+name CloudNativePG's certificate carries, so it verifies through a tunnel to
+localhost; --sslmode require|disable overrides it. A hosted env refuses --addr:
+the control plane executes its queries.
 
 The env's data_access policy (forge.DataAccess) decides who may query:
 open (the default of a local or ephemeral env), audited (the default of any
-other env: pass --confirm-env <env> and a --reason) or deny.
+other env: pass --confirm-env <env> and a --reason) or deny. A hosted env is
+judged by the control plane from the policy its deployed release recorded, and
+an audited one is open to people only (and to a db:query grant).
 
 Output: a table, or --format json|csv. --json is --format json; the document
 carries ok, exit_code and error like every other forge --json verb, plus
 schema "forge.db.query/v1", scope, columns[{name,pg_type}], rows, row_count,
-truncated, truncated_by, cells_truncated, duration_ms and bytes.
+truncated, truncated_by, cells_truncated, duration_ms and bytes; a hosted
+query adds audit{id, sql_sha256, replica}.
 
 Exit codes: 0 rows returned; 1 the statement or the request is wrong (refused
 by the guard or the read-only transaction, a SQL error, a permission error, a
@@ -2827,6 +2874,8 @@ connection lost).
   cli forge db query dev "select count(*) from jobs where crew_id is null"
   cli forge db query dev -f report.sql --format csv > report.csv
   cli forge db query staging "select * from jobs limit 5" --confirm-env staging --reason "ISS-7f3a"
+  kubectl -n app-prod port-forward svc/ledger-rw 5432:5432 &
+  cli forge db query prod "select 1" --addr localhost:5432 --confirm-env prod --reason "ISS-7f3a"
 
 ```
 reliant forge db query <env> ["<sql>" | -f FILE] [flags]
@@ -2836,6 +2885,7 @@ reliant forge db query <env> ["<sql>" | -f FILE] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--addr` | `string` | - | Dial host:port directly (your VPN, kubectl port-forward or bastion) instead of forge's own transport; not for a hosted env |
 | `--confirm-env` | `string` | - | Required on a real env: the env name again |
 | `--database` | `string` | - | ManagedDatabase to query, when a cluster env declares several |
 | `--file`, `-f` | `string` | - | Read the statement from FILE (- for stdin) |
@@ -2843,6 +2893,7 @@ reliant forge db query <env> ["<sql>" | -f FILE] [flags]
 | `--json` | `bool` | - | Same as --format json |
 | `--max-rows` | `int` | `200` | Row cap (at most 10000) |
 | `--reason` | `string` | - | Required on a real env: why you are reading it (at most 500 characters) |
+| `--sslmode` | `string` | - | With --addr on a cluster database: verify-full (default, against the cluster CA), require or disable |
 | `--timeout` | `duration` | `5s` | Statement timeout (at most 30s) |
 | `--workload` | `string` | `api` | Workload whose database to query |
 
@@ -7432,7 +7483,45 @@ reliant forge obs dashboards
 
 | Command | Description |
 |---------|-------------|
+| [`add-panel`](#reliant-forge-obs-dashboards-add-panel) | Append a panel to a dashboard you own, creating it when missing |
 | [`check`](#reliant-forge-obs-dashboards-check) | Validate the dashboards a release bundle would carry |
+
+---
+
+#### reliant forge obs dashboards add-panel
+
+Append a panel to a dashboard you own, creating it when missing
+
+Add one panel to deploy/observability/dashboards/<slug>.json, the dashboard a
+release ships for the Reliant console. The file is created when it does not
+exist (id is the slug; title is --title, or the slug).
+
+--panel is a file, or "-" for stdin, holding ONE panel object in the dashboard
+vocabulary (for example the document 'forge obs metrics query --panel-out'
+writes). It is validated exactly as 'forge obs dashboards check' validates it,
+and an error carries the panel file's own line and column.
+
+The panel's id comes from --id, else the panel's own "id", else is made from its
+title and made unique within the dashboard. An id the dashboard already holds is
+an error unless --replace, which swaps that panel in place. Nothing is written
+when anything fails, and a repeated run with the same inputs leaves the file
+byte-identical.
+
+A slug equal to a generated dashboard's name (shop-overview for
+shop-overview_gen.json) replaces that dashboard in releases; a warning says so.
+
+```
+reliant forge obs dashboards add-panel <slug> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--id` | `string` | - | id for the panel, overriding the panel's own |
+| `--panel` | `string` | - | file holding one panel object, or "-" for stdin (required) |
+| `--replace` | `bool` | - | replace the panel that has the same id instead of failing |
+| `--title` | `string` | - | title of a dashboard being created; default: the slug |
 
 ---
 
@@ -11099,7 +11188,9 @@ List available skills (forge-shipped, project, and user-global).
 The default view is GROUPED and fits on one screen: the start-here skills
 first, then one row per skill group with its sub-skills collapsed into a
 '+N' count. Every collapsed sub-skill is still loadable by its exact path
-('forge skill load db/seeding'). Pass --all for the exhaustive flat table.
+('forge skill load db/seeding'). Pass --all for the exhaustive flat table, or a
+group name ('forge skill list observability') for that group's parent and every
+sub-skill, each with its full path and description.
 
 'forge skill search <keyword>' is usually faster than reading either view —
 it scores paths, descriptions and BODIES, so it finds skills whose title
@@ -11112,7 +11203,7 @@ them, or use 'forge project upgrade list' to see the migrations that actually
 apply to this project's pinned forge_version.
 
 ```
-reliant forge skill list [flags]
+reliant forge skill list [group] [flags]
 ```
 
 **Flags:**

@@ -1,32 +1,37 @@
 /**
- * Single shared interceptor chain for every Connect transport in the app.
+ * The interceptor chain every Connect transport in the app runs.
  *
- * Before this module existed, three places built transports independently:
- *   - `api/grpc-client.ts::getTransport`           (reliant api-server)
- *   - `api/grpc-client.ts::getControlPlaneTransport` (daemon-registry/token, cloud mode)
- *   - `services/controlPlane/client.ts`              (control-plane DaemonService etc.)
+ * The transports themselves — one per backend route — are built in
+ * `src/lib/connect.ts`, and every one of them calls `buildInterceptors(...)`.
+ * They used to be built in three places with three inline chains, and they
+ * drifted: the control-plane one attached only auth + upgrade, so the project
+ * picker's "Resume daemon" failure surfaced as a raw toast instead of the
+ * UpgradeRequiredModal. One factory makes that drift mechanically impossible.
  *
- * They drifted: the third only attached an auth + upgrade interceptor, missing
- * timeout / tracing / Sentry error-logging / 401 sign-out / daemon-last-seen.
- * The user-visible symptom of that drift was the project picker's "Resume
- * daemon" call surfacing as a raw toast instead of the UpgradeRequiredModal
- * (the fix added `upgradeInterceptor` to the third transport — but the rest
- * of the drift was still there). This factory makes the drift mechanically
- * impossible: every transport calls `buildInterceptors(...)`.
- *
- * The chain order is:
- *   timeout → auth → daemon-last-seen → tracing → error-logging → upgrade-modal → machine-wake → 401-signout
- * (daemon-last-seen only on reliant api-server transports — see TransportBackend).
+ * The chain composes forge's web runtime (`@reliantlabs/forge-web-runtime`)
+ * with reliant's own interceptors. The order is:
+ *   error-normalize → timeout → auth → missing-token → daemon-last-seen → trace
+ *     → error-logging → upgrade-modal → machine-wake → 401-signout
+ * (error-normalize and auth are the runtime's; daemon-last-seen only on reliant
+ * api-server transports — see TransportBackend; trace is the runtime's).
  *
  * Why this order:
- *   - timeout outermost so the full request lifecycle (incl. retries through
+ *   - error-normalize outermost so EVERY failure a caller sees — a server
+ *     error, the deadline's own DeadlineExceeded, an abort — is the runtime's
+ *     `ConnectClientError`, the type the generated hooks declare. It is a
+ *     ConnectError subclass with the numeric `.code`, metadata and details
+ *     intact, so the `instanceof ConnectError` call sites keep working; it adds
+ *     `.reason` / `.codeName` / `.status` / `.retryable` / `.traceId`, and its
+ *     `.message` drops connect's "[code] " prefix (`rawMessage` is unchanged);
+ *   - timeout next so the full request lifecycle (incl. retries through
  *     inner interceptors) is bounded;
- *   - auth attaches the bearer before any header injection (tracing);
+ *   - auth attaches the bearer before the trace stage;
  *   - daemon-last-seen header is independent of auth ordering but cheap to
  *     leave just after auth;
- *   - tracing wraps the actual `next(req)` so spans capture network time;
- *   - errorInterceptor logs/reports to Sentry — wraps tracing so it sees the
- *     real failure (tracing would otherwise mark OK and rethrow);
+ *   - trace stamps the W3C traceparent; the span it names is the HyperDX
+ *     SDK's fetch span, opened below this chain, so it covers network time;
+ *   - errorInterceptor logs/reports to Sentry — sees the real failure the
+ *     inner stages raise;
  *   - upgradeInterceptor opens the modal on ResourceExhausted + reason header
  *     before propagating;
  *   - machineWakeInterceptor records a machine the server woke for the request
@@ -35,7 +40,7 @@
  *   - unauthInterceptor (401 → one refresh, else one sign-out) lives innermost so it doesn't gobble
  *     the timeout's DeadlineExceeded or the upgrade's ResourceExhausted.
  *
- * Setting `withAuth: false` skips both `authInterceptor` AND
+ * Setting `withAuth: false` skips the auth stages AND
  * `unauthInterceptor` (a 401 with no session would loop). All other
  * interceptors stay on so the unauth transport still gets timeouts, tracing,
  * Sentry error reporting, and the upgrade modal — drift gone.
@@ -43,15 +48,11 @@
 
 import { ConnectError, Code } from "@connectrpc/connect";
 import type { Interceptor } from "@connectrpc/connect";
-import { createConnectTransport } from "@connectrpc/connect-web";
 import {
-  trace,
-  context,
-  SpanStatusCode,
-  SpanKind,
-  propagation,
-  type Span,
-} from "@opentelemetry/api";
+  authInterceptor as runtimeAuthInterceptor,
+  errorNormalizeInterceptor,
+  traceInterceptor,
+} from "@reliantlabs/forge-web-runtime/interceptors";
 import * as Sentry from "@sentry/react";
 import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
@@ -104,27 +105,35 @@ const daemonLastSeenInterceptor: Interceptor = (next) => async (req) => {
   return await next(req);
 };
 
-// Auth interceptor to add a bearer token to requests.
+// Bearer token: the runtime's auth interceptor, fed by reliant's token source.
 //
 // The token source is pluggable — see `api/authProvider.ts`. The default
 // provider reproduces the historical inline behavior (API key from
 // localStorage first, then the Supabase session, with Supabase imported
-// lazily to break the `supabase → devAuth (grpc-unauth) → transport` cycle).
-// Native shells and embedders swap in their own provider at bootstrap.
-const authInterceptor: Interceptor = (next) => async (req) => {
-  const token = await getAuthTokenProvider().getToken();
+// lazily to break the `supabase → devAuth (grpc-unauth) → connect → transport`
+// cycle). Native shells and embedders swap in their own provider at bootstrap.
+// It is read on every request, so a provider swapped after the transports were
+// built still applies.
+const authInterceptor: Interceptor = runtimeAuthInterceptor({
+  getToken: () => getAuthTokenProvider().getToken(),
+});
 
-  if (token) {
-    req.header.set("Authorization", `Bearer ${token}`);
-  } else {
+// The runtime attaches the token silently. A request that goes out with NO
+// token is the one worth a line — it names the attach miss that precedes a
+// spurious 401 (see unauthInterceptor) — so reliant keeps it, right after.
+const missingTokenInterceptor: Interceptor = (next) => async (req) => {
+  if (!req.header.has("Authorization")) {
     logger.warn("[gRPC Client] No auth token available for request:", {
       method: req.method.name,
       isElectron: typeof window !== "undefined" ? !!window.electronAPI : false,
     });
   }
-
   return await next(req);
 };
+
+// Every failure leaves the chain as the runtime's typed ConnectClientError —
+// see the module comment for why this is outermost.
+const normalizeInterceptor: Interceptor = errorNormalizeInterceptor({});
 
 // Methods that need longer timeouts (0 = no timeout, handled by streaming layer)
 const LONG_TIMEOUT_METHODS: Record<string, number> = {
@@ -289,46 +298,12 @@ export function describeInFlight(): string {
 
 const timeoutInterceptor: Interceptor = deadline.interceptor;
 
-// OTel tracing interceptor — creates a span per RPC and injects W3C
-// traceparent/tracestate headers.
-const tracingInterceptor: Interceptor = (next) => async (req) => {
-  const tracer = trace.getTracer("reliant-frontend");
-  const spanName = `grpc.${req.service.typeName}/${req.method.name}`;
-
-  return tracer.startActiveSpan(
-    spanName,
-    { kind: SpanKind.CLIENT },
-    async (span: Span) => {
-      try {
-        // Inject W3C trace context into request headers
-        const carrier: Record<string, string> = {};
-        propagation.inject(context.active(), carrier);
-        for (const [key, value] of Object.entries(carrier)) {
-          req.header.set(key, value);
-        }
-
-        span.setAttribute("rpc.system", "connect");
-        span.setAttribute("rpc.service", req.service.typeName);
-        span.setAttribute("rpc.method", req.method.name);
-
-        const result = await next(req);
-        span.setStatus({ code: SpanStatusCode.OK });
-        return result;
-      } catch (error) {
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : String(error),
-        });
-        span.recordException(
-          error instanceof Error ? error : new Error(String(error)),
-        );
-        throw error;
-      } finally {
-        span.end();
-      }
-    },
-  );
-};
+// Trace propagation is the forge web runtime's: it writes a valid W3C
+// `traceparent` on every request (waiting, bounded, for browser telemetry to
+// finish starting so the call goes through the SDK's patched fetch). The span
+// itself is the HyperDX SDK's fetch span, so one RPC is one browser span whose
+// context the interceptor and the SDK agree on.
+export const traceStage: Interceptor = traceInterceptor();
 
 // Warn when a unary RPC takes at least this long. Streams are excluded —
 // their duration is the lifetime of the subscription, not a latency.
@@ -692,10 +667,11 @@ export function buildInterceptors(
   const { withAuth = true, backend = "reliant-api" } = options;
 
   const chain: Interceptor[] = [
+    normalizeInterceptor,
     timeoutInterceptor,
-    ...(withAuth ? [authInterceptor] : []),
+    ...(withAuth ? [authInterceptor, missingTokenInterceptor] : []),
     ...(backend === "reliant-api" ? [daemonLastSeenInterceptor] : []),
-    tracingInterceptor,
+    traceStage,
     errorInterceptor,
     upgradeInterceptor,
     machineWakeInterceptor,
@@ -703,13 +679,3 @@ export function buildInterceptors(
   ];
   return chain;
 }
-
-/**
- * Test-only re-export of the createConnectTransport binding so the transport
- * factory tests can mock it via vi.mock without having to also mock its
- * direct usage inside grpc-client.ts / grpc-unauth.ts / controlPlane/client.ts.
- *
- * Production callers should use createConnectTransport from @connectrpc/connect-web
- * directly + buildInterceptors() — not this re-export.
- */
-export { createConnectTransport };

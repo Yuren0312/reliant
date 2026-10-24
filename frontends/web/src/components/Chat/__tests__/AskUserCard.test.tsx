@@ -10,7 +10,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { QuestionInfo } from "../../../api/question-grpc";
+import type { QuestionInfo } from "../../../gen/reliant/v1/question_pb";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 import { queryClient } from "../../../lib/query-client";
 
 const { listAsyncQuestionsMock, resolveQuestionMock } = vi.hoisted(() => ({
@@ -18,13 +20,6 @@ const { listAsyncQuestionsMock, resolveQuestionMock } = vi.hoisted(() => ({
   resolveQuestionMock: vi.fn(),
 }));
 
-vi.mock("../../../api/question-grpc", () => ({
-  questionGrpc: {
-    listPendingQuestions: vi.fn().mockResolvedValue([]),
-    listAsyncQuestions: listAsyncQuestionsMock,
-    resolveQuestion: resolveQuestionMock,
-  },
-}));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import { AskUserCard, askUserCardMode } from "../AskUserCard";
@@ -45,15 +40,16 @@ const input = {
 
 function asyncQuestion(overrides: Partial<QuestionInfo> = {}): QuestionInfo {
   return {
-    question_id: "q-1",
-    chat_id: CHAT_ID,
-    workflow_id: CHAT_ID,
-    thread_id: CHAT_ID,
-    step_id: "execute_tools",
+    $typeName: "reliant.v1.QuestionInfo",
+    questionId: "q-1",
+    chatId: CHAT_ID,
+    workflowId: CHAT_ID,
+    threadId: CHAT_ID,
+    stepId: "execute_tools",
     status: "pending",
-    created_at: "2026-10-22T00:00:00Z",
+    createdAt: "2026-10-22T00:00:00Z",
     async: true,
-    tool_call_id: TOOL_CALL,
+    toolCallId: TOOL_CALL,
     ...overrides,
   };
 }
@@ -69,7 +65,23 @@ function renderCard(finished = false, cardInput: unknown = input) {
 beforeEach(() => {
   vi.clearAllMocks();
   queryClient.clear();
-  resolveQuestionMock.mockResolvedValue({ success: true });
+  // Like the server: once answered, the async list reports it answered. An
+  // answer invalidates the list, so a fake that kept saying "pending" would
+  // put the form back.
+  resolveQuestionMock.mockImplementation(async (questionId: string, _action: string, responseData?: string) => {
+    listAsyncQuestionsMock.mockResolvedValue([asyncQuestion({ questionId, status: "resolved", responseData })]);
+    return { success: true };
+  });
+  setTransport(
+    mockTransport({
+      "QuestionService.ListPendingQuestions": { response: { questions: [] } },
+      "QuestionService.ListAsyncQuestions": async () => ({ questions: await listAsyncQuestionsMock() }),
+      "QuestionService.ResolveQuestion": (req) => {
+        const { questionId, action, responseData } = req as { questionId: string; action: string; responseData?: string };
+        return resolveQuestionMock(questionId, action, responseData);
+      },
+    }),
+  );
 });
 afterEach(() => queryClient.clear());
 
@@ -91,8 +103,10 @@ describe("AskUserCard", () => {
       answers: [{ question: "Which database?", selected: ["SQLite"] }],
     });
 
-    expect(await screen.findByText("Question answered")).toBeInTheDocument();
-    expect(screen.getByTestId("ask-user-answers")).toHaveTextContent("SQLite");
+    // Answered: the card settles to its one line, question then answer.
+    const summary = await screen.findByTestId("ask-user-summary");
+    expect(summary).toHaveTextContent("Which database?");
+    expect(summary).toHaveTextContent("SQLite");
     expect(screen.queryByRole("button", { name: /submit/i })).toBeNull();
   });
 
@@ -100,11 +114,13 @@ describe("AskUserCard", () => {
     listAsyncQuestionsMock.mockResolvedValue([
       asyncQuestion({
         status: "resolved",
-        response_data: JSON.stringify({ answers: [{ question: "Which database?", selected: ["Postgres (Recommended)"] }] }),
+        responseData: JSON.stringify({ answers: [{ question: "Which database?", selected: ["Postgres (Recommended)"] }] }),
       }),
     ]);
+    const user = userEvent.setup();
     renderCard();
 
+    await user.click(await screen.findByTestId("ask-user-summary"));
     expect(await screen.findByText("Question answered")).toBeInTheDocument();
     expect(screen.getByTestId("ask-user-answers")).toHaveTextContent("Postgres (Recommended)");
     expect(screen.queryByRole("button", { name: /submit/i })).toBeNull();
@@ -112,10 +128,12 @@ describe("AskUserCard", () => {
 
   it("shows a question its agent withdrew, with the reason and no form", async () => {
     listAsyncQuestionsMock.mockResolvedValue([
-      asyncQuestion({ status: "resolved", withdrawn_reason: "Went with Postgres; the schema is migrated" }),
+      asyncQuestion({ status: "resolved", withdrawnReason: "Went with Postgres; the schema is migrated" }),
     ]);
+    const user = userEvent.setup();
     renderCard();
 
+    await user.click(await screen.findByTestId("ask-user-summary"));
     expect(await screen.findByText("Question withdrawn")).toBeInTheDocument();
     expect(screen.getByTestId("ask-user-status")).toHaveTextContent(
       "Withdrawn: Went with Postgres; the schema is migrated",
@@ -220,6 +238,95 @@ describe("AskUserCard", () => {
     await waitFor(() => expect(resolveQuestionMock).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Question for you · not blocking")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /submit/i })).toBeInTheDocument();
+  });
+});
+
+describe("AskUserCard once settled", () => {
+  const answered = () =>
+    asyncQuestion({
+      status: "resolved",
+      responseData: JSON.stringify({ answers: [{ question: "Which database?", selected: ["SQLite"] }] }),
+    });
+
+  it("collapses an answered question to one line: the question, then the answer", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([answered()]);
+    renderCard();
+
+    const summary = await screen.findByTestId("ask-user-summary");
+    expect(screen.getByTestId("ask-user-card")).toHaveAttribute("data-collapsed", "true");
+    expect(summary).toHaveAttribute("aria-expanded", "false");
+    expect(summary).toHaveAccessibleName(/^Question answered: Which database\?.*SQLite$/);
+    expect(summary).toHaveClass("min-h-[44px]");
+    // Collapsed means collapsed: no title, status line, or answer list.
+    expect(screen.queryByText("Question answered")).toBeNull();
+    expect(screen.queryByTestId("ask-user-answers")).toBeNull();
+  });
+
+  it("expands to the full card on click, and collapses again from its header", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([answered()]);
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(await screen.findByTestId("ask-user-summary"));
+    expect(screen.getByTestId("ask-user-card")).toHaveAttribute("data-collapsed", "false");
+    expect(screen.getByTestId("ask-user-answers")).toHaveTextContent("SQLite");
+    const header = screen.getByRole("button", { name: /Question answered/, expanded: true });
+    expect(header).toHaveAttribute("aria-controls");
+    expect(document.getElementById(header.getAttribute("aria-controls")!)).toContainElement(
+      screen.getByTestId("ask-user-answers"),
+    );
+
+    await user.click(header);
+    expect(screen.getByTestId("ask-user-summary")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("ask-user-answers")).toBeNull();
+  });
+
+  it("expands from the keyboard", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([answered()]);
+    const user = userEvent.setup();
+    renderCard();
+
+    await screen.findByTestId("ask-user-summary");
+    await user.tab();
+    expect(screen.getByTestId("ask-user-summary")).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByTestId("ask-user-answers")).toBeInTheDocument();
+    await user.keyboard(" ");
+    expect(screen.queryByTestId("ask-user-answers")).toBeNull();
+  });
+
+  it("collapses a withdrawn question to the question and the reason", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([
+      asyncQuestion({ status: "resolved", withdrawnReason: "Went with Postgres" }),
+    ]);
+    renderCard();
+
+    const summary = await screen.findByTestId("ask-user-summary");
+    expect(summary).toHaveAccessibleName(/^Question withdrawn: Which database\?.*Withdrawn: Went with Postgres$/);
+    expect(summary).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("ask-user-withdrawn")).toBeNull();
+  });
+
+  it("says when an answered question carried no answer", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([asyncQuestion({ status: "resolved" })]);
+    renderCard();
+    expect(await screen.findByTestId("ask-user-summary")).toHaveTextContent("No answer given.");
+  });
+
+  it("names the extra questions of a multi-question card on its one line", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([answered()]);
+    renderCard(false, { questions: [...input.questions, { question: "Which region?", options: [] }] });
+    expect(await screen.findByTestId("ask-user-summary")).toHaveTextContent("Which database? (+1 more)");
+  });
+
+  it("keeps an unanswered question full, with no collapse control", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([asyncQuestion()]);
+    renderCard();
+
+    expect(await screen.findByText("Question for you · not blocking")).toBeInTheDocument();
+    expect(screen.queryByTestId("ask-user-summary")).toBeNull();
+    expect(screen.queryByRole("button", { expanded: true })).toBeNull();
+    expect(screen.getByTestId("ask-user-card")).not.toHaveAttribute("data-collapsed");
   });
 });
 

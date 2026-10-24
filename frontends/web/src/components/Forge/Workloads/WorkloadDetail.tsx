@@ -48,6 +48,8 @@ import { useDefaultBranch } from "@/services/forge/RepoMetaContext";
 import { workloadLastError, workloadLink, type ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { UPlotChart, type ChartMarker } from "../Observability/charts/UPlotChart";
+import { ExploreLink } from "../Observability/Metrics/ExploreLink";
+import { workloadPivot, useExploreHref } from "../Observability/Metrics/pivots";
 import { unionTimestamps } from "../Observability/Dashboards/PanelBody";
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatAgo, formatBytes, formatCores, formatCount, formatPercent } from "../Observability/format";
@@ -81,6 +83,7 @@ import {
 import { ActionDialog, DriftTag, HealthStatus, WorkloadRelease } from "./workloadParts";
 import { OVERVIEW_RANGE } from "./OverviewHome";
 import { eventHeadline, eventRawReason, exitPhrase, jobFailurePhrase, plainErrorText } from "./plainHealth";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 // Its own chunk, as on the Observability pages: the explorers load only when a tab shows them.
 const ObservabilityPanel = lazy(() =>
@@ -186,7 +189,7 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
       <div className="space-y-6" data-testid="workload-detail" data-state="loading" aria-busy="true">
         <PageHeader breadcrumbs={crumbs} title={name} meta={<span className="inline-flex h-4 w-72 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />} className="mb-0" />
         <div className="h-9 border-b border-border" />
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="grid gap-4 md:grid-cols-2">
             {[0, 1, 2, 3].map((i) => (
               <Card key={i} className="h-44 animate-pulse motion-reduce:animate-none" />
@@ -271,7 +274,7 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
           <ExplorerTab project={project} env={env} name={name} view={explorer} search={search} onSearch={onSearch} />
         </div>
       ) : (
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0 space-y-4" role="tabpanel" aria-label={TAB_LABELS[tab]}>
             {tab === "overview" &&
               (isJob ? (
@@ -738,8 +741,8 @@ function OverviewTab({
         >
           <UPlotChart height={140} timestamps={timestamps} series={[{ label: "error rate", values: ratioSeries(errors, requests), tone: "destructive" }]} unit="percent" label={`Error rate of ${name}`} markers={markers} legend={false} />
         </ChartPanel>
-        <UsageChart title="CPU vs limit" series={cpu} now={cpuNow} format={formatCores} unit="cores" markers={markers} name={name} />
-        <UsageChart title="Memory vs limit" series={memory} now={memNow} format={formatBytes} unit="bytes" markers={markers} name={name} />
+        <UsageChart title="CPU vs limit" series={cpu} now={cpuNow} format={formatCores} unit="cores" markers={markers} name={name} envName={env.name} range={range} />
+        <UsageChart title="Memory vs limit" series={memory} now={memNow} format={formatBytes} unit="bytes" markers={markers} name={name} envName={env.name} range={range} />
       </div>
       <PodsPanel summary={summary} onLogs={onLogs} />
     </>
@@ -763,6 +766,7 @@ function ChartPanel({
   empty,
   loading,
   testId,
+  explore,
   children,
 }: {
   title: string;
@@ -771,12 +775,19 @@ function ChartPanel({
   empty: string | null;
   loading: boolean;
   testId: string;
+  /** The explorer link for this chart's metric, when it has one. */
+  explore?: string | null;
   children: ReactNode;
 }) {
   return (
     <Card padding="none" className="min-w-0" data-testid={testId}>
       <div className="flex items-baseline justify-between gap-3 px-4 pt-3">
         <h2 className="text-sm font-medium text-ink">{title}</h2>
+        {explore && (
+          <ExploreLink href={explore} testId={`${testId}-explore`} className="mr-auto">
+            Explore
+          </ExploreLink>
+        )}
         {figure === null ? (
           <span className="h-4 w-16 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label={`Loading ${title}`} />
         ) : (
@@ -804,6 +815,8 @@ function UsageChart({
   unit,
   markers,
   name,
+  envName,
+  range,
 }: {
   title: string;
   series: WorkloadSeries | null;
@@ -812,7 +825,11 @@ function UsageChart({
   unit: "cores" | "bytes";
   markers: readonly ChartMarker[];
   name: string;
+  envName: string;
+  range: RangePreset;
 }) {
+  const exploreHref = useExploreHref();
+  const explore = exploreHref?.(workloadPivot(name, unit === "cores" ? "cpu" : "memory"), { env: envName, range }) ?? null;
   const limit = now?.limit ?? null;
   const figure = now ? (
     <>
@@ -836,6 +853,7 @@ function UsageChart({
       empty={!series || series.timestamps.length < 2 ? `Reliant received no ${unit === "cores" ? "CPU" : "memory"} samples for ${name} in the window.` : null}
       loading={false}
       testId={`workload-chart-${unit === "cores" ? "cpu" : "memory"}`}
+      explore={explore}
     >
       {series && <UPlotChart height={140} timestamps={series.timestamps} series={lines} unit={unit} label={`${title} for ${name}`} markers={markers} legend={false} />}
     </ChartPanel>
@@ -865,7 +883,7 @@ function PodsPanel({ summary, onLogs }: { summary: Workload | null; onLogs: () =
         <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">No pod reported in the window. A workload scaled to zero, or one Reliant cannot see yet, looks like this.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-full border-collapse" aria-label="Pods">
+          <StackedTable className="min-w-full border-collapse" aria-label="Pods">
             <thead>
               <tr className="border-b border-border">
                 <th scope="col" className={TH}>
@@ -916,7 +934,7 @@ function PodsPanel({ summary, onLogs }: { summary: Workload | null; onLogs: () =
                 );
               })}
             </tbody>
-          </table>
+          </StackedTable>
         </div>
       )}
     </Panel>
@@ -930,7 +948,7 @@ function RunsPanel({ runs, hrefs }: { runs: WorkloadJob[]; hrefs: WorkloadDetail
         <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">No run of this job in the window.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-full border-collapse" aria-label="Runs">
+          <StackedTable className="min-w-full border-collapse" aria-label="Runs">
             <thead>
               <tr className="border-b border-border">
                 <th scope="col" className={TH}>
@@ -979,7 +997,7 @@ function RunsPanel({ runs, hrefs }: { runs: WorkloadJob[]; hrefs: WorkloadDetail
                 );
               })}
             </tbody>
-          </table>
+          </StackedTable>
         </div>
       )}
     </Panel>
@@ -1001,7 +1019,7 @@ function EventsPanel({ events, range }: { events: WorkloadEvent[]; range: RangeP
         <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">No Kubernetes event in the {RANGE_LABELS[range].toLowerCase()}. A steady workload is quiet.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-full border-collapse" aria-label="Kubernetes events">
+          <StackedTable className="min-w-full border-collapse" aria-label="Kubernetes events">
             <thead>
               <tr className="border-b border-border">
                 <th scope="col" className={TH}>
@@ -1045,7 +1063,7 @@ function EventsPanel({ events, range }: { events: WorkloadEvent[]; range: RangeP
                 </tr>
               ))}
             </tbody>
-          </table>
+          </StackedTable>
         </div>
       )}
     </Panel>
@@ -1094,7 +1112,7 @@ function HistoryTab({
         {images.length === 0 ? (
           <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">No image was observed in the window.</p>
         ) : (
-          <table className="min-w-full border-collapse" aria-label="Images">
+          <StackedTable className="min-w-full border-collapse" aria-label="Images">
             <thead>
               <tr className="border-b border-border">
                 <th scope="col" className={TH}>
@@ -1123,7 +1141,7 @@ function HistoryTab({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </StackedTable>
         )}
       </Panel>
       {runs.length > 0 && <RunsPanel runs={runs} hrefs={hrefs} />}

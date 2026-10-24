@@ -20,7 +20,9 @@ import { useDelayedVisibility } from "../../hooks/useDelayedVisibility";
 import {
   CATCH_UP_MIN_VISIBLE_MS,
   CATCH_UP_SHOW_DELAY_MS,
+  isTimelineCatchingUp,
 } from "../../lib/timelineCatchUp";
+import { useTimelineSync } from "../../store/chatStoreHooks";
 import { PermissionsPanelWrapper } from "./PermissionsPanelWrapper";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { ChatHeader } from "./ChatHeader";
@@ -36,7 +38,8 @@ import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { InterleavedTimeline } from "./thread-views";
 import { WorkflowViewerPanel } from "../workflow/WorkflowViewerPanel";
 
-import type { Message, ToolApprovalRequest } from "../../api/client";
+import type { Message } from "../../api/client";
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import type {
   ErrorUpdate,
   InfoUpdate,
@@ -53,7 +56,7 @@ import { useChat } from "../../hooks/chat-queries";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { isUnadoptedAutomation } from "../../lib/sidebarChatList";
 import { unansweredMessage } from "../../lib/awaitingReply";
-import { usePendingQuestions } from "../../hooks/approval-queries";
+import { usePendingQuestions } from "../../hooks/question-queries";
 import { questionForThread } from "../../lib/pendingQuestions";
 import { chatMachineNotice, resolveChatMachine } from "../../lib/chatMachineNotice";
 import { useWakingMachines } from "../../lib/machineWake";
@@ -64,7 +67,7 @@ import { TakeOverRunBar, useAdoptOnSend } from "./TakeOverRunBar";
 interface ChatPresenterProps {
   // Message data
   messages: Message[];
-  approvals: ToolApprovalRequest[];
+  approvals: Approval[];
   errorEvents: ErrorUpdate[];
   infoEvents: InfoUpdate[];
   runOutputs: RunOutputUpdate[];
@@ -72,7 +75,7 @@ interface ChatPresenterProps {
   // Chat state
   chatId: string | null;
   isChatBusy: boolean;
-  pendingApprovals: ToolApprovalRequest[];
+  pendingApprovals: Approval[];
   connectionStatus: string;
 
   // Chat metadata
@@ -108,14 +111,6 @@ interface ChatPresenterProps {
   isLoadingOlderMessages?: boolean;
   hasOlderMessages?: boolean;
 
-  /**
-   * The timeline has not caught up to the stream yet: what is on screen is
-   * the chat's cached state (or nothing) and the snapshot or replay is still
-   * outstanding. Never true for a caught-up chat, streaming or not; see
-   * lib/timelineCatchUp.
-   */
-  isTimelineCatchingUp?: boolean;
-
   /** The host shows the chat's title itself; see ChatHeader.hideTitle. */
   hideChatTitle?: boolean;
 }
@@ -143,7 +138,6 @@ export const ChatPresenter = memo(function ChatPresenter({
   onLoadOlderMessages,
   isLoadingOlderMessages,
   hasOlderMessages,
-  isTimelineCatchingUp = false,
   hideChatTitle,
 }: ChatPresenterProps) {
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
@@ -200,7 +194,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   // background-work pill instead.
   const { data: pendingQuestions } = usePendingQuestions(chatId || undefined);
   const hasPendingQuestion = !!questionForThread(
-    pendingQuestions,
+    pendingQuestions?.questions,
     chatId || undefined,
     selectedThreadId,
     chatForQueue?.workflowId,
@@ -484,22 +478,6 @@ export const ChatPresenter = memo(function ChatPresenter({
     resumeFollowRef.current?.();
   }, []);
 
-  // Catch-up overlay: delayed so a cached, instant switch shows nothing, and
-  // held briefly once up so it never flickers.
-  const catchUpOverlayVisible = useDelayedVisibility(isTimelineCatchingUp, {
-    showDelayMs: CATCH_UP_SHOW_DELAY_MS,
-    minVisibleMs: CATCH_UP_MIN_VISIBLE_MS,
-  });
-  // The reader could not scroll while the overlay was up, so where they are
-  // meant to be when it lifts is the end of the caught-up transcript.
-  const catchUpOverlayWasVisibleRef = useRef(false);
-  useEffect(() => {
-    if (catchUpOverlayWasVisibleRef.current && !catchUpOverlayVisible) {
-      scrollToBottom();
-    }
-    catchUpOverlayWasVisibleRef.current = catchUpOverlayVisible;
-  }, [catchUpOverlayVisible, scrollToBottom]);
-
   // Thinking indicator element, rendered as the timeline's footer
   const hasThinkingFooter =
     (isChatBusy || waitingOnMachine) && pendingApprovals.length === 0 && !hasPendingQuestion;
@@ -643,6 +621,30 @@ export const ChatPresenter = memo(function ChatPresenter({
       (message: Message) => message.role !== MessageRole.TOOL
     );
   }, [selectedThreadMessages, messages]);
+
+  // Catch-up overlay, for the timeline in view: the chat's (main thread) or
+  // the selected side thread's (lib/timelineCatchUp). Delayed so a cached,
+  // instant switch shows nothing, and held briefly once up so it never
+  // flickers.
+  const timelineSync = useTimelineSync(chatId, selectedSideThreadId);
+  const timelineCatchingUp = isTimelineCatchingUp({
+    ...timelineSync,
+    messages: timelineMessages,
+    connectionStatus,
+  });
+  const catchUpOverlayVisible = useDelayedVisibility(timelineCatchingUp, {
+    showDelayMs: CATCH_UP_SHOW_DELAY_MS,
+    minVisibleMs: CATCH_UP_MIN_VISIBLE_MS,
+  });
+  // The reader could not scroll while the overlay was up, so where they are
+  // meant to be when it lifts is the end of the caught-up transcript.
+  const catchUpOverlayWasVisibleRef = useRef(false);
+  useEffect(() => {
+    if (catchUpOverlayWasVisibleRef.current && !catchUpOverlayVisible) {
+      scrollToBottom();
+    }
+    catchUpOverlayWasVisibleRef.current = catchUpOverlayVisible;
+  }, [catchUpOverlayVisible, scrollToBottom]);
 
   // Render the timeline
   const renderTimeline = () => (

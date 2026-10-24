@@ -29,6 +29,7 @@ import { getPrivacySettings, usePrivacyStore } from "../store/privacyStore";
 import { appBuild } from "./appBuild";
 import { loadConfig, type ReliantWebConfig } from "./config_gen";
 import { isDev } from "./constants";
+import { reportFirstLaunch } from "./appFirstLaunch";
 import { clickstackEnabled } from "./telemetrySinks";
 
 const PRERELEASE_REGEX = /-rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+/i;
@@ -114,6 +115,8 @@ export interface TelemetryConfigInput {
   appVersion?: string;
   /** This bundle's baked build version (appBuild().version). */
   buildVersion: string;
+  /** True in the Electron renderer (window.electronAPI is present). */
+  desktop?: boolean;
   replayRate: number;
   extraApiOrigins?: Array<string | undefined>;
 }
@@ -134,6 +137,10 @@ export function buildTelemetryConfig(
       config.GATEWAY_URL || undefined,
       ...(input.extraApiOrigins ?? []),
     ],
+    // The product-event contract's client tag (dev-docs/product-events.md).
+    // Named here rather than left to the runtime's detection so it follows
+    // the same electronAPI test as the rest of the app.
+    appClient: input.desktop ? "electron" : "web",
     consoleCapture: false,
     advancedNetworkCapture: false,
     replay: config.OTEL_REPLAY === "true",
@@ -161,8 +168,8 @@ function findClient(mod: unknown): GlobalAttributeClient | null {
   return isClient(cur) ? cur : null;
 }
 
-// The runtime exposes no resource-attribute hook for these two, so they ride
-// as global span attributes.
+// The runtime has no hook for the build, so it rides as a global span
+// attribute beside the app.client the runtime stamps.
 async function stampClientAttributes(
   attributes: Record<string, string>,
 ): Promise<void> {
@@ -216,6 +223,7 @@ async function start(): Promise<boolean> {
     appVersion: import.meta.env.VITE_APP_VERSION as string | undefined,
     prerelease,
     buildVersion,
+    desktop,
     replayRate: replaySampleRate({
       prerelease,
       policy: runtime.OTEL_REPLAY_SAMPLE_POLICY,
@@ -239,12 +247,14 @@ async function start(): Promise<boolean> {
   });
 
   try {
-    await stampClientAttributes({
-      "reliant.client": desktop ? "desktop" : "web",
-      "reliant.build": buildVersion,
-    });
+    await stampClientAttributes({ "reliant.build": buildVersion });
   } catch (e) {
     console.debug("[telemetry] client attributes not set:", e);
+  }
+  if (desktop) {
+    reportFirstLaunch().catch((e) => {
+      console.debug("[telemetry] app_first_launch not reported:", e);
+    });
   }
   return true;
 }

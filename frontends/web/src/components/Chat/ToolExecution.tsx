@@ -33,7 +33,6 @@ import {
   useApproveToolRequest,
   useDenyToolRequest,
 } from "../../hooks/approval-queries";
-import type { ToolApprovalRequest } from "../../api/client";
 import { FileLink } from "./FileLink";
 import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults, isSpawnTool } from "../../lib/toolFormatters";
 import { parseFilePath } from "../../lib/filePath";
@@ -41,7 +40,7 @@ import { openFile, classifyPath } from "../../lib/fileOpener";
 import { toast } from "../../lib/toast-manager";
 import { useTasksForChat, type TaskItem } from "../../hooks/task-queries";
 import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from "../Settings/ToolCallSettings";
-import { ApprovalStatus } from "../../gen/reliant/v1/approval_pb";
+import { ApprovalStatus, type Approval } from "../../gen/reliant/v1/approval_pb";
 import {
   ContentBlockType,
   ToolCallStatus,
@@ -283,7 +282,7 @@ interface ToolExecutionProps {
     | "backgrounded"
     | "denied"
     | "failed";
-  approval?: ToolApprovalRequest;
+  approval?: Approval;
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
@@ -361,8 +360,8 @@ function ToolExecutionComponent({
   const toolCallStates = useToolCallStates(chatId || "");
   const liveToolCallState = toolCallStates.get(toolCall.id) || null;
 
-  const approveMutation = useApproveToolRequest();
-  const denyMutation = useDenyToolRequest();
+  const approveMutation = useApproveToolRequest(chatId || undefined);
+  const denyMutation = useDenyToolRequest(chatId || undefined);
 
   // Async spawn returns the tool result the moment the child agent is
   // dispatched, so the tool call's own status reads "completed" while the
@@ -540,7 +539,7 @@ function ToolExecutionComponent({
   // Handlers
   const handleApprove = useCallback(() => {
     if (approval && chatId) {
-      approveMutation.mutate({ chatId, requestId: approval.id });
+      approveMutation.mutate({ requestId: approval.id });
     } else if (onApprove) {
       onApprove(toolCall.id);
     }
@@ -548,7 +547,7 @@ function ToolExecutionComponent({
 
   const handleDeny = useCallback(() => {
     if (approval && chatId) {
-      denyMutation.mutate({ chatId, requestId: approval.id });
+      denyMutation.mutate({ requestId: approval.id });
     } else if (onDeny) {
       onDeny(toolCall.id);
     }
@@ -762,7 +761,9 @@ function ToolExecutionComponent({
     "flex items-center justify-between",
     isExpanded ? "bg-muted/50" : "bg-muted/20",
     density === "card" ? "px-3 py-2" : density === "minimal" ? "px-2 py-0.5" : "px-2 py-1",
-    isExpandable && "cursor-pointer hover:bg-muted/50"
+    isExpandable && "cursor-pointer hover:bg-muted/50",
+    // The whole row is the expand toggle: a finger needs the row 44px tall.
+    "touch:min-h-[44px]"
   );
   const contentClassName = cn(
     "border-t border-border/30 overflow-hidden overflow-y-auto bg-muted/15 py-1",
@@ -905,7 +906,7 @@ function ToolExecutionComponent({
               <Tooltip content="Open file" placement="bottom" delay={300} wrapperClassName="inline-flex">
 <button
                 onClick={openPrimaryFile}
-                className="rounded px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                className="touch-target inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
                 aria-label="Open file"
                 type="button"
               >
@@ -917,7 +918,7 @@ function ToolExecutionComponent({
               <Tooltip content="Open full thread view" placement="bottom" delay={300} wrapperClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onSelectThread(spawnThreadId); }}
-                className="p-0.5 hover:bg-muted rounded transition-colors" aria-label="Open full thread view"
+                className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Open full thread view"
               >
                 <Maximize2 className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
@@ -927,7 +928,7 @@ function ToolExecutionComponent({
               <Tooltip content="Push to background" placement="bottom" delay={300} wrapperClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onConvertToBackground(toolCall.id); }}
-                className="p-0.5 hover:bg-muted rounded transition-colors" aria-label="Push tool execution to background"
+                className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Push tool execution to background"
               >
                 <Play className="w-3.5 h-3.5 text-info" />
               </button>
@@ -937,7 +938,7 @@ function ToolExecutionComponent({
               <Tooltip content="Cancel" placement="bottom" delay={300} wrapperClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onCancel(toolCall.id); }}
-                className="p-0.5 hover:bg-muted rounded transition-colors" aria-label="Cancel tool execution"
+                className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Cancel tool execution"
                 disabled={isCancelling}
               >
                 <Square className={cn("w-3.5 h-3.5", isCancelling ? "text-warning-ink animate-pulse" : "text-destructive")} />
@@ -983,9 +984,9 @@ function ToolExecutionComponent({
         )}
 
         {/* Denial reason */}
-        {approval?.status === ApprovalStatus.DENIED && approval.denial_reason && (
+        {approval?.status === ApprovalStatus.DENIED && approval.denialReason && (
           <div className="px-2 py-1 border-t border-destructive/20 bg-destructive/5 text-xs text-destructive-ink">
-            Denied: {approval.denial_reason}
+            Denied: {approval.denialReason}
           </div>
         )}
 

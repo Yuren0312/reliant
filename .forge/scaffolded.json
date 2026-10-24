@@ -29,6 +29,9 @@
     "cmd/reliant/main.go": {
       "scaffolded_at": "2026-10-21T14:18:55Z"
     },
+    "deploy/kcl/dev/config.k": {
+      "scaffolded_at": "2026-10-22T23:48:18Z"
+    },
     "frontends/web/src/hooks/approval-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-22T21:38:55Z"
     },
@@ -141,6 +144,9 @@
     "internal/app/auth.go": {},
     "internal/app/providers.go": {
       "scaffolded_at": "2026-10-21T14:18:41Z"
+    },
+    "internal/egresslimit/contract_test.go": {
+      "scaffolded_at": "2026-10-24T00:46:19Z"
     },
     "internal/handlers/account/handlers_scaffold_delete_account_test.go": {
       "scaffolded_at": "2026-10-13T12:24:49Z"

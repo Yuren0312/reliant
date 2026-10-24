@@ -58,7 +58,7 @@ import {
 import { clearLegacyChatParams, peekLegacyChatParams } from "../../lib/legacyChatParams";
 import { pushChatParams } from "../../lib/chatSelection";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { answerQuestion, usePendingQuestions } from "../../hooks/approval-queries";
+import { answerQuestion, usePendingQuestions } from "../../hooks/question-queries";
 import { questionForThread } from "../../lib/pendingQuestions";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
@@ -340,7 +340,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const pendingQuestion = useMemo(
       () =>
         questionForThread(
-          pendingQuestionsQuery.data,
+          pendingQuestionsQuery.data?.questions,
           chatId,
           selectedThreadId,
           questionMainThreadId
@@ -1229,7 +1229,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     const handleQuestionSubmit = useCallback(async (answer: { answers: Array<{ question: string; selected: string[]; freetext?: string }> }) => {
       if (!chatId || !pendingQuestion) return;
-      await answerQuestion(chatId, pendingQuestion.question_id, answer);
+      await answerQuestion(chatId, pendingQuestion.questionId, answer);
     }, [chatId, pendingQuestion]);
 
     const handleSend = async () => {
@@ -1936,7 +1936,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                             <Tooltip content="Model settings" placement="top" delay={300} wrapperClassName="inline-flex">
 <button
                               className={cn(
-                                "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5",
+                                "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5 touch:h-[44px] touch:px-3.5 touch:text-xs",
                                 settingsPage === 'model'
                                   ? "bg-primary/20 text-primary hover:bg-primary/30"
                                   : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
@@ -1973,7 +1973,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                               }
                               disabled={disabled || !isMessagingAllowed}
                               className={cn(
-                                "relative flex items-center justify-center rounded-full transition-colors h-6 w-6",
+                                "relative flex items-center justify-center rounded-full transition-colors h-6 w-6 touch:h-[44px] touch:w-[44px]",
                                 !disabled
                                   ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
                                   : "cursor-default opacity-60",

@@ -35,8 +35,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
-	"time"
 )
 
 func main() {
@@ -76,7 +76,12 @@ func main() {
 	files := fs.String("files", "", "comma-separated paths (or @file, one per line) to treat as the change set instead of the git diff (what-if)")
 	dry := fs.Bool("dry-run", false, "with run: print the commands instead of executing them")
 	gotestP := fs.Int("p", 0, "go test -p (default: the machine's parallelism)")
+	jobs := fs.Int("jobs", 2, "maximum concurrent test steps (1 serializes; prerequisites always run first)")
 	if err := fs.Parse(args); err != nil {
+		os.Exit(2)
+	}
+	if *jobs < 1 {
+		fmt.Fprintln(os.Stderr, "test-affected: -jobs must be positive")
 		os.Exit(2)
 	}
 	if *baseFlag == "" {
@@ -102,7 +107,7 @@ func main() {
 		os.Exit(1)
 	}
 	if cmd == "run" {
-		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP,
+		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, jobs: *jobs,
 			slot: strings.Fields(os.Getenv("TEST_AFFECTED_SLOT"))}
 		os.Exit(r.run(ctx, pl, enabled))
 	}
@@ -411,17 +416,24 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 			}
 		}
 	}
+	for _, lc := range pl.Lockfiles {
+		if slices.ContainsFunc(lc.Lanes, func(l lane) bool { return enabled[l] }) {
+			p.f("\n[npm-lockfile] %s: npm ci --dry-run (%s)\n", lc.Dir, lc.Why)
+		}
+	}
 	return p.err
 }
 
 // ── runner ──────────────────────────────────────────────────────────────────
 
 type runner struct {
-	root   string
-	out    io.Writer
-	errOut io.Writer
-	dry    bool
-	goP    int
+	root    string
+	out     io.Writer
+	errOut  io.Writer
+	dry     bool
+	goP     int
+	jobs    int
+	execute func(context.Context, step, io.Writer, io.Writer) error
 	// slot prefixes a FULL lane's command (Taskfile.yml passes
 	// TEST_AFFECTED_SLOT='forge slot run --class heavy --'): a whole-module
 	// run is as heavy as any gate check, and outside a host slot it only steals
@@ -436,29 +448,45 @@ func (r *runner) heavy(argv []string) []string {
 }
 
 type step struct {
-	name string
-	dir  string
-	env  []string
-	argv []string
+	name         string
+	dir          string
+	env          []string
+	argv         []string
+	prerequisite bool
+	// exclusive tests temporarily rewrite repository inputs used by other lanes.
+	exclusive bool
 }
+
+// lockfileArgv proves a project's lockfile still installs without touching
+// its node_modules: `npm ci` validates package.json against the lockfile
+// before it reifies anything, and --dry-run stops it there (~10s, offline for
+// a lockfile in sync).
+var lockfileArgv = []string{"npm", "ci", "--dry-run", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error"}
 
 func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 	var out []step
+	// First: the cheapest step, and every test after it would otherwise pass
+	// against a node_modules a fresh install can no longer produce.
+	for _, lc := range pl.Lockfiles {
+		if slices.ContainsFunc(lc.Lanes, func(l lane) bool { return enabled[l] }) {
+			out = append(out, step{name: "npm lockfile in sync (" + lc.Dir + ")", dir: filepath.Join(r.root, lc.Dir), argv: lockfileArgv, prerequisite: true})
+		}
+	}
 	// First, so the tests below run against what generate leaves behind. It
 	// writes what it regenerates into the tree, naming every file it changed.
 	if enabled[laneForgeGen] && pl.ForgeGen.Full {
-		out = append(out, step{name: "forge generate is a no-op", dir: r.root, argv: []string{"task", "generate:check"}})
+		out = append(out, step{name: "forge generate is a no-op", dir: r.root, argv: []string{"task", "generate:check"}, prerequisite: true})
 	}
 	// Likewise: the docs generators write into the tree (one of them a Go
 	// file). They compile most of the module, so the step takes a heavy slot.
 	if enabled[laneDocGen] && pl.DocGen.Full {
-		out = append(out, step{name: "docs generators are a no-op", dir: r.root, argv: r.heavy([]string{"task", "generate:docs:check"})})
+		out = append(out, step{name: "docs generators are a no-op", dir: r.root, argv: r.heavy([]string{"task", "generate:docs:check"}), prerequisite: true})
 	}
 	if enabled[laneGo] {
 		out = append(out, r.goSteps(pl)...)
 	}
 	if enabled[laneElectron] && pl.Electron.Full {
-		out = append(out, step{name: "electron", dir: filepath.Join(r.root, "electron"), argv: []string{"npm", "test", "--silent"}})
+		out = append(out, step{name: "electron", dir: filepath.Join(r.root, "electron"), argv: []string{"npm", "test", "--silent"}, exclusive: true})
 	}
 	if enabled[laneWeb] {
 		out = append(out, r.webSteps(pl)...)
@@ -499,30 +527,7 @@ func (r *runner) run(ctx context.Context, pl *Plan, enabled map[lane]bool) int {
 		fmt.Fprintln(r.out, "\ntest-affected: nothing to run.")
 		return 0
 	}
-	fmt.Fprintln(r.out)
-	failed := 0
-	for _, s := range steps {
-		fmt.Fprintf(r.out, "==> %s: %s\n", s.name, summarize(s.argv))
-		if r.dry {
-			continue
-		}
-		start := time.Now()
-		c := exec.CommandContext(ctx, s.argv[0], s.argv[1:]...)
-		c.Dir = s.dir
-		c.Env = append(os.Environ(), s.env...)
-		c.Stdout, c.Stderr = r.out, r.errOut
-		err := c.Run()
-		status := "ok"
-		if err != nil {
-			status = "FAILED: " + err.Error()
-			failed++
-		}
-		fmt.Fprintf(r.out, "<== %s: %s (%s)\n", s.name, status, time.Since(start).Round(time.Second))
-	}
-	if failed > 0 {
-		return 1
-	}
-	return 0
+	return r.runSteps(ctx, steps)
 }
 
 func summarize(argv []string) string {

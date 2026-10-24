@@ -10746,6 +10746,10 @@
             "kind": "message",
             "type_name": "reliant.v1.TriggerSender",
             "optional": true
+          },
+          {
+            "name": "fire_workflow_id",
+            "kind": "string"
           }
         ],
         "reliant.v1.TriggerEventRun": [
@@ -14216,6 +14220,22 @@
           {
             "name": "moves_on_drain",
             "kind": "bool"
+          },
+          {
+            "name": "version",
+            "kind": "string"
+          },
+          {
+            "name": "commit",
+            "kind": "string"
+          },
+          {
+            "name": "commit_time_unix",
+            "kind": "int64"
+          },
+          {
+            "name": "forge_version",
+            "kind": "string"
           }
         ],
         "reliant.v1.DiscoveredProject": [
@@ -34390,6 +34410,11 @@
             "name": "connection",
             "kind": "message",
             "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "hosted_use",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
           }
         ],
         "reliant.v1.AnyInputConfig": [
@@ -40009,6 +40034,118 @@
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "max_concurrent_workflow_tasks",
+          "GoName": "MaxConcurrentWorkflowTasks",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Workflow tasks (replays included) run at once; 0 derives max(2, GOMAXPROCS-1)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "workflow_task_pollers",
+          "GoName": "WorkflowTaskPollers",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_WORKFLOW_TASK_POLLERS",
+          "Flag": "",
+          "DefaultValue": "5",
+          "Required": false,
+          "Description": "Workflow-task pollers",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "egress_replicas",
+          "GoName": "EgressReplicas",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_EGRESS_REPLICAS",
+          "Flag": "",
+          "DefaultValue": "1",
+          "Required": false,
+          "Description": "Worker replicas sharing the egress rate budgets (0: 1)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "egress_user_per_minute",
+          "GoName": "EgressUserPerMinute",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_EGRESS_USER_PER_MINUTE",
+          "Flag": "",
+          "DefaultValue": "60",
+          "Required": false,
+          "Description": "Egress tool calls per minute per user, fleet-wide",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "egress_user_burst",
+          "GoName": "EgressUserBurst",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_EGRESS_USER_BURST",
+          "Flag": "",
+          "DefaultValue": "20",
+          "Required": false,
+          "Description": "Egress burst per user, fleet-wide",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "egress_user_max_concurrent",
+          "GoName": "EgressUserMaxConcurrent",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT",
+          "Flag": "",
+          "DefaultValue": "6",
+          "Required": false,
+          "Description": "Egress calls in flight per user, per replica",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "egress_host_max_concurrent",
+          "GoName": "EgressHostMaxConcurrent",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT",
+          "Flag": "",
+          "DefaultValue": "16",
+          "Required": false,
+          "Description": "Egress calls in flight to one destination host, per replica",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "egress_turn_max_parallel",
+          "GoName": "EgressTurnMaxParallel",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL",
+          "Flag": "",
+          "DefaultValue": "4",
+          "Required": false,
+          "Description": "Egress calls of one conversation turn run at once, per replica (the rest wait)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -40037,7 +40174,7 @@
     "reliant/config/v1/preview_url_config.proto": "e9ff64e47a61c04e8f2a63311bfd4e41acb28ef0811581d527b88fbff20e3306",
     "reliant/config/v1/server_config.proto": "35d746867279548a913e21f7be321451dab6225abccdf1319ed48f70a0966010",
     "reliant/config/v1/web_config.proto": "306c59f8cbc6d924c1d4870acc38a9d7c1850471774a3a0d0c2d3f216d3b235a",
-    "reliant/config/v1/worker_config.proto": "994167399278969352fe99528dd5b1a68f01828b3e345cc15cf8dd3439547aa6",
+    "reliant/config/v1/worker_config.proto": "503a77d05a9e96aa0509df8ed88dff2c24e454c8672696bea47d7bb018eaf9f0",
     "reliant/v1/account.proto": "d7e5ce0de4321d271532eb749a53e2001e692bdf208a4b7b71d4816673eebf35",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
     "reliant/v1/approval.proto": "4ebbca862a2a5f88bb7f603d52d09933c296cbdc89e55d2abd1f58b76ecad6ce",
@@ -40073,10 +40210,10 @@
     "reliant/v1/terminal.proto": "877157ed3b8127ca00b1e49597143a8fdf73d100ebf7867118541c95c809a43f",
     "reliant/v1/token.proto": "df7f634505ef8d0da2882feb4fe31865d541b2593df0c069159f2b6440e5f63e",
     "reliant/v1/tool_call.proto": "b5861a934a2b119031b609eb10cf77e6ba8ccce474d1bb0edbf5cd9fed56cc95",
-    "reliant/v1/tools_daemon.proto": "619e7af630046ea39abad05dfb538dfaafc7cfcacbe5a413489b2b05260a15d2",
-    "reliant/v1/trigger.proto": "0f2d477e782a056081d09805e1d3972fe7ac430604cb6252d743e51aa1ec2674",
+    "reliant/v1/tools_daemon.proto": "093e70e06ec18f1a4db9ef4416590b721dc8085192cba21ca9f2993d8b01b8c0",
+    "reliant/v1/trigger.proto": "de46d93ebb237117c5fdd274d2875abb96eaf13f8a53f732cae0bba7b9d18c67",
     "reliant/v1/workflow.proto": "bd8fa927bf1b9842617fda4c7d56e346ff6ee6d89247178752fb10b9c4f18c86",
-    "reliant/v1/workflow_v2.proto": "ab25a4ea3cdfdc1ab731f8eefde4fe45325da51d03e2f93ec1c1023b5e36eaf7",
+    "reliant/v1/workflow_v2.proto": "bfd48242abaed06a26e9a2b6aecd003493d423b96dc2671d2aac61cf39107d6a",
     "reliant/v1/worktree.proto": "ce353c761192377e35feb5ab9aa68f2b52981f0982b746f7597e51b7648fa24b"
   }
 }
