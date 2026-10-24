@@ -24,7 +24,7 @@
  */
 
 import { useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, ChevronRight, Code2, Copy, ExternalLink, Lock, ShieldCheck } from "lucide-react";
+import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, ChevronRight, Code2, Copy, ExternalLink, LineChart, Lock, ShieldCheck } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import { Button } from "@/components/ui/Button";
@@ -38,9 +38,12 @@ import { AlertReceivers } from "./AlertReceivers";
 import { AlertSilences, SilenceDialog } from "./AlertSilences";
 import { ruleAsCode, starterRuleKcl, type RuleAsCode } from "./alertsAsCode";
 import { formatAgo, formatTimestamp } from "./format";
+import { alertPivot, alertRange, useExploreHref } from "./Metrics/pivots";
 import { placeEnvironments, type ObsEnvironment, type ObsPlace } from "./obsPlace";
 import { ALERTS_TABS, type AlertsTab, type ObsNavigate } from "./obsSearch";
+import { ExploreLink } from "./Metrics/ExploreLink";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 export const ALERTS_TAB_LABELS: Record<AlertsTab, string> = {
   firing: "Firing",
@@ -302,6 +305,9 @@ function FiringTab({
   onRules: () => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
+  const exploreHref = useExploreHref();
+  const exploreAlert = (a: AlertInstance, rule: DeclaredAlertRule | undefined) =>
+    rule ? (exploreHref?.(alertPivot(rule.expr, a.labels), { env: envName(a.envId), range: alertRange(a.firingAtMs ?? a.activeAtMs, Date.now()) }) ?? null) : null;
   const ruleOf = (a: AlertInstance) => rules.find((r) => r.env.id === a.envId && r.rule.alert === a.rule);
   if (alerts.length === 0) {
     const evaluated = rules.filter((r) => !observabilityOff(r.env)).length;
@@ -375,6 +381,12 @@ function FiringTab({
                     <Button variant="ghost" size="sm" leftIcon={<Code2 className="h-3.5 w-3.5" />} onClick={() => onOpenRule(declared.key)}>
                       Rule
                     </Button>
+                  )}
+                  {exploreAlert(a, declared?.rule) && (
+                    <ExploreLink href={exploreAlert(a, declared?.rule)!} testId={`obs-alert-explore-${a.rule}`}>
+                      <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
+                      Explore
+                    </ExploreLink>
                   )}
                   <Button
                     variant="outline"
@@ -478,7 +490,7 @@ function HistoryTab({
   return (
     <Card padding="none" data-testid="obs-alert-history">
       <div className="max-h-[32rem] overflow-auto">
-        <table className="w-full text-sm">
+        <StackedTable className="w-full text-sm">
           <caption className="sr-only">Alert state changes, newest first</caption>
           <thead className="sticky top-0 bg-card">
             <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -506,7 +518,7 @@ function HistoryTab({
               </tr>
             ))}
           </tbody>
-        </table>
+        </StackedTable>
       </div>
     </Card>
   );
@@ -544,7 +556,7 @@ function RulesTab({
     );
   }
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
       <div className="space-y-2">
         {off.length > 0 && (
           <p className="rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-muted-foreground" data-testid="obs-rules-observability-off">
@@ -594,6 +606,8 @@ function RulesTab({
 
 function RuleDetail({ entry }: { entry: EnvRule }) {
   const { rule, env } = entry;
+  const exploreHref = useExploreHref();
+  const explore = exploreHref?.(alertPivot(rule.expr), { env: env.name, range: "1h" }) ?? null;
   return (
     <Card padding="md" data-testid="obs-rule-detail">
       <div className="space-y-4">
@@ -602,6 +616,12 @@ function RuleDetail({ entry }: { entry: EnvRule }) {
             <h3 className="font-mono text-sm font-semibold text-foreground">{rule.alert}</h3>
             <SeverityChip severity={rule.labels.severity ?? "warning"} />
             <SourceChip rule={rule} />
+            {explore && (
+              <ExploreLink href={explore} testId="obs-rule-explore" className="ml-auto">
+                <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
+                Explore
+              </ExploreLink>
+            )}
           </div>
           <p className="text-xs text-muted-foreground">
             Declared for <span className="font-mono">{env.name}</span>

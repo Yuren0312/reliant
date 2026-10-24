@@ -164,7 +164,15 @@ describe("unversioned production build", () => {
 
 // scripts/release-identity.sh itself, against real git repositories shaped
 // like the clones that build releases.
-describe("release-identity.sh", () => {
+//
+// Its own budget: vite.config.ts's timeout (5s × the host's load factor) is
+// sized for in-process tests, but each test here is SUBPROCESS-bound — the
+// shallow-clone case alone is a `git clone` plus four runs of a script that
+// itself runs ~5 git commands, ~25 process spawns. On a shared host at load
+// 2x the core count a spawn costs 0.3–0.6s, so that case measured 16s against
+// a 15s budget and failed with every assertion correct. 60s covers the worst
+// case seen with room to spare and still catches a genuine hang.
+describe("release-identity.sh", { timeout: 60_000 }, () => {
   let root: string;
   let repo: string;
   let releaseSha: string;
@@ -246,6 +254,34 @@ describe("release-identity.sh", () => {
     } finally {
       git(repo, "checkout", "-q", "--", "README");
     }
+  });
+
+  it("--commit-time prints the committer time of the commit, the build number that orders builds", () => {
+    const committed = (sha: string) => git(repo, "show", "-s", "--format=%ct", sha);
+    expect(identity("--commit-time", "--repo", repo)).toBe(committed(devSha));
+    expect(identity("--commit-time", "--repo", repo, "--commit", releaseSha)).toBe(committed(releaseSha));
+    expect(Number(identity("--commit-time", "--repo", repo))).toBeGreaterThan(0);
+  });
+
+  it("--commit-time is 0 (unordered) for a dirty tree, an unknown commit and a non-repo — never an error", () => {
+    writeFileSync(path.join(repo, "README"), "edited\n");
+    try {
+      expect(identity("--commit-time", "--repo", repo)).toBe("0");
+      // Naming the commit describes a commit, not the working tree.
+      expect(identity("--commit-time", "--repo", repo, "--commit", devSha)).not.toBe("0");
+    } finally {
+      git(repo, "checkout", "-q", "--", "README");
+    }
+    expect(identity("--commit-time", "--repo", repo, "--commit", "deadbeef")).toBe("0");
+    const empty = path.join(root, "not-a-repo");
+    mkdirSync(empty);
+    expect(identity("--commit-time", "--repo", empty)).toBe("0");
+  });
+
+  it("works in a shallow, tagless clone", () => {
+    const shallow = path.join(root, "shallow-ct");
+    git(root, "clone", "-q", "--depth", "1", "--no-tags", `file://${repo}`, shallow);
+    expect(identity("--commit-time", "--repo", shallow)).toBe(git(repo, "show", "-s", "--format=%ct", devSha));
   });
 
   it("refuses when it can name nothing", () => {

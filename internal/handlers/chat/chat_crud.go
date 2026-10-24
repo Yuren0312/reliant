@@ -200,6 +200,10 @@ func (s *Service) startChat(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to start chat"))
 	}
 
+	if eventKind == core.TriggerEventKindChatStart {
+		s.trackStartedChatMessage(ctx, userID, result.Chat, clientID, msg)
+	}
+
 	return connect.NewResponse(&reliantv1.StartChatResponse{
 		Chat:       s.chatToProtoWithSelection(ctx, result.Chat),
 		WorkflowId: result.WorkflowID,
@@ -540,11 +544,10 @@ func (s *Service) cancelArchivedChatWorkflow(ctx context.Context, chat *db.Chat)
 	if workflowID == "" {
 		return
 	}
-	runID := ""
-	if chat.RunID != nil {
-		runID = *chat.RunID
-	}
-	err := s.deps.Temporal.CancelWorkflow(ctx, workflowID, runID)
+	// The current run (empty run id): the chat row's run id is stale after a
+	// continue-as-new, and cancelling that closed run would leave the live
+	// one going.
+	err := s.deps.Temporal.CancelWorkflow(ctx, workflowID, "")
 	var notFound *serviceerror.NotFound
 	if err == nil || errors.As(err, &notFound) {
 		return
@@ -844,19 +847,6 @@ func (s *Service) UpdateChatState(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update chat state"))
 	}
 
-	// If unarchiving a chat, also unarchive the associated workspace
-	if newState == db.ChatStateIdle && previousState == db.ChatStateArchived && chat.WorktreeID != nil {
-		worktree, err := s.deps.Repo.GetWorktree(ctx, *chat.WorktreeID)
-		if err == nil && worktree.DeletedAt != nil {
-			if err := s.deps.Repo.UnarchiveWorktree(ctx, *chat.WorktreeID); err != nil {
-				logging.ErrorContext(ctx, "Failed to unarchive workspace when unarchiving chat",
-					"error", err,
-					"chatID", req.Msg.ChatId,
-					"worktreeID", *chat.WorktreeID)
-			}
-		}
-	}
-
 	// If archiving, also cancel any running workflow
 	if newState == db.ChatStateArchived {
 		s.cancelArchivedChatWorkflow(ctx, chat)
@@ -999,9 +989,40 @@ func (s *Service) ResumeChat(
 	release := s.runs.LockRunControl(ctx, req.Msg.ChatId)
 	defer release()
 
+	// Resume is for the whole chat: every blocked thread goes on, not only
+	// the root — usage-limit waits retry, and every stopped sub-agent resumes
+	// (resumeWholeChat). A run that is
+	// executing — not paused — has no pause for signal.resume to release;
+	// sent anyway, the resume would be held and release the next pause the
+	// run takes on its own. For it, Resume is the wake alone: its threads
+	// parked on a usage limit retry, and its stopped sub-agents resume.
+	if root, err := s.deps.Repo.GetWorkflow(ctx, *chat.WorkflowID); err == nil && root != nil && root.Status == db.Active() {
+		if err := s.resumeWholeChat(ctx, chat); err != nil {
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resume workflow"))
+		}
+		runID := ""
+		if chat.RunID != nil {
+			runID = *chat.RunID
+		}
+		return connect.NewResponse(&reliantv1.ResumeChatResponse{
+			Success:      true,
+			Message:      "Chat resumed successfully",
+			WorkflowId:   *chat.WorkflowID,
+			RunId:        runID,
+			RecoveryType: reliantv1.RecoveryType_RECOVERY_TYPE_RESUMED,
+		}), nil
+	}
+
 	outcome, err := s.runs.Resume(ctx, req.Msg.ChatId, nil)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resume workflow"))
+	}
+	if outcome.Kind == runs.OutcomeResumed {
+		// After the resume, so it reaches the run the resume woke — or the
+		// one a reset just made, whose replay rebuilt the stopped agents.
+		if err := s.resumeWholeChat(ctx, chat); err != nil {
+			logging.WarnContext(ctx, "Resumed the chat's run but could not wake its stopped sub-agents", "chatID", chat.ID, "error", err)
+		}
 	}
 
 	switch outcome.Kind {

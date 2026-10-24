@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type RouteComponent } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
-import { shouldRedirectToMobileNow } from './lib/mobileRedirect'
+import { mobilePathFor, shouldRedirectToMobileNow } from './lib/mobileRedirect'
 import { isForgeUIEnabled } from './lib/forgeFeature'
 import { getIsDev } from './lib/constants'
 import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
@@ -28,6 +28,7 @@ import { AuthGuard } from './components/AuthGuard'
 import { ModalLayer } from './components/Modals/ModalLayer'
 import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
+import { NewBuildPrompt } from './components/NewBuildPrompt'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
 import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
@@ -90,6 +91,8 @@ const ConsolePrimitivesPreview = lazyRoute(
   () => import('./components/Forge/__preview__/ConsolePrimitivesPreview'), 'default')
 const DashboardsPreview = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/__preview__/DashboardsPreview'), 'default')
+const MetricsExplorerPreview = lazyRoute(
+  () => import('./components/Forge/Observability/Metrics/__preview__/MetricsExplorerPreview'), 'default')
 const ReleasesPreview = lazyRoute(
   () => import('./components/Forge/Releases/__preview__/ReleasesPreview'), 'default')
 const WorkloadsPreview = lazyRoute(
@@ -138,6 +141,10 @@ const MobileSearchScreen = lazyRoute(
   () => import('./components/Mobile/MobileSearchScreen'), 'MobileSearchScreen')
 const MobileWorkflowCatalog = lazyRoute(
   () => import('./components/Mobile/MobileWorkflowCatalog'), 'MobileWorkflowCatalog')
+const MobileInboxScreen = lazyRoute(
+  () => import('./components/Mobile/MobileInboxScreen'), 'MobileInboxScreen')
+const MobileDiagnosticsRoute = lazyRoute(
+  () => import('./components/Mobile/MobileDiagnosticsRoute'), 'MobileDiagnosticsRoute')
 const MobileSettingsScreen = lazyRoute(
   () => import('./components/Mobile/MobileSettingsScreen'), 'MobileSettingsScreen')
 const MobileGitHubScreen = lazyRoute(
@@ -246,7 +253,9 @@ function RootShell() {
             search as Record<string, string>,
           ).toString();
     if (shouldRedirectToMobileNow({ pathname, search: searchString })) {
-      navigate({ to: "/m/chats", replace: true });
+      // To the mobile twin of what was asked for (the Inbox, a run's chat,
+      // settings), not always the chat list — see mobilePathFor.
+      navigate({ href: mobilePathFor(pathname), replace: true });
     }
   }, [pathname, search, navigate]);
 
@@ -263,6 +272,7 @@ function RootShell() {
       <ModalLayer />
       <AnonSignInNudge />
       <Toaster />
+      <NewBuildPrompt />
       <ContextualTipsLayer />
       <GitHubSyncStatus />
       <OnboardingWizard />
@@ -554,6 +564,14 @@ const forgeDashboardsPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><DashboardsPreview /></DevOnlyRoute>,
 })
 
+// The metrics explorer, inside the real console chrome, against the explorer's
+// fixture app — every state in every scheme, no backend.
+const forgeMetricsPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-metrics-preview',
+  component: () => <DevOnlyRoute><MetricsExplorerPreview /></DevOnlyRoute>,
+})
+
 // (`/checkout/embed` removed with the embedded-checkout path. It existed to
 // host Stripe's hosted checkout page in a bare Electron BrowserWindow, because
 // payment-method domains are registered by HOSTNAME and app://bundle cannot be
@@ -788,6 +806,21 @@ const mobileWorkflowsRoute = createRoute({
   component: MobileWorkflowCatalog,
 })
 
+// The Inbox: the desktop InboxView in the mobile chrome. The desktop `/inbox`
+// redirects here on a phone (lib/mobileRedirect.ts, mobilePathFor).
+const mobileInboxRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/inbox',
+  component: MobileInboxScreen,
+})
+
+// Settings → Diagnostics at its own URL, for a support link.
+const mobileDiagnosticsRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/diagnostics',
+  component: MobileDiagnosticsRoute,
+})
+
 const mobileSettingsRoute = createRoute({
   getParentRoute: () => mobileLayoutRoute,
   path: '/m/settings',
@@ -841,6 +874,7 @@ const routeTree = rootRoute.addChildren([
   forgeReleasesPreviewRoute,
   forgeWorkloadsPreviewRoute,
   forgeDashboardsPreviewRoute,
+  forgeMetricsPreviewRoute,
   projectPickerRedirectRoute,
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([
@@ -858,6 +892,8 @@ const routeTree = rootRoute.addChildren([
       mobileChatWorkflowRoute,
       mobileSettingsRoute,
       mobileGitHubRoute,
+      mobileInboxRoute,
+      mobileDiagnosticsRoute,
     ]),
     onboardingRoute,
     forgeConsoleRoutes,
