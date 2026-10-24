@@ -1,7 +1,7 @@
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { type MCPServer, type RecommendedServer, ConfigScope } from "../../hooks/mcp-queries";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Input } from "../ui/Input";
 import { MCPServerListItem } from "./MCPServerListItem";
 import { MCPTabs } from "./MCPTabs";

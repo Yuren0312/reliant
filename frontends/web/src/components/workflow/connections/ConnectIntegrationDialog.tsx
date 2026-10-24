@@ -25,7 +25,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, KeyRound, Loader2 } from "lucide-react";
 
 import { Modal } from "../../ui/Modal";
-import { Button } from "../../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { CardInset } from "../../forge-ui/card";
 import {
   apiKeyConnectionRequest,
