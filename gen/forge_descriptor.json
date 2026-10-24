@@ -39093,74 +39093,18 @@
           "GoName": "Environment",
           "GoType": "string",
           "ProtoType": "string",
-          "EnvVar": "SENTRY_ENVIRONMENT",
+          "EnvVar": "ENVIRONMENT",
           "Flag": "",
           "DefaultValue": "",
           "Required": false,
           "Description": "Deployment environment telemetry is filed under",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "reliant/config/v1/observability_config.proto",
-          "EnvVarAliases": [
-            {
-              "Name": "ENVIRONMENT"
-            }
-          ]
-        }
-      ],
-      "ProtoFile": "reliant/config/v1/observability_config.proto",
-      "Line": 15,
-      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
-    },
-    {
-      "Name": "SentryConfig",
-      "Fields": [
-        {
-          "Name": "enabled",
-          "GoName": "Enabled",
-          "GoType": "bool",
-          "ProtoType": "bool",
-          "EnvVar": "SENTRY_ENABLED",
-          "Flag": "",
-          "DefaultValue": "true",
-          "Required": false,
-          "Description": "Report errors to Sentry (when SENTRY_DSN is set and the tier is prod)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "reliant/config/v1/observability_config.proto"
-        },
-        {
-          "Name": "dsn",
-          "GoName": "Dsn",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "SENTRY_DSN",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Sentry DSN",
-          "Sensitive": true,
-          "Category": "",
-          "Optional": true,
-          "ProtoFile": "reliant/config/v1/observability_config.proto"
-        },
-        {
-          "Name": "traces_sample_rate",
-          "GoName": "TracesSampleRate",
-          "GoType": "float64",
-          "ProtoType": "double",
-          "EnvVar": "SENTRY_TRACES_SAMPLE_RATE",
-          "Flag": "",
-          "DefaultValue": "0",
-          "Required": false,
-          "Description": "Share of transactions Sentry traces, 0 to 1",
-          "Sensitive": false,
-          "Category": "",
           "ProtoFile": "reliant/config/v1/observability_config.proto"
         }
       ],
       "ProtoFile": "reliant/config/v1/observability_config.proto",
-      "Line": 49,
+      "Line": 14,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -39382,21 +39326,6 @@
           "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
-          "Name": "sentry",
-          "GoName": "Sentry",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "SentryConfig",
-          "ProtoFile": "reliant/config/v1/server_config.proto"
-        },
-        {
           "Name": "analytics",
           "GoName": "Analytics",
           "GoType": "",
@@ -39500,7 +39429,7 @@
         }
       ],
       "ProtoFile": "reliant/config/v1/server_config.proto",
-      "Line": 69,
+      "Line": 71,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -39550,7 +39479,7 @@
         }
       ],
       "ProtoFile": "reliant/config/v1/server_config.proto",
-      "Line": 93,
+      "Line": 95,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -39600,7 +39529,7 @@
         }
       ],
       "ProtoFile": "reliant/config/v1/server_config.proto",
-      "Line": 123,
+      "Line": 125,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -39740,10 +39669,10 @@
     "reliant/config/v1/gateway_config.proto": "040bb180fa87e028678bdec8b6205b7b60ecf5066f3f564914940bc062352ac2",
     "reliant/config/v1/integrations_config.proto": "33a9bfa080d0e13ab6092e3598eff4fc2d7229ef4a623c873c73a97fbee46ed9",
     "reliant/config/v1/llm_config.proto": "73e6ea5332b67d3a3ff346a18bfe6513ec8e2c3fa0fa6b3a84a3b681ac5fa6c7",
-    "reliant/config/v1/observability_config.proto": "2c6c722905e6adabd402caa30069702dd3dd9e98504a43d1617bc0c138113f42",
+    "reliant/config/v1/observability_config.proto": "24706afec922fccc2157b46ca74c13986ddce2175e4097cc7776a8ec65308b50",
     "reliant/config/v1/preview_config.proto": "ffbf20088c49cac7e5cd913d17d2f2d30e992df459998d706e6b96f0f5a2ab73",
     "reliant/config/v1/preview_url_config.proto": "e9ff64e47a61c04e8f2a63311bfd4e41acb28ef0811581d527b88fbff20e3306",
-    "reliant/config/v1/server_config.proto": "35d746867279548a913e21f7be321451dab6225abccdf1319ed48f70a0966010",
+    "reliant/config/v1/server_config.proto": "76492686db314c5f2057d74f396a0e1ebf2cf6e617ad65d7ea564e278cb09583",
     "reliant/config/v1/worker_config.proto": "1466bed22e0651d180f417fd3035dcbebfc4a7be567483c2d8da247fed8eebeb",
     "reliant/v1/account.proto": "d7e5ce0de4321d271532eb749a53e2001e692bdf208a4b7b71d4816673eebf35",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
