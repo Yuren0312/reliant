@@ -25,7 +25,7 @@
  *      in index.css). That is the single most likely wrong "fix".
  *
  * Actual color resolution was verified in a real browser across
- * professional-blue / forest / pure-black / vibrant-pink in both modes:
+ * professional-blue / modern-teal / pure-black / purple-classic in both modes:
  * all 32 utilities resolved to opaque colors, and `.forge-ui` was confirmed
  * to flip `accent` from reliant's muted tint to its primary action color.
  */
@@ -86,7 +86,7 @@ function declaredTokens(css: string): Set<string> {
  * tailwind.config.js rather than in the bridge, so scanning it would report
  * `bg-card` as an undeclared forge token.
  */
-const HAND_WRITTEN = new Set(["ForgeTokenSandbox.tsx", "__tokenprobe.tsx"]);
+const HAND_WRITTEN = new Set(["ForgeTokenSandbox.tsx", "S2Sandbox.tsx", "__tokenprobe.tsx"]);
 
 /** Color-token names referenced by the installed forge components. */
 function referencedTokens(): Map<string, string[]> {
@@ -95,7 +95,9 @@ function referencedTokens(): Map<string, string[]> {
     (f) => f.endsWith(".tsx") && !HAND_WRITTEN.has(f),
   );
   const pattern = new RegExp(
-    `\\b(?:${COLOR_PREFIXES.join("|")})-([a-z][a-z0-9-]*)`,
+    // Not preceded by `-`: `bg-border-strong` is the token border-strong,
+    // not a `border-` utility whose colour is "strong".
+    `(?<![\\w-])(?:${COLOR_PREFIXES.join("|")})-([a-z][a-z0-9-]*)`,
     "g",
   );
   for (const file of files) {
