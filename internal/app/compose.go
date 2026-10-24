@@ -338,6 +338,7 @@ func (g *Graph) newProcessRuntime() (*ProcessRuntime, error) {
 	return NewProcessRuntime(ProcessRuntimeDeps{
 		Settings:     g.ProcessSettings(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		Network:      g.ServerProcessConfig.GetNetwork(),
 		Analytics:    g.ServerProcessConfig.GetAnalytics(),
 		DB:           g.Database(),
 	})
@@ -495,7 +496,7 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 
 func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 	return NewWorkerToolsFactory(WorkerToolsFactoryDeps{
-		ControlPlane:  g.ServerProcessConfig.GetControlPlane(),
+		Network:       g.ServerProcessConfig.GetNetwork(),
 		Temporal:      g.TemporalClient(),
 		AgentRuns:     g.AgentRuns(),
 		Triggers:      g.WorkerTrigger(),
@@ -543,6 +544,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		WriteLedger:    g.WriteLedger(),
 		Pollers:        g.TriggerPollers(),
 		ControlPlane:   g.ServerProcessConfig.GetControlPlane(),
+		Network:        g.ServerProcessConfig.GetNetwork(),
 		Recorder:       g.AccountRecorder(),
 		DB:             g.Database(),
 		// Read here, not in workersetup, so the worker root's config reach
@@ -651,9 +653,9 @@ func (g *Graph) newAPIDaemonRouter() (*APIDaemonRouter, error) {
 
 func (g *Graph) newAPIToolsFactory() (*tools.ToolsFactory, error) {
 	return NewAPIToolsFactory(APIToolsFactoryDeps{
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		Temporal:     g.TemporalClient(),
-		DB:           g.Database(),
+		Network:  g.ServerProcessConfig.GetNetwork(),
+		Temporal: g.TemporalClient(),
+		DB:       g.Database(),
 	})
 }
 
@@ -941,13 +943,14 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 // newChat constructs the chat handler (internal/handlers/chat).
 func (g *Graph) newChat() (*chat.Service, error) {
 	return chat.New(chat.Deps{
-		Logger:    g.Log,
-		Config:    g.Cfg,
-		Repo:      g.Database(),
-		Temporal:  g.TemporalClient().Client,
-		Pause:     g.PauseService(),
-		TaskQueue: v2workflow.SharedTaskQueue,
-		Router:    g.APIDaemonRouter().NATSDaemonRouter,
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Repo:        g.Database(),
+		Temporal:    g.TemporalClient().Client,
+		Pause:       g.PauseService(),
+		TaskQueue:   v2workflow.SharedTaskQueue,
+		Router:      g.APIDaemonRouter().NATSDaemonRouter,
+		LocalModels: local.NewRepoDirectory(g.Database()),
 	})
 }
 
@@ -1075,12 +1078,12 @@ func (g *Graph) newMessage() (*message.Service, error) {
 // answers ErrCredentialStoreUnavailable.
 func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 	return model_endpoint.New(model_endpoint.Deps{
-		Logger:       g.Log,
-		Config:       g.Cfg,
-		Repo:         g.Database(),
-		Router:       g.APIDaemonRouter().NATSDaemonRouter,
-		Credentials:  nil,
-		ControlPlane: modelEndpointControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Repo:        g.Database(),
+		Router:      g.APIDaemonRouter().NATSDaemonRouter,
+		Credentials: nil,
+		Network:     g.ServerProcessConfig.GetNetwork(),
 	})
 }
 
