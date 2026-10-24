@@ -16,10 +16,12 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/reliant-labs/reliant/internal/connections"
-	"github.com/reliant-labs/reliant/internal/integrations/catalog"
-	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
+	"crypto/tls"
+	"crypto/x509"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/pkg/guardedhttp"
+	"github.com/reliant-labs/reliant/pkg/secretredact"
+	"time"
 )
 
 // Endpoint authorizes one exact escaped path and method. Prefixes and globs
@@ -82,10 +84,18 @@ type Result struct {
 
 // Executor uses the same SSRF guard, TLS checks, response limits and scrub
 // boundary as integration HTTP actions. There is no daemon transport.
-type Executor struct{ runner *httpaction.Runner }
+type Executor struct{ client *http.Client }
 
 // New constructs a production executor with the standard public-network guard.
-func New() *Executor { return &Executor{runner: httpaction.NewRunner(netguard.New())} }
+func New() *Executor { return newWithGuard(netguard.New(), nil) }
+
+func newWithGuard(guard *netguard.Guard, roots *x509.CertPool) *Executor {
+	transport := guard.Transport()
+	if roots != nil {
+		transport.TLSClientConfig = &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}
+	}
+	return &Executor{client: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+}
 
 // Validate checks both a policy's canonical form and the rendered request.
 // Validate must succeed before any secret is read. Apply checks it again at
@@ -138,25 +148,26 @@ func (e *Executor) Execute(ctx context.Context, p Policy, req Request, secret Se
 	if err := p.Validate(req); err != nil {
 		return nil, err
 	}
-	if e == nil || e.runner == nil || secret == nil {
+	if e == nil || e.client == nil || secret == nil {
 		return nil, errors.New("hosted HTTP execution is unavailable")
 	}
 	// Reject unserializable/oversized requests before resolving the value.
 	if _, err := RequestDigest(req); err != nil {
 		return nil, err
 	}
-	action, err := catalog.MustBuiltin().Resolve("http/request@1")
-	if err != nil {
-		return nil, errors.New("hosted HTTP action is unavailable")
+	var body []byte
+	if req.Body != nil {
+		body, _ = json.Marshal(req.Body)
 	}
+	target, _ := url.Parse(req.URL)
 	var out *Result
 	var executionErr error
-	err = secret.Use(ctx, func(value []byte) error {
+	err := secret.Use(ctx, func(value []byte) error {
 		if len(value) < 16 {
 			executionErr = errors.New("hosted HTTP credential is invalid")
 			return nil
 		}
-		redactor := connections.NewRedactor()
+		redactor := secretredact.New()
 		text := string(value)
 		for _, ch := range value {
 			if ch < 0x20 || ch == 0x7f {
@@ -171,20 +182,38 @@ func (e *Executor) Execute(ctx context.Context, p Policy, req Request, secret Se
 			redactor.Register(string(escaped[1 : len(escaped)-1]))
 		}
 		cred := &credential{policy: p, value: text, redactor: redactor}
-		result, runErr := e.runner.RunAuthenticated(ctx, action.Manifest, action.Spec, map[string]any{
-			"url": req.URL, "method": req.Method, "body": req.Body,
-			"follow_redirects": false, "response_format": "json", "connection": "hosted-use",
-		}, source{cred}, httpaction.CallSite{})
+		headers := http.Header{"Content-Type": []string{"application/json"}, "Accept": []string{"application/json"}}
+		response, runErr := guardedhttp.Do(ctx, e.client, req.Method, target, headers, body, 1<<20, cred)
 		if runErr != nil {
 			executionErr = errors.New("hosted HTTP request could not be completed")
 			return nil
 		}
-		if result == nil {
-			executionErr = errors.New("hosted HTTP request returned no result")
+		var parsed any
+		if len(response.Body) > 0 {
+			if json.Unmarshal(response.Body, &parsed) != nil && response.StatusCode >= 200 && response.StatusCode < 300 {
+				executionErr = errors.New("hosted HTTP response is not JSON")
+				return nil
+			}
+		}
+		hdrs := map[string]any{}
+		for k, v := range response.Header {
+			hdrs[strings.ToLower(k)] = strings.Join(v, ",")
+		}
+		data := map[string]any{"status": response.StatusCode, "headers": hdrs, "json": parsed, "text": string(response.Body)}
+		// Scrub the serialized shape BEFORE returning anything from the secret
+		// callback, including nested data and response headers.
+		raw, _ := json.Marshal(data)
+		var clean map[string]any
+		if json.Unmarshal([]byte(redactor.Scrub(string(raw))), &clean) != nil {
+			executionErr = errors.New("hosted HTTP response could not be sanitized")
 			return nil
 		}
-		// The runner scrubs raw content and all structured fields before returning.
-		out = &Result{Content: result.Content, Data: result.Data, StatusCode: result.StatusCode, IsError: result.IsError, Retryable: result.Retryable}
+		content, _ := json.Marshal(clean)
+		textContent := string(content)
+		if len(textContent) > 30000 {
+			textContent = textContent[:30000] + "…"
+		}
+		out = &Result{Content: textContent, Data: clean, StatusCode: response.StatusCode, IsError: response.StatusCode >= 400, Retryable: false}
 		return nil
 	})
 	if err != nil {
@@ -193,16 +222,10 @@ func (e *Executor) Execute(ctx context.Context, p Policy, req Request, secret Se
 	return out, executionErr
 }
 
-type source struct{ cred *credential }
-
-func (s source) Credential(context.Context, httpaction.CredentialRequest) (httpaction.Credential, error) {
-	return s.cred, nil
-}
-
 type credential struct {
 	policy   Policy
 	value    string
-	redactor *connections.Redactor
+	redactor *secretredact.Redactor
 }
 
 func (*credential) ConnectionID() string      { return "" }
@@ -215,6 +238,9 @@ func (c *credential) Apply(req *http.Request) error {
 	if err := c.policy.Validate(Request{URL: req.URL.String(), Method: req.Method}); err != nil {
 		return err
 	}
+	// Hosted mutations are one-use; never let net/http replay a body after an
+	// uncertain transport failure. Native action redirect behavior is separate.
+	req.GetBody = nil
 	req.Header.Set("X-API-Key", c.value)
 	return nil
 }
@@ -222,5 +248,4 @@ func (*credential) String() string               { return "hostedhttp.credential
 func (c *credential) GoString() string           { return c.String() }
 func (c *credential) Format(s fmt.State, _ rune) { _, _ = s.Write([]byte(c.String())) }
 
-var _ httpaction.CredentialSource = source{}
-var _ httpaction.Credential = (*credential)(nil)
+var _ guardedhttp.Credential = (*credential)(nil)

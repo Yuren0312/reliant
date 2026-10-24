@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
@@ -26,7 +25,7 @@ func testExecutor(t *testing.T, h http.Handler) *Executor {
 	guard.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
 		return netguardtest.Dial(ctx, network, srv.Listener.Addr().String())
 	}
-	return &Executor{runner: httpaction.NewRunner(guard).WithRootCAs(roots)}
+	return newWithGuard(guard, roots)
 }
 func TestRedirectIsReturnedNeverFollowed(t *testing.T) {
 	calls := 0

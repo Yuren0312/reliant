@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
@@ -93,7 +92,7 @@ func TestExecuteReusesRunnerAndScrubsResponse(t *testing.T) {
 	g.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
 		return netguardtest.Dial(ctx, network, srv.Listener.Addr().String())
 	}
-	e := &Executor{runner: httpaction.NewRunner(g).WithRootCAs(roots)}
+	e := newWithGuard(g, roots)
 	s := &testSecret{}
 	out, err := e.Execute(context.Background(), testPolicy(), Request{URL: "https://example.com/rpc", Method: "POST", Body: map[string]any{"safe": true}}, s)
 	if err != nil {
