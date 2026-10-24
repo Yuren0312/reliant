@@ -15,7 +15,7 @@ vi.mock('@/api/connection-grpc', () => ({
   connectionErrorMessage: (err: unknown) => (err instanceof Error ? err.message : String(err)),
 }))
 
-vi.mock('@/hooks/connection-queries', () => ({
+vi.mock('@/hooks/catalog-queries', () => ({
   useCatalogEntry: () => ({
     isLoading: false,
     isError: false,
@@ -26,6 +26,9 @@ vi.mock('@/hooks/connection-queries', () => ({
       },
     },
   }),
+}))
+
+vi.mock('@/hooks/connection-queries', () => ({
   useCreateApiKeyConnection: () => ({ mutateAsync: vi.fn(), isPending: false }),
   invalidateConnectionQueries: invalidate,
 }))
