@@ -90,7 +90,7 @@ snapshot() {
 # and test are reading it); anything else fails the phase.
 judge() {
   local n=$1 before=$2 wt=$3 changed bad
-  changed=$(cd "$wt" && diff <(printf '%s\n' "$before") <(snapshot) | awk -F'\t' '/^[<>] / { print substr($1, 3) }' | sort -u | grep -v '^$' || true)
+  changed=$(cd "$wt" && diff <(printf '%s\n' "$before") <(snapshot) | awk -F'\t' '/^[<>] / { print substr($1, 3) }' | sort -u | grep -v '^$' | grep -v '\(^\|/\)node_modules$' || true)
   [ -z "$changed" ] && return 0
   echo "$changed" >"$L/$n.changed"; echo "$wt" >"$L/$n.wt"
   bad=$(echo "$changed" | grep -Ev "$gen_re" || true)
@@ -117,7 +117,12 @@ scratch() {
   git worktree add -q --detach "$SCRATCH" HEAD >/dev/null 2>&1 || return 1
   scratches+=("$SCRATCH")
   for d in tools/protoc-gen-es; do
-    [ -d "$root/$d/node_modules" ] && ln -s "$root/$d/node_modules" "$SCRATCH/$d/node_modules"
+    [ -d "$root/$d/node_modules" ] || continue
+    ln -s "$root/$d/node_modules" "$SCRATCH/$d/node_modules"
+    # The fresh checkout's lockfile is newer than the linked install's stamp,
+    # which would make deps:protoc-gen-es reinstall through the link: give
+    # it the original's mtime.
+    touch -r "$root/$d/package-lock.json" "$SCRATCH/$d/package-lock.json"
   done
   return 0
 }

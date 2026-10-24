@@ -70,6 +70,14 @@ record_of() {
   git notes --ref=release-gate show "$sha" 2>/dev/null && return
   git notes --ref=release-gate-origin show "$sha" 2>/dev/null
 }
+# recorded: every sha with a record anywhere, one per line (one git call per
+# source, not one per commit: a walk of 200 commits stays instant).
+recorded() {
+  { ls "$records" 2>/dev/null | sed -n 's/^\([0-9a-f]\{40\}\)\.json$/\1/p'
+    git notes --ref=release-gate list 2>/dev/null | cut -d' ' -f2
+    git notes --ref=release-gate-origin list 2>/dev/null | cut -d' ' -f2
+  } | sort -u
+}
 result_of() { record_of "$1" | jq -r '.result // empty' 2>/dev/null | tail -1; }
 
 publish() {
@@ -111,8 +119,10 @@ cmd_check() {
   r=$(result_of "$sha")
   if [ "$r" = PASS ]; then echo "release-gate: $(git rev-parse --short "$sha") is green ($(record_of "$sha" | jq -r '.finished'))"; return 0; fi
   if [ "$r" = FAIL ]; then echo "release-gate: $(git rev-parse --short "$sha") is RED: $(record_of "$sha" | jq -r '[.steps[] | select(.result != "PASS") | .name] | join(", ")')" >&2; return 1; fi
+  local -A have; local x; while read -r x; do have[$x]=1; done < <(recorded)
   for a in $(git rev-list --first-parent -n 50 "$sha^" 2>/dev/null); do
     n=$((n+1))
+    [ -n "${have[$a]:-}" ] || continue
     r=$(result_of "$a")
     [ -z "$r" ] && continue
     if [ "$r" = PASS ] && release_metadata_only "$a" "$sha"; then
@@ -133,9 +143,11 @@ cmd_check() {
 cmd_latest() {
   local ref sha
   ref=${1:-origin/main}
-  git fetch -q origin 2>/dev/null || true
+  [ "$ref" = origin/main ] && { git fetch -q origin main 2>/dev/null || true; }
   fetch_notes
+  local -A have; local x; while read -r x; do have[$x]=1; done < <(recorded)
   for sha in $(git rev-list --first-parent -n 200 "$(resolve "$ref")"); do
+    [ -n "${have[$sha]:-}" ] || continue
     [ "$(result_of "$sha")" = PASS ] && { echo "$sha"; return 0; }
   done
   echo "release-gate: no green record in the last 200 commits of $ref" >&2
