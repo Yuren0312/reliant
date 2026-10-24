@@ -70,6 +70,9 @@ type RemoteExecutor struct {
 	// preemptGrace overrides defaultPreemptReplyGrace. Zero means the default;
 	// tests shorten it.
 	preemptGrace time.Duration
+
+	// egress bounds the egress tools executeOnServer runs; nil admits all.
+	egress EgressLimiter
 }
 
 // ToolExecutionRequest is the payload sent to daemon over WebSocket
@@ -202,6 +205,15 @@ func (e *RemoteExecutor) ExecuteTool(ctx context.Context, req *ToolRequest) (*To
 
 // executeOnServer runs a tool in-process via the server executor.
 func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, startTime time.Time) (*ToolResult, error) {
+	// Every egress tool passes here, so this is the one place its rate and
+	// concurrency are bounded. A refusal is a tool result, not an error: the
+	// model reads "rate limited, retry after Ns" and the run continues.
+	releaseEgress, refusal := e.admitEgress(ctx, req, startTime)
+	if refusal != nil {
+		return refusal, nil
+	}
+	defer releaseEgress()
+
 	timeoutMs := 0
 	if req.Timeout > 0 {
 		timeoutMs = int(req.Timeout.Milliseconds())
@@ -400,8 +412,9 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		// A transport failure the gateway answered for — the daemon's
 		// connection dropped under the request, or the gateway was too busy
 		// to deliver it — is a reply, but not from the daemon: it proves
-		// nothing about the machine being reachable.
-		RanOnDaemon:  !IsTransportErrorCode(resp.ErrorCode),
+		// nothing about the machine being reachable. A restarted daemon's
+		// "interrupted by restart" is from the daemon, so it does.
+		RanOnDaemon:  !IsTransportErrorCode(resp.ErrorCode) || resp.ErrorCode == ErrorCodeDaemonRestarted,
 		DaemonID:     resp.DaemonID,
 		StartTime:    startTime,
 		EndTime:      time.Now(),
