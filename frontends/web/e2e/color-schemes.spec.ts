@@ -93,7 +93,7 @@ test.describe('forge components across color schemes', () => {
   // Tall enough that every region fits without scrolling. An element
   // screenshot that has to scroll lands on a fractional offset, and two
   // consecutive captures then round to different heights and never settle.
-  test.use({ viewport: { width: 1280, height: 4000 }, deviceScaleFactor: 1 });
+  test.use({ viewport: { width: 1280, height: 4800 }, deviceScaleFactor: 1 });
   // Two navigations and three captures per test; on a loaded machine the
   // default 30s is spent before the last capture settles.
   test.setTimeout(240_000);
@@ -133,7 +133,7 @@ test.describe('forge components across color schemes', () => {
         await expect(menus).toHaveScreenshot(`s2-filter-${scheme}-${mode}.png`, SHOT);
 
         // A modal covers the viewport; capture the viewport at a dialog's
-        // real proportions rather than the 4000px-tall harness page.
+        // real proportions rather than the 4800px-tall harness page.
         await page.setViewportSize({ width: 1280, height: 800 });
         await openHarness(page, '?view=s2-modal', scheme, mode);
         await page.getByRole('button', { name: 'Open dialog' }).focus();

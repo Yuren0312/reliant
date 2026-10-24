@@ -532,20 +532,24 @@ export default function ForgeTokenSandbox() {
 
       {/* The S1 and S2 sites sit OUTSIDE the scope, as they do in the app: a
           site that needs forge's accent wraps itself in .forge-ui, and this
-          is where a missing wrap would show. */}
+          is where a missing wrap would show. The S2 sites come last, so the
+          regions above them keep the page offsets their baselines were
+          captured at (a region moved by a fraction of a pixel re-rasterizes). */}
       {view === undefined && (
-        <div className="mt-12 space-y-12">
-          <S1Sites />
-          <S2Sites />
-        </div>
+        <>
+          <div className="mt-12">
+            <S1Sites />
+          </div>
+          <div className="mt-12">
+            <ButtonSites />
+          </div>
+          <div className="mt-12">
+            <S2Sites />
+          </div>
+        </>
       )}
       {view === "s2-menus" && <S2Menus />}
       {view === "s2-modal" && <S2Modal />}
-      {view !== "overlays" && !view?.startsWith("s2-") && (
-        <div className="mt-12">
-          <ButtonSites />
-        </div>
-      )}
     </div>
   );
 }
