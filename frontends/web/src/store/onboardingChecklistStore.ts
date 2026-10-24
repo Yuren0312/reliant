@@ -45,7 +45,9 @@ import {
   invalidateProviderStatuses,
   providerStatusesKey,
 } from "../hooks/settings-queries";
-import { hashKey } from "@tanstack/react-query";
+import { hashKey, partialMatchKey } from "@tanstack/react-query";
+import { fetchProjectPresets } from "../hooks/preset-queries";
+import { presetServiceKeys } from "../hooks/preset-service-hooks_gen";
 import type { GetProviderStatusesResponse } from "../gen/reliant/v1/settings_pb";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "./authStore";
@@ -454,7 +456,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       // 8. Create a preset
       if (!newItems.has("create-preset") && projectId) {
         try {
-          const presets = useGlobalDataStore.getState().presets;
+          const presets = await fetchProjectPresets(projectId);
           if (presets.some((p) => p.source === "user")) {
             newItems.add("create-preset");
             changed = true;
@@ -537,10 +539,17 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
           ) {
             get().markComplete("create-workflow");
           }
-          if (
-            !get().completedItems.has("create-preset") &&
-            state.presets.some((p) => p.source === "user")
-          ) {
+        }),
+      );
+
+      // "create-preset" derives from any preset read the app makes (the lists
+      // under presetServiceKeys hold PresetInfo rows with their source).
+      unsubscribers.push(
+        queryClient.getQueryCache().subscribe((event) => {
+          if (get().completedItems.has("create-preset")) return;
+          if (!partialMatchKey(event.query.queryKey, presetServiceKeys.all)) return;
+          const presets = (event.query.state.data as { presets?: unknown } | undefined)?.presets;
+          if (Array.isArray(presets) && presets.some((p: { source?: string }) => p.source === "user")) {
             get().markComplete("create-preset");
           }
         }),
