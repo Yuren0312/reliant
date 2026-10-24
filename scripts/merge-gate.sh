@@ -109,7 +109,7 @@ judge() {
 
 # scratch <name>: a private detached checkout of HEAD under $L, for a
 # generator that writes the tree, so it can run beside the phases that read it.
-# node_modules a generator needs is linked from the gate's own tree.
+# node_modules a generator needs is copied from the gate's own tree.
 # Sets SCRATCH (not a subshell: cleanup must see every checkout made).
 scratch() {
   local d
@@ -118,10 +118,11 @@ scratch() {
   scratches+=("$SCRATCH")
   for d in tools/protoc-gen-es; do
     [ -d "$root/$d/node_modules" ] || continue
-    ln -s "$root/$d/node_modules" "$SCRATCH/$d/node_modules"
-    # The fresh checkout's lockfile is newer than the linked install's stamp,
-    # which would make deps:protoc-gen-es reinstall through the link: give
-    # it the original's mtime.
+    # A copy, not a link: an install in the scratch checkout must never
+    # reach through into the gate's own tree. The fresh checkout's lockfile
+    # is newer than the copied install's stamp, which would make
+    # deps:protoc-gen-es reinstall: give it the original's mtime.
+    cp -a "$root/$d/node_modules" "$SCRATCH/$d/node_modules"
     touch -r "$root/$d/package-lock.json" "$SCRATCH/$d/package-lock.json"
   done
   return 0
