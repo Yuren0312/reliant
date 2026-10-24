@@ -690,7 +690,4 @@ export const api = {
       };
     },
   },
-
-
-  // Background processes - use backgroundGrpc directly from background-grpc.ts
 };
