@@ -35,6 +35,7 @@ import { isNewerSelection, selectionFromPayload, type SelectionPayload } from ".
 import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { invalidateMcpQueries } from "../hooks/mcp-queries";
+import { settingsServiceKeys } from "../hooks/settings-service-hooks_gen";
 import { runKeys, runsInvalidatingUpdate } from "../hooks/run-queries";
 import { inboxInvalidatingUpdate, inboxKeys } from "../hooks/inbox-queries";
 import { showWorkflowCompletionNotification, showWorkflowFailedNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
@@ -1329,8 +1330,12 @@ function handleRefetch(update: UserUpdate) {
     logger.warn(`${LOG_PREFIX} Received refetch event with no type`, { data: update.data });
     return;
   }
-  // MCP server health is part of config health: refetch the MCPService reads.
-  if (refetchType === "config_health") invalidateMcpQueries(queryClient);
+  if (refetchType === "config_health") {
+    // ConfigHealthIndicator reads GetConfigHealth through the generated hook,
+    // and MCP server health is part of config health.
+    void queryClient.invalidateQueries({ queryKey: settingsServiceKeys.all });
+    invalidateMcpQueries(queryClient);
+  }
   // Keep existing refetchStore call for backwards compat
   triggerRefetch(refetchType, update.entity_id);
 
