@@ -242,7 +242,7 @@ export const useKillPackageProcess = useKillPackageProcessRpc;
 /**
  * Mark or unmark a favorite, shown at once: the cached favorites are patched
  * before the call and restored if it fails; the generated mutation then
- * refetches them either way.
+ * refetches them on success.
  */
 export function useToggleCommandFavorite() {
   const client = useQueryClient();
@@ -257,11 +257,9 @@ export function useToggleCommandFavorite() {
       client.setQueryData(key, create(GetCommandFavoritesResponseSchema, { commandKeys: [...keys] }));
       return { key, previous };
     },
-    onError: (_error, _vars, context) => {
-      // TODO(forge NO_SIDE_EFFECTS/TContext): the generated mutation hooks
-      // take no TContext type parameter, so the onMutate return arrives as
-      // unknown and is narrowed here.
-      const rollback = context as { key: readonly unknown[]; previous?: GetCommandFavoritesResponse } | undefined;
+    // The generated hook infers onMutate's return (TanStack's TContext), so
+    // the rollback arrives typed.
+    onError: (_error, _vars, rollback) => {
       if (rollback) client.setQueryData(rollback.key, rollback.previous);
     },
   });
