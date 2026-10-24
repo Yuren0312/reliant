@@ -153,8 +153,9 @@ cmd_run() {
     echo "release-gate: $(git rev-parse --short "$sha") already has a green record (--force re-runs it)"; return 0
   fi
   # One heavy slot for the whole run; every step nests inside it.
-  if [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${RG_IN_SLOT:-}" ] && forge slot status --class heavy >/dev/null 2>&1; then
-    RG_SLOT_T0=$(date +%s) RG_IN_SLOT=1 exec forge slot run --class heavy -- "$0" run $([ "$force" = 1 ] && echo --force) "$sha"
+  local slotforge=${FORGE_BIN:-forge}
+  if [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${RG_IN_SLOT:-}" ] && "$slotforge" slot status --class heavy >/dev/null 2>&1; then
+    RG_SLOT_T0=$(date +%s) RG_IN_SLOT=1 exec "$slotforge" slot run --class heavy -- "$0" run $([ "$force" = 1 ] && echo --force) "$sha"
   fi
   t0=$(date +%s); slot_wait=$(( t0 - ${RG_SLOT_T0:-$t0} ))
   snap=${RELEASE_GATE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/reliant-release-gate/$(echo "$common" | md5sum | cut -c1-8)}/snap
