@@ -438,9 +438,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// This process IS the machine that runs shell commands, so its own GOOS is
 	// the right answer here — unlike on the server, where reading runtime.GOOS
 	// would describe the wrong machine entirely.
-	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
-		ShellPlatform: tools.ShellPlatformFromGOOS(runtime.GOOS),
-	})
+	toolsFactory := newDaemonToolsFactory(host)
 
 	caps := toolsFactory.ListAvailableToolsForPlacement(tools.PlacementDaemon)
 	sort.Strings(caps)
@@ -519,7 +517,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		return nil, fmt.Errorf("creating daemon HTTP client: %w", err)
 	}
 
-	return &daemonClient{
+	client := &daemonClient{
 		daemonID:   bootCfg.DaemonID,
 		daemonName: daemonName,
 		// userID is set later from RegistrationAck (gateway-derived from PAT).
@@ -544,7 +542,27 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		memWatcher:        cgroupmem.NewWatcher(memReader, cgroupmem.DefaultPollInterval),
 		diskWatcher:       diskWatcher,
 		diskGuard:         diskGuard,
-	}, nil
+	}
+	client.restoreResultOutbox()
+	return client, nil
+}
+
+// restoreResultOutbox gives the result outbox its home in the instance's data
+// directory and reloads what the previous process left there, so a tool
+// result survives a daemon restart. A daemon with no data directory (an
+// embedded runtime), or one whose outbox directory cannot be used, runs with
+// the in-memory outbox: it never fails to start over this.
+func (d *daemonClient) restoreResultOutbox() {
+	dataDir := strings.TrimSpace(d.bootCfg.DataDir)
+	if dataDir == "" {
+		return
+	}
+	store, err := openOutboxStore(filepath.Join(dataDir, outboxDirName))
+	if err != nil {
+		logging.Warn(logPrefix+" Tool results will not survive a daemon restart", "error", err)
+		return
+	}
+	d.results.restore(store)
 }
 
 // persistDaemonID writes the server-assigned daemon id into THIS INSTANCE's
@@ -996,6 +1014,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			MovesOnDrain: true,
 		}},
 	}
+	stampBuildIdentity(register.GetRegister())
 	if err := sendRegistration(stream, register); err != nil {
 		close(sessionOver)
 		return fmt.Errorf("sending daemon registration to %s: %w", baseURL, err)
@@ -1735,6 +1754,9 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	if req == nil {
 		return
 	}
+
+	// Before the tool can do anything a restart would cut short.
+	d.results.persistRunning(req.RequestId)
 
 	execCtx, cancel := context.WithCancel(dispatchContext(req))
 	// Registered under both ids. request_id is the transport's correlation key

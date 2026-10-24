@@ -34,7 +34,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronDown, ChevronRight, CircleCheck, CircleX, MinusCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -54,7 +54,7 @@ import { useCatalogEntry, useDeclaredTriggerRef, useDeclaredTriggerRefState, use
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
 import { describeSchedule } from "@/lib/cronText";
 import { describeDeclaredSource, integrationOf, isAlertingWebhook, promptOf, type DeclaredTrigger } from "@/lib/declaredTriggers";
-import { repoGrpc } from "@/api/repo-grpc";
+import { useListRepos } from "@/hooks/repo-service-hooks_gen";
 import { DEFAULT_REPO_INPUT, singleGitHubRepo, withDefaultRepo } from "./oncallSetup";
 import { inputDefToSchema } from "@/lib/nodeFieldAdapter";
 import { getInputDescription, getInputMaxItems, getInputMinItems, getInputMulti, isIntegrationInput, type InputDef } from "@/lib/inputHelpers";
@@ -63,13 +63,13 @@ import { triggerRunsWorkflow } from "@/lib/triggerRail";
 import { workflowPageHref } from "@/lib/workflowsArea";
 import { formatAbsoluteTime } from "@/lib/relativeTime";
 import { useProjectStore } from "@/store/projectStore";
-import { useWorkflowPresets } from "@/store/globalDataStore";
+import { useWorkflowPresets } from "@/hooks/preset-queries";
 import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { ErrorSummary, focusField, type ErrorSummaryItem } from "./ErrorSummary";
-import { Modal } from "../ui/Modal";
-import { Toggle } from "../ui/Toggle";
+import Modal from "../forge-ui/modal";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import { ProtoFieldRenderer } from "../workflow/ProtoFieldRenderer";
 import { ConnectionPicker } from "../workflow/connections/ConnectionPicker";
 import { ConnectIntegrationDialog } from "../workflow/connections/ConnectIntegrationDialog";
@@ -306,13 +306,8 @@ function SetupBody({
   // project, that is the repository, so the one click needs no other input.
   const alerting = useMemo(() => declared.some(isAlertingWebhook), [declared]);
   const wantsDefaultRepo = alerting && !!projectId && schemaByName.has(DEFAULT_REPO_INPUT);
-  const projectRepos = useQuery({
-    queryKey: ["oncall", "repos", projectId],
-    queryFn: () => repoGrpc.list(projectId),
-    enabled: wantsDefaultRepo,
-    staleTime: 60_000,
-  });
-  const defaultRepo = wantsDefaultRepo ? singleGitHubRepo(projectRepos.data?.repos.map((r) => r.remote_url) ?? []) : undefined;
+  const projectRepos = useListRepos({ projectId }, { enabled: wantsDefaultRepo, staleTime: 60_000 });
+  const defaultRepo = wantsDefaultRepo ? singleGitHubRepo(projectRepos.data?.repos.map((r) => r.remoteUrl) ?? []) : undefined;
   const fillsDefaultRepo = withDefaultRepo(value.params, defaultRepo) !== value.params;
 
   const display = useMemo(() => {
@@ -463,7 +458,7 @@ function SetupBody({
       .filter((i) => i.scopes.length > 0)
       .flatMap((i) => (Array.isArray(flat[i.name]) ? (flat[i.name] as unknown[]).map(String) : flat[i.name] ? [String(flat[i.name])] : []));
     return (
-      <Modal isOpen onClose={onClose} size="lg" title={mode === "settings" ? `${title} in ${projectName}` : `${title} is on`}>
+      <Modal open onClose={onClose} size="lg" title={mode === "settings" ? `${title} in ${projectName}` : `${title} is on`}>
         <SetupSuccess
           workflowTitle={title}
           projectName={projectName}
@@ -549,7 +544,7 @@ function SetupBody({
   };
 
   return (
-    <Modal isOpen onClose={onClose} size="lg" title={dialogTitle} footer={footer}>
+    <Modal open onClose={onClose} size="lg" title={dialogTitle} footer={footer}>
       <TypedInputsProvider
         value={{
           connectionIds: connections,
@@ -797,12 +792,13 @@ function SetupBody({
           </Disclosure>
 
           <div>
-            <div className="flex items-center gap-2">
-              <Toggle checked={notify} onChange={setNotify} srLabel="Also notify me when a run succeeds" />
-              <span className="text-sm text-foreground" aria-hidden>
-                Also notify me when a run succeeds
-              </span>
-            </div>
+            <ToggleSwitch
+              checked={notify}
+              onChange={setNotify}
+              label="Also notify me when a run succeeds"
+              size="lg"
+              className="forge-ui"
+            />
             <p className={hintClass}>Failures always notify you.</p>
           </div>
 

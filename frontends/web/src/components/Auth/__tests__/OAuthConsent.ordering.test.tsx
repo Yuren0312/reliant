@@ -151,8 +151,8 @@ describe("OAuth consent ordering", () => {
   // torn-down jsdom — React's setState threw "window is not defined" as an
   // unhandled error in whichever test file the worker ran next.
   it("cancels the redirect fallback when the page goes away", async () => {
-    const setTimeoutSpy = vi.spyOn(window, "setTimeout");
-    const clearTimeoutSpy = vi.spyOn(window, "clearTimeout");
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
     try {
       const { unmount } = render(<OAuthConsent />);
       await userEvent.click(

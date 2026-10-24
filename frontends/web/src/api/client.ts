@@ -1,11 +1,10 @@
 import { getCatalogClient } from "./grpc-client";
 import { projectGrpc } from "./project-grpc";
-import { approvalGrpc } from "./approval-grpc";
 import { chatGrpc } from "./chat-grpc";
 import type { Chat, Message } from "../types/chat";
 import { ChatState, MessageRole } from "../types/chat";
 import { settingsGrpc, type Preferences } from "./settings-grpc";
-import { providerAccountGrpc } from "./provider-account-grpc";
+import { addProviderApiKey, disconnectProvider } from "../hooks/provider-account-queries";
 import { mcpGrpc } from "./mcp-grpc";
 import { toolCallGrpc } from "./tool-call-grpc";
 import { logger } from "../lib/logger";
@@ -20,9 +19,6 @@ import type {
 // Re-export types for consumers
 export type { Chat, Message, ContentBlock, Attachment } from "../types/chat";
 export { ChatState } from "../types/chat";
-
-// Re-export approval types from canonical source
-export type { ToolApprovalRequest } from "./approval-grpc";
 
 export const api = {
   workflows: {
@@ -468,36 +464,6 @@ export const api = {
     },
   },
 
-  health: async () => {
-    const { systemGrpc } = await import("./system-grpc");
-    return systemGrpc.health();
-  },
-
-  approvals: {
-    listByChat: async (chatId: string) =>
-      approvalGrpc.listByChat(chatId),
-
-    approve: async (requestId: string, actionTaken?: string) =>
-      approvalGrpc.approve(requestId, actionTaken),
-
-    deny: async (
-      requestId: string,
-      denialReason?: string,
-      actionTaken?: string
-    ) => approvalGrpc.deny(requestId, denialReason, actionTaken),
-
-    batchApprove: async (
-      requestIds: string[],
-      actionTaken?: string
-    ) => approvalGrpc.batchApprove(requestIds, actionTaken),
-
-    batchDeny: async (
-      requestIds: string[],
-      denialReason?: string,
-      actionTaken?: string
-    ) => approvalGrpc.batchDeny(requestIds, denialReason, actionTaken),
-  },
-
   toolCalls: {
     cancel: (toolCallId: string) => toolCallGrpc.cancel(toolCallId),
     convertToBackground: (toolCallId: string) =>
@@ -561,7 +527,6 @@ export const api = {
       return settingsGrpc.setHiddenItem(itemType, slug, hidden);
     },
 
-
     getProviders: async () => {
       const providers = await settingsGrpc.getProviderStatuses();
       return providers.map((p) => ({
@@ -573,22 +538,6 @@ export const api = {
       }));
     },
 
-    getProvider: async (provider: string) => {
-      // Get all providers and filter - gRPC doesn't have a single-get endpoint
-      const providers = await settingsGrpc.getProviderStatuses();
-      const found = providers.find((p) => p.provider === provider);
-      if (!found) {
-        throw new Error(`Provider ${provider} not found`);
-      }
-      return {
-        provider: found.provider,
-        configured: found.configured,
-        hasApiKey: found.configured,
-        accountCount: found.account_count,
-        displayName: found.display_name,
-      };
-    },
-
     /**
      * Adds an API key as a new account of the provider (ProviderAccountService.AddProviderAPIKey,
      * which validates it first). The same key twice is one account. Rejects an empty key: removing
@@ -598,27 +547,18 @@ export const api = {
       if (!apiKey.trim()) {
         throw new Error('An API key is required.');
       }
-      const { created } = await providerAccountGrpc.addApiKey(provider, apiKey.trim());
+      const { created } = await addProviderApiKey(provider, apiKey.trim());
       return { message: created ? 'API key added' : 'That key is already connected' };
     },
 
     /** Removes every account of the provider (it becomes disconnected). */
     deleteProvider: async (provider: string) => {
-      const accounts = await providerAccountGrpc.listAccounts();
-      for (const account of accounts) {
-        if (account.provider === provider) {
-          await providerAccountGrpc.deleteAccount(account.id);
-        }
-      }
+      await disconnectProvider(provider);
       return { message: 'Disconnected' };
     },
 
     validateProviderAPIKey: async (provider: string, apiKey: string) => {
       return settingsGrpc.validateProviderAPIKey(provider, apiKey);
-    },
-
-    completeCodexOAuth: async (code: string, codeVerifier: string, redirectURI: string) => {
-      return settingsGrpc.completeCodexOAuth(code, codeVerifier, redirectURI);
     },
 
     syncReliantProvider: async (forceRotate = false) => {
@@ -636,53 +576,8 @@ export const api = {
       return settingsGrpc.updatePrivacySettings(settings);
     },
 
-    trackPageVisited: (pageName: string, previousPage?: string) => {
-      return settingsGrpc.trackPageVisited(pageName, previousPage);
-    },
-
-
-    getPrompts: async () => {
-      return settingsGrpc.getPrompts();
-    },
-
-    savePrompts: async (
-      prompts: Array<{
-        id: string;
-        title: string;
-        content: string;
-        default?: boolean;
-        hotkey?: string;
-        category?: string;
-      }>
-    ) => {
-      return settingsGrpc.savePrompts(prompts);
-    },
-
-
-    createSetting: async (
-      key: string,
-      value: string,
-      valueType?: string,
-      projectId?: string
-    ) => {
-      return settingsGrpc.createSetting(key, value, valueType, projectId);
-    },
-
     listSettings: async (projectId?: string) => {
       return settingsGrpc.listSettings(projectId);
-    },
-
-    getSetting: async (key: string, projectId?: string) => {
-      return settingsGrpc.getSetting(key, projectId);
-    },
-
-    updateSetting: async (
-      key: string,
-      value?: string,
-      valueType?: string,
-      projectId?: string
-    ) => {
-      return settingsGrpc.updateSetting(key, value, valueType, projectId);
     },
 
     batchUpsertSettings: async (

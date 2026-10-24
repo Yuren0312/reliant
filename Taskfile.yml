@@ -14,6 +14,8 @@ version: '3'
 # │   task test:e2e          e2e/stories (Temporal dev server)    │
 # │   task ci                The whole local gate, one table      │
 # │   task ci:checks         Static + build lane of it            │
+# │   task ci:merge          The merge tier (~5 min, affected)    │
+# │   task release:gate      The slow tier, on main, per sha      │
 # │   task generate          forge generate (+ hooks), then docs  │
 # │   task generate:check    Pinned forge generate is a no-op     │
 # │   task generate:docs:check  Docs generators are a no-op       │
@@ -194,6 +196,8 @@ tasks:
         sh: ./scripts/release-identity.sh 2>/dev/null || echo unknown
       COMMIT:
         sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
+      COMMIT_TIME:
+        sh: ./scripts/release-identity.sh --commit-time 2>/dev/null || echo 0
       DATE:
         sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
       BRANCH:
@@ -205,7 +209,7 @@ tasks:
       - mkdir -p dist
       - >-
         {{if .GOOS}}GOOS={{.GOOS}} GOARCH={{.GOARCH}} {{end}}go {{.GO_ARGS}} -buildvcs=false
-        -ldflags="-s -w -X {{.PKG}}.Version={{.VERSION}} -X {{.PKG}}.Commit={{.COMMIT}} -X {{.PKG}}.Date={{.DATE}} -X {{.PKG}}.Branch={{.BRANCH}}"
+        -ldflags="-s -w -X {{.PKG}}.Version={{.VERSION}} -X {{.PKG}}.Commit={{.COMMIT}} -X {{.PKG}}.Date={{.DATE}} -X {{.PKG}}.Branch={{.BRANCH}} -X {{.PKG}}.CommitTime={{.COMMIT_TIME}}"
         ./cmd/reliant/
 
   build:dev-cli:
@@ -435,6 +439,34 @@ tasks:
     cmds:
       - '{{.FORGE}} ci gate checks'
 
+  ci:merge:
+    # The MERGE tier, the one the merge queue runs on every branch: only what
+    # the diff from origin/main can affect, in about five minutes, inside ONE
+    # host heavy slot. tools/test-affected decides the Go/web/electron tests
+    # and whether forge generate / the docs generators must be checked; then
+    # go build, forge lint --scope <changed dirs> and (for a migration)
+    # migration-safety run at the same time. Prints a per-phase table: slot
+    # wait vs run. `-- --base <rev>` moves the diff base.
+    # dev-docs/merge-and-release-gates.md.
+    desc: "The merge tier: affected tests + build + scoped lint (+ generate/docs checks when their inputs changed), ~5 min"
+    cmds:
+      - ./scripts/merge-gate.sh {{.CLI_ARGS}}
+
+  release:gate:
+    # The SLOW tier: everything ci:merge leaves out (unscoped lint, the full
+    # -race suite with every slow test, integration, e2e, generate and docs
+    # drift), on a commit of main (default origin/main) in a private checkout,
+    # recorded per sha. release:tag refuses a commit without a green record.
+    # 40-70 minutes on a loaded host: run it in the background.
+    desc: "The release gate: the whole suite on origin/main (or `-- <rev>`), recorded per sha; release:tag requires it"
+    cmds:
+      - ./scripts/release-gate.sh run {{.CLI_ARGS}}
+
+  release:gate:check:
+    desc: "Is HEAD (or `-- <rev>`) release-ready? exit 0 green | 1 red | 3 no record"
+    cmds:
+      - ./scripts/release-gate.sh check {{.CLI_ARGS}}
+
   # ── Lint and format ───────────────────────────────────────────────────
 
   lint:
@@ -642,10 +674,19 @@ tasks:
     # `forge lint --migration-safety` fails it until it says one, with a
     # reason.
     desc: "Create a new forge migration (NAME=my_changes), then: write the SQL and its compat declaration, task generate:check, queries in internal/store (internal/db/SCHEMA.md)"
+    #
+    # The version must clear origin/main's NEWEST migration, not the wall
+    # clock: a long-lived branch, a skewed clock or a future-dated main head
+    # otherwise mints a version under one that already merged, which is never
+    # applied and crash-loops the migrator (reliant#1399). So origin/main is
+    # refreshed first (forge allocates above its tip), and the result is checked
+    # against it after, whatever forge pin is installed.
     requires:
       vars: [NAME]
     cmds:
+      - git fetch -q origin main || echo "WARNING - could not refresh origin/main; the version is checked against the ref as it is" >&2
       - '{{.GEN_ENV}} {{.FORGE}} db migration new {{.NAME}}'
+      - MIGRATION_ORDER_OFFLINE=1 go run ./tools/test-affected migration-order
 
   migrate:
     desc: Apply pending database migrations (wraps `reliant db migrate up`)

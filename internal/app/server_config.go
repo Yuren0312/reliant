@@ -3,6 +3,7 @@
 package app
 
 import (
+	"log/slog"
 	"strings"
 	"time"
 
@@ -19,7 +20,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/natsutil"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
 // The server configs (proto/reliant/config/v1 ServerProcessConfig, DatabaseConfig and
@@ -37,6 +37,25 @@ func ControlPlaneEndpoint(cfg *configv1.ControlPlaneConfig) controlplane.Endpoin
 		URL:                   strings.TrimSpace(cfg.GetUrl()),
 		InternalServiceSecret: strings.TrimSpace(cfg.GetInternalServiceSecret()),
 	}
+}
+
+// AllowPrivateEgress is NetworkConfig.allow_private_egress: the one switch
+// that lets a server role's user-steered dials (fetch, websearch, model
+// endpoints) reach private, loopback and link-local addresses. It is false
+// unless an operator set it; the control-plane URL, hosted or not, never
+// implies it. NewProcessRuntime warns once at startup when it is on.
+func AllowPrivateEgress(cfg *configv1.NetworkConfig) bool {
+	return cfg.GetAllowPrivateEgress()
+}
+
+// warnPrivateEgress is the startup notice that the process runs with its
+// user-steered dials open to the private network.
+func warnPrivateEgress(cfg *configv1.NetworkConfig, log *slog.Logger) {
+	if !AllowPrivateEgress(cfg) {
+		return
+	}
+	log.Warn("network.allow_private_egress is ON: fetch, websearch, sourcegraph and model endpoints can reach private, loopback and link-local addresses, including this network's cloud metadata service. Use it only on a self-hosted deployment whose users are trusted with that reach",
+		"env", "RELIANT_ALLOW_PRIVATE_EGRESS")
 }
 
 // DatabaseURLs is the DatabaseConfig's driver, URL and direct (session) URL.
@@ -145,18 +164,6 @@ func PreviewSettings(cfg *configv1.PreviewConfig) tools.PreviewSettings {
 // internal/analytics takes.
 func AnalyticsSettings(cfg *configv1.AnalyticsConfig) analytics.Settings {
 	return analytics.Settings{Disabled: cfg.GetDisabled()}
-}
-
-// SentrySettings is the shared SentryConfig in the shape internal/telemetry
-// takes. Events are filed under the deployment environment the deploy states
-// (SENTRY_ENVIRONMENT, else ENVIRONMENT).
-func SentrySettings(cfg *configv1.SentryConfig, obs *configv1.ObservabilityConfig) telemetry.SentryConfig {
-	return telemetry.SentryConfig{
-		Enabled:          cfg.GetEnabled(),
-		DSN:              cfg.GetDsn(),
-		Environment:      obs.GetEnvironment(),
-		TracesSampleRate: cfg.GetTracesSampleRate(),
-	}
 }
 
 // TemporalEndpoint is the shared TemporalConfig: host, port and namespace.

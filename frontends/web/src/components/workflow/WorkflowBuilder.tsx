@@ -90,8 +90,8 @@ import { withFindingMarkers, withProblemMarkers } from "./nodes/problemMarkers";
 import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { YamlEditorModal } from "./YamlEditorModal";
 import type { ValidationError } from "../../api/workflow-grpc";
-import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import Modal from "../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 
 import type { BackgroundVariant, SelectionMode } from "@xyflow/react";
 import { WorkflowEditorChatPanel, type PanelSize } from "./WorkflowEditorChatPanel";
@@ -2410,7 +2410,7 @@ function WorkflowBuilderInner({
       {/* Create a Copy Modal */}
       {showTemplateModal && (
         <Modal
-          isOpen={true}
+          open={true}
           onClose={() => setShowTemplateModal(false)}
           title="Create a Copy"
           size="md"
@@ -2460,7 +2460,7 @@ function WorkflowBuilderInner({
       {/* Exit Confirmation Modal */}
       {showExitConfirmModal && (
         <Modal
-          isOpen={true}
+          open={true}
           onClose={() => setShowExitConfirmModal(false)}
           title="Unsaved Changes"
           size="sm"
@@ -2483,7 +2483,7 @@ function WorkflowBuilderInner({
                 </Button>
               )}
               <Button
-                variant={(workflow.name ?? "").trim() ? "outline" : "destructive"}
+                variant={(workflow.name ?? "").trim() ? "outline" : "danger"}
                 onClick={handleDiscardAndExit}
                 disabled={isSavingBeforeExit}
               >
@@ -2545,7 +2545,7 @@ function WorkflowBuilderInner({
       {/* Scenario Panel Modal */}
       {currentProject?.id && (
         <Modal
-          isOpen={showScenarioPanel}
+          open={showScenarioPanel}
           onClose={() => setShowScenarioPanel(false)}
           title="Tests"
           size="lg"

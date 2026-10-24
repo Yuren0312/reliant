@@ -24,8 +24,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, KeyRound, Loader2 } from "lucide-react";
 
-import { Modal } from "../../ui/Modal";
-import { Button } from "../../ui/Button";
+import Modal from "../../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { CardInset } from "../../forge-ui/card";
 import { connectionErrorMessage, type AuthMethod } from "../../../api/connection-grpc";
 import { invalidateConnectionQueries, useCatalogEntry, useCreateApiKeyConnection } from "../../../hooks/connection-queries";
@@ -172,11 +172,15 @@ function ConnectBody({
 
   return (
     <Modal
-      isOpen
+      open
       onClose={onClose}
       size="md"
-      title={`Connect ${target.displayName}`}
-      titlePrefix={<IntegrationIcon hint={target.icon ?? target.integrationId} />}
+      title={
+        <span className="flex items-center gap-3">
+          <IntegrationIcon hint={target.icon ?? target.integrationId} />
+          {`Connect ${target.displayName}`}
+        </span>
+      }
     >
       {entryQuery.isLoading ? (
         <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground">

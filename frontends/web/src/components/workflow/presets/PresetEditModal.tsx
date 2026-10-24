@@ -8,14 +8,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Modal } from '../../ui/Modal'
-import { Button } from '../../ui/Button'
+import Modal from '../../forge-ui/modal'
+import Button from '@/components/forge-ui/button';
 import { ModelSelector } from '../../Chat/ModelSelector'
 import { ToolsSelector } from '../ToolsSelector'
 import { AgentSelector } from '../../Chat/AgentSelector'
 import { MultiSelectDropdown } from '../../ui/MultiSelectDropdown'
-import type { Preset } from '../../../store/globalDataStore'
-import { presetGrpc } from '../../../api/preset-grpc'
+import { createPreset, updatePreset, type Preset } from '../../../hooks/preset-queries'
 import { workflowGrpc, type WorkflowResponse } from '../../../api/workflow-grpc'
 import { formatValueForDisplay } from '../../../lib/paramUtils'
 import { ProtoFieldRenderer } from '../ProtoFieldRenderer'
@@ -398,7 +397,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
     setIsSaving(true)
     try {
       // Use preset.name for the API call (works for both user and project presets)
-      const result = await presetGrpc.updatePreset(projectId, preset.name, {
+      const result = await updatePreset(projectId, preset.name, {
         newName: name !== preset.name ? name : undefined,
         newDescription: description !== preset.description ? description : undefined,
         newTag: tag !== (preset.tag || '') ? tag : undefined,
@@ -429,7 +428,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
     setIsCopying(true)
     try {
       // Create new preset with same params/description
-      const result = await presetGrpc.createPreset(projectId, {
+      const result = await createPreset(projectId, {
         name: copyName,
         description: preset.description,
         params: preset.params || {},
@@ -489,7 +488,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
 
   return (
     <Modal
-      isOpen={true}
+      open={true}
       onClose={onClose}
       title={isEditable ? `Edit Preset: ${preset.name}` : `View Preset: ${preset.name}`}
       size="lg"

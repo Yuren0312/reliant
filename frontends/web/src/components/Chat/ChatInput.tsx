@@ -13,11 +13,7 @@ import { Settings2, ChevronDown } from "lucide-react";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
-import {
-  usePresetsForWorkflow,
-  useModels,
-  type Preset,
-} from "../../store/globalDataStore";
+import { useModels } from "../../store/globalDataStore";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { WorkflowSelector } from "./WorkflowSelector";
@@ -58,7 +54,7 @@ import {
 import { clearLegacyChatParams, peekLegacyChatParams } from "../../lib/legacyChatParams";
 import { pushChatParams } from "../../lib/chatSelection";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { answerQuestion, usePendingQuestions } from "../../hooks/approval-queries";
+import { answerQuestion, usePendingQuestions } from "../../hooks/question-queries";
 import { questionForThread } from "../../lib/pendingQuestions";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
@@ -78,10 +74,8 @@ import {
 import { askUserQuestionItems } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
-import {
-  fetchDefaultPresets,
-  useWorkflowDefinitionQuery,
-} from "../../hooks/workflow-config-queries";
+import { useWorkflowDefinitionQuery } from "../../hooks/workflow-config-queries";
+import { fetchDefaultPresets, usePresetsForWorkflow, type Preset } from "../../hooks/preset-queries";
 
 /** Workflow tag metadata for preset matching. */
 interface WorkflowTagInfo {
@@ -340,7 +334,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const pendingQuestion = useMemo(
       () =>
         questionForThread(
-          pendingQuestionsQuery.data,
+          pendingQuestionsQuery.data?.questions,
           chatId,
           selectedThreadId,
           questionMainThreadId
@@ -1229,7 +1223,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     const handleQuestionSubmit = useCallback(async (answer: { answers: Array<{ question: string; selected: string[]; freetext?: string }> }) => {
       if (!chatId || !pendingQuestion) return;
-      await answerQuestion(chatId, pendingQuestion.question_id, answer);
+      await answerQuestion(chatId, pendingQuestion.questionId, answer);
     }, [chatId, pendingQuestion]);
 
     const handleSend = async () => {

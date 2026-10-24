@@ -78,8 +78,8 @@ vi.mock("../../../hooks/chat-queries", async () => {
   };
 });
 
-vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingQuestions: () => ({ data: [], isLoading: false }),
+vi.mock("../../../hooks/question-queries", () => ({
+  usePendingQuestions: () => ({ data: { questions: [] }, isLoading: false }),
 }));
 
 const NO_PRESETS = { presets: [] as never[], loading: false };
@@ -87,7 +87,6 @@ const NO_MODELS = { models: [] as never[] };
 const NO_SLASH_COMMANDS: never[] = [];
 
 vi.mock("../../../store/globalDataStore", () => ({
-  usePresetsForWorkflow: () => NO_PRESETS,
   useModels: () => NO_MODELS,
   useGlobalDataStore: Object.assign(() => undefined, {
     getState: () => ({ models: [] }),
@@ -106,11 +105,10 @@ vi.mock("../../../api/workflow-grpc", () => ({
   workflowGrpc: { getWorkflow: vi.fn().mockResolvedValue({ workflow: null }) },
 }));
 
-vi.mock("../../../api/preset-grpc", () => ({
-  presetGrpc: {
-    getDefaultPresets: vi.fn().mockResolvedValue({}),
-    listPresets: vi.fn().mockResolvedValue([]),
-  },
+vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/preset-queries")>()),
+  usePresetsForWorkflow: () => NO_PRESETS,
+  fetchDefaultPresets: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock("../settings", () => ({

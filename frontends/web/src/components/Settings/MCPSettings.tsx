@@ -19,13 +19,13 @@ import {
 import { useProjectStore } from "../../store/projectStore";
 import { usePreferencesStore } from "../../store/preferencesStore";
 import { toast } from "sonner";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { MCPCustomServerModal } from "./MCPCustomServerModal";
 import { MCPTabs } from "./MCPTabs";
 import { MCPInstalledTab } from "./MCPInstalledTab";
 import { MCPDiscoverTab } from "./MCPDiscoverTab";
 import { MCPSetupWizard } from "./MCPSetupWizard";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import { subscribeToRefetch } from "../../store/refetchStore";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
@@ -126,7 +126,7 @@ function MCPRefreshStatus({
           type="button"
           variant="ghost"
           size="xs"
-          className="self-start text-destructive-ink hover:bg-destructive/10 hover:text-destructive-ink sm:self-auto"
+          className="self-start text-destructive-ink! not-disabled:hover:bg-destructive/10! sm:self-auto"
           onClick={onRetry}
         >
           Retry
@@ -836,7 +836,7 @@ export function MCPSettings() {
 
       {toolsModalServer && (
         <Modal
-          isOpen={true}
+          open={true}
           onClose={() => {
             setToolsModalServer(null);
             setToolsModalTools([]);

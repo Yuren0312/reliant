@@ -1,6 +1,20 @@
 import '@testing-library/jest-dom'
 import { configure } from '@testing-library/react'
-import { afterEach, vi } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
+import { resetConfigForTests } from '@/lib/config_gen'
+
+// Runtime config: every test starts from an EMPTY config.js document, i.e.
+// config_gen.ts's defaults (the self-hosted app). An absent document is not
+// the same thing under vitest: config_gen.ts would fall back to reading
+// process.env, so whatever API_URL / AUTH_MODE the shell running the tests
+// exports would leak into them. Set before any test file imports a module
+// that reads the config at module scope; tests override it with
+// src/test/runtimeConfig.ts setRuntimeConfig().
+window.__FORGE_CONFIG__ = {}
+beforeEach(() => {
+  window.__FORGE_CONFIG__ = {}
+  resetConfigForTests()
+})
 
 // findBy*/waitFor budget, scaled with host load like the test timeout (see
 // "Vitest sizing" in vite.config.ts). The fixed 1s default failed tests on a
@@ -96,14 +110,11 @@ vi.mock('@/api/grpc-unauth', () => ({
 }))
 
 // Keep attachment-store tests deterministic by stubbing network deletion.
-vi.mock('@/api/attachment-grpc', async () => {
-  const actual = await vi.importActual<typeof import('@/api/attachment-grpc')>('@/api/attachment-grpc')
+vi.mock('@/hooks/attachment-queries', async () => {
+  const actual = await vi.importActual<typeof import('@/hooks/attachment-queries')>('@/hooks/attachment-queries')
   return {
     ...actual,
-    attachmentGrpc: {
-      ...actual.attachmentGrpc,
-      deleteAttachment: vi.fn(async () => undefined),
-    },
+    deleteAttachment: vi.fn(async () => undefined),
   }
 })
 

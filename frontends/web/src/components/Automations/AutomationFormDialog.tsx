@@ -20,8 +20,8 @@
 import { memo, useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { ChevronRight } from "lucide-react";
 
-import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import Modal from "../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { useProjectStore } from "@/store/projectStore";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "../workflow/run/RunWorkflowForm";
@@ -511,7 +511,7 @@ function AutomationFormBody({
 
   return (
     <Modal
-      isOpen
+      open
       onClose={requestClose}
       title={isEdit ? "Edit automation" : "New automation"}
       size="lg"
@@ -951,7 +951,7 @@ function AutomationFormBody({
               >
                 Keep editing
               </Button>
-              <Button type="button" variant="destructive" onClick={onClose}>
+              <Button type="button" variant="danger" onClick={onClose}>
                 Discard
               </Button>
             </div>
