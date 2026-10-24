@@ -39714,7 +39714,13 @@
           "Description": "Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "reliant/config/v1/web_config.proto"
+          "ProtoFile": "reliant/config/v1/web_config.proto",
+          "RequiredWhen": [
+            {
+              "Field": "auth_mode",
+              "Equals": "cloud"
+            }
+          ]
         },
         {
           "Name": "control_plane_api_url",
@@ -39728,7 +39734,13 @@
           "Description": "Origin of the control plane's admin-server. Set: the cloud features (billing, managed daemons, coupons, Forge cloud envs) are wired up. Unset: the self-hosted implementations (src/services/controlPlane/config.ts).",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "reliant/config/v1/web_config.proto"
+          "ProtoFile": "reliant/config/v1/web_config.proto",
+          "RequiredWhen": [
+            {
+              "Field": "auth_mode",
+              "Equals": "cloud"
+            }
+          ]
         },
         {
           "Name": "gateway_url",
@@ -39801,7 +39813,13 @@
           "Description": "The Supabase project the browser signs in against. Default: a local `supabase start`.",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "reliant/config/v1/web_config.proto"
+          "ProtoFile": "reliant/config/v1/web_config.proto",
+          "RequiredWhen": [
+            {
+              "Field": "auth_mode",
+              "Equals": "cloud"
+            }
+          ]
         },
         {
           "Name": "supabase_anon_key",
@@ -39815,7 +39833,13 @@
           "Description": "The Supabase project's PUBLISHABLE (anon) key. Public by design. Unset: Supabase sign-in is unavailable and the app says so.",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "reliant/config/v1/web_config.proto"
+          "ProtoFile": "reliant/config/v1/web_config.proto",
+          "RequiredWhen": [
+            {
+              "Field": "auth_mode",
+              "Equals": "cloud"
+            }
+          ]
         },
         {
           "Name": "auto_anon_sign_in",
@@ -40244,7 +40268,7 @@
     "reliant/config/v1/preview_config.proto": "ffbf20088c49cac7e5cd913d17d2f2d30e992df459998d706e6b96f0f5a2ab73",
     "reliant/config/v1/preview_url_config.proto": "e9ff64e47a61c04e8f2a63311bfd4e41acb28ef0811581d527b88fbff20e3306",
     "reliant/config/v1/server_config.proto": "737f9184116615f327c4437f2550eee5a13cd79d75b14f811ec754bd53ab5b16",
-    "reliant/config/v1/web_config.proto": "306c59f8cbc6d924c1d4870acc38a9d7c1850471774a3a0d0c2d3f216d3b235a",
+    "reliant/config/v1/web_config.proto": "a265cf8fa479b2018e0b05bc50e492b3dcf26855c581a66890a88a25a7790aeb",
     "reliant/config/v1/worker_config.proto": "503a77d05a9e96aa0509df8ed88dff2c24e454c8672696bea47d7bb018eaf9f0",
     "reliant/v1/account.proto": "d7e5ce0de4321d271532eb749a53e2001e692bdf208a4b7b71d4816673eebf35",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
