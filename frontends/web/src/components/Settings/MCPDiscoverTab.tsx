@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Download, RefreshCw } from "lucide-react";
-import { type RecommendedServer } from "../../api/mcp-grpc";
+import { type RecommendedServer } from "../../hooks/mcp-queries";
 import { Button } from "../ui/Button";
 import { getMcpIconUrl, MCPAvatar } from "./mcpAvatar";
 

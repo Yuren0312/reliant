@@ -1,6 +1,6 @@
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { type MCPServer, type RecommendedServer, ConfigScope } from "../../api/mcp-grpc";
+import { type MCPServer, type RecommendedServer, ConfigScope } from "../../hooks/mcp-queries";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { MCPServerListItem } from "./MCPServerListItem";
