@@ -20,7 +20,7 @@ const result = (data: Partial<PanelResult> = {}): PanelResult => ({
   seriesTotal: 0, warnings: [], compiledSql: [], ...data,
 });
 const ready = (data: PanelResult) => ({ data, isLoading: false, error: null });
-const row = (group: Record<string, string>, values: number[]) => ({ group, values });
+const row = (group: Record<string, string>, values: (number | null)[]) => ({ group, values });
 
 const tables = [
   { dashboard: "active-users", id: "active-by-version", columns: ["users", "events"], rows: [row({ service: "reliant", version: "v1.2" }, [12, 120])] },
@@ -105,6 +105,18 @@ describe("SQL aggregate figures", () => {
     expect(screen.queryByTestId("obs-panel-table")).not.toBeInTheDocument();
   });
 
+  it("keeps null aggregates distinct from zero and does not invent comparisons", () => {
+    const data = result({ columns: ["zero", "missing", "negative"], rows: [row({}, [0, null, -2])] });
+    const { rerender } = render(<PanelBody panel={panel("nullable")} query={ready(data)} compare={{ query: ready(result({ columns: ["missing", "zero", "negative"], rows: [row({}, [5, 0, null])] })), label: "before", offsetSec: 3600 }} />);
+    const figures = screen.getByTestId("obs-panel-number");
+    expect(Array.from(figures.children).map((figure) => within(figure as HTMLElement).getAllByRole("definition")[0].textContent)).toEqual(["0", "—", "-2"]);
+    expect(screen.getAllByTestId("obs-panel-change")).toHaveLength(1);
+    expect(screen.getByTestId("obs-panel-change")).toHaveTextContent("no change vs before");
+    rerender(<PanelBody panel={panel("nullable")} query={ready(result({ columns: ["missing"], rows: [row({}, [null])] }))} />);
+    expect(screen.getByTestId("obs-panel-number")).toHaveTextContent("—");
+    expect(screen.queryByTestId("obs-panel-empty")).not.toBeInTheDocument();
+  });
+
   it("reuses units, comparisons and compact figures without guessing units from aliases", () => {
     const data = result({ columns: ["share"], rows: [row({}, [0.25])] });
     render(<PanelBody panel={panel("share", "percent")} query={ready(data)} compact compare={{ query: ready(result({ columns: ["share"], rows: [row({}, [0.2])] })), label: "previous period", offsetSec: 3600 }} />);
@@ -128,6 +140,21 @@ describe("SQL time series", () => {
     expect(vi.mocked(UPlotChart).mock.lastCall?.[0]).toMatchObject({ timestamps: [1000, 1060], series: expected, compact: false });
     rerender(<PanelBody panel={panel(id)} query={ready(data)} compact />);
     expect(vi.mocked(UPlotChart).mock.lastCall?.[0]).toMatchObject({ compact: true, height: 28, legend: false });
+  });
+
+  it("aligns sparse groups without losing zero, null gaps or a ratio alias", () => {
+    const series = [
+      { label: "ratio", group: { client: "web" }, timestamps: [1000, 1120], values: [0, null], value: null },
+      { label: "users", group: { client: "web", version: "v2" }, timestamps: [1060], values: [2], value: null },
+    ];
+    render(<PanelBody panel={panel("sparse")} query={ready(result({ series }))} />);
+    expect(vi.mocked(UPlotChart).mock.lastCall?.[0]).toMatchObject({
+      timestamps: [1000, 1060, 1120],
+      series: [
+        { label: "web — ratio", values: [0, null, null] },
+        { label: "web · v2 — users", values: [null, 2, null] },
+      ],
+    });
   });
 
   it("keeps both numeric column names in grouped legends and matches comparisons", () => {
