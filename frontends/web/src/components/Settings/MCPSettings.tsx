@@ -37,7 +37,7 @@ import { MCPTabs } from "./MCPTabs";
 import { MCPInstalledTab } from "./MCPInstalledTab";
 import { MCPDiscoverTab } from "./MCPDiscoverTab";
 import { MCPSetupWizard } from "./MCPSetupWizard";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
 type MainTab = "installed" | "discover";
@@ -703,7 +703,7 @@ export function MCPSettings() {
 
       {toolsModalServer && (
         <Modal
-          isOpen={true}
+          open={true}
           onClose={() => {
             setToolsModalServer(null);
             setToolsModalTools([]);
