@@ -22,6 +22,28 @@ func TestStaticAnalysisValidatesReferencedChildStructure(t *testing.T) {
 	assert.Contains(t, result.Error(), "child")
 }
 
+func TestStaticAnalysisChildAdvisoriesBelongToChild(t *testing.T) {
+	child, err := wfyaml.ParseWorkflow([]byte(`name: child
+entry: [a]
+nodes:
+  - {id: a, type: run, command: "true"}
+outputs:
+  result: "{{nodes.a}}"
+`))
+	require.NoError(t, err)
+	// A child's findings must not be interpreted as node locations on the
+	// parent canvas. Blocking errors are propagated, advisory warnings aren't.
+	childResult := StaticAnalysis(child, nil)
+	root := refChainWorkflow(t, "root", "project://child")
+	parentResult := StaticAnalysis(root, func(string) (*reliantv1.Workflow, error) { return child, nil })
+	assert.False(t, parentResult.HasErrors(), parentResult.Error())
+	for _, warning := range childResult.Warnings() {
+		for _, propagated := range parentResult.Warnings() {
+			assert.NotEqual(t, warning.Error(), propagated.Error())
+		}
+	}
+}
+
 func TestStaticAnalysisCachesDefinitionPerCanonicalRef(t *testing.T) {
 	root := refChainWorkflow(t, "root", "project://child")
 	child := refChainWorkflow(t, "child", "project://root")

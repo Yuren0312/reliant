@@ -112,7 +112,17 @@ func StaticAnalysisWithOptions(wf *reliantv1.Workflow, opts *ValidationOptions) 
 	result := NewResult()
 	for i := 0; i < len(queue); i++ {
 		options.CanonicalWorkflowRef = queue[i].ref
-		result.Merge(staticAnalysisOne(queue[i].wf, &options))
+		checked := staticAnalysisOne(queue[i].wf, &options)
+		if i == 0 {
+			result.Merge(checked)
+			continue
+		}
+		// Admission propagates blocking child errors. Advisory findings stay
+		// on the child's own validation surface: they are not findings on the
+		// parent canvas (whose node IDs and edit locations differ).
+		for _, issue := range checked.Errors() {
+			result.Add(issue)
+		}
 	}
 	return result
 }
