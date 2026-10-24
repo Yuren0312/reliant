@@ -45,7 +45,9 @@ func RedeemHostedHTTPActionTicket(ctx context.Context, db orm.Context, id, grant
  AND w.owner_user_id=t.owner_user_id AND c.user_id=t.owner_user_id
  AND p.user_id=t.owner_user_id AND c.project_id=t.project_id
  AND w.workflow_name=t.workflow_name
- RETURNING t.*`, id, grant, digest).Scan(ctx, &ticket)
+ RETURNING t.id, t.workflow_id, t.temporal_run_id, t.activity_id,
+ t.owner_user_id, t.project_id, t.workflow_name, t.node_id, t.grant_id,
+ t.request_sha256, t.created_at, t.expires_at, t.redeemed_at`, id, grant, digest).Scan(ctx, &ticket)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

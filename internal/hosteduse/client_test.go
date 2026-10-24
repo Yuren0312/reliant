@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -56,7 +56,7 @@ func (s *memoryStore) RedeemHostedHTTPActionTicket(_ context.Context, id, grant,
 
 func actionTest(t *testing.T, name string, fn func(context.Context) error) {
 	t.Helper()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivityWithOptions(fn, activity.RegisterOptions{Name: name})
 	_, err := env.ExecuteActivity(name)

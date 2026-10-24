@@ -735,6 +735,7 @@ message ActionArgs {
   // Mutually exclusive with connection; unavailable to integration tools.
   CelString hosted_use = 5 [(reliant) = {
     description: "Hosted HTTP use-grant reference for this fixed action"
+    example: "grant_approved_trader_staging"
     label: "Hosted use grant"
     visibility_contexts: "basic"
   }];

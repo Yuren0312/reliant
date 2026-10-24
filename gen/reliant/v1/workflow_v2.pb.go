@@ -8361,7 +8361,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01:m\x8a\xb5\x18i\n" +
-	"\vinvoke_tool\x12\bRun Tool\x1a?Run one tool you pick, with parameters you set; no LLM involved*\aagentic2\x06Hammer\"\xba\a\n" +
+	"\vinvoke_tool\x12\bRun Tool\x1a?Run one tool you pick, with parameters you set; no LLM involved*\aagentic2\x06Hammer\"\xda\a\n" +
 	"\n" +
 	"ActionArgs\x12\x8f\x01\n" +
 	"\x04uses\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBd\x82\xb5\x18`\n" +
@@ -8373,10 +8373,10 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"connection\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB\xa0\x01\x82\xb5\x18\x9b\x01\n" +
 	"^Id of the saved connection to authenticate with. Leave it empty to use your default connectionJ\n" +
 	"ConnectionZ\x05basic\x82\x01%conn_3f2a9c1e7b4d4e0f9a6c2b8d1e5f7a90R\n" +
-	"connection\x12\x8a\x01\n" +
+	"connection\x12\xaa\x01\n" +
 	"\n" +
-	"hosted_use\x18\x05 \x01(\v2\x15.reliant.v1.CelStringBT\x82\xb5\x18P\n" +
-	"5Hosted HTTP use-grant reference for this fixed actionJ\x10Hosted use grantZ\x05basicR\thostedUse\x1aO\n" +
+	"hosted_use\x18\x05 \x01(\v2\x15.reliant.v1.CelStringBt\x82\xb5\x18p\n" +
+	"5Hosted HTTP use-grant reference for this fixed actionJ\x10Hosted use grantZ\x05basic\x82\x01\x1dgrant_approved_trader_stagingR\thostedUse\x1aO\n" +
 	"\tWithEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01:\\\x8a\xb5\x18X\n" +
