@@ -8,7 +8,7 @@
  * (releaseParts), so the console has one button vocabulary.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Lock, Star } from "lucide-react";
 
 import Link from "@/components/forge-ui/link";
@@ -245,6 +245,26 @@ export function Menu({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [shift, setShift] = useState(0);
+  // Controls wrap at both card and viewport widths. Clamp the floating menu,
+  // not the whole toolbar: either fixed alignment can escape one of its edges.
+  useLayoutEffect(() => {
+    if (!open) { setShift(0); return; }
+    const position = () => {
+      const menu = menuRef.current;
+      const anchor = ref.current;
+      if (!menu || !anchor) return;
+      const box = anchor.getBoundingClientRect();
+      const width = menu.getBoundingClientRect().width;
+      const left = align === "left" ? box.left : box.right - width;
+      const clamped = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+      setShift(clamped - left);
+    };
+    position();
+    window.addEventListener("resize", position);
+    return () => window.removeEventListener("resize", position);
+  }, [open, align]);
   const escapeLayer = useEscapeLayer(open, () => setOpen(false));
   useEffect(() => {
     if (!open) return;
@@ -270,6 +290,8 @@ export function Menu({
       {open && (
         <div
           role="menu"
+          ref={menuRef}
+          style={{ transform: `translateX(${shift}px)` }}
           {...escapeLayer}
           className={cn(
             "absolute top-full z-50 mt-1 min-w-52 max-w-sm rounded-lg border border-border bg-surface p-1 text-left shadow-md",

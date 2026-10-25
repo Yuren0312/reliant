@@ -28,7 +28,7 @@ export function ViewerControls({ dashboard, scope, range, search, onSearch }: {
       {fields.length > 0 && <VariableSelect id="dashboard-breakdown" label="breakdown" value={search.breakdown ?? ""}
         options={[{ value: "", label: "Saved grouping" }, { value: "none", label: "None" }, ...fields.map((field) => ({ value: field, label: attributeKey(field) === "service.name" ? "Process (service.name)" : attributeLabel(attributeKey(field)) }))]}
         onChange={(value) => onSearch({ breakdown: value || undefined })} />}
-      {!!dashboard.sections?.length && <Menu label="Sections" trigger="Sections" triggerClassName={BUTTON_SMALL} testId="dashboard-sections"
+      {!!dashboard.sections?.length && <Menu label="Sections" trigger="Sections" align="left" triggerClassName={BUTTON_SMALL} testId="dashboard-sections"
         entries={dashboard.sections.map((section) => ({ label: section.title, multiple: true, checked: !search.hiddenSections?.includes(section.id),
           onSelect: () => onSearch({ hiddenSections: toggledHidden(search.hiddenSections, section.id) }),
         }))} />}
@@ -43,7 +43,7 @@ export function ViewerControls({ dashboard, scope, range, search, onSearch }: {
           onChange={(event) => onSearch({ alerts: event.target.checked ? undefined : false })} />
         Alert bands
       </label>
-      <Menu label="Metrics" trigger="Metrics" triggerClassName={BUTTON_SMALL} testId="dashboard-metrics"
+      <Menu label="Metrics" trigger="Metrics" align="left" triggerClassName={BUTTON_SMALL} testId="dashboard-metrics"
         entries={dashboard.panels.map((panel) => ({
           label: panel.title,
           multiple: true,

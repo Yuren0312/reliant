@@ -85,9 +85,20 @@ reload/share/back/forward 1/1. Updated wide/narrow screenshots are at
 probe reports no horizontal overflow. Fixture RPC/section controls were added
 after these screenshots, so refresh those during integration.
 
-Disk pressure then blocked new heavy starts again. The subsequent typed Cost
-discovery/adapter and NULL mapping checkpoint still needs scoped adapter/list/
-view tests, typecheck, ESLint, production build and affected gate after recovery.
+Integrated verification after capacity recovered (2026-10-25): frontend
+typecheck PASS; 19 scoped files / 235 tests PASS (Cost renderer/model, adapters,
+NULL-versus-zero, list, empty-roster route, viewer, Home and URL state); all 38
+authored TypeScript files ESLint PASS; affected web 280 files / 2685 tests PASS;
+production tsc+Vite build PASS. Chromium Cost suite 6/6 PASS includes actual
+selection → DashboardView → Cost renderer without deployments at 390/1440px,
+plus Cost light/dark at both widths. Viewer reload/share/back/forward 1/1 PASS
+includes open-menu viewport bounds at 540/1440px. This exposed and fixed viewer
+menus escaping under the sidebar or past the viewport edge; floating menus now
+clamp horizontally on open/resize. Latest viewer screenshots:
+`/tmp/dashboard-controls-1440.png`, `/tmp/dashboard-controls-540.png`. Cost
+selection screenshots are attached under `/tmp/reliant-organization-costs-playwright/`.
+
 `task test:affected LANES=web` is the actual gate in this Taskfile checkout (the
-older memory's Make target does not exist). No merge or deploy is authorized in
-this implementation wave.
+older memory's Make target does not exist). Parent still owns cross-contract
+scope pin/membership migration and CP review gates. No merge or deploy is
+authorized in this implementation wave.

@@ -39,6 +39,13 @@ test('dashboard viewer state survives share URL, reload and browser history', as
   for (const width of [1440, 540]) {
     await page.setViewportSize({ width, height: 1000 });
     await expect(page.getByTestId('dashboard-viewer-controls')).toBeVisible();
+    await page.getByTestId('dashboard-metrics').click();
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    const bounds = await menu.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+    await page.keyboard.press('Escape');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (process.env.OBS_SCREENSHOTS) await page.screenshot({ path: `${process.env.OBS_SCREENSHOTS}/dashboard-controls-${width}.png` });
   }
