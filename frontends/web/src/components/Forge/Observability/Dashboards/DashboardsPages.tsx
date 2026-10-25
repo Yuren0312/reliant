@@ -45,17 +45,17 @@ function useRecordedEnvs(): ObsEnvironment[] {
   );
 }
 
-/** Merge `next` into the current search without a history entry. */
-function useSearchUpdater<T extends object>() {
+/** Merge viewer state into the URL; dashboard controls keep browser history. */
+function useSearchUpdater<T extends object>(replace = true) {
   const navigate = useNavigate();
   return useCallback(
     (next: Partial<T>) =>
       void navigate({
         to: ".",
         search: (prev: Record<string, unknown>) => ({ ...prev, ...next }),
-        replace: true,
+        replace,
       }),
-    [navigate]
+    [navigate, replace]
   );
 }
 
@@ -169,7 +169,7 @@ export function DashboardPage() {
   const { forgeProject, env, setEnv } = useForgeConsole();
   const { kind, key = "" } = useParams({ strict: false }) as { kind?: string; key?: string };
   const raw = useSearch({ strict: false }) as Record<string, unknown>;
-  const onSearch = useSearchUpdater<DashboardSearch>();
+  const onSearch = useSearchUpdater<DashboardSearch>(false);
   const environments = useRecordedEnvs();
   const hrefs = useObservabilityHrefs();
   const navigateTo = useNavigateTo();
@@ -180,6 +180,15 @@ export function DashboardPage() {
   const search: DashboardSearch = {
     range: rangeParam(raw.range),
     service: typeof raw.service === "string" ? raw.service : undefined,
+    rpcService: typeof raw.rpcService === "string" ? raw.rpcService : undefined,
+    rpcMethod: typeof raw.rpcMethod === "string" ? raw.rpcMethod : undefined,
+    rpcProcedure: typeof raw.rpcProcedure === "string" ? raw.rpcProcedure : undefined,
+    variables: raw.variables && typeof raw.variables === "object" && !Array.isArray(raw.variables) ? raw.variables as Record<string, string> : undefined,
+    breakdown: typeof raw.breakdown === "string" ? raw.breakdown : undefined,
+    hiddenSections: Array.isArray(raw.hiddenSections) ? raw.hiddenSections.filter((id): id is string => typeof id === "string") : undefined,
+    hiddenPanels: Array.isArray(raw.hiddenPanels) ? raw.hiddenPanels.filter((id): id is string => typeof id === "string") : undefined,
+    releases: typeof raw.releases === "boolean" ? raw.releases : undefined,
+    alerts: typeof raw.alerts === "boolean" ? raw.alerts : undefined,
     compare: raw.compare === undefined ? undefined : compareParam(raw.compare),
     refresh: raw.refresh === undefined ? undefined : refreshParam(raw.refresh),
     tv: raw.tv === true || undefined,

@@ -174,6 +174,8 @@ export interface MenuEntry {
   separated?: boolean;
   /** The entry currently in effect (a picked interval). */
   checked?: boolean;
+  /** Independent choices, unlike an exclusive interval radio group. */
+  multiple?: boolean;
   testId?: string;
 }
 
@@ -201,7 +203,7 @@ function MenuItems({ entries, heading, close }: { entries: MenuEntry[]; heading?
             ) : (
               <button
                 type="button"
-                role={entry.checked !== undefined ? "menuitemradio" : "menuitem"}
+                role={entry.checked !== undefined ? (entry.multiple ? "menuitemcheckbox" : "menuitemradio") : "menuitem"}
                 aria-checked={entry.checked}
                 data-testid={entry.testId}
                 disabled={entry.disabled}

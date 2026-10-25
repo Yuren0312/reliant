@@ -143,6 +143,19 @@ export function refreshMs(interval: RefreshInterval): number | false {
 export interface DashboardSearch {
   range?: RangePreset;
   service?: string;
+  /** RPC attributes, NOT the deployed process's service.name. */
+  rpcService?: string;
+  rpcMethod?: string;
+  rpcProcedure?: string;
+  /** Other explicitly declared filter ids and their viewer values. */
+  variables?: Record<string, string>;
+  /** Absent: saved grouping. "none": explicitly ungrouped. Otherwise a supported semantic field. */
+  breakdown?: string;
+  hiddenSections?: string[];
+  hiddenPanels?: string[];
+  /** Absent: on, when supported by the dashboard. */
+  releases?: boolean;
+  alerts?: boolean;
   compare?: CompareMode;
   refresh?: RefreshInterval;
   /** Full screen, for a wall display. */

@@ -193,6 +193,20 @@ describe("variables, compare, refresh, share, full screen", () => {
     await waitFor(() => expect(screen.queryByTestId("dashboard-tv")).not.toBeInTheDocument());
   });
 
+  it("keeps annotation and metric visibility in viewer state without saving", async () => {
+    const user = userEvent.setup();
+    const { onCall, current } = renderDashboard(ref("workspace", "checkout-latency"));
+    await screen.findByTestId("dashboard-grid");
+    await user.click(screen.getByRole("checkbox", { name: "Release markers" }));
+    await user.click(screen.getByRole("checkbox", { name: "Alert bands" }));
+    expect(current()).toMatchObject({ releases: false, alerts: false });
+    await user.click(screen.getByTestId("dashboard-metrics"));
+    await user.click(screen.getByRole("menuitemcheckbox", { name: /p95 latency by route/ }));
+    expect(current().hiddenPanels).toContain("latency-by-route");
+    expect(screen.queryByTestId("dashboard-panel-latency-by-route")).not.toBeInTheDocument();
+    expect(calls(onCall, "SaveDashboard")).toHaveLength(0);
+  });
+
   it("drills from a series into Logs, Traces and the workload", async () => {
     const user = userEvent.setup();
     renderDashboard(ref("workspace", "checkout-latency"));
