@@ -110,9 +110,18 @@ describe("one session", () => {
     await waitFor(() => expect(screen.getByTestId("replay-player")).toHaveAttribute("data-state", "ready"));
     expect(screen.getByTestId("replay-masked-badge")).toBeInTheDocument();
     // The fixture recording is masked as recorded: no readable page text reaches the Replayer.
-    const recorded = JSON.stringify(FakeReplayer.last().events);
-    expect(recorded).not.toMatch(/Checkout|Pay now|4242/);
-    expect(recorded).toContain("********");
+    // Assert over every string payload (including nested snapshot text and
+    // input/attribute values), not timestamps or numeric node/position IDs.
+    // A real wall-clock timestamp can legitimately contain the digits 4242.
+    const payloadStrings: string[] = [];
+    const collectStrings = (value: unknown): void => {
+      if (typeof value === "string") payloadStrings.push(value);
+      else if (Array.isArray(value)) value.forEach(collectStrings);
+      else if (value && typeof value === "object") Object.values(value).forEach(collectStrings);
+    };
+    FakeReplayer.last().events.forEach(collectStrings);
+    expect(payloadStrings.join("\n")).not.toMatch(/Checkout|Pay now|4242/);
+    expect(payloadStrings.join("\n")).toContain("********");
 
     const timeline = screen.getByTestId("session-timeline");
     expect(within(timeline).getAllByTestId(/^session-entry-/).length).toBeGreaterThan(4);

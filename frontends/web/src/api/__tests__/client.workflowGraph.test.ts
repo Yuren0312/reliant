@@ -11,6 +11,11 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { api } from '../client'
+
+// Load the client during module collection, not inside the first assertion's
+// timeout. Its transitive graph is large; cold transformation under load must
+// not poison the module for every later mapping assertion. vi.mock is hoisted.
 
 const mocks = vi.hoisted(() => ({
   listWorkflows: vi.fn(),
@@ -45,7 +50,6 @@ describe('api.workflows.list', () => {
   })
 
   it('carries the graph through, not just the step count', async () => {
-    const { api } = await import('../client')
     const { workflows } = await api.workflows.list('project-1')
 
     expect(workflows[0].nodes).toHaveLength(17)
@@ -55,7 +59,6 @@ describe('api.workflows.list', () => {
   it('keeps step_count and the graph in agreement', async () => {
     // The whole bug was these two disagreeing. A workflow that reports N steps
     // must carry N nodes, or two screens describe the same thing differently.
-    const { api } = await import('../client')
     const { workflows } = await api.workflows.list('project-1')
 
     const wf = workflows[0]
@@ -63,7 +66,6 @@ describe('api.workflows.list', () => {
   })
 
   it('still maps the descriptive fields it always did', async () => {
-    const { api } = await import('../client')
     const { workflows } = await api.workflows.list('project-1')
 
     expect(workflows[0]).toMatchObject({
@@ -84,7 +86,6 @@ describe('api.workflows.list', () => {
       { ...wireWorkflow(), stepCount: 0, nodes: undefined, edges: undefined },
     ])
 
-    const { api } = await import('../client')
     const { workflows } = await api.workflows.list('project-1')
 
     expect(workflows[0].nodes).toBeUndefined()
