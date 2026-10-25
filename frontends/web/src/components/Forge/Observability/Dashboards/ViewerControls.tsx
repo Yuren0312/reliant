@@ -34,7 +34,7 @@ export function ViewerControls({ dashboard, scope, range, search, onSearch }: {
         }))} />}
 
       <label className="flex min-h-11 items-center gap-2 text-sm">
-        <input type="checkbox" checked={search.releases !== false} disabled={!marksReleases(dashboard)}
+        <input type="checkbox" checked={marksReleases(dashboard) && search.releases !== false} disabled={!marksReleases(dashboard)}
           onChange={(event) => onSearch({ releases: event.target.checked ? undefined : false })} />
         Release markers
       </label>
@@ -48,7 +48,7 @@ export function ViewerControls({ dashboard, scope, range, search, onSearch }: {
           label: panel.title,
           multiple: true,
           checked: !search.hiddenPanels?.includes(panel.id),
-          detail: dashboard.sections?.find((section) => section.id === panel.section)?.title,
+          detail: panel.section && search.hiddenSections?.includes(panel.section) ? "Section hidden" : dashboard.sections?.find((section) => section.id === panel.section)?.title,
           onSelect: () => onSearch({ hiddenPanels: toggledHidden(search.hiddenPanels, panel.id) }),
         }))} />
       <span className="text-sm text-muted-foreground">Shared in the URL. Saved dashboard unchanged.</span>
@@ -85,6 +85,6 @@ function ViewerFilter({ filter, scope, range, search, onSearch }: {
           onSearch({ variables: Object.keys(variables).length ? variables : undefined });
         }
       }} />
-    {values.error && <span className="text-sm text-muted-foreground" role="status">Values unavailable</span>}
+    {!!values.error && <span className="text-sm text-muted-foreground" role="status">Values unavailable</span>}
   </div>;
 }

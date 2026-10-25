@@ -164,6 +164,21 @@ describe("variables, compare, refresh, share, full screen", () => {
     expect(await screen.findAllByTestId("obs-panel-change")).not.toHaveLength(0);
   });
 
+  it("applies declared RPC filters only to their panels and queries none grouping explicitly", async () => {
+    const { onCall } = renderDashboard(ref("workspace", "checkout-latency"), { rpcService: "pkg.Service", rpcMethod: "Get", breakdown: "none" });
+    await screen.findByTestId("dashboard-grid");
+    await waitFor(() => expect(calls(onCall, "QueryPanel").length).toBeGreaterThan(0));
+    const requests = calls(onCall, "QueryPanel");
+    const rpc = requests.find((request) => request.panel.id === "latency-by-route");
+    expect(rpc.panel).toMatchObject({ groupBy: [], where: expect.arrayContaining([
+      { field: "span.attr.rpc.service", op: "eq", value: "pkg.Service" },
+      { field: "span.attr.rpc.method", op: "eq", value: "Get" },
+    ]) });
+    const experience = requests.find((request) => request.panel.id === "conversion");
+    expect(experience.panel.where).toBeUndefined();
+    expect(calls(onCall, "SaveDashboard")).toHaveLength(0);
+  });
+
   it("compares with the previous release, and says why it cannot across every environment", async () => {
     renderDashboard(ref("workspace", "checkout-latency"), { compare: "release" });
     expect(await screen.findByTestId("dashboard-compare-release")).toHaveTextContent("before v1.8.3 reached prod");

@@ -7,6 +7,8 @@ import { renderWithApi } from "../../__tests__/obsTestUtils";
 import type { Dashboard } from "@/services/controlPlane/observability/types";
 import { ViewerControls } from "../ViewerControls";
 
+vi.mock("uplot", async () => (await import("../../__tests__/obsMocks")).obsMocks.uplot());
+
 const dashboard: Dashboard = {
   id: "health", title: "Health", filters: [], annotations: [{ source: "releases" }],
   sections: [{ id: "activity", title: "Activity" }, { id: "financial", title: "Financial" }],
