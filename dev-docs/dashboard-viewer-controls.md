@@ -52,7 +52,9 @@ Discovery uses `DashboardSource.BUILTIN = 5`, key `org-costs`, and
 This is a dedicated organization view, not a telemetry panel or SQL dashboard.
 It requires live explicit `billing:read`, not billing-management permission.
 
-Implement its renderer after generated CP bindings are integrated. Use the typed
+Generated CP bindings are synced in `490fa24e`; adapter/discovery routing and
+NULL mapping are checkpointed in `7a0511ed`. The renderer is parallel-owned.
+Use the typed
 period/source/allowance records; distinguish actual consumption, list-equivalent,
 credit grants, pending estimates and unmeasured amounts. No grand total across
 periods; absent amounts are not zero. Show source coverage, limitations,
@@ -75,7 +77,17 @@ Responsive fixture screenshots: `/tmp/dashboard-controls-wide.png` (1440px),
 `/tmp/dashboard-controls-narrow.png` (540px). These screenshots precede the final
 metadata controls and must be refreshed after integration.
 
-The machine filled to 100% while other work ran. Heavy starts were refused;
-parent instructed a pause. New targeting/section tests and final typecheck,
-ESLint, build and affected gate still need to run after disk recovery. No merge
-or deploy is authorized in this implementation wave.
+The machine filled to 100% while other work ran. After a brief recovery, the
+controls gate passed: scoped 6 files / 78 tests; affected web 88 files / 1002
+tests; production `npm run build` (tsc + Vite); touched-file ESLint; Playwright
+reload/share/back/forward 1/1. Updated wide/narrow screenshots are at
+`/tmp/dashboard-controls-final-{wide,narrow}.png`; the 540px browser overflow
+probe reports no horizontal overflow. Fixture RPC/section controls were added
+after these screenshots, so refresh those during integration.
+
+Disk pressure then blocked new heavy starts again. The subsequent typed Cost
+discovery/adapter and NULL mapping checkpoint still needs scoped adapter/list/
+view tests, typecheck, ESLint, production build and affected gate after recovery.
+`task test:affected LANES=web` is the actual gate in this Taskfile checkout (the
+older memory's Make target does not exist). No merge or deploy is authorized in
+this implementation wave.
