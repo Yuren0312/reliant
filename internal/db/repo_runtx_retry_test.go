@@ -45,6 +45,8 @@ func recordRetryBackoff(repo *Repo) *[]time.Duration {
 // This test keeps the REAL sleep (two short backoffs, ~150ms), so the
 // production time.Sleep path is exercised somewhere.
 func TestRunTx_RetriesUntilSuccess(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -72,11 +74,58 @@ func TestRunTx_RetriesUntilSuccess(t *testing.T) {
 	}
 }
 
+// A transaction whose caller's context has ended is a cancellation, not a
+// database failure: RunTx stops at once instead of spending its retry budget
+// (each attempt would fail the same way), and returns the context's error so
+// the caller can tell what happened. In prod (2026-10-23) every starved
+// activity logged "Failed to begin transaction" at ERROR while Postgres idled.
+func TestRunTx_StopsWhenTheCallersContextEnds(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	backoffs := recordRetryBackoff(repo)
+
+	t.Run("already expired: BEGIN fails, nothing runs", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+		ran := false
+		err := repo.RunTx(ctx, orm.Serializable, func(context.Context) error { ran = true; return nil })
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("RunTx on an expired context = %v, want context.DeadlineExceeded", err)
+		}
+		if ran {
+			t.Fatal("the transaction body ran on an expired context")
+		}
+	})
+
+	t.Run("ends mid-transaction: one attempt, no retries", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		attempts := 0
+		err := repo.RunTx(ctx, orm.Serializable, func(context.Context) error {
+			attempts++
+			cancel()
+			// A retryable error, so only the ended context stops the ladder.
+			return serializationFailure()
+		})
+		if err == nil {
+			t.Fatal("RunTx must fail")
+		}
+		if attempts != 1 {
+			t.Fatalf("a transaction whose context ended was attempted %d times, want 1", attempts)
+		}
+	})
+	if len(*backoffs) != 0 {
+		t.Fatalf("RunTx backed off %d times for a context that had ended", len(*backoffs))
+	}
+}
+
 // The retry budget must be bounded and must match orm.Serializable's — the
 // same maxRetries+1 attempts RunTx ran before it took a level. An unbounded
 // retry loop under contention is worse than failing: it holds a connection and
 // multiplies the load that caused the conflict.
 func TestRunTx_StopsAtMaxRetries(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	recordRetryBackoff(repo)
@@ -107,6 +156,8 @@ func TestRunTx_StopsAtMaxRetries(t *testing.T) {
 // READ COMMITTED when the caller asked for attempts, and one attempt returns
 // the raw conflict verbatim — what a contention measurement needs.
 func TestRunTx_BudgetFollowsThePolicy(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	recordRetryBackoff(repo)
@@ -147,6 +198,8 @@ func TestRunTx_BudgetFollowsThePolicy(t *testing.T) {
 // A policy that names no level is refused before anything is begun, naming
 // the line that called RunTx.
 func TestRunTx_RefusesAPolicyWithNoLevel(t *testing.T) {
+	t.Parallel()
+
 	ran := false
 	err := (&Repo{}).RunTx(context.Background(), orm.Isolation(0), func(context.Context) error { ran = true; return nil })
 	if !errors.Is(err, orm.ErrInvalidTxOptions) {
@@ -164,6 +217,8 @@ func TestRunTx_RefusesAPolicyWithNoLevel(t *testing.T) {
 // business error (a validation failure, a missing row) wastes the budget and
 // delays the caller's error by the full backoff ladder.
 func TestRunTx_DoesNotRetryNonRetryable(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -194,6 +249,8 @@ func TestRunTx_DoesNotRetryNonRetryable(t *testing.T) {
 //
 // Wrapping with %w preserves the chain and costs nothing.
 func TestRunTx_ExhaustionPreservesErrorChain(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	recordRetryBackoff(repo)
@@ -222,6 +279,8 @@ func TestRunTx_ExhaustionPreservesErrorChain(t *testing.T) {
 // already-aborted transaction can only fail again. The outer call owns the
 // retry.
 func TestRunTx_NestedDoesNotRetryIndependently(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -257,6 +316,8 @@ func TestRunTx_NestedDoesNotRetryIndependently(t *testing.T) {
 // pins more than wall-clock gaps could: exactly one backoff before each retry,
 // none before the first attempt, each on the capped exponential ladder.
 func TestRunTx_BacksOffBetweenRetries(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	backoffs := recordRetryBackoff(repo)
@@ -281,6 +342,8 @@ func TestRunTx_BacksOffBetweenRetries(t *testing.T) {
 // The retry loop must respect context cancellation rather than burning the
 // full backoff ladder on a caller that has already given up.
 func TestRunTx_HonorsContextCancellation(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -315,6 +378,8 @@ func TestRunTx_HonorsContextCancellation(t *testing.T) {
 // live code actually has, so that if someone "fixes" the loop bounds and makes
 // the tail reachable, they are forced to notice it must wrap with %w.
 func TestRunTx_ExhaustionReturnsUnflattenedError(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	recordRetryBackoff(repo)

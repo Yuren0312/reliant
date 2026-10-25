@@ -8,9 +8,12 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 func TestUpdateStreamCountersAreScoped(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -46,6 +49,8 @@ func TestUpdateStreamCountersAreScoped(t *testing.T) {
 }
 
 func TestUserUpdateCounterRollsBackWithLedgerWrite(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -83,6 +88,8 @@ func TestUserUpdateCounterRollsBackWithLedgerWrite(t *testing.T) {
 }
 
 func TestChatUpdateCounterRollsBackWithLedgerWrite(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -112,6 +119,9 @@ func TestChatUpdateCounterRollsBackWithLedgerWrite(t *testing.T) {
 }
 
 func TestConcurrentChatUpdatesAreContiguous(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -160,6 +170,8 @@ func TestConcurrentChatUpdatesAreContiguous(t *testing.T) {
 }
 
 func TestUpdateNotificationsRunOnlyAfterOutermostCommit(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 

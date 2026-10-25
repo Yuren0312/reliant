@@ -20,7 +20,7 @@ import (
 // presets column. getSpawnTool alone (every orchestrating turn) was 3.3 GB of
 // worker allocation per 22 minutes.
 type fullConfigRowReads struct {
-	db.Repository
+	*db.Repo
 
 	mu      sync.Mutex
 	callers []string
@@ -31,12 +31,14 @@ func (r *fullConfigRowReads) GetProjectConfigRecord(ctx context.Context, project
 	r.mu.Lock()
 	r.callers = append(r.callers, runtime.FuncForPC(pc).Name())
 	r.mu.Unlock()
-	return r.Repository.GetProjectConfigRecord(ctx, projectID)
+	return r.Repo.GetProjectConfigRecord(ctx, projectID)
 }
 
 // The worker's preset paths read only the presets column — and a project
 // preset, which lives in that column, is still found by each of them.
 func TestWorkerPresetPathsReadOnlyThePresetsColumn(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	ctx := context.Background()
 
@@ -46,7 +48,7 @@ func TestWorkerPresetPathsReadOnlyThePresetsColumn(t *testing.T) {
 		ProjectID: "test-project", DaemonID: "daemon-1",
 		ProjectPresetsJSON: &presets, ProjectSkillsJSON: &skills,
 	}))
-	spy := &fullConfigRowReads{Repository: repo}
+	spy := &fullConfigRowReads{Repo: repo}
 
 	// CallLLM: the spawn tool's description lists the project preset's own.
 	spawn := (&CallLLMActivity{repo: spy}).getSpawnTool(ctx, "test-project", &SpawnConfig{Presets: []string{"project-reviewer"}})

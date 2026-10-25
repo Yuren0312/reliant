@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
 
 // A message queued to a paused chat resumes it. Prod, chat adcee226
@@ -105,6 +106,8 @@ func (fx pausedAgentMessageFixture) send(t *testing.T, threadID, body string) *r
 }
 
 func TestSendAgentMessage_PausedChatIsResumedForAMessageToItsRoot(t *testing.T) {
+	t.Parallel()
+
 	fx := setupPausedAgentMessageFixture(t)
 
 	resp := fx.send(t, fx.rootThreadID, "continue")
@@ -128,6 +131,8 @@ func TestSendAgentMessage_PausedChatIsResumedForAMessageToItsRoot(t *testing.T) 
 // The pause is the chat's, not the thread's: every thread runs in the chat's
 // one execution. A message to a paused sub-agent resumes that execution.
 func TestSendAgentMessage_PausedChatIsResumedForAMessageToASubAgent(t *testing.T) {
+	t.Parallel()
+
 	fx := setupPausedAgentMessageFixture(t)
 
 	resp := fx.send(t, fx.childThreadID, "continue")
@@ -153,6 +158,8 @@ func TestSendAgentMessage_PausedChatIsResumedForAMessageToASubAgent(t *testing.T
 // A run that is not paused is not resumed: a live run's doorbell is its whole
 // delivery.
 func TestSendAgentMessage_RunningChatIsOnlyWoken(t *testing.T) {
+	t.Parallel()
+
 	fx := setupPausedAgentMessageFixture(t)
 	require.NoError(t, fx.repo.UpdateWorkflowStatus(fx.ctx, fx.rootThreadID, db.Active()))
 	require.NoError(t, fx.repo.UpdateWorkflowStatus(fx.ctx, fx.childThreadID, db.Active()))
@@ -168,6 +175,8 @@ func TestSendAgentMessage_RunningChatIsOnlyWoken(t *testing.T) {
 // promised a delivery: the row is withdrawn and the user told to send the
 // message to the chat, whose SendMessage recovers the run at its position.
 func TestSendAgentMessage_PausedChatThatCannotResumeWithdrawsTheMessage(t *testing.T) {
+	t.Parallel()
+
 	fx := setupPausedAgentMessageFixture(t)
 	fx.pause.resumeErr = fmt.Errorf("resume: %w", workflow.ErrWorkflowNotFound)
 
@@ -179,4 +188,29 @@ func TestSendAgentMessage_PausedChatThatCannotResumeWithdrawsTheMessage(t *testi
 	require.NoError(t, err)
 	assert.Empty(t, queued, "a message nothing will deliver must not stay queued")
 	assert.Empty(t, threadWakeSignals(fx.temporal.signals), "nothing is woken for a withdrawn message")
+}
+
+// The answer to an async question (the question service sends it under
+// threadwake.WithoutQuestionYield) rings a doorbell that is not the user's: it
+// answers that question, so a thread parked on a different, blocking one must
+// keep waiting on it rather than close it unanswered.
+func TestSendAgentMessage_AsyncAnswerDoorbellDoesNotYieldQuestions(t *testing.T) {
+	t.Parallel()
+
+	fx := setupPausedAgentMessageFixture(t)
+	require.NoError(t, fx.repo.UpdateWorkflowStatus(fx.ctx, fx.rootThreadID, db.Active()))
+	require.NoError(t, fx.repo.UpdateWorkflowStatus(fx.ctx, fx.childThreadID, db.Active()))
+
+	resp, err := fx.service.SendAgentMessage(threadwake.WithoutQuestionYield(fx.ctx), connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "Answer to the question you asked without waiting",
+	}))
+	require.NoError(t, err)
+	require.True(t, resp.Msg.Success, "got: %s", resp.Msg.Message)
+
+	wakes := threadWakeSignals(fx.temporal.signals)
+	require.Len(t, wakes, 1, "the thread is still woken, like any mail")
+	sig, ok := wakes[0].Arg.(v2.ThreadWakeSignal)
+	require.True(t, ok)
+	assert.Equal(t, fx.childThreadID, sig.Thread)
+	assert.False(t, sig.FromUser, "an async answer's doorbell must not make a blocking question's wait yield")
 }

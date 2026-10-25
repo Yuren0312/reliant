@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -25,10 +26,12 @@ import (
 // context.Background() — never the activity's transaction, exactly as the
 // reconciler would — and keeps whatever that pass reaped.
 type reapingRepo struct {
-	db.Repository
+	*db.Repo
 	t      *testing.T
 	reaped []db.ReapedThread
 }
+
+var _ WorkflowStatusStore = (*reapingRepo)(nil)
 
 func (r *reapingRepo) reconcilerPass() {
 	reaped, err := r.ReapOrphanedThreads(context.Background())
@@ -44,22 +47,22 @@ func (r *reapingRepo) around(write func() error) error {
 }
 
 func (r *reapingRepo) UpdateWorkflowStatus(ctx context.Context, id string, status db.WorkflowStatus) error {
-	return r.around(func() error { return r.Repository.UpdateWorkflowStatus(ctx, id, status) })
+	return r.around(func() error { return r.Repo.UpdateWorkflowStatus(ctx, id, status) })
 }
 
 func (r *reapingRepo) CascadeTerminalStatusToDescendants(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error {
-	return r.around(func() error { return r.Repository.CascadeTerminalStatusToDescendants(ctx, workflowID, reason) })
+	return r.around(func() error { return r.Repo.CascadeTerminalStatusToDescendants(ctx, workflowID, reason) })
 }
 
 func (r *reapingRepo) CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error {
-	return r.around(func() error { return r.Repository.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, reason) })
+	return r.around(func() error { return r.Repo.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, reason) })
 }
 
 func (r *reapingRepo) ReviveThread(ctx context.Context, threadID string) (int64, error) {
 	var revived int64
 	err := r.around(func() error {
 		var err error
-		revived, err = r.Repository.ReviveThread(ctx, threadID)
+		revived, err = r.Repo.ReviveThread(ctx, threadID)
 		return err
 	})
 	return revived, err
@@ -83,6 +86,8 @@ func (r *reapingRepo) reapedIn(chatID string) []db.ReapedThread {
 // then executed behind a thread reading completed — the state ReviveThread
 // exists to prevent — while the reap paged as a missed cascade.
 func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -110,7 +115,7 @@ func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(
 	require.Equal(t, db.ThreadStatusCompleted, thread.Status, "precondition: turn 1 closed the thread")
 
 	// Turn 2 starts with a reconciler pass between every write.
-	repo := &reapingRepo{Repository: h.Repo(), t: t}
+	repo := &reapingRepo{Repo: h.Repo(), t: t}
 	interleaved := NewWorkflowStatusActivity(repo)
 	require.NoError(t, h.ExecuteActivity(interleaved.Execute, turn("started"), &output))
 
@@ -131,6 +136,9 @@ func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(
 // terminal workflow over running threads and reaped them as a missed cascade
 // — an ERROR that paged for a run whose cascade was one statement away.
 func TestWorkflowStatus_TerminalArmsCascadeInTheStatusCommit(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
+	t.Parallel()
+
 	for _, tc := range []struct {
 		status     string
 		wantThread db.ThreadStatus
@@ -174,7 +182,7 @@ func TestWorkflowStatus_TerminalArmsCascadeInTheStatusCommit(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			repo := &reapingRepo{Repository: h.Repo(), t: t}
+			repo := &reapingRepo{Repo: h.Repo(), t: t}
 			interleaved := NewWorkflowStatusActivity(repo)
 			input.Status = tc.status
 			require.NoError(t, h.ExecuteActivity(interleaved.Execute, input, &output))

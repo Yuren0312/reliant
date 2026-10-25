@@ -9,6 +9,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -37,6 +39,8 @@ func stopSubAgent(t *testing.T, repo *db.Repo, ctx context.Context, fx sendAgent
 }
 
 func TestSendAgentMessage_ResumesSubAgentThatStoppedOnAFailure(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -71,6 +75,8 @@ func TestSendAgentMessage_ResumesSubAgentThatStoppedOnAFailure(t *testing.T) {
 
 // A sub-agent the user stopped is finished: today's refusal stands.
 func TestSendAgentMessage_SubAgentStoppedByTheUserStaysFinished(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
 
@@ -109,6 +115,9 @@ func stoppedSpawnRun(t *testing.T, repo *db.Repo, ctx context.Context, fx sendAg
 // anything else, and its root waits on the agent's report before taking a
 // turn. (It used to be refused: "this chat's run has since ended".)
 func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *testing.T) {
+	testkit.Slow(t, "a DB-backed chat handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -122,11 +131,13 @@ func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *
 	chat.WorkflowName = &workflowName
 	require.NoError(t, repo.UpdateChat(ctx, chat))
 
-	// The completed run's inputs, which its successor continues with.
+	// The completed run's inputs as the chat's selection records them: its
+	// successor continues with them. The closed run itself refuses a query.
 	temporal := &closingRunTemporalClient{closed: true, lastInputs: map[string]interface{}{
 		"model":              map[string]interface{}{"id": "mock"},
 		v2.InputKeyLaunchRun: true,
 	}}
+	seedSelection(t, ctx, repo, fx.chatID, "test-user", workflowName, map[string]any{"model": map[string]any{"id": "mock"}})
 	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "the limit has reset; carry on",
 	}))
@@ -147,6 +158,7 @@ func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *
 	assert.Equal(t, fx.rootThreadID, run.input.ExecContext.Thread)
 	require.NotNil(t, run.input.Resume, "the chat's run is resumed, not started over at graph entry")
 	assert.True(t, run.input.Resume.AwaitSpawnsFirst, "its root waits on the resumed agent before taking a turn")
+	assert.True(t, run.input.Resume.ResumeAllStopped, "resuming one portion also resumes its unfinished siblings")
 	require.Len(t, run.input.Resume.ResumeStopped, 1)
 	resumed := run.input.Resume.ResumeStopped[0]
 	assert.Equal(t, "tc-stopped", resumed.ToolCallID)
@@ -154,7 +166,7 @@ func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *
 	assert.Equal(t, fx.childThreadID, resumed.ChildWorkflowID)
 	assert.Equal(t, fx.rootThreadID, resumed.ParentThread)
 	assert.Equal(t, "general", resumed.Preset)
-	assert.Equal(t, map[string]interface{}{"id": "mock"}, run.input.Inputs["model"], "it runs on the completed run's own inputs")
+	assert.Equal(t, map[string]interface{}{"id": "mock"}, run.input.Inputs["model"], "it runs on what the completed run was running on")
 	assert.NotContains(t, run.input.Inputs, v2.InputKeyLaunchRun, "it answers a person, not whatever launched the chat")
 }
 
@@ -162,6 +174,8 @@ func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *
 // parent, which is not running: it is resumed second. The user is told which
 // agent to message first, and nothing is queued.
 func TestSendAgentMessage_StoppedSubAgentOfAStoppedParentSaysToResumeTheParentFirst(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
 
@@ -192,6 +206,8 @@ func TestSendAgentMessage_StoppedSubAgentOfAStoppedParentSaysToResumeTheParentFi
 // over the way a live agent's can — the row is withdrawn and the user told,
 // rather than left queued behind a receipt nothing will honour.
 func TestSendAgentMessage_StoppedSubAgentThatCannotBeWokenIsNotLeftQueued(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -215,6 +231,8 @@ func TestSendAgentMessage_StoppedSubAgentThatCannotBeWokenIsNotLeftQueued(t *tes
 // provider is how a user gets past a usage limit before resuming it. A
 // finished agent has no next run for params to apply to.
 func TestThreadAcceptsParamUpdate_StoppedSubAgentDoesAFinishedOneDoesNot(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -233,11 +251,11 @@ func TestThreadAcceptsParamUpdate_StoppedSubAgentDoesAFinishedOneDoesNot(t *test
 	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.Completed()))
 	err = service.threadAcceptsParamUpdate(ctx, chat, fx.childThreadID)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "nothing will resume it once the chat's run has ended")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "nothing will resume it once the chat's run has ended")
 	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.Active()))
 
 	stopSubAgent(t, repo, ctx, fx, db.ThreadStatusCompleted, db.Completed())
 	err = service.threadAcceptsParamUpdate(ctx, chat, fx.childThreadID)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "a finished agent has no next run")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "a finished agent has no next run")
 }

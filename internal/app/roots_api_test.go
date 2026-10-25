@@ -32,7 +32,7 @@ func TestAPIStopsTakingCallsFirst(t *testing.T) {
 		"worktree_sweeper",
 		"queued_delivery",
 		"daemon_events_consumer",
-		"git_hub_access_loop",
+		"github_access_loop",
 		"workflow_reconciler",
 		"reliant_key_sweep",
 		"payload_gc",
@@ -49,7 +49,7 @@ func TestAPIStopsTakingCallsFirst(t *testing.T) {
 
 	loops := []string{
 		"trigger_redriver", "trigger_reconciler", "trigger_schedule_sync", "worktree_sweeper", "queued_delivery",
-		"daemon_events_consumer", "git_hub_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc",
+		"daemon_events_consumer", "github_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc",
 	}
 	for _, n := range plan {
 		switch {
@@ -85,13 +85,13 @@ func TestAPIReadiness(t *testing.T) {
 }
 
 // The process-wide state is installed before anything could read it: the
-// api-server's own config, validated, and the config-only settings before
+// api-server's own config and the config-only settings before
 // every other node, the database-backed globals (the LLM key provider and
 // Reliant-key healer, analytics, the error reporter) right after the
 // database they read.
 func TestAPIInstallsProcessStateFirst(t *testing.T) {
 	names := PlanAPI().Names()
-	require.Equal(t, []string{"probe_listener", "api_settings", "integration_settings", "process_settings", "db_repo", "process_runtime"}, names[:6])
+	require.Equal(t, []string{"probe_listener", "api_settings", "integration_settings", "process_settings", "db_repo", "database", "process_runtime"}, names[:7])
 }
 
 // The api root reaches only the api's variants: never the worker's router —
@@ -111,9 +111,9 @@ func TestAPIVariantsStayInTheAPI(t *testing.T) {
 	for _, name := range []string{
 		"api_settings", "api_daemon_router", "api_tools_factory", "api_catalog_search", "api_connections",
 		"user_auth", "user_chain", "user_routes", "http_routes", "api_listener", "api_debug_server",
-		"reset_guard", "queued_deliverer", "git_hub_access", "trigger_inbound", "trigger_senders",
+		"reset_guard", "queued_deliverer", "github_access", "trigger_inbound", "trigger_senders",
 		"trigger_redriver", "trigger_reconciler", "trigger_schedule_sync", "worktree_sweeper", "queued_delivery",
-		"daemon_events_consumer", "git_hub_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc",
+		"daemon_events_consumer", "github_access_loop", "workflow_reconciler", "reliant_key_sweep", "payload_gc",
 	} {
 		require.Contains(t, api, name)
 		require.False(t, slices.Contains(others, name), "another root builds the api's %s", name)

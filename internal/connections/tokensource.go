@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/oauth2"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 	"golang.org/x/sync/singleflight"
@@ -23,7 +24,7 @@ const refreshWindow = 60 * time.Second
 type tokenStore interface {
 	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
 	GetSecrets(ctx context.Context, userID, id string) (map[string]core.ConnectionSecret, error)
-	WithSecretsLock(ctx context.Context, userID, id string, fn func(core.SecretsTx) error) error
+	WithSecretsLock(ctx context.Context, userID, id string, fn func(*db.SecretsTx) error) error
 	AppendConnectionEvent(ctx context.Context, ev core.ConnectionEvent) error
 }
 
@@ -126,7 +127,7 @@ func (s *TokenSource) RefreshAfterRejection(ctx context.Context, userID, connect
 	s.Forget(connectionID)
 	if conn.AuthKind != core.ConnectionAuthOAuth2 {
 		var marked error
-		if err := s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx core.SecretsTx) error {
+		if err := s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx *db.SecretsTx) error {
 			marked = s.markNeedsReauth(ctx, tx, conn, "rejected")
 			return nil
 		}); err != nil {
@@ -253,13 +254,49 @@ func (s *TokenSource) refresh(ctx context.Context, conn *core.Connection, seenGe
 	v, err, _ := s.flight.Do(key, func() (any, error) {
 		// The shared call must not die with the first caller's context, or one
 		// cancelled caller fails every waiter.
-		return s.refreshLocked(context.WithoutCancel(ctx), conn, seenGeneration)
+		ctx := context.WithoutCancel(ctx)
+		if r, ok, err := s.alreadyReplaced(ctx, conn, seenGeneration); err != nil || ok {
+			return r, err
+		}
+		return s.refreshLocked(ctx, conn, seenGeneration)
 	})
 	if err != nil {
 		return vault.Secret{}, 0, err
 	}
 	r := v.(refreshed)
 	return r.tok, r.gen, nil
+}
+
+// alreadyReplaced re-reads the access token, without the row lock, before a
+// refresh takes it. A caller's read of seenGeneration can be stale by the time
+// it reaches the single-flight: a flight keyed on that generation may have
+// refreshed, committed and ended in between (the caller was descheduled after
+// its read), so it starts a new flight. If the token was replaced and the
+// replacement is not expiring, that is the answer, and no refresh transaction
+// is opened. The locked generation check in refreshLocked still decides when
+// this read races a refresh in another process.
+func (s *TokenSource) alreadyReplaced(ctx context.Context, conn *core.Connection, seenGeneration int64) (refreshed, bool, error) {
+	secrets, err := s.store.GetSecrets(ctx, conn.UserID, conn.ID)
+	if err != nil {
+		return refreshed{}, false, mapStoreErr(err)
+	}
+	access, ok := secrets[core.SecretFieldAccessToken]
+	if !ok || access.Generation == seenGeneration {
+		return refreshed{}, false, nil
+	}
+	fresh, err := s.store.GetConnection(ctx, conn.UserID, conn.ID)
+	if err != nil {
+		return refreshed{}, false, mapStoreErr(err)
+	}
+	if fresh.Status != core.ConnectionStatusActive || s.expiring(fresh.AccessExpiresAt) {
+		return refreshed{}, false, nil
+	}
+	tok, err := s.open(ctx, fresh, access)
+	if err != nil {
+		return refreshed{}, false, err
+	}
+	s.store2cache(fresh.ID, access.Generation, tok, fresh.AccessExpiresAt)
+	return refreshed{tok: tok, gen: access.Generation}, true, nil
 }
 
 func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, seenGeneration int64) (refreshed, error) {
@@ -273,7 +310,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 	}
 	var result refreshed
 	var permanent error
-	err = s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx core.SecretsTx) error {
+	err = s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx *db.SecretsTx) error {
 		secrets := tx.Secrets()
 		access := secrets[core.SecretFieldAccessToken]
 		// Another worker may have refreshed while we waited for the lock: use
@@ -385,7 +422,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 
 // markNeedsReauth records the permanent failure inside the refresh transaction
 // and returns the typed error. status_reason is a class, never the provider's body.
-func (s *TokenSource) markNeedsReauth(ctx context.Context, tx core.SecretsTx, conn *core.Connection, reason string) error {
+func (s *TokenSource) markNeedsReauth(ctx context.Context, tx *db.SecretsTx, conn *core.Connection, reason string) error {
 	if err := tx.MarkStatus(ctx, core.ConnectionStatusNeedsReauth, reason); err != nil {
 		return err
 	}

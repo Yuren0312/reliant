@@ -9,23 +9,19 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the preset service. internal/grpc/server.go
-// constructs it today; forge's composition root takes over in P3c
-// (research/forge-migration/PLAN.md). The rpc methods on *Service are where
-// this service's logic lives; see the forge `api` / `services` skill.
+// Deps holds dependencies for the preset service. The composition graph
+// constructs it (internal/app/compose.go). The rpc methods on *Service are
+// where this service's logic lives; see the forge `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
 	// Repo reads and writes presets, the settings that hold a user's
-	// defaults, and the workflows a preset applies to. The whole
-	// db.Repository: the handlers call 19 of its methods, more than a
-	// consumer-declared slice is worth until P6 splits it.
-	Repo db.Repository
+	// defaults, and the workflows a preset applies to (deps.go).
+	Repo Repository
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

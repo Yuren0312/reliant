@@ -110,7 +110,7 @@ jobs:
           node-version: "24"
           cache: "npm"
           cache-dependency-path: |
-            web/package-lock.json
+            frontends/web/package-lock.json
             electron/package-lock.json
 
       - name: Extract Electron tool versions from package.json
@@ -138,7 +138,7 @@ jobs:
           echo "Using Electron cache versions: electron=$ELECTRON_VERSION, electron-builder=$ELECTRON_BUILDER_VERSION"
 
       - name: Install web dependencies
-        working-directory: web
+        working-directory: frontends/web
         run: npm ci --legacy-peer-deps --prefer-offline
 
       # NO CODE GENERATION HERE. Generated code is committed, and PR CI's
@@ -151,7 +151,7 @@ jobs:
       # UNREVIEWED code: protoc-gen-go/-connect-go `@latest` instead of the
       # go.mod pins, remote buf plugins on the rate-limited Buf Schema
       # Registry, and a cache keyed on proto/ alone that, on a hit, restored
-      # a web/src/gen from some earlier release over the committed one.
+      # a frontends/web/src/gen from some earlier release over the committed one.
 
       # The renderer's build-time config, from control-plane's KCL.
       #
@@ -164,45 +164,18 @@ jobs:
       # "Control plane API URL not configured" on the desktop app.
       #
       # electron/release.config.json is GENERATED from control-plane's
-      # deploy/kcl/lib/env.k by .github/scripts/sync-release-config.mjs, and it
-      # carries the SAME VITE_* list the hosted app is built with. The step
-      # below verifies it has not drifted, then exports it.
-      #
-      # No .env file is written. `vite build` reads VITE_* straight from the
-      # process environment, so $GITHUB_ENV is sufficient and there is no
-      # generated dotfile to leak into an artifact or fall out of date.
+      # deploy/kcl/lib/env.k by .github/scripts/sync-release-config.mjs, and its
+      # `renderer` block carries the SAME runtime_config keys the hosted app is
+      # served. The step below verifies it has not drifted.
       - name: Verify release config matches control-plane KCL
         run: node .github/scripts/sync-release-config.mjs --check
 
-      - name: Export renderer build config
-        env:
-          # Secrets are NOT in KCL and never in this repo. They are merged in
-          # here, on top of the KCL-sourced public values.
-          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-          VITE_STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
-          VITE_SENTRY_REPLAY_CANVAS: ${{ vars.VITE_SENTRY_REPLAY_CANVAS }}
-        run: |
-          set -euo pipefail
-
-          # KCL-sourced public config (endpoints, auth mode, Supabase URL +
-          # publishable key, Sentry enable flags). jq -e fails if `.vite` is
-          # missing rather than exporting an empty set.
-          jq -er '.vite | to_entries[] | "\(.key)=\(.value)"' \
-            electron/release.config.json >> "$GITHUB_ENV"
-
-          # Secret-backed and CI-tunable values layered on top.
-          {
-            echo "VITE_SENTRY_DSN=${VITE_SENTRY_DSN}"
-            echo "VITE_STATSIG_CLIENT_KEY=${VITE_STATSIG_CLIENT_KEY}"
-            echo "VITE_SENTRY_TRACES_SAMPLE_RATE=0.1"
-            echo "VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE=0.1"
-            echo "VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE=1.0"
-            echo "VITE_SENTRY_REPLAY_CANVAS=${VITE_SENTRY_REPLAY_CANVAS}"
-          } >> "$GITHUB_ENV"
-
-          echo "Renderer config exported from KCL:"
-          jq -r '.vite | "  VITE_CONTROL_PLANE_API_URL = \(.VITE_CONTROL_PLANE_API_URL)\n  VITE_GATEWAY_URL           = \(.VITE_GATEWAY_URL)"' \
-            electron/release.config.json
+      # No renderer build config is exported: the bundle reads every
+      # per-environment value from config.js at runtime (R2a), and the
+      # packaged app's config.js is answered by its main process from
+      # release.config.json's `renderer` block (electron/src/runtime-config.js,
+      # written by generate-build-config.mjs in each platform job). The one
+      # build-time value is VITE_APP_VERSION, from scripts/release-identity.sh.
 
       # `build`, not `build:alpha` — the difference is `tsc -b`.
       #
@@ -215,7 +188,7 @@ jobs:
       # A release is the LAST place to skip the check, so it runs the same
       # gate the hosted frontend does.
       - name: Build React frontend
-        working-directory: web
+        working-directory: frontends/web
         # NODE_ENV=production is scoped to this command, NOT the step, and NOT
         # the job. Vite honours NODE_ENV even under `vite build`, so a leaked
         # `development` folds `import.meta.env.DEV` to TRUE inside a production
@@ -260,13 +233,13 @@ jobs:
       # this run fails anyway, release-health.yml opens a `release:failed`
       # issue for the tag.
       - name: Verify the built bundle
-        run: node .github/scripts/verify-bundle.mjs --dist web/dist
+        run: node .github/scripts/verify-bundle.mjs --dist frontends/web/dist
 
       - name: Upload web build artifact
         uses: actions/upload-artifact@v4
         with:
           name: web-dist
-          path: web/dist
+          path: frontends/web/dist
           retention-days: 1
           compression-level: 6 # Faster upload with good compression
 
@@ -433,8 +406,9 @@ jobs:
           else
             IDENTITY="$(bash scripts/release-identity.sh --commit "$COMMIT")"
           fi
-          echo "Stamping version=${IDENTITY} commit=${COMMIT}"
-          LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${IDENTITY} -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT}"
+          COMMIT_TIME="$(bash scripts/release-identity.sh --commit-time --commit "$COMMIT")"
+          echo "Stamping version=${IDENTITY} commit=${COMMIT} commit_time=${COMMIT_TIME}"
+          LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${IDENTITY} -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT} -X github.com/reliant-labs/reliant/internal/version.CommitTime=${COMMIT_TIME}"
 
           # Build-time defaults: the release's hosted endpoints, stamped into
           # pkg/config.BuildDefaults (forge's build-defaults layer, between the
@@ -582,7 +556,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-dist
-          path: web/dist
+          path: frontends/web/dist
 
       - name: Download backend (darwin-amd64)
         uses: actions/download-artifact@v4
@@ -611,8 +585,6 @@ jobs:
       - name: Generate runtime build config
         uses: ./.github/actions/generate-build-config
         with:
-          statsig-client-key: ${{ secrets.STATSIG_CLIENT_KEY }}
-          sentry-dsn: ${{ secrets.SENTRY_DSN }}
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
           supabase-anon-key: ${{ secrets.SUPABASE_ANON_KEY }}
           reliant-server-url: ${{ env.RELIANT_SERVER_URL }}
@@ -772,7 +744,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-dist
-          path: web/dist
+          path: frontends/web/dist
 
       - name: Download backend (linux-amd64)
         uses: actions/download-artifact@v4
@@ -801,8 +773,6 @@ jobs:
       - name: Generate runtime build config
         uses: ./.github/actions/generate-build-config
         with:
-          statsig-client-key: ${{ secrets.STATSIG_CLIENT_KEY }}
-          sentry-dsn: ${{ secrets.SENTRY_DSN }}
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
           supabase-anon-key: ${{ secrets.SUPABASE_ANON_KEY }}
           reliant-server-url: ${{ env.RELIANT_SERVER_URL }}
@@ -922,7 +892,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-dist
-          path: web/dist
+          path: frontends/web/dist
 
       - name: Download backend (windows-amd64)
         uses: actions/download-artifact@v4
@@ -950,8 +920,6 @@ jobs:
       - name: Generate runtime build config
         uses: ./.github/actions/generate-build-config
         with:
-          statsig-client-key: ${{ secrets.STATSIG_CLIENT_KEY }}
-          sentry-dsn: ${{ secrets.SENTRY_DSN }}
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
           supabase-anon-key: ${{ secrets.SUPABASE_ANON_KEY }}
           reliant-server-url: ${{ env.RELIANT_SERVER_URL }}

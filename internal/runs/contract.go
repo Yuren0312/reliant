@@ -1,28 +1,30 @@
 // Copyright (c) 2025 Reliant Labs
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/handlers, internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewRunLifecycle provider
+// (providers_worker.go) and the chat handler: never a node compose.go
+// constructs from Deps.
+//
+//forge:provided
 package runs
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// ErrChatNotFound is returned when the chat a lifecycle call names does not
-// exist.
-var ErrChatNotFound = errors.New("chat not found")
-
 // ErrNoWorkflow is returned when a chat has never started a root workflow, so
-// there is no run to stop or restart.
-var ErrNoWorkflow = errors.New("chat has no workflow")
+// there is no run to stop or restart. It is a FailedPrecondition, and its text
+// is what the client reads. A chat that does not exist is the store's own
+// NotFound (core.ErrChatNotFound), returned wrapped.
+var ErrNoWorkflow = svcerr.FailedPrecondition("chat has no workflow")
 
-// Repository is the subset of db.Repository this service needs.
+// Repository is the subset of *db.Repo this service needs.
 type Repository interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error

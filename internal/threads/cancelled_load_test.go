@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -37,6 +38,9 @@ import (
 // as retryable, rather than silently becoming a well-formed "there is nothing
 // here" that every downstream layer trusts.
 func TestLoadCurrentMessages_CancelledReadIsNotEmptyThread(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 
@@ -88,6 +92,8 @@ func TestLoadCurrentMessages_CancelledReadIsNotEmptyThread(t *testing.T) {
 // whole defect was one branch treating every error as emptiness, so the
 // boundary between "no rows" and "the read failed" is the thing worth pinning.
 func TestIsEmptyThread_ClassifiesOnlyNoRows(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		err  error

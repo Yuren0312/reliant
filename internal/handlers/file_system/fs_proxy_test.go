@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -43,7 +44,7 @@ func (r *recordingFSDaemonRouter) SendDaemonCommand(_ context.Context, _ string,
 // newProxy builds the service on router and repo. A nil repo leaves the
 // harness's fail-closed stub in its place, for requests decided before any
 // lookup.
-func newProxy(t *testing.T, router Router, repo db.Repository) *Service {
+func newProxy(t *testing.T, router Router, repo Repository) *Service {
 	t.Helper()
 	return NewTestFileSystem(t, WithFileSystemDeps(Deps{Router: router, Repo: repo}))
 }
@@ -94,19 +95,19 @@ func TestFileSystemProxy_MachineStateIsNotAnInternalError(t *testing.T) {
 	}{
 		{
 			name:   "not connected: NATS had no responder",
-			err:    connect.NewError(connect.CodeUnavailable, errors.New("no daemon connected for user")),
+			err:    connect.NewError(connect.CodeUnavailable, svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser)),
 			want:   connect.CodeUnavailable,
 			marker: true,
 		},
 		{
 			name:   "starting or asleep",
-			err:    fmt.Errorf("resolving daemon for command: %w", fmt.Errorf("your machine is still starting: %w", toolexec.ErrDaemonPending)),
+			err:    fmt.Errorf("resolving daemon for command: %w", svcerr.WithMessage(toolexec.ErrDaemonPending, "your machine is still starting: "+toolexec.ErrDaemonPending.Error())),
 			want:   connect.CodeUnavailable,
 			marker: true,
 		},
 		{
 			name: "no machine at all",
-			err:  fmt.Errorf("resolving daemon for command: %w", fmt.Errorf("%w: no machine is connected to your account yet", toolexec.ErrNoDaemon)),
+			err:  fmt.Errorf("resolving daemon for command: %w", svcerr.WithMessage(toolexec.ErrNoDaemon, "no daemon available: no machine is connected to your account yet")),
 			want: connect.CodeFailedPrecondition,
 		},
 		{
@@ -131,7 +132,7 @@ func TestFileSystemProxy_MachineStateIsNotAnInternalError(t *testing.T) {
 				Path: "/home/workspace/projects/new-folder",
 			}))
 			require.Error(t, err)
-			assert.Equal(t, tc.want, connect.CodeOf(err), "error: %v", err)
+			assert.Equal(t, tc.want, svcerr.Code(err), "error: %v", err)
 			if tc.marker {
 				assert.Contains(t, err.Error(), "no daemon connected")
 			}
@@ -149,7 +150,7 @@ func TestFileSystemProxy_CreateDirectory_RejectsEmptyAndRelativePaths(t *testing
 	for _, path := range []string{"", "relative/path", `C:proj`, `\proj`} {
 		_, err := svc.CreateDirectory(ctx, connect.NewRequest(&reliantv1.CreateDirectoryRequest{Path: path}))
 		require.Error(t, err, "path %q must be refused", path)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "path %q", path)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "path %q", path)
 	}
 	// No command should have been forwarded to the daemon.
 	assert.Empty(t, router.lastCommandType)
@@ -163,7 +164,7 @@ func TestFileSystemProxy_CreateDirectory_RequiresAuth(t *testing.T) {
 		Path: "/home/workspace/projects/new-folder",
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 }
 
 // fsTreeStubRouter returns a canned fs.get_tree response and records the payload
@@ -278,7 +279,7 @@ func fsProxyContext() context.Context {
 
 // seedFSProxyProject registers a project whose path is a real directory, and
 // returns the repository, the project id, and that workspace root.
-func seedFSProxyProject(t *testing.T) (db.Repository, string, string) {
+func seedFSProxyProject(t *testing.T) (*db.Repo, string, string) {
 	t.Helper()
 
 	repo, cleanup := db.SetupTestDB(t)
@@ -322,7 +323,7 @@ func TestFileSystemProxy_RefusesPathsThatEscapeTheWorkspace(t *testing.T) {
 				Path:      tc.path,
 			}))
 			require.Error(t, err, "path %q escaped the workspace", tc.path)
-			assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err),
+			assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err),
 				"an escape is a refusal, not a missing file")
 			assert.Nil(t, router.lastPayload, "a refused path must never reach the daemon")
 		})
@@ -387,7 +388,7 @@ func TestFileSystemProxy_EveryPathRPCIsConfined(t *testing.T) {
 
 			err := call(fsProxyContext(), svc)
 			require.Error(t, err, "%s forwarded an escaping path", name)
-			assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+			assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
 			assert.Nil(t, router.lastPayload, "%s reached the daemon with a refused path", name)
 		})
 	}
@@ -446,7 +447,7 @@ func TestFileSystemProxy_RefusesRequestWithoutAWorkspace(t *testing.T) {
 			Path: "/",
 		}))
 		require.Error(t, err, "a request naming no workspace must not reach the daemon")
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 		assert.Nil(t, router.lastPayload)
 	})
 
@@ -469,7 +470,7 @@ func TestFileSystemProxy_RefusesRequestWithoutAWorkspace(t *testing.T) {
 			Path:      "/",
 		}))
 		require.Error(t, err, "a project with no workspace path must not be forwarded unscoped")
-		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 		assert.Nil(t, router.lastPayload)
 	})
 }

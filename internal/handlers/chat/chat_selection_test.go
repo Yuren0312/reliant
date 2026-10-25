@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/chatselection"
@@ -253,24 +254,21 @@ func TestUpdateWorkflowParams_WithoutALiveRunStoresTheSelection(t *testing.T) {
 	_ = repo
 }
 
-// An edit of a live run moves an unservable pin first, as a send does, and
-// stores what runs.
-func TestUpdateWorkflowParams_LiveRunPinIsMovedAndTheSelectionHoldsTheMove(t *testing.T) {
+// The root keeps exactly the user's pick. If that model/provider is unavailable,
+// reject the picker change without storing or signalling a silent substitute.
+func TestUpdateWorkflowParams_UnavailableRootPickIsRejected(t *testing.T) {
 	ctx, fx, repo, temporal, service := selectionFixture(t, db.Active())
-
+	before := setSelection(t, ctx, repo, fx.chatID, map[string]any{"model": map[string]any{"id": sonnetOnClaude}})
 	_, err := service.UpdateWorkflowParams(ctx, updateParams(fx.chatID, paramsOf(t, map[string]any{
 		"model": map[string]any{"id": codexOnlyModel},
 	})))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Empty(t, temporal.signals)
+	after, err := chatselection.New(repo).Get(ctx, fx.chatID)
 	require.NoError(t, err)
-
-	require.Len(t, temporal.signals, 1)
-	update := temporal.signals[0].Arg.(map[string]interface{})
-	signalled := modelID(t, update["model"])
-	assert.True(t, assertAnthropic(signalled), "the live run must not be pinned to a provider that cannot serve it, got %q", signalled)
-
-	sel, err := chatselection.New(repo).Get(ctx, fx.chatID)
-	require.NoError(t, err)
-	assert.Equal(t, signalled, modelID(t, sel.Params["model"]))
+	assert.Equal(t, before.Version, after.Version)
+	assert.Equal(t, sonnetOnClaude, modelID(t, after.Params["model"]))
 }
 
 // Optimistic concurrency: an edit made against a selection that has since
@@ -285,7 +283,7 @@ func TestUpdateWorkflowParams_StaleVersionIsAborted(t *testing.T) {
 	req.Msg.ExpectedVersion = &stale
 	_, err := service.UpdateWorkflowParams(ctx, req)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAborted, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeAborted, svcerr.Code(err))
 
 	got, err := chatselection.New(repo).Get(ctx, fx.chatID)
 	require.NoError(t, err)
@@ -335,7 +333,7 @@ func TestUpdateChatProviderPolicy_RefusesNonsenseAndStaleVersions(t *testing.T) 
 		ChatId:         fx.chatID,
 		ProviderPolicy: &reliantv1.ProviderPolicy{OnLimit: reliantv1.ProviderPolicy_ON_LIMIT_FALLBACK},
 	}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "a fallback with no model is not a policy")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "a fallback with no model is not a policy")
 
 	stale := first.Version
 	_, err = service.UpdateChatProviderPolicy(ctx, connect.NewRequest(&reliantv1.UpdateChatProviderPolicyRequest{
@@ -343,7 +341,7 @@ func TestUpdateChatProviderPolicy_RefusesNonsenseAndStaleVersions(t *testing.T) 
 		ProviderPolicy:  &reliantv1.ProviderPolicy{OnLimit: reliantv1.ProviderPolicy_ON_LIMIT_WAIT},
 		ExpectedVersion: &stale,
 	}))
-	assert.Equal(t, connect.CodeAborted, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeAborted, svcerr.Code(err))
 }
 
 // A second device opening the chat reads the same selection from the server.
@@ -377,6 +375,8 @@ func branchTestContext(t *testing.T, repo *db.Repo) (context.Context, string) {
 // F4: a branch starts on the chat it was branched from — its selection and its
 // presets. Both the in-place and the to-workspace paths are the one BranchChat.
 func TestBranchChat_CopiesTheSelectionAndPresets(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, projectID := branchTestContext(t, repo)

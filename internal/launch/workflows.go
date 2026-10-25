@@ -20,6 +20,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -43,11 +44,12 @@ import (
 
 // ValidateWorkflowParamStructure rejects dotted param keys, which silently
 // never reach the workflow: inputs are nested objects, so "agent.model" is a
-// top-level key named "agent.model" rather than a path into "agent".
+// top-level key named "agent.model" rather than a path into "agent". The
+// refusal is an svcerr.InvalidArgument naming the key.
 func ValidateWorkflowParamStructure(params map[string]*structpb.Value) error {
 	for key, value := range params {
 		if strings.Contains(key, ".") {
-			return fmt.Errorf("workflow_params contains dotted key %q; use nested objects instead (for example {\"agent\": {\"model\": ...}})", key)
+			return svcerr.InvalidArgument(fmt.Sprintf("workflow_params contains dotted key %q; use nested objects instead (for example {\"agent\": {\"model\": ...}})", key))
 		}
 		if err := validateWorkflowParamKeyPath(key, value); err != nil {
 			return err
@@ -70,7 +72,7 @@ func validateWorkflowParamKeyPath(keyPath string, value *structpb.Value) error {
 			nestedPath = keyPath + "." + nestedKey
 		}
 		if strings.Contains(nestedKey, ".") {
-			return fmt.Errorf("workflow_params contains dotted key %q; use nested objects instead (for example {\"agent\": {\"model\": ...}})", nestedPath)
+			return svcerr.InvalidArgument(fmt.Sprintf("workflow_params contains dotted key %q; use nested objects instead (for example {\"agent\": {\"model\": ...}})", nestedPath))
 		}
 		nestedProtoValue, err := structpb.NewValue(nestedValue)
 		if err != nil {
@@ -556,11 +558,14 @@ func (l *Launcher) LoadWorkflowForValidation(ctx context.Context, workflowName, 
 
 // WorkflowLookupError marks a failure to READ a workflow, as opposed to a
 // workflow that is absent or malformed. The first is a store problem and
-// retryable; only the second can never launch.
+// retryable; only the second can never launch. It is an Internal, with Err the
+// withheld cause.
 type WorkflowLookupError struct{ Err error }
 
 func (e *WorkflowLookupError) Error() string { return e.Err.Error() }
-func (e *WorkflowLookupError) Unwrap() error { return e.Err }
+func (e *WorkflowLookupError) Unwrap() error {
+	return svcerr.WithCause(svcerr.Internal("failed to look up workflow"), e.Err)
+}
 
 // draftRootFor names the workflow whose saved draft may run without being
 // marked complete: the root of a builder test run, and nothing else. A test run
@@ -585,6 +590,20 @@ func draftRootFor(ev Event, workflowName string) string {
 // against the same definition the run it starts will execute.
 func ResolveRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID string) (*reliantv1.Workflow, error) {
 	return resolveRunWorkflow(ctx, repo, userID, workflowName, projectID, "")
+}
+
+// ResolveValidatedRunWorkflow admits an automation's current definition using
+// the same whole-tree gate as launch. It is not a cross-worker version check:
+// parsing and validation use this process's compiled runtime contract.
+func ResolveValidatedRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID string) (*reliantv1.Workflow, error) {
+	wf, err := ResolveRunWorkflow(ctx, repo, userID, workflowName, projectID)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateResolvedWorkflowTree(ctx, repo, userID, workflowName, projectID, "", wf); err != nil {
+		return nil, err
+	}
+	return wf, nil
 }
 
 func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, userID, workflowName, projectID, draftRoot string) (*reliantv1.Workflow, error) {
@@ -645,15 +664,39 @@ func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowNam
 		return err
 	}
 
+	return validateResolvedWorkflowTree(ctx, l.repo, userID, workflowName, projectID, draftRoot, wf)
+}
+
+func validateResolvedWorkflowTree(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID, draftRoot string, wf *reliantv1.Workflow) error {
+	var lookupErr *WorkflowLookupError
 	validationOpts := &validation.ValidationOptions{
-		WorkflowLoader:       l.createChatWorkflowLoader(ctx, userID, projectID, draftRoot),
+		WorkflowLoader: func(ref string) (*reliantv1.Workflow, error) {
+			child, err := resolveRunWorkflow(ctx, repo, userID, ref, projectID, draftRoot)
+			var lookup *WorkflowLookupError
+			if errors.As(err, &lookup) {
+				lookupErr = lookup
+			}
+			return child, err
+		},
 		CanonicalWorkflowRef: workflowName,
 	}
 	if projectID != "" {
-		validationOpts.PresetLoader = l.createDBPresetLoader(ctx, projectID)
+		// Reuse launch's preset resolution, without constructing its unrelated
+		// runtime collaborators or changing the validation source precedence.
+		validationOpts.PresetLoader = func(name string) (map[string]interface{}, error) {
+			p, err := loadPresetFromDB(ctx, repo, "", projectID, name)
+			if err != nil {
+				return nil, err
+			}
+			return p.Params, nil
+		}
 	}
 
 	result := validation.StaticAnalysisWithOptions(wf, validationOpts)
+	if lookupErr != nil {
+		// A child store outage is not a permanent verdict on the definition.
+		return lookupErr
+	}
 	if result != nil && result.HasErrors() {
 		return &ValidationError{
 			Kind:   ValidationFailedPrecondition,
@@ -711,19 +754,6 @@ func (l *Launcher) validateNoMachine(ctx context.Context, userID, workflowName, 
 	return nil
 }
 
-// createDBPresetLoader returns a PresetLoader that reads presets from project/builtin sources.
-// Validation does not currently have user context, so DB-backed user presets are resolved at runtime only.
-func (l *Launcher) createDBPresetLoader(ctx context.Context, projectID string) validation.PresetLoader {
-	return func(presetName string) (map[string]interface{}, error) {
-		// Pass empty userID so validation behavior stays scoped to project/builtin presets.
-		p, err := l.LoadPresetFromDB(ctx, "", projectID, presetName)
-		if err != nil {
-			return nil, err
-		}
-		return p.Params, nil
-	}
-}
-
 // createDBPresetLoaderFull returns a function that loads full preset objects from all runtime sources.
 // Used by BuildWorkflowInputs where the full preset is needed for ApplyToInputs.
 func (l *Launcher) createDBPresetLoaderFull(ctx context.Context, userID, projectID string) func(name string) (*preset.Preset, error) {
@@ -734,26 +764,30 @@ func (l *Launcher) createDBPresetLoaderFull(ctx context.Context, userID, project
 
 // LoadPresetFromDB loads a preset by name. Priority: user presets > stored project presets > builtins.
 func (l *Launcher) LoadPresetFromDB(ctx context.Context, userID, projectID, name string) (*preset.Preset, error) {
+	return loadPresetFromDB(ctx, l.repo, userID, projectID, name)
+}
+
+func loadPresetFromDB(ctx context.Context, repo WorkflowResolver, userID, projectID, name string) (*preset.Preset, error) {
 	slug := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 
-	if l.repo != nil {
+	if repo != nil {
 		// Try project-scoped user preset first.
 		if projectID != "" {
-			dbPreset, err := l.repo.GetPresetBySlugAndProject(ctx, userID, slug, projectID)
+			dbPreset, err := repo.GetPresetBySlugAndProject(ctx, userID, slug, projectID)
 			if err == nil && dbPreset != nil {
 				return dbPresetToRuntimePreset(dbPreset), nil
 			}
 		}
 
 		// Fall back to global user preset.
-		dbPreset, err := l.repo.GetPresetBySlug(ctx, userID, slug)
+		dbPreset, err := repo.GetPresetBySlug(ctx, userID, slug)
 		if err == nil && dbPreset != nil {
 			return dbPresetToRuntimePreset(dbPreset), nil
 		}
 
 		// Try stored project presets from daemon config sync.
 		if projectID != "" {
-			presetsJSON, err := l.repo.GetProjectPresetsJSON(ctx, projectID)
+			presetsJSON, err := repo.GetProjectPresetsJSON(ctx, projectID)
 			if err == nil {
 				presets, err := cfg.ParseStoredPresets(presetsJSON)
 				if err == nil {

@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -83,6 +84,8 @@ func (f *builderTestFixture) launchKind(t *testing.T, chatID string) string {
 // A builder test run records launch kind builder.test, runs the saved draft
 // even though it is not marked complete, and stays out of the sidebar.
 func TestStartChat_BuilderTestRecordsBuilderTestKind(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	f.saveDraft(t, "test-user", "bt-draft", db.WorkflowDraftStatusDraft)
 
@@ -105,6 +108,8 @@ func TestStartChat_BuilderTestRecordsBuilderTestKind(t *testing.T) {
 // The same draft started the ordinary way is still refused: builder_test is
 // the only door, and it does not make drafts runnable anywhere else.
 func TestStartChat_DraftStillRefusedWithoutBuilderTest(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	f.saveDraft(t, "test-user", "bt-draft", db.WorkflowDraftStatusDraft)
 
@@ -118,6 +123,8 @@ func TestStartChat_DraftStillRefusedWithoutBuilderTest(t *testing.T) {
 // An ordinary start is chat.start; there is no field through which a client
 // can ask for schedule or agent.start_run.
 func TestStartChat_ClientCannotClaimOtherLaunchKinds(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	f.saveDraft(t, "test-user", "bt-draft", db.WorkflowDraftStatusComplete)
 
@@ -134,6 +141,8 @@ func TestStartChat_ClientCannotClaimOtherLaunchKinds(t *testing.T) {
 }
 
 func TestStartChat_BuilderTestRequiresAnOwnedSavedDraft(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	f.saveDraft(t, "someone-else", "theirs", db.WorkflowDraftStatusComplete)
 	f.saveDraft(t, "test-user", "mine", db.WorkflowDraftStatusComplete)
@@ -154,7 +163,7 @@ func TestStartChat_BuilderTestRequiresAnOwnedSavedDraft(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := f.start(tc.workflow, proto.Bool(true), tc.chatID)
 			require.Error(t, err)
-			assert.Equal(t, tc.want, connect.CodeOf(err), err.Error())
+			assert.Equal(t, tc.want, svcerr.Code(err), err.Error())
 		})
 	}
 

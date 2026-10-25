@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	worktree "github.com/reliant-labs/reliant/internal/handlers/worktree"
@@ -16,7 +17,7 @@ import (
 
 // pagedWorktreeRepo serves total worktrees in the order the store returns
 // them, honouring Limit and Offset the way the SQL does.
-func pagedWorktreeRepo(t *testing.T, total int) *worktree.StubRepo {
+func pagedWorktreeRepo(t *testing.T, total int) *worktree.MockRepository {
 	repo := ownedWorktreeRepo(t)
 	all := make([]*db.Worktree, total)
 	for i := range all {
@@ -55,6 +56,8 @@ func listAllWorktrees(t *testing.T, svc *worktree.Service, limit int32) (ids []s
 }
 
 func TestListWorktrees_PagesThroughMoreThanOnePage(t *testing.T) {
+	t.Parallel()
+
 	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: pagedWorktreeRepo(t, 250)}))
 
 	ids, pages := listAllWorktrees(t, svc, 0)
@@ -68,6 +71,8 @@ func TestListWorktrees_PagesThroughMoreThanOnePage(t *testing.T) {
 }
 
 func TestListWorktrees_ExactPageBoundaryHasNoTrailingToken(t *testing.T) {
+	t.Parallel()
+
 	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: pagedWorktreeRepo(t, 100)}))
 
 	resp, err := svc.ListWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: ownProjectID}))
@@ -77,10 +82,12 @@ func TestListWorktrees_ExactPageBoundaryHasNoTrailingToken(t *testing.T) {
 }
 
 func TestListWorktrees_RejectsMalformedPageToken(t *testing.T) {
+	t.Parallel()
+
 	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: pagedWorktreeRepo(t, 5)}))
 
 	bad := "not-a-token!"
 	_, err := svc.ListWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: ownProjectID, PageToken: &bad}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }

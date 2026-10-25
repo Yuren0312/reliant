@@ -2,6 +2,9 @@
 package runner
 
 import (
+	"bytes"
+	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,9 +15,11 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/memtemp"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -81,11 +86,9 @@ func writeFile(t *testing.T, path, content string) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
 
-func newSandbox(t *testing.T) *sandbox {
-	t.Helper()
-	requireTools(t)
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
+// sandboxLayout names where everything in a sandbox rooted at root lives. It
+// touches nothing on disk.
+func sandboxLayout(root string) *sandbox {
 	s := &sandbox{
 		root:        root,
 		home:        filepath.Join(root, "home"),
@@ -93,45 +96,185 @@ func newSandbox(t *testing.T) *sandbox {
 		candidates:  map[int]string{},
 		baseContent: map[string]string{"a.txt": "base a\n", "b.txt": "base b\n", "keep.txt": "keep\n"},
 	}
-	for name, content := range s.baseContent {
-		writeFile(t, filepath.Join(s.project, name), content)
-	}
-	gitIn(t, s.project, "init", "-q")
-	gitIn(t, s.project, "add", "-A")
-	gitIn(t, s.project, "commit", "-qm", "base")
-
-	// Uncommitted user work in the project. rsync --delete removed anything
-	// the candidate lacked, so even a CORRECT destination lost this.
 	s.userNotes = filepath.Join(s.project, "notes.txt")
-	writeFile(t, s.userNotes, "my uncommitted notes\n")
-
 	s.sentinels = []string{
 		filepath.Join(root, "outside", "SENTINEL"),
 		filepath.Join(s.home, "SENTINEL"),
 		filepath.Join(s.home, "projects", "other", "SENTINEL"),
 	}
+	for n := 1; n <= 3; n++ {
+		s.candidates[n] = filepath.Join(s.home, ".reliant", "worktrees", "app", "compete-impl-"+strconv.Itoa(n)+"-default-test-wf-0a1b2c3d")
+	}
+	return s
+}
+
+// newSandbox's state is built once per test binary and copied per test.
+//
+// Building it is ten git processes, every one a fork and an exec, and on a
+// loaded machine a process costs hundreds of milliseconds: TestApplyWinner_Guards
+// built eleven of these one after another and took 30-53s of the package's 60s
+// -short budget. A byte copy costs no process at all. Every absolute path the
+// copy carries (the worktrees' gitdir links) is rewritten to the copy's root.
+var sandboxTemplate struct {
+	once sync.Once
+	root string
+	err  error
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if sandboxTemplate.root != "" {
+		_ = os.RemoveAll(sandboxTemplate.root)
+	}
+	os.Exit(code)
+}
+
+func newSandbox(t *testing.T) *sandbox {
+	t.Helper()
+	requireTools(t)
+	sandboxTemplate.once.Do(func() {
+		dir, err := os.MkdirTemp("", "runner-sandbox-template-")
+		if err == nil {
+			// Canonical, so the paths rewritten below are byte-identical
+			// to the ones git wrote.
+			dir, err = filepath.EvalSymlinks(dir)
+		}
+		if err == nil {
+			sandboxTemplate.root = dir
+			err = buildSandbox(sandboxLayout(dir))
+		}
+		sandboxTemplate.err = err
+	})
+	require.NoError(t, sandboxTemplate.err, "build the sandbox template")
+	// In memory: apply_winner and the subtests' own setup still run git in
+	// the copy, and on the shared disk under a full test lane their writes
+	// are a third of the time (internal/memtemp).
+	root, err := filepath.EvalSymlinks(memtemp.Dir(t))
+	require.NoError(t, err)
+	require.NoError(t, copySandbox(sandboxTemplate.root, root))
+	return sandboxLayout(root)
+}
+
+// buildSandbox creates s on disk: the project, its uncommitted user file, the
+// sentinels, and the candidate worktrees.
+func buildSandbox(s *sandbox) error {
+	write := func(path, content string) error {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(path, []byte(content), 0o644)
+	}
+	for name, content := range s.baseContent {
+		if err := write(filepath.Join(s.project, name), content); err != nil {
+			return err
+		}
+	}
+	for _, args := range [][]string{
+		{"init", "-q"},
+		// No background housekeeping: every commit would otherwise spawn a
+		// `git maintenance run --auto` child, one more process on a machine
+		// where a process is the whole cost. apply_winner never depends on it.
+		{"config", "maintenance.auto", "false"},
+		{"config", "gc.auto", "0"},
+		{"add", "-A"},
+		{"commit", "-qm", "base"},
+	} {
+		if err := sandboxGit(s.project, args...); err != nil {
+			return err
+		}
+	}
+
+	// Uncommitted user work in the project. rsync --delete removed anything
+	// the candidate lacked, so even a CORRECT destination lost this.
+	if err := write(s.userNotes, "my uncommitted notes\n"); err != nil {
+		return err
+	}
 	for _, p := range s.sentinels {
-		writeFile(t, p, "must survive\n")
+		if err := write(p, "must survive\n"); err != nil {
+			return err
+		}
 	}
 
 	// Candidate N rewrites a.txt and adds new_N.txt. Candidate 1 commits its
 	// work (an agent may), the others leave it uncommitted; candidate 2 also
 	// deletes b.txt, which must reach the project as a deletion.
 	for n := 1; n <= 3; n++ {
-		wt := filepath.Join(s.home, ".reliant", "worktrees", "app", "compete-impl-"+strconv.Itoa(n)+"-default-test-wf-0a1b2c3d")
-		gitIn(t, s.project, "worktree", "add", "-q", "-b", "compete-"+strconv.Itoa(n), wt, "HEAD")
-		writeFile(t, filepath.Join(wt, "a.txt"), "candidate "+strconv.Itoa(n)+"\n")
-		writeFile(t, filepath.Join(wt, "new_"+strconv.Itoa(n)+".txt"), "added by candidate\n")
+		wt := s.candidates[n]
+		if err := sandboxGit(s.project, "worktree", "add", "-q", "-b", "compete-"+strconv.Itoa(n), wt, "HEAD"); err != nil {
+			return err
+		}
+		if err := write(filepath.Join(wt, "a.txt"), "candidate "+strconv.Itoa(n)+"\n"); err != nil {
+			return err
+		}
+		if err := write(filepath.Join(wt, "new_"+strconv.Itoa(n)+".txt"), "added by candidate\n"); err != nil {
+			return err
+		}
 		if n == 2 {
-			require.NoError(t, os.Remove(filepath.Join(wt, "b.txt")))
+			if err := os.Remove(filepath.Join(wt, "b.txt")); err != nil {
+				return err
+			}
 		}
 		if n == 1 {
-			gitIn(t, wt, "add", "-A")
-			gitIn(t, wt, "commit", "-qm", "candidate 1")
+			if err := sandboxGit(wt, "add", "-A"); err != nil {
+				return err
+			}
+			if err := sandboxGit(wt, "commit", "-qm", "candidate 1"); err != nil {
+				return err
+			}
 		}
-		s.candidates[n] = wt
 	}
-	return s
+	return nil
+}
+
+// sandboxGit runs git as gitIn does, without a *testing.T: the template
+// outlives whichever test happened to build it.
+func sandboxGit(dir string, args ...string) error {
+	cmd := exec.Command("git", append([]string{"-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "init.defaultBranch=main"}, args...)...)
+	cmd.Dir = dir
+	cmd.Env = sandboxEnv("")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git %v in %s: %v\n%s", args, dir, err, out)
+	}
+	return nil
+}
+
+// copySandbox copies the template at src into the empty dst, keeping
+// permissions and modification times, and rewrites every occurrence of src in
+// git's link files — a worktree's .git file and its admin dir's gitdir name
+// each other by absolute path — so the copy is self-contained.
+func copySandbox(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		switch {
+		case d.IsDir():
+			return os.MkdirAll(target, info.Mode().Perm())
+		case d.Type().IsRegular():
+			b, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if name := d.Name(); name == ".git" || name == "gitdir" {
+				b = bytes.ReplaceAll(b, []byte(src), []byte(dst))
+			}
+			if err := os.WriteFile(target, b, info.Mode().Perm()); err != nil {
+				return err
+			}
+			return os.Chtimes(target, info.ModTime(), info.ModTime())
+		default:
+			return fmt.Errorf("copySandbox: %s is neither a file nor a directory", path)
+		}
+	})
 }
 
 // quotedAbsPath matches a quoted literal absolute path — not shell syntax that
@@ -223,6 +366,7 @@ func (s *sandbox) requireWinnerApplied(t *testing.T, n int) {
 // deterministic scenario runner, takes the command the runtime rendered for
 // apply_winner, and runs it in the sandbox.
 func TestParallelCompete_UseWinnerWritesOnlyInsideTheProject(t *testing.T) {
+	testkit.Slow(t, "runs the parallel-compete workflow over real git worktrees")
 	s := newSandbox(t)
 
 	wf := loadBuiltin(t, "parallel-compete")
@@ -303,8 +447,13 @@ func renderApplyWinner(t *testing.T, projectPath, winnerPath string) (string, er
 
 // Every refusal leaves the project, the candidates and everything outside them
 // exactly as they were.
+//
+// The subtests run in parallel: each builds its own sandbox (about ten git
+// commands) and shares nothing, and one after another their process waits were
+// 32-58s of the package's 60s -short budget under a full test lane (2026-10-22).
 func TestApplyWinner_Guards(t *testing.T) {
 	t.Run("applies the winner and nothing else", func(t *testing.T) {
+		t.Parallel()
 		s := newSandbox(t)
 		command, err := renderApplyWinner(t, s.project, s.candidates[2])
 		require.NoError(t, err)
@@ -314,6 +463,7 @@ func TestApplyWinner_Guards(t *testing.T) {
 	})
 
 	t.Run("an empty project path never renders", func(t *testing.T) {
+		t.Parallel()
 		s := newSandbox(t)
 		_, err := renderApplyWinner(t, "", s.candidates[2])
 		require.Error(t, err)
@@ -321,6 +471,7 @@ func TestApplyWinner_Guards(t *testing.T) {
 	})
 
 	t.Run("an empty winner path never renders", func(t *testing.T) {
+		t.Parallel()
 		s := newSandbox(t)
 		_, err := renderApplyWinner(t, s.project, "")
 		require.Error(t, err)
@@ -375,6 +526,7 @@ func TestApplyWinner_Guards(t *testing.T) {
 	}
 	for _, tc := range refusals {
 		t.Run("refuses: "+tc.name, func(t *testing.T) {
+			t.Parallel()
 			s := newSandbox(t)
 			projectPath, winnerPath := tc.setup(t, s)
 			command, err := renderApplyWinner(t, projectPath, winnerPath)

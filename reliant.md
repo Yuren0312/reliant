@@ -28,7 +28,7 @@ There might be 10 reliant processes running at a time, each for a different feat
 
 ## Database (Postgres only)
 
-- Migrations are forge migrations in `db/migrations/` (`<YYYYMMDDHHMMSS>_<name>.up.sql`, forward only, applied by forge's migrator). Create them with `make migration NAME=<name>` — never hand-write the version. Each one says whether the previous release survives it: `-- forge:backward-compatible — <why>` (the default; expand/contract) or `-- forge:breaks-rollback <why>`, enforced by `forge lint --migration-safety`. One file runs as one transaction; a `CREATE INDEX CONCURRENTLY` must be the only statement in its file (see `internal/db/SCHEMA.md`). `internal/db/migrations/postgres` is goose's frozen history, kept only for the goose bridge that catches old databases up: never add to or edit it.
+- Migrations are forge migrations in `db/migrations/` (`<YYYYMMDDHHMMSS>_<name>.up.sql`, forward only, applied by forge's migrator). Create them with `make migration NAME=<name>` — never hand-write the version. Each one says whether the previous release survives it: `-- forge:backward-compatible — <why>` (the default; expand/contract) or `-- forge:breaks-rollback <why>`, enforced by `forge lint --migration-safety`. One file runs as one transaction; a `CREATE INDEX CONCURRENTLY` must be the only statement in its file (see `internal/db/SCHEMA.md`).
 - The forge ORM projects the applied schema into `internal/store`: after a migration run the pinned `forge generate` (`make forge-generate-check`) and commit what it writes. Queries live in `internal/store/<entity>_repo_ext.go`; `internal/db` is the hand Repository facade over them (rules: `internal/db/SCHEMA.md`). There is no sqlc.
 - Key tables: `chats`, `messages`, `message_content_blocks` (text, tool calls), `workflows`, `projects`, `worktrees`.
 - Two dev Postgres servers — not drift, different stacks: **5433** is this repo's own docker-compose (`make postgres-up`, `scripts/dev.sh`, the Make test targets); **5434** is the control-plane `forge env up` stack's, database `reliant`, holding real data — read-only, never drop or mutate it.
@@ -37,9 +37,29 @@ There might be 10 reliant processes running at a time, each for a different feat
 
 For the usual `forge env up` stack, every log — backend, browser console, Electron — is under `../control-plane/.forge/logs/dev/` (`reliant-temporal-worker.log` = tool execution / call_llm / spawns, `reliant-api-server.log` = RPC handlers, `frontend_reliant-web.log` = UI `[browser:<level>]` lines), NOT `./data/`. Only this repo's own `scripts/dev.sh` stack logs to `./data/logs*`. Never add another log location. Load the `dev-logs` skill before debugging: full file map, DB queries, and how to prove a sink is live before trusting a zero-hit grep.
 
+## Merging to main: the merge-gate status is required
+
+GitHub refuses any merge into `main` whose commit lacks a SUCCESS `merge-gate`
+commit status (ruleset "main: merge-gate required", head must be up to date
+with main, **no bypass actors** — `gh pr merge --admin` is refused too). The
+merge queue posts it on the exact squashed commit its gate verified:
+
+```bash
+/home/workspace/.reliant/worktrees/reliant-labs/migrate-reliant-to-forge-758c83c8/.fm-tools/merge_queue3.sh <remote-branch>
+```
+
+The only other way in is an audited waiver — a hotfix that cannot wait, or a
+gate failure that reproduces identically on main. It posts `WAIVED: <reason>`,
+comments on the PR and appends to `/home/workspace/fm-logs/merge-gate-waivers.log`:
+
+```bash
+.fm-tools/merge_gate_waive.sh --by "<agent/thread or human>" --reason "<check + evidence>" <pr>
+gh pr merge <pr> --squash
+```
+
 ## Load these skills before touching their area
 
-- `web-styling` — any styling/layout change under `web/src` (semantic tokens, the `bg-muted` elevation trap).
+- `web-styling` — any styling/layout change under `frontends/web/src` (semantic tokens, the `bg-muted` elevation trap).
 - `onboarding-flow` — onboarding, or anything that creates a daemon during it (a background effect can complete onboarding with no user action).
 - `oauth-provider-login` — Claude/Codex provider OAuth (Electron daemon callback vs `reliant auth serve`).
 

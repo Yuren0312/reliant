@@ -9,6 +9,7 @@ import (
 
 	forgedb "github.com/reliant-labs/reliant/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,6 +36,8 @@ func newRemoteProject(id, user, path string, remote *string) *core.Project {
 // The store is the one place every writer passes through, so a token in a
 // remote never reaches the column — whichever caller handed it over.
 func TestStoreNeverPersistsRemoteCredentials(t *testing.T) {
+	t.Parallel()
+
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -58,8 +61,8 @@ func TestStoreNeverPersistsRemoteCredentials(t *testing.T) {
 	assert.Equal(t, cleanRemote, rawRemote(t, raw, "repos", r.ID).String, "CreateRepo")
 
 	r.RemoteURL = &other
-	require.NoError(t, repo.UpdateRepo(ctx, r))
-	assert.Equal(t, "https://gitlab.com/g/p.git", rawRemote(t, raw, "repos", r.ID).String, "UpdateRepo")
+	require.NoError(t, store.ReplaceRepo(ctx, repo.ORM(), r))
+	assert.Equal(t, "https://gitlab.com/g/p.git", rawRemote(t, raw, "repos", r.ID).String, "ReplaceRepo")
 
 	// A lookup by the leaked form finds the clean row: a caller that still
 	// holds a token URL does not create a duplicate project.
@@ -91,6 +94,8 @@ const stripRemoteCredentialsMigration = "migrations/20261019172550_strip_remote_
 // userinfo, a collision with a clean sibling under projects_user_remote_url_uniq,
 // and values that must not change.
 func TestStripRemoteURLCredentialsMigration(t *testing.T) {
+	t.Parallel()
+
 	_, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	sqlText, err := forgedb.MigrationsFS.ReadFile(stripRemoteCredentialsMigration)

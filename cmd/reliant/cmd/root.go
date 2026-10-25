@@ -26,6 +26,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	forgecli "github.com/reliant-labs/forge/cli"
+
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runenv"
@@ -92,7 +94,7 @@ Reliant server components.`,
 	// their values are read.
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 	enableVersionFlag(root)
-	// The root config's leaves (proto/config/v1 ReliantConfig) are persistent
+	// The root config's leaves (proto/reliant/config/v1 ReliantConfig) are persistent
 	// flags as well. A process that reads them loads the config in its own
 	// RunE, so a command that reads none of them never fails on one.
 	config.RegisterReliantConfigFlags(root)
@@ -120,17 +122,19 @@ Reliant server components.`,
 	return root
 }
 
-// Execute runs the root command.
-func Execute() error {
+// Execute runs the root command, and exits the process with the failure's
+// status when it fails, having printed the error to stderr. The status is
+// forge's own resolution (forgecli.ExitCode): `reliant forge …` verbs print the
+// same number as their --json document's exit_code, and any other error is 1.
+func Execute() {
 	root := NewRootCmd()
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		return err
+		os.Exit(forgecli.ExitCode(err))
 	}
-	return nil
 }
 
-// loadRootConfig loads the reliant binary's root config (proto/config/v1
+// loadRootConfig loads the reliant binary's root config (proto/reliant/config/v1
 // ReliantConfig) for the process cmd runs. Every process that reads it — the
 // servers and the daemon — calls this first thing in its RunE, before it
 // builds anything from the config.
@@ -160,7 +164,7 @@ func logSettings(cfg *config.ReliantConfig) logging.Settings {
 // whether the platform declared this a managed daemon (DaemonConfig).
 func storageReaperConfig(cfg *config.ReliantConfig, managed bool) diskwatch.ReaperConfig {
 	sr := cfg.GetStorageReaper()
-	out, warnings := diskwatch.ParseReaperConfig(sr.GetMode(), sr.GetInterval(), sr.GetPressureInterval(), sr.GetPolicyPath(), managed)
+	out, warnings := diskwatch.ParseReaperConfig(sr.GetMode(), sr.GetInterval(), sr.GetPressureInterval(), sr.GetGocacheInterval(), sr.GetPolicyPath(), managed)
 	for _, w := range warnings {
 		logging.Warn("Storage reaper config: " + w)
 	}

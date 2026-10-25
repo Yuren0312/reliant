@@ -10,9 +10,11 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -71,6 +73,8 @@ func ghDefinition(env *triggerTestEnv, mutate func(*reliantv1.TriggerDefinition)
 // token lives at control-plane. Creating a trigger needs no connection, and
 // refreshes the owner's access so the first event routes.
 func TestAccessGatedTriggerNeedsNoConnectionAndRefreshesAccess(t *testing.T) {
+	t.Parallel()
+
 	env, access := setupAccessTriggerTest(t)
 	created := env.create(t, ghDefinition(env, nil))
 	assert.Empty(t, created.GetConnectionId(), "delegated: no connection row")
@@ -84,6 +88,9 @@ func TestAccessGatedTriggerNeedsNoConnectionAndRefreshesAccess(t *testing.T) {
 // With a saved connection the trigger still binds it (self-hosted), and an
 // explicitly named one must be the caller's.
 func TestAccessGatedTriggerBindsASavedConnectionWhenThereIsOne(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, _ := setupAccessTriggerTest(t)
 	mine := env.createConnection(t, env.userID, "gh", "11", core.ConnectionStatusActive)
 	created := env.create(t, ghDefinition(env, nil))
@@ -93,23 +100,25 @@ func TestAccessGatedTriggerBindsASavedConnectionWhenThereIsOne(t *testing.T) {
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: ghDefinition(env, func(d *reliantv1.TriggerDefinition) { d.ConnectionId = &theirs.ID }),
 	}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 // A permanent refresh failure (GitHub not connected, or a token that cannot
 // list installations) refuses the write with the reason; nothing is stored.
 // A transient one is Unavailable.
 func TestAccessGatedTriggerRefusesWhenAccessCannotBeRead(t *testing.T) {
+	t.Parallel()
+
 	env, access := setupAccessTriggerTest(t)
 	access.err, access.permanent = fmt.Errorf("GitHub is not connected: connect GitHub in Settings"), true
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: ghDefinition(env, nil)}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "connect GitHub")
 
 	access.err, access.permanent = errors.New("control-plane unreachable"), false
 	_, err = env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: ghDefinition(env, nil)}))
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 
 	list, err := env.svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
 	require.NoError(t, err)
@@ -119,6 +128,8 @@ func TestAccessGatedTriggerRefusesWhenAccessCannotBeRead(t *testing.T) {
 // Re-enabling and editing refresh too: either can be the first activation
 // after access changed.
 func TestAccessGatedTriggerRefreshesOnUpdateAndEnable(t *testing.T) {
+	t.Parallel()
+
 	env, access := setupAccessTriggerTest(t)
 	created := env.create(t, ghDefinition(env, nil))
 	_, err := env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: created.GetId(), Enabled: false}))
@@ -134,11 +145,13 @@ func TestAccessGatedTriggerRefreshesOnUpdateAndEnable(t *testing.T) {
 
 	access.err, access.permanent = errors.New("not connected"), true
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: created.GetId(), Enabled: true}))
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }
 
 // Integrations that are not access-gated keep requiring a connection.
 func TestNonAccessGatedIntegrationStillRequiresAConnection(t *testing.T) {
+	t.Parallel()
+
 	env, access := setupAccessTriggerTest(t)
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
@@ -147,6 +160,6 @@ func TestNonAccessGatedIntegrationStillRequiresAConnection(t *testing.T) {
 			}}
 		}),
 	}))
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Empty(t, access.users())
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -46,6 +47,8 @@ func resolveSenders(env *triggerTestEnv, integration string, handles, ids []stri
 // "Only from" resolves a login to the id it stores, and an id to the login it
 // shows, asking as the caller.
 func TestResolveTriggerSendersAsksAsTheCaller(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	dir := &fakeSenders{found: []ResolvedSender{
 		{Query: "@octocat", ID: "583231", DisplayName: "octocat"},
@@ -64,13 +67,15 @@ func TestResolveTriggerSendersAsksAsTheCaller(t *testing.T) {
 }
 
 func TestResolveTriggerSendersErrors(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 
 	_, err := resolveSenders(env, "slack", []string{"U123"}, nil)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "Slack ids are already what a person pastes")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "Slack ids are already what a person pastes")
 
 	_, err = resolveSenders(env, "github", []string{"octocat"}, nil)
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "no GitHub on this server")
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "no GitHub on this server")
 
 	cases := map[string]struct {
 		dir  *fakeSenders
@@ -85,13 +90,15 @@ func TestResolveTriggerSendersErrors(t *testing.T) {
 			env.configure(t, func(d *Deps) { d.Senders = map[string]SenderDirectory{"github": tc.dir} })
 			_, err := resolveSenders(env, "github", []string{"octocat"}, nil)
 			require.Error(t, err)
-			assert.Equal(t, tc.code, connect.CodeOf(err))
+			assert.Equal(t, tc.code, svcerr.Code(err))
 		})
 	}
 }
 
 // A firing carries trigger.sender, so a list of them can name who sent each.
 func TestListTriggerEventsCarriesTheSender(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 	sender := &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "583231", DisplayName: "octocat", Verified: true}

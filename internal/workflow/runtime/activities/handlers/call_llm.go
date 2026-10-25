@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -122,7 +121,7 @@ type streamingToolCall struct {
 // CallLLMActivity implements the call_llm activity.
 // This activity streams LLM response by content blocks and is separate from message saving
 type CallLLMActivity struct {
-	repo           db.Repository
+	repo           CallLLMStore
 	hub            streaming.StreamingHub
 	toolsFactory   *tools.ToolsFactory
 	configProvider cfgpkg.ConfigProvider
@@ -131,9 +130,9 @@ type CallLLMActivity struct {
 	// localRelay carries local-model HTTP to the daemon that serves it; nil
 	// where no daemon router exists, in which case local models are unavailable.
 	localRelay toolexec.LocalModelRelay
-	// controlPlaneURL is the control plane hosting this deployment, "" when it
-	// is self-hosted; see WithControlPlane.
-	controlPlaneURL string
+	// allowPrivateEgress is the dial policy for user-supplied model endpoint
+	// URLs; see WithPrivateEgress.
+	allowPrivateEgress bool
 	// routing picks the account of a provider that serves a thread and
 	// handles an account that is refused; nil routes nothing.
 	routing *AccountRouting
@@ -147,12 +146,11 @@ func (a *CallLLMActivity) WithAccountRouting(r *AccountRouting) *CallLLMActivity
 	return a
 }
 
-// WithControlPlane records the control plane hosting this deployment, which
-// picks the dial policy for user-supplied model endpoint URLs: a hosted
-// deployment's shared worker must not be pointed at its own network. Unset is
-// self-hosted.
-func (a *CallLLMActivity) WithControlPlane(controlPlaneURL string) *CallLLMActivity {
-	a.controlPlaneURL = controlPlaneURL
+// WithPrivateEgress sets whether a user-supplied model endpoint URL may
+// resolve to a private, loopback or link-local address (netguard.ForDeployment).
+// Unset refuses them: the shared worker must not be pointed at its own network.
+func (a *CallLLMActivity) WithPrivateEgress(allow bool) *CallLLMActivity {
+	a.allowPrivateEgress = allow
 	return a
 }
 
@@ -179,14 +177,14 @@ func (a *CallLLMActivity) localModelSpec(preferDaemonID string, noMachine bool) 
 		PreferDaemonID: preferDaemonID,
 		Custom: &local.CustomRoutes{
 			Relay:  relay,
-			Policy: netguard.ForDeployment(a.controlPlaneURL),
+			Policy: netguard.ForDeployment(a.allowPrivateEgress),
 		},
 	}
 }
 
 // NewCallLLMActivity creates a new CallLLMActivity.
 // The optional variadic arguments accept a cfgpkg.ConfigProvider and/or a drivers.DriverResolver.
-func NewCallLLMActivity(repo db.Repository, hub streaming.StreamingHub, toolsFactory *tools.ToolsFactory, cfgProvider cfgpkg.ConfigProvider, resolver drivers.DriverResolver, mcpBinder toolexec.MCPContextBinder) *CallLLMActivity {
+func NewCallLLMActivity(repo CallLLMStore, hub streaming.StreamingHub, toolsFactory *tools.ToolsFactory, cfgProvider cfgpkg.ConfigProvider, resolver drivers.DriverResolver, mcpBinder toolexec.MCPContextBinder) *CallLLMActivity {
 	return &CallLLMActivity{
 		repo:           repo,
 		hub:            hub,
@@ -1068,7 +1066,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// While the thread is on a fallback model (its own provider hit a usage
 	// limit and the chat allows another), that model replaces the selector.
 	// The workflow only sets it inside the lease, so this needs no clock.
-	if rtx.FallbackModel != "" {
+	if rtx.FallbackModel != "" && rtx.ChatProvider == "" {
 		modelSelector = models.ModelSelector{ID: rtx.FallbackModel}
 	}
 
@@ -1130,19 +1128,23 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// When a custom driver resolver is injected (e.g., in tests), it skips
 	// registry resolution and probes the resolver for its model.
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, llmCallSpec{
-		UserID:         chat.UserID,
-		SessionID:      chat.ID,
-		Selector:       modelSelector,
-		RunProviders:   rtx.ProviderPreference,
-		ThreadID:       thread,
-		Routing:        a.routing,
-		Failover:       rtx.Failover,
-		Temperature:    explicitTemperature,
-		ThinkingLevel:  explicitThinkingLevel,
-		MaxTokens:      explicitMaxTokens,
-		WorkingDir:     workingDir,
-		TagPrefsReader: a.repo,
-		Local:          a.localModelSpec(worktreeDaemonID, chat.NoMachine),
+		UserID:            chat.UserID,
+		SessionID:         chat.ID,
+		Selector:          modelSelector,
+		RunProviders:      rtx.ProviderPreference,
+		ChatProvider:      rtx.ChatProvider,
+		ClearProviderPins: rtx.ClearProviderPins,
+		Descendant:        rtx.Descendant,
+		PresetModelTags:   rtx.PresetModelTags,
+		ThreadID:          thread,
+		Routing:           a.routing,
+		Failover:          rtx.Failover,
+		Temperature:       explicitTemperature,
+		ThinkingLevel:     explicitThinkingLevel,
+		MaxTokens:         explicitMaxTokens,
+		WorkingDir:        workingDir,
+		TagPrefsReader:    a.repo,
+		Local:             a.localModelSpec(worktreeDaemonID, chat.NoMachine),
 	})
 	if err != nil {
 		return nil, err
@@ -1833,13 +1835,12 @@ streamLoop:
 		a.cancelInFlightStreamingToolCalls(ctx, chat.ID, thread, streamState)
 	}
 
-	// Track LLM call completion for analytics.
 	llmLatencyMs := time.Since(llmCallStart).Milliseconds()
-	analyticsErr := streamErr
+	usageErr := streamErr
 	if streamInterrupted {
-		analyticsErr = nil
+		usageErr = nil
 	}
-	a.trackLLMCallCompleted(ctx, chat, driver, llmLatencyMs, streamState.usage, analyticsErr, shape, shapeDiff)
+	a.logLLMUsage(ctx, chat, driver, llmLatencyMs, streamState.usage, usageErr, shape, shapeDiff)
 
 	if streamState.upstreamRequestID != "" || streamState.upstreamProxymanID != "" {
 		activity.GetLogger(ctx).Info("[CallLLM] Upstream correlation",
@@ -1883,10 +1884,7 @@ streamLoop:
 			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: rtx.Failover,
 		}
-		if rejected := a.routing.credentialRejection(ctx, streamErr, failedCall); rejected != nil {
-			return nil, rejected
-		}
-		return nil, a.routing.usageLimitFailure(ctx, streamErr, failedCall)
+		return nil, a.routing.providerFailure(ctx, streamErr, failedCall)
 	}
 
 	// A heartbeat RPC that merely timed out is NOT an instruction to stop.
@@ -2606,6 +2604,11 @@ func (a *CallLLMActivity) getSystemPrompts(
 		bb.WriteString(workingDir)
 		bb.WriteString("/README.md) or by its plain relative path (README.md). ")
 		bb.WriteString("NEVER guess a project root and never write a placeholder path such as /path/to/project — the real one is on this line.")
+		// A workspace that is archived is cleaned up by reclaim. Files loose at
+		// its root, outside every git checkout, are saved only up to a size
+		// cap and otherwise keep the directory on disk, so scratch belongs
+		// elsewhere (and a worktree's checkout is the place for anything to keep).
+		bb.WriteString("\nKeep scratch files (notes, plans, logs, temporary output) outside this directory, e.g. under /tmp or a scratchpad directory you were given, so they never sit loose at the workspace root where git cannot see them; put anything meant to last inside a repository checkout.")
 	}
 
 	// Multi-repo hint. When the project has more than one repo, every fs/process
@@ -2629,6 +2632,12 @@ func (a *CallLLMActivity) getSystemPrompts(
 		}
 		bb.WriteString("\nOmit `repo` to inherit the chat's bound worktree.")
 	}
+
+	// What Reliant can do: the live routing guide (reliant_capabilities.go).
+	// Static bytes, so it rides the cached prefix; it goes before the skills
+	// announcement, which changes whenever a skill does.
+	bb.WriteString("\n\n")
+	bb.WriteString(strings.TrimSpace(reliantCapabilities))
 
 	// Append skill announcement if any skills are available. Skills are
 	// synced from the daemon via project config — this is pure in-memory.
@@ -3065,8 +3074,8 @@ func (a *CallLLMActivity) handleComplete(ctx context.Context, event llm.DriverEv
 	}
 }
 
-// trackLLMCallCompleted fires an analytics event after each LLM API call.
-func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Chat, driver llm.Driver, latencyMs int64, usage llm.TokenUsage, streamErr error, shape promptShape, diff shapeDiff) {
+// logLLMUsage logs per-call usage next to the latency that produced it.
+func (a *CallLLMActivity) logLLMUsage(ctx context.Context, chat *db.Chat, driver llm.Driver, latencyMs int64, usage llm.TokenUsage, streamErr error, shape promptShape, diff shapeDiff) {
 	model := driver.Model()
 
 	// Per-call usage, logged next to the latency that produced it. This is the
@@ -3106,52 +3115,6 @@ func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Ch
 		"totalTokens", usage.TokenCount,
 	}
 	logging.InfoContext(ctx, "[CallLLM] Usage", append(usageFields, shape.logFields(diff)...)...)
-	metrics := analytics.LLMCallMetrics{
-		Provider:    driver.Name(),
-		Model:       string(model.ID),
-		LatencyMs:   latencyMs,
-		Success:     streamErr == nil,
-		IsStreaming: true,
-		ChatID:      chat.ID,
-	}
-	if streamErr != nil {
-		metrics.ErrorType = classifyLLMError(streamErr)
-	}
-	metrics.InputTokens = int(usage.InputTokens)
-	metrics.OutputTokens = int(usage.OutputTokens)
-	if metrics.InputTokens == 0 && metrics.OutputTokens == 0 {
-		metrics.InputTokens = int(usage.TokenCount)
-	}
-	if chat.WorkflowID != nil {
-		metrics.WorkflowID = *chat.WorkflowID
-	}
-
-	analyticsClient := analytics.ForUser(ctx, chat.UserID)
-	analyticsClient.TrackLLMCallCompleted(metrics)
-}
-
-// classifyLLMError maps an LLM error to a category string for analytics.
-func classifyLLMError(err error) string {
-	if err == nil {
-		return ""
-	}
-	errMsg := strings.ToLower(err.Error())
-	switch {
-	case strings.Contains(errMsg, "rate limit") || strings.Contains(errMsg, "429"):
-		return "rate_limit"
-	case strings.Contains(errMsg, "context length") || strings.Contains(errMsg, "too many tokens") || strings.Contains(errMsg, "maximum context"):
-		return "context_length"
-	case strings.Contains(errMsg, "auth") || strings.Contains(errMsg, "401") || strings.Contains(errMsg, "403") || strings.Contains(errMsg, "invalid api key"):
-		return "auth"
-	case strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "deadline"):
-		return "timeout"
-	case strings.Contains(errMsg, "cancelled") || strings.Contains(errMsg, "canceled"):
-		return "cancelled"
-	case strings.Contains(errMsg, "connection") || strings.Contains(errMsg, "network") || strings.Contains(errMsg, "eof"):
-		return "network"
-	default:
-		return "unknown"
-	}
 }
 
 // trimBashWorkspaceCD removes redundant "cd <workspace> && " prefix from Bash tool input.
@@ -3198,8 +3161,10 @@ func formatStoredMemories(projectCfg *cfgpkg.Config) string {
 	if strings.TrimSpace(projectCfg.GlobalMemoryMD) != "" {
 		memories = append(memories, "## Global Context\n\n"+projectCfg.GlobalMemoryMD)
 	}
-	if strings.TrimSpace(projectCfg.ProjectMemoryMD) != "" {
-		memories = append(memories, "## Project Context\n\n"+projectCfg.ProjectMemoryMD)
+	// A reliant.md scaffolded before the routing guide moved into the system
+	// prompt still carries a copy of it; the live one is the only one sent.
+	if projectMemory := withoutScaffoldedCapabilities(projectCfg.ProjectMemoryMD); strings.TrimSpace(projectMemory) != "" {
+		memories = append(memories, "## Project Context\n\n"+projectMemory)
 	}
 
 	// Runtime capability heads-up for cloud daemons: tell the model up front

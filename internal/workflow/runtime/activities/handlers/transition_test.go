@@ -29,7 +29,7 @@ const (
 )
 
 // setChatWorkflow points a test chat at a given workflow name.
-func setChatWorkflow(t *testing.T, ctx context.Context, repo db.Repository, chatID, workflowName string) {
+func setChatWorkflow(t *testing.T, ctx context.Context, repo *db.Repo, chatID, workflowName string) {
 	t.Helper()
 	chat, err := repo.GetChat(ctx, chatID)
 	require.NoError(t, err)
@@ -37,7 +37,7 @@ func setChatWorkflow(t *testing.T, ctx context.Context, repo db.Repository, chat
 	require.NoError(t, repo.UpdateChat(ctx, chat))
 }
 
-func chatWorkflowName(t *testing.T, ctx context.Context, repo db.Repository, chatID string) string {
+func chatWorkflowName(t *testing.T, ctx context.Context, repo *db.Repo, chatID string) string {
 	t.Helper()
 	chat, err := repo.GetChat(ctx, chatID)
 	require.NoError(t, err)
@@ -49,6 +49,8 @@ func chatWorkflowName(t *testing.T, ctx context.Context, repo db.Repository, cha
 // switches the chat to its declared transition_to target, atomically with the
 // status write, and idempotently.
 func TestWorkflowStatus_TransitionToOnCompletion(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -107,6 +109,8 @@ func TestWorkflowStatus_TransitionToOnCompletion(t *testing.T) {
 // with no transition_to (builtin://agent) leaves the chat's workflow untouched —
 // this also proves the transition chain terminates (no cycle).
 func TestWorkflowStatus_NoTransitionWhenTargetAbsent(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -148,6 +152,8 @@ func TestWorkflowStatus_NoTransitionWhenTargetAbsent(t *testing.T) {
 // a transition_to-bearing name must never switch the chat out from under its
 // parent.
 func TestWorkflowStatus_ChildCompletionDoesNotTransition(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -187,6 +193,8 @@ func TestWorkflowStatus_ChildCompletionDoesNotTransition(t *testing.T) {
 
 // TestTransitionChatOnCompletion_Guards exercises the helper's guards directly.
 func TestTransitionChatOnCompletion_Guards(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

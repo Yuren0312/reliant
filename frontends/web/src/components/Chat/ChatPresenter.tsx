@@ -1,0 +1,969 @@
+/**
+ * ChatPresenter - Pure rendering component
+ *
+ * Receives all data as props and renders the chat interface.
+ * No store subscriptions, no business logic - just pure rendering.
+ */
+
+import { useRef, useState, memo, useMemo, useEffect, useCallback } from "react";
+import { GripHorizontal, GripVertical } from "lucide-react";
+import { ChatInputWrapper } from "./ChatInputWrapper";
+import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
+import { ChatMachineNoticeLine } from "./ChatMachineNotice";
+import { QueuedForMachineNote } from "./QueuedForMachineNote";
+import { UsageLimitWaitNote } from "./UsageLimitWaitNote";
+import { usageLimitWaitOf } from "@/lib/usageLimitWait";
+import { ChatMessagesContainer } from "./ChatMessagesContainer";
+import { ScrollToBottomButton } from "./ScrollToBottomButton";
+import { TimelineCatchUpOverlay, TimelineCatchUpStatus } from "./TimelineCatchUpOverlay";
+import { useDelayedVisibility } from "../../hooks/useDelayedVisibility";
+import {
+  CATCH_UP_MIN_VISIBLE_MS,
+  CATCH_UP_SHOW_DELAY_MS,
+  isTimelineCatchingUp,
+} from "../../lib/timelineCatchUp";
+import { useTimelineSync } from "../../store/chatStoreHooks";
+import { PermissionsPanelWrapper } from "./PermissionsPanelWrapper";
+import { PermissionsPanel } from "./PermissionsPanel";
+import { ChatHeader } from "./ChatHeader";
+import { ResumeDaemonPill } from "./ResumeDaemonPill";
+import { OomKillBanner } from "./OomKillBanner";
+import { DiskPressureBanner } from "./DiskPressureBanner";
+import { ComposerWakeStatus } from "./ComposerWakeStatus";
+import { ContinueWithoutMachineButton, NoMachineComposerHint } from "./NoMachine";
+import { continueBranchPoint } from "../../lib/chatMachine";
+import { BackgroundWorkPill } from "./BackgroundWorkPill";
+import { QueuedMessages } from "./QueuedMessages";
+import type { WorkflowExecution } from "./ExecutionSidebar/types";
+import { InterleavedTimeline } from "./thread-views";
+import { WorkflowViewerPanel } from "../workflow/WorkflowViewerPanel";
+
+import type { Message } from "../../api/client";
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
+import type {
+  ErrorUpdate,
+  InfoUpdate,
+  RunOutputUpdate,
+  ConnectionStatus,
+} from "../../types/streaming";
+import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { useViewerStore } from "../../store/viewerStore";
+import { ChatActivity, MessageRole } from "../../gen/reliant/v1/chat_pb";
+import { useCapability } from "../../lib/surfaceContext";
+import { useThreadMessages } from "../../hooks/message-queries";
+import { useChat } from "../../hooks/chat-queries";
+import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
+import { isUnadoptedAutomation } from "../../lib/sidebarChatList";
+import { unansweredMessage } from "../../lib/awaitingReply";
+import { usePendingQuestions } from "../../hooks/question-queries";
+import { questionForThread } from "../../lib/pendingQuestions";
+import { chatMachineNotice, resolveChatMachine } from "../../lib/chatMachineNotice";
+import { useWakingMachines } from "../../lib/machineWake";
+import { useDaemonList } from "@/hooks/useOnboardingQueries";
+import { useChatActivity } from "../../store/activityStore";
+import { TakeOverRunBar, useAdoptOnSend } from "./TakeOverRunBar";
+
+interface ChatPresenterProps {
+  // Message data
+  messages: Message[];
+  approvals: Approval[];
+  errorEvents: ErrorUpdate[];
+  infoEvents: InfoUpdate[];
+  runOutputs: RunOutputUpdate[];
+
+  // Chat state
+  chatId: string | null;
+  isChatBusy: boolean;
+  pendingApprovals: Approval[];
+  connectionStatus: string;
+
+  // Chat metadata
+  worktreeId?: string | null;
+  projectId?: string | null;
+  needsRecovery?: boolean; // True when Temporal workflow was lost and user needs to send message to continue
+  
+  // Recovery callback - called when user confirms they want to restart the conversation
+  onRestartConversation?: () => void;
+
+  // Callbacks
+  onSendMessage: (
+    content: string,
+    attachmentIds?: string[],
+    workflow?: string | null,
+    workflowParams?: Record<string, unknown>,
+    targetThread?: string | null,
+    selectedPresets?: Record<string, string | null>
+  ) => Promise<void>;
+  onStopStreaming: () => Promise<void>;
+
+  // UI state
+  isFocused?: boolean;
+  paneId?: string;
+
+  // Workflow execution sidebar/timeline metadata
+  workflowExecution?: WorkflowExecution;
+  workflowExecutions?: WorkflowExecution[];
+
+  // Scroll-back paging (the initial message snapshot is bounded, so older
+  // history is fetched on demand when the user scrolls to the top)
+  onLoadOlderMessages?: () => void;
+  isLoadingOlderMessages?: boolean;
+  hasOlderMessages?: boolean;
+
+  /** The host shows the chat's title itself; see ChatHeader.hideTitle. */
+  hideChatTitle?: boolean;
+}
+
+export const ChatPresenter = memo(function ChatPresenter({
+  messages,
+  approvals,
+  errorEvents,
+  infoEvents,
+  runOutputs,
+  chatId,
+  isChatBusy,
+  pendingApprovals,
+  connectionStatus,
+  worktreeId,
+  projectId,
+  needsRecovery,
+  onRestartConversation,
+  onSendMessage,
+  onStopStreaming,
+  isFocused = true,
+  paneId,
+  workflowExecution,
+  workflowExecutions,
+  onLoadOlderMessages,
+  isLoadingOlderMessages,
+  hasOlderMessages,
+  hideChatTitle,
+}: ChatPresenterProps) {
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // The workflow viewer (side/inline panel, its mouse-drag resize handles,
+  // and the execution-detail chrome it exposes) is desktop-only: it can't
+  // fit an iPhone viewport even at its resize floor, and its handles have no
+  // touch equivalent. chatExecutionSidebar is false for both mobile and
+  // embed, so this single flag decides whether any of that state, effects,
+  // or markup mount at all — never render-and-hide.
+  const showDesktopChrome = useCapability("chatExecutionSidebar");
+
+  // Thread selection state (lifted up to share between header and timeline)
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+
+  // Background-work pill reveals a running command in the Commands tab, which
+  // already accepts a processId to preselect.
+  const openCommandsViewer = useViewerStore((state) => state.openCommandsViewer);
+  const handleSelectBackgroundCommand = useCallback(
+    (processId: string) => {
+      if (!projectId) return;
+      openCommandsViewer(projectId, worktreeId ?? undefined, processId);
+    },
+    [openCommandsViewer, projectId, worktreeId],
+  );
+
+  // The queued mailbox is read HERE rather than inside the composer so the
+  // attention band above the input has one owner and one order: what you
+  // already sent and can still take back sits above the ambient readout of
+  // what is running. Rendered from the composer, the strip could only ever
+  // appear below the background-work pill, since the pill is a sibling the
+  // composer is mounted after.
+  //
+  // The mailbox is the one the composer queues INTO, so both must derive the
+  // target thread the same way: a selected side thread, else the chat's main
+  // thread.
+  const chatForQueue = useChat(chatId || undefined).data;
+  const queueThreadId =
+    selectedThreadId && selectedThreadId !== chatId
+      ? selectedThreadId
+      : chatForQueue?.workflowId;
+
+  // The SAME "the agent is actually working" signal the composer computes, and
+  // deliberately not isChatBusy — which is RUNNING *or* AWAITING_INPUT, so it
+  // is still true while a question waits on the user. Two things read this and
+  // both would be wrong under isChatBusy: the mailbox poll (an agent parked on
+  // a question drains nothing, so polling it is pure noise), and the
+  // "Interrupt & send now" button, which must not be offered when there is no
+  // work in flight to stop.
+  //
+  // "A question waits on the user" is about the thread IN VIEW, the same one
+  // the composer answers: a spawned agent parked on its own question does not
+  // stop the main thread from working, and its question surfaces in the
+  // background-work pill instead.
+  const { data: pendingQuestions } = usePendingQuestions(chatId || undefined);
+  const hasPendingQuestion = !!questionForThread(
+    pendingQuestions?.questions,
+    chatId || undefined,
+    selectedThreadId,
+    chatForQueue?.workflowId,
+  );
+  const isAgentWorking = isChatBusy && !hasPendingQuestion;
+
+  // The run is held until its machine comes up (research/QUEUE_UNTIL_DAEMON.md).
+  // Read from the activity store, which streams activity changes, and not
+  // from the chat query: that is a snapshot from its last fetch and does not
+  // follow the run into (or out of) the wait. WAITING_FOR_DAEMON is also not
+  // "running", so isChatBusy is false throughout it — everything that should
+  // still speak for a held run (the footer, the queued strip) takes this too.
+  const chatActivity = useChatActivity(chatId || "");
+  const waitingOnMachine = chatActivity === ChatActivity.WAITING_FOR_DAEMON;
+  // The run that held the user's message ended because its machine never
+  // came up (failed to start, removed, or still down after hours). Nothing is
+  // running, but the message is still queued for the machine: the server
+  // sends it when the machine connects. The composer, the queued strip and
+  // the footer speak for it as they do for a held run.
+  const queuedForMachine = chatActivity === ChatActivity.QUEUED_FOR_MACHINE;
+  const heldForMachine = waitingOnMachine || queuedForMachine;
+
+  // A held run drains its mailbox on its first turn, so the strip keeps
+  // polling while it waits; only interrupting needs work in flight.
+  const {
+    messages: queuedMessages,
+    refresh: refreshQueuedMessages,
+    forget: forgetQueuedMessage,
+  } = useQueuedAgentMessages(chatId || undefined, queueThreadId, isAgentWorking || waitingOnMachine);
+
+  // Workspace state store for persisting workflow viewer state
+  const getWorkflowViewerOpen = useWorkspaceStateStore((state) => state.getWorkflowViewerOpen);
+  const setWorkflowViewerOpen = useWorkspaceStateStore((state) => state.setWorkflowViewerOpen);
+  const getWorkflowViewerMode = useWorkspaceStateStore((state) => state.getWorkflowViewerMode);
+  const setWorkflowViewerModeStore = useWorkspaceStateStore((state) => state.setWorkflowViewerMode);
+
+  // Workflow viewer mode: 'inline' (above chat) or 'side' (beside chat)
+  // Initialize from settings immediately. Skipped entirely off desktop —
+  // the value is never read once showDesktopChrome is false, and reading
+  // it anyway would just be dead code exercising settingsSync for nothing.
+  const [workflowViewerMode, setWorkflowViewerMode] = useState<'inline' | 'side'>(() => {
+    if (!showDesktopChrome) return 'side';
+    const stored = settingsSync.getSetting(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, 'side');
+    return (stored === 'inline' || stored === 'side') ? stored : 'side';
+  });
+  const workflowViewerModeRef = useRef(workflowViewerMode);
+  
+  // Workflow viewer open state - load from persisted state
+  const [isWorkflowViewerOpen, setIsWorkflowViewerOpen] = useState(false);
+  
+  const [sidePanelWidth, setSidePanelWidth] = useState(400);
+  const [inlineViewerHeight, setInlineViewerHeight] = useState(400); // Height for inline viewer
+  const [isWorkflowViewerExpanded, setIsWorkflowViewerExpanded] = useState(false);
+  const isResizingRef = useRef(false); // Track if a resize operation is in progress
+
+  // Helper to update both local and persisted state
+  const updateWorkflowViewerOpen = useCallback((open: boolean) => {
+    setIsWorkflowViewerOpen(open);
+    if (chatId && projectId) {
+      setWorkflowViewerOpen(projectId, worktreeId ?? null, chatId, open);
+    }
+  }, [chatId, projectId, worktreeId, setWorkflowViewerOpen]);
+
+  const updateWorkflowViewerMode = useCallback((mode: 'inline' | 'side') => {
+    setWorkflowViewerMode(mode);
+    workflowViewerModeRef.current = mode;
+    // Save chat-specific mode if we have both chatId and projectId
+    if (chatId && projectId) {
+      setWorkflowViewerModeStore(projectId, worktreeId ?? null, chatId, mode);
+    }
+  }, [chatId, projectId, worktreeId, setWorkflowViewerModeStore]);
+
+  // Load persisted workflow viewer state when chatId changes. Skipped off
+  // desktop: the viewer never renders there (showDesktopChrome below), so
+  // there is nothing for this state to drive.
+  useEffect(() => {
+    if (!showDesktopChrome || !chatId || !projectId) return;
+
+    // Load persisted state
+    const persistedOpen = getWorkflowViewerOpen(projectId, worktreeId ?? null, chatId);
+    const persistedMode = getWorkflowViewerMode(projectId, worktreeId ?? null, chatId);
+
+    // If we have persisted mode for this chat, use it (user has set a preference for this specific chat)
+    if (persistedMode !== null) {
+      setWorkflowViewerMode(persistedMode);
+      workflowViewerModeRef.current = persistedMode;
+    } else {
+      // NEW chat - no persisted mode, use the setting
+      const stored = settingsSync.getSetting(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, 'side');
+      const defaultMode = (stored === 'inline' || stored === 'side') ? stored : 'side';
+      setWorkflowViewerMode(defaultMode);
+      workflowViewerModeRef.current = defaultMode;
+      // Don't persist it - only persist when user explicitly toggles
+    }
+
+    // Set open state from persisted state, or default based on workflow execution
+    if (workflowExecution !== undefined) {
+      // If workflow exists, use persisted state or default to true
+      updateWorkflowViewerOpen(persistedOpen !== false);
+    } else {
+      // No workflow, use persisted state or default to false
+      updateWorkflowViewerOpen(persistedOpen);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatId, projectId, worktreeId]); // Only depend on chatId, projectId, worktreeId
+
+  // When workflowExecution appears, restore persisted mode if it exists
+  // This handles the case where a workflow starts after the chat is already loaded
+  useEffect(() => {
+    if (!showDesktopChrome || !chatId || !projectId || !workflowExecution) return;
+    
+    const persistedMode = getWorkflowViewerMode(projectId, worktreeId ?? null, chatId);
+    
+    // If we have persisted mode, use it (user has set a preference for this specific chat)
+    if (persistedMode !== null) {
+      setWorkflowViewerMode(persistedMode);
+      workflowViewerModeRef.current = persistedMode;
+    } else {
+      // No persisted mode, use setting (for new chats)
+      const stored = settingsSync.getSetting(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, 'side');
+      const defaultMode = (stored === 'inline' || stored === 'side') ? stored : 'side';
+      setWorkflowViewerMode(defaultMode);
+      workflowViewerModeRef.current = defaultMode;
+      // Don't persist it - only persist when user explicitly toggles
+    }
+    
+    // Open state is already handled in the chatId effect above
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowExecution?.id]); // Only when workflow execution ID changes
+
+
+  // Keep ref in sync with state (already handled in updateWorkflowViewerMode)
+
+  // Determine if viewers should be open based on mode and open state
+  const isInlineWorkflowViewerOpen = showDesktopChrome && workflowViewerMode === 'inline' && isWorkflowViewerOpen && workflowExecution !== undefined;
+  const isSidePanelWorkflowViewerOpen = showDesktopChrome && workflowViewerMode === 'side' && isWorkflowViewerOpen && workflowExecution !== undefined;
+
+
+  // Show/hide the viewer, keeping whichever mode (inline or side) is already
+  // set from the persisted per-chat preference or the global setting. Mode is
+  // switched from inside the viewer panel itself, not from here.
+  const handleToggleWorkflowViewer = useCallback(() => {
+    updateWorkflowViewerOpen(!isWorkflowViewerOpen);
+  }, [isWorkflowViewerOpen, updateWorkflowViewerOpen]);
+
+  // Mode switch, driven by the viewer panel's own inline/side control.
+  const handleToggleWorkflowViewerMode = useCallback(() => {
+    updateWorkflowViewerMode(workflowViewerMode === 'inline' ? 'side' : 'inline');
+  }, [workflowViewerMode, updateWorkflowViewerMode]);
+
+  // Listen for settings changes (only update if no persisted mode exists - i.e., new chats)
+  // This ensures new chats use the updated setting, but existing chats keep their preference.
+  // No-op off desktop — nothing here is read once showDesktopChrome is false.
+  useEffect(() => {
+    if (!showDesktopChrome) return;
+    const handleSettingsChange = () => {
+      if (!chatId || !projectId) return;
+      
+      // Only update if we don't have persisted state for this chat (new chat)
+      // Existing chats with persisted modes should keep their preference
+      const persistedMode = getWorkflowViewerMode(projectId, worktreeId ?? null, chatId);
+      if (persistedMode === null) {
+        const stored = settingsSync.getSetting(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, 'side');
+        const newDefault = (stored === 'inline' || stored === 'side') ? stored : 'side';
+        // Update the mode without persisting (since user hasn't explicitly set it for this chat)
+        setWorkflowViewerMode(newDefault);
+        workflowViewerModeRef.current = newDefault;
+      }
+    };
+    
+    window.addEventListener('appearance-updated', handleSettingsChange);
+    return () => {
+      window.removeEventListener('appearance-updated', handleSettingsChange);
+    };
+  }, [showDesktopChrome, chatId, projectId, worktreeId, getWorkflowViewerMode]);
+
+  // Reset thread selection when navigating to a different chat
+  // Workflow viewer state is now loaded from persisted state in the effect above
+  useEffect(() => {
+    setSelectedThreadId(null);
+  }, [chatId]);
+
+  // Convert single thread ID to Set for timeline filtering
+  const selectedThreads = useMemo(() => {
+    if (selectedThreadId === null) return null; // null = show all
+    return new Set([selectedThreadId]);
+  }, [selectedThreadId]);
+
+  // A selected SIDE thread is fetched on its own; the main thread keeps
+  // reading the chat-wide list, which is already exactly the main transcript
+  // (plus the interleaved thread-start / handoff markers the timeline draws
+  // around it, which only exist in the chat-wide view).
+  // The `!!` matters: `selectedThreadId && …` yields the FALSY OPERAND when
+  // selectedThreadId is null, so the ternary's condition — and therefore the
+  // whole expression — was `string | null`, while useThreadMessages takes
+  // `string | undefined`. Coercing to a boolean keeps the branch value in the
+  // `string | undefined` the hook expects.
+  const selectedSideThreadId =
+    !!selectedThreadId &&
+    selectedThreadId !== chatId &&
+    selectedThreadId !== "0" &&
+    selectedThreadId !== ""
+      ? selectedThreadId
+      : undefined;
+  // chatId is `string | null` on this component's props, while the hook takes
+  // `string | undefined` — both mean "no chat selected", so normalize at the
+  // boundary rather than widening the hook.
+  const { data: selectedThreadMessages } = useThreadMessages(
+    chatId ?? undefined,
+    selectedSideThreadId,
+  );
+
+  // Wrapper to inject selectedThreadId into onSendMessage
+  const handleSendWithThread = useCallback(
+    async (
+      content: string,
+      attachmentIds?: string[],
+      workflow?: string | null,
+      workflowParams?: Record<string, unknown>,
+      _targetThread?: string | null, // ignored - we use selectedThreadId instead
+      selectedPresets?: Record<string, string | null>
+    ) => {
+      await onSendMessage(content, attachmentIds, workflow, workflowParams, selectedThreadId, selectedPresets);
+    },
+    [onSendMessage, selectedThreadId]
+  );
+  // Replying in an automation run takes it over (§6.3). The composer starts
+  // collapsed to a bar that says so; expanding it is per chat, so opening the
+  // next run starts collapsed again.
+  const handleAdoptingSend = useAdoptOnSend(chatForQueue, handleSendWithThread);
+
+  // Which chat has a send awaiting the server. The server wakes the chat's
+  // machine inside that call, so this is half of the "Waking <machine>…"
+  // signal (ComposerWakeStatus); keyed by chat so a send left in flight by a
+  // chat switch never lights the next chat's composer.
+  const [sendingChatId, setSendingChatId] = useState<string | null>(null);
+  const handleSend = useCallback(
+    async (...args: Parameters<typeof handleAdoptingSend>) => {
+      const sendingFor = chatId;
+      setSendingChatId(sendingFor);
+      try {
+        await handleAdoptingSend(...args);
+      } finally {
+        setSendingChatId((current) => (current === sendingFor ? null : current));
+      }
+    },
+    [handleAdoptingSend, chatId],
+  );
+  const [takeOverExpandedFor, setTakeOverExpandedFor] = useState<string | null>(null);
+
+  // A chat with no machine by design (NO_MACHINE_CHATS.md): none of the
+  // machine surfaces apply, and the composer says what the chat can do.
+  const currentChat = chatForQueue?.id === chatId ? chatForQueue : undefined;
+  const noMachine = !!currentChat?.noMachine;
+
+  // The run is parked until a provider's usage limit resets (server-side timer;
+  // it retries by itself). The reset time rides on the chat, the activity says
+  // whether it applies.
+  const usageLimitWait =
+    chatActivity === ChatActivity.WAITING_FOR_USAGE_LIMIT ? usageLimitWaitOf(currentChat) : undefined;
+  // For a chat ON a machine that is unavailable, "Continue without machine"
+  // branches at its latest stored main-thread message.
+  const continueFromMessageId = useMemo(
+    () => (noMachine ? undefined : continueBranchPoint(messages, currentChat?.workflowId || currentChat?.id)),
+    [noMachine, messages, currentChat?.workflowId, currentChat?.id],
+  );
+  const showTakeOverBar =
+    !!chatForQueue && chatForQueue.id === chatId && isUnadoptedAutomation(chatForQueue) && takeOverExpandedFor !== chatId;
+
+  // Scroll state bridge: whether the transcript is at the bottom (drives the
+  // scroll-to-bottom button), and the timeline's "jump to bottom and resume
+  // following" callback (the button, and the composer after a send).
+  const [timelineAtBottom, setTimelineAtBottom] = useState(true);
+  const resumeFollowRef = useRef<(() => void) | null>(null);
+
+  const handleResumeFollow = useCallback((cb: () => void) => {
+    resumeFollowRef.current = cb;
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    resumeFollowRef.current?.();
+  }, []);
+
+  // Thinking indicator element, rendered as the timeline's footer
+  const hasThinkingFooter =
+    (isChatBusy || waitingOnMachine) && pendingApprovals.length === 0 && !hasPendingQuestion;
+  // A held run that has not read the user's latest message yet is holding
+  // THAT message: the footer says it is queued, not that it is stuck.
+  const unanswered = useMemo(
+    () => unansweredMessage(messages, currentChat?.workflowId || chatId || undefined),
+    [messages, currentChat?.workflowId, chatId],
+  );
+  const latestMessageUnanswered = unanswered !== undefined;
+  const messageQueuedForMachine = waitingOnMachine && latestMessageUnanswered;
+  // The run ended and its message waits for the machine: a static line, not
+  // the thinking indicator — nothing is running.
+  const hasQueuedForMachineFooter =
+    !hasThinkingFooter && queuedForMachine && latestMessageUnanswered && pendingApprovals.length === 0 && !hasPendingQuestion;
+
+  // The chat's machine, read from the machine registry rather than from the
+  // run (lib/chatMachineNotice). Whenever work is waiting — a live run, a run
+  // held for (or a message queued for) the machine, a send in flight — and
+  // the machine is coming up, reconnecting, asleep or failed, the footer says
+  // so. The run's state does not gate it: chat 66a045ce's run was failing its
+  // replay while its machine resumed, never reached the machine wait, and
+  // read "Processing" throughout.
+  const sendingThisChat = !!chatId && sendingChatId === chatId;
+  const workWaitsOnMachine =
+    !noMachine &&
+    pendingApprovals.length === 0 &&
+    !hasPendingQuestion &&
+    (isAgentWorking || heldForMachine || sendingThisChat || usageLimitWait !== undefined);
+  const { data: daemons } = useDaemonList({ enabled: workWaitsOnMachine });
+  const wakes = useWakingMachines();
+  const chatMachineDaemon = workWaitsOnMachine ? resolveChatMachine(daemons, currentChat?.activeDaemonId) : undefined;
+  const chatMachineWakeStartedAt = chatMachineDaemon ? wakes.get(chatMachineDaemon.daemonId) : undefined;
+  const unansweredSentAt = unanswered ? Date.parse(unanswered.createdAt) : NaN;
+  const machineNotice = useMemo(
+    () =>
+      chatMachineNotice({
+        daemon: chatMachineDaemon,
+        messageUnanswered: latestMessageUnanswered || sendingThisChat,
+        messageSentAt: Number.isFinite(unansweredSentAt) ? unansweredSentAt : undefined,
+        sending: sendingThisChat,
+        runWaitingForMachine: waitingOnMachine,
+        // A live run waiting off the machine wakes it itself on resume.
+        runHeld: usageLimitWait ? "usage_limit" : isAgentWorking ? "run" : undefined,
+        wakeStartedAt: chatMachineWakeStartedAt,
+      }),
+    [
+      chatMachineDaemon,
+      latestMessageUnanswered,
+      sendingThisChat,
+      waitingOnMachine,
+      usageLimitWait,
+      isAgentWorking,
+      unansweredSentAt,
+      chatMachineWakeStartedAt,
+    ],
+  );
+
+  // What the thinking indicator times "no response yet" from: anything the
+  // run shows — a new message, streamed text, run output.
+  const lastMessage = messages[messages.length - 1];
+  const lastBlock = lastMessage?.contentBlocks?.[lastMessage.contentBlocks.length - 1];
+  const progressKey = `${messages.length}:${lastMessage?.id ?? ""}:${lastMessage?.contentBlocks?.length ?? 0}:${
+    lastBlock?.content?.length ?? 0
+  }:${runOutputs.length}`;
+  const canShowRunStatus = showDesktopChrome && workflowExecution !== undefined;
+  const handleShowRunStatus = useCallback(() => updateWorkflowViewerOpen(true), [updateWorkflowViewerOpen]);
+  const handleStopRun = useCallback(() => {
+    void onStopStreaming();
+  }, [onStopStreaming]);
+
+  // Memoized because it is a prop of the memo()'d timeline: a fresh element
+  // on every render would re-render the whole transcript on each pass —
+  // which, during streaming, is many times per second.
+  const thinkingFooter = useMemo(() => {
+    if (machineNotice && usageLimitWait && chatId) {
+      // Held on a usage limit with the machine asleep: the limit is still
+      // what the run waits on (with its countdown and Retry now), and the
+      // machine line says it will wake by itself when the run resumes.
+      return (
+        <div className="flex flex-col gap-1.5">
+          <UsageLimitWaitNote chatId={chatId} wait={usageLimitWait} onStop={handleStopRun} />
+          <ChatMachineNoticeLine notice={machineNotice} />
+        </div>
+      );
+    }
+    if (machineNotice) {
+      return <ChatMachineNoticeLine notice={machineNotice} />;
+    }
+    if (usageLimitWait && chatId) {
+      return <UsageLimitWaitNote chatId={chatId} wait={usageLimitWait} onStop={handleStopRun} />;
+    }
+    if (hasThinkingFooter) {
+      return (
+        <ChatThinkingIndicator
+          chatId={chatId || undefined}
+          filterThreadId={selectedThreadId}
+          waitingOnMachine={waitingOnMachine}
+          messageQueuedForMachine={messageQueuedForMachine}
+          progressKey={progressKey}
+          onShowRunStatus={canShowRunStatus ? handleShowRunStatus : undefined}
+          onStop={handleStopRun}
+        />
+      );
+    }
+    return hasQueuedForMachineFooter ? <QueuedForMachineNote /> : undefined;
+  }, [
+    machineNotice,
+    usageLimitWait,
+    hasThinkingFooter,
+    hasQueuedForMachineFooter,
+    chatId,
+    selectedThreadId,
+    waitingOnMachine,
+    messageQueuedForMachine,
+    progressKey,
+    canShowRunStatus,
+    handleShowRunStatus,
+    handleStopRun,
+  ]);
+  // The transcript, and with it that footer, is only drawn once there is
+  // something in it.
+  const showsTimeline =
+    messages.length > 0 || runOutputs.length > 0 || errorEvents.length > 0 || infoEvents.length > 0;
+
+  // With a thread selected, render THAT THREAD's own messages rather than the
+  // chat-wide list narrowed down to it. Filtering only showed whatever part of
+  // the thread happened to survive a window sized for the main transcript, so
+  // selecting a busy spawn could show a fraction of it and look complete. The
+  // thread-scoped read has the whole thread.
+  //
+  // Only the thread branch is filtered here: `messages` arrives from
+  // ChatContainer already sorted and TOOL-filtered, while the thread-scoped
+  // read comes straight from the API with neither applied. Memoized because
+  // this array is InterleavedTimeline's `messages` prop and the timeline is
+  // memo()'d — filtering on every render would hand it a fresh array each
+  // pass and defeat that memo entirely.
+  const timelineMessages = useMemo(() => {
+    if (!selectedThreadMessages) return messages;
+    return selectedThreadMessages.filter(
+      (message: Message) => message.role !== MessageRole.TOOL
+    );
+  }, [selectedThreadMessages, messages]);
+
+  // Catch-up overlay, for the timeline in view: the chat's (main thread) or
+  // the selected side thread's (lib/timelineCatchUp). Delayed so a cached,
+  // instant switch shows nothing, and held briefly once up so it never
+  // flickers.
+  const timelineSync = useTimelineSync(chatId, selectedSideThreadId);
+  const timelineCatchingUp = isTimelineCatchingUp({
+    ...timelineSync,
+    messages: timelineMessages,
+    connectionStatus,
+  });
+  const catchUpOverlayVisible = useDelayedVisibility(timelineCatchingUp, {
+    showDelayMs: CATCH_UP_SHOW_DELAY_MS,
+    minVisibleMs: CATCH_UP_MIN_VISIBLE_MS,
+  });
+  // The reader could not scroll while the overlay was up, so where they are
+  // meant to be when it lifts is the end of the caught-up transcript.
+  const catchUpOverlayWasVisibleRef = useRef(false);
+  useEffect(() => {
+    if (catchUpOverlayWasVisibleRef.current && !catchUpOverlayVisible) {
+      scrollToBottom();
+    }
+    catchUpOverlayWasVisibleRef.current = catchUpOverlayVisible;
+  }, [catchUpOverlayVisible, scrollToBottom]);
+
+  // Render the timeline
+  const renderTimeline = () => (
+    <InterleavedTimeline
+      messages={timelineMessages}
+      approvals={approvals}
+      errorEvents={errorEvents}
+      infoEvents={infoEvents}
+      runOutputs={runOutputs}
+      chatId={chatId || ""}
+      workflowExecution={workflowExecution}
+      selectedThreads={selectedThreads}
+      isStreaming={isChatBusy}
+      onAtBottomStateChange={setTimelineAtBottom}
+      onResumeFollow={handleResumeFollow}
+      footer={thinkingFooter}
+      onSelectThread={setSelectedThreadId}
+      onLoadOlderMessages={onLoadOlderMessages}
+      isLoadingOlderMessages={isLoadingOlderMessages}
+      hasOlderMessages={hasOlderMessages}
+    />
+  );
+
+  return (
+    <div className="flex h-full layout-stable relative flex-1 min-w-0 min-h-0">
+      {/* Main chat area */}
+      <div
+        className={isWorkflowViewerExpanded && workflowViewerMode === 'side' ? "hidden" : "flex flex-col flex-1 min-w-0 min-h-0 relative"}
+        data-testid="chat-interface"
+      >
+        {/* Chat Header */}
+        <ChatHeader
+          chatId={chatId}
+          selectedThreadId={selectedThreadId}
+          onSelectThread={setSelectedThreadId}
+          workflowExecution={workflowExecutions ?? workflowExecution}
+          // Omitting the callback (rather than passing a no-op) is what
+          // suppresses the "Show/Hide Workflow" menu entry — ChatHeader
+          // gates on `onToggleWorkflowViewer &&`.
+          onToggleWorkflowViewer={showDesktopChrome ? handleToggleWorkflowViewer : undefined}
+          isWorkflowViewerOpen={isWorkflowViewerOpen}
+          hideTitle={hideChatTitle}
+        />
+
+        {!noMachine && <ResumeDaemonPill />}
+
+        {/* Inline Workflow Viewer Panel - shown when in inline mode */}
+        {isInlineWorkflowViewerOpen && workflowExecution && projectId && (
+          <div 
+            className={isWorkflowViewerExpanded ? "flex-1 border-b border-border bg-background flex flex-col relative min-h-0" : "flex-shrink-0 border-b border-border bg-background flex flex-col relative"}
+            style={isWorkflowViewerExpanded ? undefined : { height: inlineViewerHeight }}
+          >
+            {/* Resize handle at the bottom - hidden when expanded */}
+            {!isWorkflowViewerExpanded && (
+            <div
+              className="absolute bottom-0 left-0 right-0 h-2 cursor-row-resize hover:bg-primary/20 transition-colors z-10 flex items-center justify-center group"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                // Prevent multiple simultaneous resize operations
+                if (isResizingRef.current) {
+                  return;
+                }
+                // Only allow resize if we're actually in inline mode
+                if (workflowViewerModeRef.current !== 'inline') {
+                  return;
+                }
+                isResizingRef.current = true;
+                const startY = e.clientY;
+                const startHeight = inlineViewerHeight;
+                const onMouseMove = (e: MouseEvent) => {
+                  // Double-check mode hasn't changed during resize
+                  if (workflowViewerModeRef.current !== 'inline') {
+                    isResizingRef.current = false;
+                    document.removeEventListener('mousemove', onMouseMove);
+                    document.removeEventListener('mouseup', onMouseUp);
+                    return;
+                  }
+                  // For bottom handle: dragging down (Y increases) = increase height
+                  // Dragging up (Y decreases) = decrease height
+                  const delta = e.clientY - startY;
+                  const newHeight = Math.max(200, Math.min(800, startHeight + delta));
+                  setInlineViewerHeight(newHeight);
+                };
+                const onMouseUp = () => {
+                  isResizingRef.current = false;
+                  document.removeEventListener('mousemove', onMouseMove);
+                  document.removeEventListener('mouseup', onMouseUp);
+                };
+                document.addEventListener('mousemove', onMouseMove);
+                document.addEventListener('mouseup', onMouseUp);
+              }}
+            >
+              <GripHorizontal className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors" />
+            </div>
+            )}
+            <WorkflowViewerPanel
+              projectId={projectId}
+              chatId={chatId}
+              workflowName={workflowExecution.workflowName}
+              execution={workflowExecution}
+              onClose={() => updateWorkflowViewerOpen(false)}
+              compact={false}
+              hideFullscreen={false}
+              viewerMode={workflowViewerMode}
+              onToggleViewerMode={handleToggleWorkflowViewerMode}
+              onExpandedChange={setIsWorkflowViewerExpanded}
+            />
+          </div>
+        )}
+
+        {/* Messages Area - hidden when workflow viewer is expanded in inline mode */}
+        {!(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && (
+        <ChatMessagesContainer chatId={chatId ?? undefined} busy={catchUpOverlayVisible}>
+          {/* display:contents, so this wrapper is invisible to layout; it
+              exists to make the content under the catch-up overlay inert. */}
+          <div className="contents" inert={catchUpOverlayVisible || undefined}>
+            {showsTimeline && renderTimeline()}
+          </div>
+          {/* Overlaid rather than inserted, so the transcript never shifts
+              when it appears or lifts. */}
+          {catchUpOverlayVisible && <TimelineCatchUpOverlay hasContent={showsTimeline} />}
+          {/* Inside the transcript frame, anchored to its bottom edge, so the
+              band between the transcript and the composer (queued strip,
+              background-work pill, permissions) can never sit on top of it. */}
+          <ScrollToBottomButton
+            visible={!timelineAtBottom}
+            onClick={scrollToBottom}
+          />
+        </ChatMessagesContainer>
+        )}
+        {/* Outside the busy frame: a live region inside an aria-busy one may
+            not be announced. */}
+        <TimelineCatchUpStatus visible={catchUpOverlayVisible} />
+
+        {/* Messages already queued into the running agent's mailbox. Above the
+            background-work pill deliberately: this is what the user already
+            sent and can still take back, so it outranks the ambient readout of
+            what is running. */}
+        {/* Same gutters and max width as the composer below, so the strip and
+            the input it belongs to share one column. */}
+        <div className="flex-shrink-0 px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-[1200px]">
+            <QueuedMessages
+              chatId={chatId || undefined}
+              threadId={queueThreadId}
+              messages={queuedMessages}
+              onRefresh={refreshQueuedMessages}
+              onForget={forgetQueuedMessage}
+              onInterrupted={refreshQueuedMessages}
+              isRunning={isAgentWorking}
+              waitingOnMachine={heldForMachine}
+            />
+          </div>
+        </div>
+
+        {/* Background work (async spawns + running commands) — the spawn tool
+            call that started them scrolls away, so this is the fixed surface
+            that keeps them reachable. */}
+        <BackgroundWorkPill
+          chatId={chatId || undefined}
+          worktreeId={worktreeId ?? undefined}
+          selectedThreadId={selectedThreadId}
+          mainThreadId={chatForQueue?.workflowId}
+          onSelectThread={setSelectedThreadId}
+          onSelectCommand={handleSelectBackgroundCommand}
+        />
+
+        {/* Permissions Panel - positioned above chat input */}
+        <PermissionsPanelWrapper>
+          <PermissionsPanel chatId={chatId || undefined} />
+        </PermissionsPanelWrapper>
+
+        {/* OOM banner — machine ran out of memory recently (cloud daemons) */}
+        {!noMachine && <OomKillBanner />}
+        {/* Disk banner — a volume on the chat's machine is (nearly) full */}
+        {!noMachine && <DiskPressureBanner daemonId={currentChat?.activeDaemonId} />}
+
+        {noMachine && chatId ? (
+          <NoMachineComposerHint chatId={chatId} />
+        ) : (
+          // "Waking <machine>…" while this send wakes the chat's machine, and
+          // "Continue without machine" whenever that machine is unavailable.
+          <ComposerWakeStatus
+            sending={sendingThisChat}
+            daemonId={currentChat?.activeDaemonId}
+            waitingOnMachine={heldForMachine}
+            machineStatusInTranscript={!!machineNotice && showsTimeline}
+            continueWithoutMachine={
+              chatId ? <ContinueWithoutMachineButton chatId={chatId} messageId={continueFromMessageId} /> : undefined
+            }
+          />
+        )}
+
+        {/* Recovery Banner - shown when workflow was lost */}
+        {needsRecovery && (
+          <div className="flex-shrink-0 px-4 py-3 bg-amber-500/10 border-t border-amber-500/30 text-amber-600 dark:text-amber-400 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>Session was interrupted. Your message history is preserved.</span>
+              </div>
+              {onRestartConversation && (
+                <button
+                  onClick={onRestartConversation}
+                  className="flex-shrink-0 px-3 py-1 text-xs font-medium bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-md transition-colors"
+                >
+                  Restart Conversation
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+
+        {/* Input Area - Collapsible when not focused, hidden when workflow viewer is expanded in inline mode */}
+        {!(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && isFocused && showTakeOverBar && chatForQueue ? (
+          <TakeOverRunBar
+            chat={chatForQueue}
+            onReply={() => {
+              setTakeOverExpandedFor(chatId);
+              // The composer mounts on this render; focus it on the next frame.
+              requestAnimationFrame(() => chatInputRef.current?.focus());
+            }}
+          />
+        ) : !(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && isFocused ? (
+          <div className="flex-shrink-0">
+            <ChatInputWrapper
+              ref={chatInputRef}
+              onScrollToBottom={scrollToBottom}
+              onSend={handleSend}
+              onStop={onStopStreaming}
+              disabled={false}
+              worktreeId={worktreeId ?? undefined}
+              isStreaming={isChatBusy}
+              chatId={chatId ?? undefined}
+              connectionStatus={
+                connectionStatus as ConnectionStatus | undefined
+              }
+              isChatBusy={isChatBusy}
+              projectId={projectId ?? undefined}
+              paneId={paneId}
+              selectedThreadId={selectedThreadId}
+              workflowExecution={workflowExecution}
+            />
+          </div>
+        ) : !(isWorkflowViewerExpanded && workflowViewerMode === 'inline') ? (
+          <div className="p-2 border-t border-border bg-muted/20 text-center text-sm text-muted-foreground flex-shrink-0">
+            Click to focus and type a message
+          </div>
+        ) : null}
+      </div>
+      
+      {/* Side Panel Workflow Viewer - resizable panel beside chat */}
+      {isSidePanelWorkflowViewerOpen && workflowExecution && projectId && (
+        <div 
+          className={isWorkflowViewerExpanded ? "flex-1 border-l border-border bg-background flex flex-col h-full relative min-w-0" : "flex-shrink-0 border-l border-border bg-background flex flex-col h-full relative"}
+          style={isWorkflowViewerExpanded ? undefined : { width: sidePanelWidth }}
+        >
+          {/* Resize handle - hidden when expanded */}
+          {!isWorkflowViewerExpanded && (
+          <div
+            className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/20 transition-colors z-10 flex items-center justify-center group"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              // Prevent multiple simultaneous resize operations
+              if (isResizingRef.current) {
+                return;
+              }
+              // Only allow resize if we're actually in side panel mode
+              if (workflowViewerModeRef.current !== 'side') {
+                return;
+              }
+              isResizingRef.current = true;
+              const startX = e.clientX;
+              const startWidth = sidePanelWidth;
+              const onMouseMove = (e: MouseEvent) => {
+                // Double-check mode hasn't changed during resize
+                if (workflowViewerModeRef.current !== 'side') {
+                  isResizingRef.current = false;
+                  document.removeEventListener('mousemove', onMouseMove);
+                  document.removeEventListener('mouseup', onMouseUp);
+                  return;
+                }
+                // For left handle: dragging right (X increases) = decrease width (panel gets narrower)
+                // Dragging left (X decreases) = increase width (panel gets wider)
+                const delta = startX - e.clientX;
+                const newWidth = Math.max(300, Math.min(800, startWidth + delta));
+                setSidePanelWidth(newWidth);
+              };
+              const onMouseUp = () => {
+                isResizingRef.current = false;
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+              };
+              document.addEventListener('mousemove', onMouseMove);
+              document.addEventListener('mouseup', onMouseUp);
+            }}
+          >
+            <GripVertical className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground/70 transition-colors" />
+          </div>
+          )}
+          <WorkflowViewerPanel
+            projectId={projectId}
+            chatId={chatId}
+            workflowName={workflowExecution.workflowName}
+            execution={workflowExecution}
+            onClose={() => updateWorkflowViewerOpen(false)}
+            compact={false}
+            hideFullscreen={false}
+            viewerMode={workflowViewerMode}
+            onToggleViewerMode={handleToggleWorkflowViewerMode}
+            onExpandedChange={setIsWorkflowViewerExpanded}
+          />
+        </div>
+      )}
+    </div>
+  );
+});

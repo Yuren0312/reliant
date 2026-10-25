@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -68,7 +69,7 @@ func noticeWindowName(window string) string {
 // noticeClock is a time inside a notice's text: an RFC 3339 UTC instant in a
 // <time:...> token. The worker does not know the reader's time zone (it runs in
 // UTC), so it stores the instant and the web renders it in the reader's zone
-// (web/src/lib/providerNotice.ts). Read as plain text, as the model reads it,
+// (frontends/web/src/lib/providerNotice.ts). Read as plain text, as the model reads it,
 // the token is still an unambiguous time.
 func noticeClock(t time.Time) string {
 	return "<time:" + t.UTC().Format(time.RFC3339) + ">"
@@ -145,6 +146,16 @@ func providerSwitchNotice(provider, model string, until time.Time, probing bool)
 }
 
 // providerReturnNotice is the chat coming back to its own provider.
+// servedBy reports whether a turn served by driver is on provider, which a
+// stay records as the driver id or, from an unrouted failure, its display
+// name. Unknown either way counts as served by it.
+func servedBy(provider, driver string) bool {
+	if provider == "" || driver == "" {
+		return true
+	}
+	return strings.EqualFold(provider, driver) || provider == models.ProviderDisplayName(driver)
+}
+
 func providerReturnNotice(provider, model string) string {
 	return fmt.Sprintf("%s's limit has reset. Back on **%s**.", noticeProviderName(provider), noticeModelName(model))
 }
@@ -152,7 +163,7 @@ func providerReturnNotice(provider, model string) string {
 // postNotice saves text as a warning notice on thread. Best-effort, and
 // idempotent on key when one is given: a retried activity writes the notice
 // once.
-func postNotice(ctx context.Context, repo db.Repository, chatID, thread, workflowID, key, text string) {
+func postNotice(ctx context.Context, repo threads.Repository, chatID, thread, workflowID, key, text string) {
 	if repo == nil || chatID == "" || thread == "" || text == "" {
 		return
 	}
@@ -204,6 +215,11 @@ func (a *CallLLMActivity) announceRouting(ctx context.Context, chat *db.Chat, th
 func (a *CallLLMActivity) announceReturn(ctx context.Context, chat *db.Chat, thread string, rtx types.RuntimeContext, resolved *resolvedLLMCall) {
 	ret := rtx.FallbackReturn
 	if ret == nil || rtx.FallbackModel != "" {
+		return
+	}
+	// A turn served by another provider than the one the stay left is not a
+	// return to it: the chat was switched off that provider meanwhile.
+	if !servedBy(ret.Provider, resolved.ProviderDriver) {
 		return
 	}
 	own := resolved.ProviderDriver

@@ -5,6 +5,8 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // Regenerable tool output in a checkout does not hold it: forge's scratch and
@@ -102,6 +104,7 @@ func preCommitClone(t *testing.T, checkout, rel string) string {
 // they do not make the checkout a nested repository, and removal takes them.
 func TestReconcile_PreCommitClonesUnderToolsAreRegenerable(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~48 git processes")
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, ".tools/\n")
@@ -148,6 +151,7 @@ func TestReconcile_OtherNestedRepositoriesStillHold(t *testing.T) {
 }
 
 func TestToolClone_NeedsAnOwnerThatIgnoresIt(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	ignore(t, f, ".tools/\n")

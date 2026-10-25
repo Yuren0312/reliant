@@ -8,7 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
@@ -47,9 +47,9 @@ func (c *wakeTestTemporalClient) ResetWorkflowExecution(
 // params actually changed. Returning an error is the honest answer for a fake
 // with no workflow behind it, and the caller treats that as "cannot tell" —
 // which keeps this test focused on the doorbell rather than on param diffing.
-func (c *wakeTestTemporalClient) QueryWorkflow(
-	_ context.Context, _, _, _ string, _ ...interface{},
-) (converter.EncodedValue, error) {
+func (c *wakeTestTemporalClient) QueryWorkflowWithOptions(
+	_ context.Context, _ *client.QueryWorkflowWithOptionsRequest,
+) (*client.QueryWorkflowWithOptionsResponse, error) {
 	return nil, assertNotFound{}
 }
 
@@ -97,6 +97,8 @@ func threadWakeSignals(signals []signaltest.Signal) []signaltest.Signal {
 // spawn has no Temporal execution of its own, so one execution drives every
 // thread and the payload is what selects which gate wakes.
 func TestSendMessage_RunningWorkflowWakesTargetThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -138,6 +140,8 @@ func TestSendMessage_RunningWorkflowWakesTargetThread(t *testing.T) {
 // looks at the pause epoch. That is precisely what happened on chat 7da3935c —
 // the resume woke the spawn's loop and left the root thread parked.
 func TestSendMessage_PausedWorkflowWakesTargetThreadOnResume(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -176,6 +180,8 @@ func TestSendMessage_PausedWorkflowWakesTargetThreadOnResume(t *testing.T) {
 // This is the boundary of the fix: the wake belongs only on the paths where a
 // run is already live and may be parked.
 func TestSendMessage_NewRunDoesNotWake(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -204,6 +210,8 @@ func TestSendMessage_NewRunDoesNotWake(t *testing.T) {
 // signal that cannot be delivered costs a late pickup, never lost input.
 // Failing the RPC would report failure for a message that IS saved.
 func TestSendMessage_WakeFailureStillSavesMessage(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

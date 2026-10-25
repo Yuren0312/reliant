@@ -12,6 +12,8 @@ import (
 // transcript instead of the bottom, which presents as "my message never showed
 // up" even though it was delivered.
 func TestEnrichMessageUpdate_CarriesSeq(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -33,7 +35,7 @@ func TestEnrichMessageUpdate_CarriesSeq(t *testing.T) {
 	}
 
 	raw, _ := json.Marshal(map[string]any{"id": msg.ID})
-	enriched, err := repo.EnrichMessageUpdate(ctx, ChatUpdate{
+	enriched, err := repo.enrichMessageUpdate(ctx, ChatUpdate{
 		Data: raw, EntityID: msg.ID, CreatedAt: time.Now(),
 	})
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -41,6 +42,8 @@ func (c *inputCapturingTemporalClient) ExecuteWorkflow(
 // starts a new run of a completed chat re-supplies the chat's launch event, so
 // `trigger.*` means the same thing in the continuation as in the first run.
 func TestSendMessage_RestartOfCompletedChatCarriesLaunchTrigger(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -100,6 +103,8 @@ func mustChatProject(t *testing.T, ctx context.Context, repo *db.Repo, chatID st
 // The wire carries the chat's origin, and exclude_automations hides schedule
 // chats unless one is waiting on a human.
 func TestListChatsAndGetChatCarryLaunchOriginAndExcludeAutomations(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	service := &Service{deps: Deps{Repo: repo}}
@@ -193,6 +198,8 @@ func seedScheduledChat(t *testing.T, ctx context.Context, repo *db.Repo, chatID 
 // Adoption means a human is now present: the continuation's root run is
 // attended. Unattended is a fact about a run, and the next run is a new one.
 func TestSendMessage_AdoptedScheduleChatStartsAttendedRootRun(t *testing.T) {
+	t.Parallel()
+
 	for _, adopt := range []bool{false, true} {
 		t.Run(map[bool]string{false: "not adopted", true: "adopted"}[adopt], func(t *testing.T) {
 			repo, cleanup := db.SetupTestDB(t)
@@ -220,6 +227,8 @@ func TestSendMessage_AdoptedScheduleChatStartsAttendedRootRun(t *testing.T) {
 }
 
 func TestAdoptChat_OwnerScopedIdempotentAndExposedOnTheWire(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Completed())
@@ -229,11 +238,11 @@ func TestAdoptChat_OwnerScopedIdempotentAndExposedOnTheWire(t *testing.T) {
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, "someone-else")
 	_, err := service.AdoptChat(otherCtx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	_, err = service.UnadoptChat(otherCtx, connect.NewRequest(&reliantv1.UnadoptChatRequest{ChatId: fx.chatID}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	_, err = service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 
 	first, err := service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))
 	require.NoError(t, err)

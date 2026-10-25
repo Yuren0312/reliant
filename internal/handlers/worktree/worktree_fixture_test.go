@@ -2,11 +2,11 @@ package worktree_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	worktree "github.com/reliant-labs/reliant/internal/handlers/worktree"
 )
 
@@ -23,7 +23,7 @@ const (
 // project p-1, which holds the worktree w-1 and its main checkout w-main.
 // w-other is in another user's project. Every other worktree or project is
 // not found, as GetWorktree and GetProjectWithUserCheck answer.
-func ownedWorktreeRepo(t *testing.T) *worktree.StubRepo {
+func ownedWorktreeRepo(t *testing.T) *worktree.MockRepository {
 	t.Helper()
 	active := int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	worktrees := map[string]db.Worktree{
@@ -40,18 +40,18 @@ func ownedWorktreeRepo(t *testing.T) *worktree.StubRepo {
 			BaseBranch: "main", Path: "/elsewhere", Status: active,
 		},
 	}
-	return &worktree.StubRepo{
+	return &worktree.MockRepository{
 		GetWorktreeFunc: func(_ context.Context, id string) (*db.Worktree, error) {
 			if w, ok := worktrees[id]; ok {
 				return &w, nil
 			}
-			return nil, errors.New("worktree not found")
+			return nil, core.ErrWorktreeNotFound
 		},
 		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
 			if id == ownProjectID && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Name: "proj", Path: "/work", IsGitRepo: true}, nil
 			}
-			return nil, errors.New("project not found")
+			return nil, core.ErrProjectNotFound
 		},
 	}
 }

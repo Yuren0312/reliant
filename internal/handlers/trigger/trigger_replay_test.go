@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -63,6 +64,8 @@ func (e *triggerTestEnv) seedReplayEvent(t *testing.T, triggerID string, at time
 // and does NOT apply its filter: issue 7 is below the filter's threshold of
 // 1000, which is exactly the event someone wants to replay.
 func TestPreviewReplay_MapsInputsAndPromptWithoutTheFilter(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 
@@ -82,6 +85,8 @@ func TestPreviewReplay_MapsInputsAndPromptWithoutTheFilter(t *testing.T) {
 // The edited payload is what is mapped; an event kind a trigger never receives
 // is refused; a trigger the workflow does not declare is refused.
 func TestPreviewReplay_RefusesWhatItCannotMap(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 
@@ -100,18 +105,20 @@ func TestPreviewReplay_RefusesWhatItCannotMap(t *testing.T) {
 				ProjectId: env.projectID, Workflow: "triage", Replay: tc.replay,
 			}))
 			require.Error(t, err)
-			assert.Equal(t, tc.code, connect.CodeOf(err), err.Error())
+			assert.Equal(t, tc.code, svcerr.Code(err), err.Error())
 			assert.Contains(t, err.Error(), tc.reason)
 		})
 	}
 
 	_, err := env.svc.PreviewReplay(env.ctx, connect.NewRequest(&reliantv1.PreviewReplayRequest{ProjectId: env.projectID, Workflow: "triage"}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "replay is required")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "replay is required")
 }
 
 // A workflow the caller does not own does not resolve for them.
 func TestPreviewReplay_ResolvesTheWorkflowForTheCaller(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 
@@ -127,6 +134,8 @@ func TestPreviewReplay_ResolvesTheWorkflowForTheCaller(t *testing.T) {
 // workflow's triggers, newest first, labelled with the trigger they arrived
 // through, and reads nobody else's.
 func TestListReplayEvents_ListsTheCallersActivationsEventsNewestFirst(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -169,6 +178,8 @@ func TestListReplayEvents_ListsTheCallersActivationsEventsNewestFirst(t *testing
 }
 
 func TestListReplayEvents_LimitsAndHandlesNoActivations(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 
@@ -187,7 +198,7 @@ func TestListReplayEvents_LimitsAndHandlesNoActivations(t *testing.T) {
 
 	_, err = env.svc.ListReplayEvents(env.ctx, connect.NewRequest(&reliantv1.ListReplayEventsRequest{ProjectId: &env.projectID}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "workflow is required")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "workflow is required")
 }
 
 func strPtr(s string) *string { return &s }

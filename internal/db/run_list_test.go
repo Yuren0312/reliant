@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -102,6 +103,8 @@ func listRunIDs(items []*RunListItem) []string {
 }
 
 func TestListRuns_ScopedToUser(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	seedListRun(t, repo, listRunSeed{id: "mine", status: Active()})
@@ -116,6 +119,9 @@ func TestListRuns_ScopedToUser(t *testing.T) {
 }
 
 func TestListRuns_RootRunsOnlyAndArchivedHidden(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -138,6 +144,8 @@ func TestListRuns_RootRunsOnlyAndArchivedHidden(t *testing.T) {
 }
 
 func TestListRuns_Filters(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -191,6 +199,8 @@ func TestListRuns_Filters(t *testing.T) {
 }
 
 func TestListRuns_KeysetPaginationWithTiedCreatedAt(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -230,6 +240,8 @@ func TestListRuns_KeysetPaginationWithTiedCreatedAt(t *testing.T) {
 }
 
 func TestListRuns_HasMoreOnlyWhenMoreRowsFollow(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -247,6 +259,9 @@ func TestListRuns_HasMoreOnlyWhenMoreRowsFollow(t *testing.T) {
 }
 
 func TestListRuns_DisplayStates(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -283,6 +298,9 @@ func TestListRuns_DisplayStates(t *testing.T) {
 }
 
 func TestListRuns_CarriesChatAndTriggerColumns(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -321,6 +339,8 @@ func TestListRuns_CarriesChatAndTriggerColumns(t *testing.T) {
 }
 
 func TestLastRunPerWorkflow(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

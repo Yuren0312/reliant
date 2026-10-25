@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
@@ -36,7 +37,7 @@ func (r *adoptTestDaemonRouter) SendDaemonCommand(ctx context.Context, userID, c
 	return r.Stub.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 }
 
-func newAdoptTestProject(t *testing.T, repo db.Repository) *db.Project {
+func newAdoptTestProject(t *testing.T, repo *db.Repo) *db.Project {
 	t.Helper()
 	now := time.Now().UTC()
 	project := &db.Project{
@@ -57,6 +58,8 @@ func newAdoptTestProject(t *testing.T, repo db.Repository) *db.Project {
 // exists on disk (e.g. manual `git init` in the workspace terminal) but has no
 // registry row is adopted at the gate instead of failing the precondition.
 func TestListProjectReposAdoptsUnregisteredRepos(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -90,6 +93,8 @@ func TestListProjectReposAdoptsUnregisteredRepos(t *testing.T) {
 // TestListProjectReposStillFailsWhenNothingOnDisk pins that the precondition
 // error survives when the daemon confirms there is genuinely no repo.
 func TestListProjectReposStillFailsWhenNothingOnDisk(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -100,6 +105,6 @@ func TestListProjectReposStillFailsWhenNothingOnDisk(t *testing.T) {
 
 	_, err := s.listProjectRepos(ctx, project)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Equal(t, 1, router.discoverCalls)
 }

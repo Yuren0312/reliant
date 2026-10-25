@@ -10,12 +10,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -23,7 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
-	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
 
 // fakeInstallations is control-plane's MintInstallationToken: it records what
@@ -72,6 +72,7 @@ var repoParams = map[string]any{"owner": "acme", "repo": "widgets", "issue_numbe
 // The bot's token is minted for the OWNER, scoped to the ONE repository the call
 // names, with only what the action needs.
 func TestActingAsApp_MintsAScopedTokenForTheRunOwner(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	inst := &fakeInstallations{}
 	cred, err := e.botSource(APIHost, inst).Credential(context.Background(),
@@ -92,6 +93,8 @@ func TestActingAsApp_MintsAScopedTokenForTheRunOwner(t *testing.T) {
 }
 
 func TestActingAsApp_PermissionsFollowTheAction(t *testing.T) {
+	testkit.Slow(t, "DB-backed acting-as-app runs, one per case")
+	t.Parallel()
 	for action, want := range map[string]map[string]string{
 		"issue.create":            {"issues": "write"},
 		"issue.labels.add":        {"issues": "write"},
@@ -101,6 +104,7 @@ func TestActingAsApp_PermissionsFollowTheAction(t *testing.T) {
 		"workflow.dispatch":       nil, // not in the table: control-plane's default cap
 	} {
 		t.Run(action, func(t *testing.T) {
+			t.Parallel()
 			e := newEnv(t)
 			inst := &fakeInstallations{}
 			_, err := e.botSource(APIHost, inst).Credential(context.Background(), botReq(t, e.newRun("idp|alice"), action, true, repoParams))
@@ -113,6 +117,8 @@ func TestActingAsApp_PermissionsFollowTheAction(t *testing.T) {
 // A mint that cannot be done must FAIL the write. It never falls through to the
 // owner's token: the activation said the bot makes this write.
 func TestActingAsApp_RefusalsNeverFallBackToTheOwner(t *testing.T) {
+	testkit.Slow(t, "DB-backed acting-as-app runs, one per case")
+	t.Parallel()
 	cases := map[string]struct {
 		err      error
 		wantCode string
@@ -127,6 +133,7 @@ func TestActingAsApp_RefusalsNeverFallBackToTheOwner(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			e := newEnv(t)
 			inst := &fakeInstallations{err: tc.err}
 			cred, err := e.botSource(APIHost, inst).Credential(context.Background(),
@@ -148,7 +155,9 @@ func TestActingAsApp_RefusalsNeverFallBackToTheOwner(t *testing.T) {
 // degrades to the owner: choosing the bot is a promise about whose name is on
 // the write.
 func TestActingAsApp_UnavailableIdentityFailsClosed(t *testing.T) {
+	t.Parallel()
 	t.Run("control-plane holds no key", func(t *testing.T) {
+		t.Parallel()
 		e := newEnv(t)
 		inst := &fakeInstallations{err: gitcredentialclient.ErrAppNotConfigured}
 		cred, err := e.botSource(APIHost, inst).Credential(context.Background(),
@@ -164,6 +173,7 @@ func TestActingAsApp_UnavailableIdentityFailsClosed(t *testing.T) {
 		assert.Empty(t, e.cp.asked, "the owner's own token was never looked up")
 	})
 	t.Run("no installation source wired (self-hosted)", func(t *testing.T) {
+		t.Parallel()
 		e := newEnv(t)
 		cred, err := e.botSource(APIHost, nil).Credential(context.Background(),
 			botReq(t, e.newRun("idp|alice"), "issue.comment", true, repoParams))
@@ -181,7 +191,9 @@ func TestActingAsApp_UnavailableIdentityFailsClosed(t *testing.T) {
 // with no delegated broker at all has none either. Both fail the write; neither
 // reaches the owner's saved connection or delegated token.
 func TestActingAsApp_UnsupportedBrokerFailsClosed(t *testing.T) {
+	t.Parallel()
 	t.Run("a plain DelegatedBroker", func(t *testing.T) {
+		t.Parallel()
 		e := newEnv(t)
 		brokers := connauth.NewBrokers()
 		require.NoError(t, brokers.Register(BrokerID, plainBroker{b: newBroker(e.cp, APIHost, nil)}))
@@ -191,6 +203,7 @@ func TestActingAsApp_UnsupportedBrokerFailsClosed(t *testing.T) {
 		assert.Empty(t, e.cp.asked, "the owner's own token was never looked up")
 	})
 	t.Run("no broker registered", func(t *testing.T) {
+		t.Parallel()
 		e := newEnv(t)
 		src := connauth.New(connauth.Deps{Resolver: e.resolver})
 		cred, err := src.Credential(context.Background(), botReq(t, e.newRun("idp|alice"), "issue.comment", true, repoParams))
@@ -233,6 +246,7 @@ func requireBotRefusal(t *testing.T, cred httpaction.Credential, err error, want
 // the connection nor the owner's delegated token is used, nor is a bot token
 // minted for a call that cannot be made as the bot.
 func TestActingAsApp_AppliesToWritesOnly(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	inst := &fakeInstallations{}
 	src := e.botSource(APIHost, inst)
@@ -251,11 +265,13 @@ func TestActingAsApp_AppliesToWritesOnly(t *testing.T) {
 }
 
 func TestActingAsApp_WriteNamingAConnectionFailsClosed(t *testing.T) {
+	t.Parallel()
 	for name, connection := range map[string]func(*env) string{
 		"an unknown connection":        func(*env) string { return "conn_pat" },
 		"the owner's saved github PAT": func(e *env) string { return e.githubPAT("idp|alice") },
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			e := newEnv(t)
 			inst := &fakeInstallations{}
 			named := botReq(t, e.newRun("idp|alice"), "issue.comment", true, repoParams)
@@ -272,6 +288,7 @@ func TestActingAsApp_WriteNamingAConnectionFailsClosed(t *testing.T) {
 // A request that carries an identity the source does not know is refused, never
 // treated as the owner.
 func TestActingAsApp_UnknownIdentityOnAWriteFailsClosed(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	req := botReq(t, e.newRun("idp|alice"), "issue.comment", true, repoParams)
 	req.ActingIdentity = "admin"
@@ -283,6 +300,7 @@ func TestActingAsApp_UnknownIdentityOnAWriteFailsClosed(t *testing.T) {
 // A run with no owner record cannot be acted for; the owner lookup failing is
 // not an invitation to try another credential.
 func TestActingAsApp_UnresolvableOwnerFailsClosed(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	inst := &fakeInstallations{}
 	cred, err := e.botSource(APIHost, inst).Credential(context.Background(),
@@ -295,6 +313,7 @@ func TestActingAsApp_UnresolvableOwnerFailsClosed(t *testing.T) {
 
 // A push is a write too: it asks for contents only, and nothing for the owner.
 func TestActingAsApp_GitPushMintsContentsWrite(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	inst := &fakeInstallations{}
 	_, err := e.botSource(APIHost, inst).Credential(context.Background(),
@@ -307,6 +326,8 @@ func TestActingAsApp_GitPushMintsContentsWrite(t *testing.T) {
 // A call that names no repository has nothing to scope a bot token to. It is
 // refused, never widened to "every repository the App reaches".
 func TestActingAsApp_RequiresARepository(t *testing.T) {
+	testkit.Slow(t, "DB-backed acting-as-app runs, one per case")
+	t.Parallel()
 	for name, params := range map[string]map[string]any{
 		"none":       nil,
 		"no repo":    {"owner": "acme"},
@@ -315,6 +336,7 @@ func TestActingAsApp_RequiresARepository(t *testing.T) {
 		"wrong type": {"owner": 1, "repo": 2},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			e := newEnv(t)
 			inst := &fakeInstallations{}
 			_, err := e.botSource(APIHost, inst).Credential(context.Background(), botReq(t, e.newRun("idp|alice"), "issue.comment", true, params))
@@ -327,6 +349,7 @@ func TestActingAsApp_RequiresARepository(t *testing.T) {
 }
 
 func TestActingAsApp_UnknownIdentityIsRefusedByTheBroker(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	b := newBroker(e.cp, APIHost, nil)
 	b.installations = &fakeInstallations{}
@@ -339,6 +362,7 @@ func TestActingAsApp_UnknownIdentityIsRefusedByTheBroker(t *testing.T) {
 }
 
 func TestFooter(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, "<sub>Posted by Reliant for pr-review, an automation of @alice.</sub>", Footer("pr-review", "alice"))
 	assert.Equal(t, "<sub>Posted by Reliant for pr-review.</sub>", Footer("pr-review", ""))
 	assert.Equal(t, "<sub>Posted by Reliant for an automation, an automation of @alice.</sub>", Footer(" ", "alice"))
@@ -354,6 +378,8 @@ func TestFooter(t *testing.T) {
 // END TO END through the real runner and the real catalog: the bot's bearer
 // reaches the host, the body carries the footer, and the token is scrubbed.
 func TestActingAsApp_EndToEndWriteCarriesTheBotTokenAndTheFooter(t *testing.T) {
+	testkit.Slow(t, "DB-backed acting-as-app runs, one per case")
+	t.Parallel()
 	cases := []struct {
 		name   string
 		action string
@@ -369,11 +395,12 @@ func TestActingAsApp_EndToEndWriteCarriesTheBotTokenAndTheFooter(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			e := newEnv(t)
 			inst := &fakeInstallations{}
 			var gotAuth string
 			var gotBody map[string]any
-			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				gotAuth = r.Header.Get("Authorization")
 				raw, _ := io.ReadAll(r.Body)
 				_ = json.Unmarshal(raw, &gotBody)
@@ -381,7 +408,6 @@ func TestActingAsApp_EndToEndWriteCarriesTheBotTokenAndTheFooter(t *testing.T) {
 				w.WriteHeader(http.StatusCreated)
 				_, _ = fmt.Fprintf(w, `{"id":1,"number":1,"html_url":"https://github.com/acme/widgets/x/1","title":"t","state":"open","body":%q}`, gotAuth)
 			}))
-			defer srv.Close()
 			u, _ := url.Parse(srv.URL)
 			src := e.botSource(u.Host, inst)
 
@@ -390,8 +416,7 @@ func TestActingAsApp_EndToEndWriteCarriesTheBotTokenAndTheFooter(t *testing.T) {
 			require.NoError(t, err)
 			pool := x509.NewCertPool()
 			pool.AddCert(srv.Certificate())
-			g := netguard.New()
-			g.AllowLoopback = true
+			g := netguardtest.Guard()
 			runner := httpaction.NewRunner(g).WithRootCAs(pool)
 
 			site := httpaction.CallSite{RunID: e.newRun("idp|alice"), ActingIdentity: httpaction.IdentityApp, Automation: "pr-review"}
@@ -415,10 +440,11 @@ func TestActingAsApp_EndToEndWriteCarriesTheBotTokenAndTheFooter(t *testing.T) {
 // What a bot does NOT author carries no footer: a label, a state change with no
 // new text, an update that leaves the body alone.
 func TestActingAsApp_ActionsThatAuthorNothingAreNotSigned(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	inst := &fakeInstallations{}
 	var gotBody map[string]any
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		gotBody = nil
 		_ = json.Unmarshal(raw, &gotBody)
@@ -429,14 +455,12 @@ func TestActingAsApp_ActionsThatAuthorNothingAreNotSigned(t *testing.T) {
 		}
 		_, _ = w.Write([]byte(`[]`))
 	}))
-	defer srv.Close()
 	u, _ := url.Parse(srv.URL)
 	src := e.botSource(u.Host, inst)
 	cat := githubCatalogAt(t, srv.URL)
 	pool := x509.NewCertPool()
 	pool.AddCert(srv.Certificate())
-	g := netguard.New()
-	g.AllowLoopback = true
+	g := netguardtest.Guard()
 	runner := httpaction.NewRunner(g).WithRootCAs(pool)
 	site := httpaction.CallSite{RunID: e.newRun("idp|alice"), ActingIdentity: httpaction.IdentityApp, Automation: "pr-review"}
 
@@ -457,6 +481,7 @@ func TestActingAsApp_ActionsThatAuthorNothingAreNotSigned(t *testing.T) {
 
 // An owner run is untouched: no identity, no footer, the owner's own token.
 func TestOwnerIdentityIsUnchanged(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	inst := &fakeInstallations{}
 	req := githubReq(t, e.newRun("idp|alice"))

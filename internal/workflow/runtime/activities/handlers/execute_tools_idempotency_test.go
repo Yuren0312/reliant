@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -104,7 +105,7 @@ func (m *mockToolExecutor) Reset() {
 func createTestToolCallBlock(
 	ctx context.Context,
 	t *testing.T,
-	repo db.Repository,
+	repo *db.Repo,
 	messageID string,
 	toolCallID string,
 	toolName string,
@@ -130,7 +131,7 @@ func createTestToolCallBlock(
 func createTestMessage(
 	ctx context.Context,
 	t *testing.T,
-	repo db.Repository,
+	repo *db.Repo,
 	chatID string,
 	threadID string,
 	contextWindowID string,
@@ -159,6 +160,9 @@ func createTestMessage(
 // ============================================================================
 
 func TestExecuteToolsActivity_Idempotency(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -234,6 +238,9 @@ func TestExecuteToolsActivity_Idempotency(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_NoReExecutionOnRetry(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -296,6 +303,8 @@ func TestExecuteToolsActivity_NoReExecutionOnRetry(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_MultipleToolCalls(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -366,6 +375,8 @@ func TestExecuteToolsActivity_MultipleToolCalls(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_ToolExecutionFailure(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -454,6 +465,8 @@ func TestExecuteToolsActivity_ToolExecutionFailure(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_MissingToolCallBlock(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -504,6 +517,8 @@ func TestExecuteToolsActivity_MissingToolCallBlock(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_InvalidBlockType(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -572,6 +587,8 @@ func TestExecuteToolsActivity_InvalidBlockType(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_IncompleteToolCallBlock(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -641,6 +658,8 @@ func TestExecuteToolsActivity_IncompleteToolCallBlock(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_ExecutorError(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -702,6 +721,8 @@ func TestExecuteToolsActivity_ExecutorError(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_EmptyToolCalls(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

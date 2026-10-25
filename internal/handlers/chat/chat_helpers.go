@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runstateproto"
+	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 )
 
 // activeWorkflowNameForResume returns the workflow name to (re)start for an
@@ -75,10 +75,10 @@ const paramsChangeQueryTimeout = 500 * time.Millisecond
 // params reach the run through update_workflow_state either way. So a query
 // that cannot answer in paramsChangeQueryTimeout is treated like one that
 // failed: assume changed, and never hold the user's send for it.
-func (s *Service) checkParamsActuallyChanged(ctx context.Context, workflowID, runID string, incomingParams map[string]interface{}) bool {
+func (s *Service) checkParamsActuallyChanged(ctx context.Context, workflowID string, incomingParams map[string]interface{}) bool {
 	queryCtx, cancel := context.WithTimeout(ctx, paramsChangeQueryTimeout)
 	defer cancel()
-	currentInputs, err := s.queryRunInputs(queryCtx, workflowID, runID)
+	currentInputs, err := s.queryRunInputs(queryCtx, workflowID)
 	if err != nil {
 		// If query fails (e.g., workflow not running yet) or the worker is too
 		// busy to answer in time, assume params changed to be safe
@@ -89,11 +89,13 @@ func (s *Service) checkParamsActuallyChanged(ctx context.Context, workflowID, ru
 	return inputsDiffer(currentInputs, incomingParams)
 }
 
-// queryRunInputs reads a run's current inputs with its get_workflow_inputs
-// query. Temporal answers it for a closed run too, by replaying the history
-// on a worker.
-func (s *Service) queryRunInputs(ctx context.Context, workflowID, runID string) (map[string]interface{}, error) {
-	queryResp, err := s.deps.Temporal.QueryWorkflow(ctx, workflowID, runID, "get_workflow_inputs")
+// queryRunInputs reads the current inputs of workflowID's current run with its
+// get_workflow_inputs query. A closed run is refused (rtemporal.ErrRunNotOpen),
+// never replayed: see rtemporal.QueryOpenRun. The run the chat row names is
+// not consulted — it goes stale at every continue-as-new, and the current run
+// is the one update_workflow_state reaches anyway.
+func (s *Service) queryRunInputs(ctx context.Context, workflowID string) (map[string]interface{}, error) {
+	queryResp, err := rtemporal.QueryOpenRun(ctx, s.deps.Temporal, workflowID, "get_workflow_inputs")
 	if err != nil {
 		return nil, err
 	}
@@ -211,50 +213,6 @@ func displayStyleProtoToInt32Ptr(ds *reliantv1.DisplayStyle) *int32 {
 	return &v
 }
 
-// launchErrorToConnect maps a launch error onto the wire code this service has
-// always returned for that failure.
-//
-// internal/launch deliberately does not import connect — it runs on the worker
-// too, where there is no request to answer — so the handler owns the mapping.
-// The codes here are the ones chat creation returned before the start path moved,
-// and several are asserted by tests.
-func launchErrorToConnect(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	var validationErr *launch.ValidationError
-	if errors.As(err, &validationErr) {
-		if validationErr.Kind == launch.ValidationFailedPrecondition {
-			return connect.NewError(connect.CodeFailedPrecondition, errors.New(validationErr.Reason))
-		}
-		return connect.NewError(connect.CodeInvalidArgument, errors.New(validationErr.Reason))
-	}
-
-	var notFoundErr *launch.NotFoundError
-	if errors.As(err, &notFoundErr) {
-		return connect.NewError(connect.CodeNotFound, errors.New(notFoundErr.Reason))
-	}
-
-	var alreadyErr *launch.AlreadyLaunchedError
-	if errors.As(err, &alreadyErr) {
-		return connect.NewError(connect.CodeAlreadyExists, errors.New(alreadyErr.Error()))
-	}
-
-	if errors.Is(err, launch.ErrNotPending) {
-		return connect.NewError(connect.CodeFailedPrecondition, err)
-	}
-
-	// Internal failures keep the terse message on the wire and the detail in
-	// the logs, exactly as the inline code did.
-	var internalErr *launch.InternalError
-	if errors.As(err, &internalErr) {
-		return connect.NewError(connect.CodeInternal, errors.New(internalErr.Reason))
-	}
-
-	return connect.NewError(connect.CodeInternal, err)
-}
-
 // seedMessagesFromInput converts wire InputMessages into launch seed messages.
 // launch holds no proto request types, so the translation is the handler's.
 func seedMessagesFromInput(messages []*reliantv1.InputMessage) []launch.SeedMessage {
@@ -270,6 +228,31 @@ func seedMessagesFromInput(messages []*reliantv1.InputMessage) []launch.SeedMess
 		})
 	}
 	return seeds
+}
+
+// trackStartedChatMessage records the user message a chat start carries as a
+// message_sent: StartChat is the only way a chat's first message reaches the
+// server, and the web no longer reports it. The seed carries no stored message
+// id, so the client's named id (or, failing that, the chat's) identifies it.
+func (s *Service) trackStartedChatMessage(ctx context.Context, userID string, chat *db.Chat, clientMessageID string, msg *reliantv1.StartChatRequest) {
+	if chat == nil {
+		return
+	}
+	var content string
+	for _, m := range msg.GetMessages() {
+		if m.GetRole() == reliantv1.MessageRole_MESSAGE_ROLE_USER {
+			content = m.GetContent()
+			break
+		}
+	}
+	if content == "" {
+		return
+	}
+	messageID := clientMessageID
+	if messageID == "" {
+		messageID = chat.ID
+	}
+	go s.trackMessageSent(context.WithoutCancel(ctx), userID, chat, messageID, chat.MainThreadID(), content, len(msg.GetAttachments()))
 }
 
 func (s *Service) trackMessageSent(ctx context.Context, userID string, chat *db.Chat, messageID, threadID, userContent string, attachmentCount int) {

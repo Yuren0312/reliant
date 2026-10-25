@@ -137,9 +137,9 @@ coverage/
 test-results/
 playwright-report/
 playwright/.cache/
-web/test-results/
-web/playwright-report/
-web/coverage/
+frontends/web/test-results/
+frontends/web/playwright-report/
+frontends/web/coverage/
 
 # Temporary files
 *.tmp
@@ -222,6 +222,7 @@ electron/dist/
 electron/resources/bin/
 electron/resources/server/
 electron/src/build-config.js
+electron/src/release-renderer-config.js
 
 # Cursor
 .cursor/
@@ -264,7 +265,7 @@ dev/
 # Source of truth files and what they generate:
 #
 # Keyboard Shortcuts (from config/shortcuts.yaml):
-#   -> web/src/store/shortcutsData.generated.ts
+#   -> frontends/web/src/store/shortcutsData.generated.ts
 #   -> generated/docs-source/settings/keyboard-shortcuts.generated.md
 #
 # Workflow/schema/model/tool reference docs:
@@ -331,8 +332,8 @@ tools/docgen/*/types
 /tools-daemon
 /daemon-gateway
 /autotune
-# Stray binaries in subdirs (e.g. web/api-server)
-web/api-server
+# Stray binaries in subdirs (e.g. frontends/web/api-server)
+frontends/web/api-server
 logsnippet.txt
 internal/db/schema.sql
 
@@ -346,7 +347,7 @@ goroutines.txt
 .serena/
 console.logs
 
-web/data
+frontends/web/data
 # Local-only patterns for the forbidden-strings pre-commit guard (never committed)
 .forbidden-strings
 
@@ -359,3 +360,10 @@ web/data
 !.forge/scaffolded.json
 !.forge/disowned.json
 !.forge/hashes.json
+
+# deploy/kcl/<env>/main.k's FileSecrets store (`forge env up dev` generates
+# secrets/dev.yaml: AUTH_API_KEY, RELIANT_VAULT_KEY). Never committed.
+secrets/
+# ...whose env lives in deploy/kcl/dev/, which the bare `dev/` above would
+# otherwise swallow.
+!deploy/kcl/dev/

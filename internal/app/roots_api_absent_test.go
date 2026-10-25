@@ -9,7 +9,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/graphkit"
 	"github.com/stretchr/testify/require"
 
-	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -22,11 +22,11 @@ func TestAPIAbsentLoopsBuildNothing(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, sweep, "no healer, no sweep")
 
-	access, err := NewGitHubAccess(GitHubAccessDeps{Repo: &DBRepo{}, Integrations: &IntegrationSettings{}})
+	access, err := NewGitHubAccess(GitHubAccessDeps{Integrations: &IntegrationSettings{}})
 	require.NoError(t, err)
 	require.Nil(t, access, "no webhook secret, no refresher")
 
-	senders, err := NewTriggerSenders(TriggerSendersDeps{Repo: &DBRepo{}, Integrations: &IntegrationSettings{}})
+	senders, err := NewTriggerSenders(TriggerSendersDeps{Integrations: &IntegrationSettings{}})
 	require.NoError(t, err)
 	require.Nil(t, senders, "no webhook secret, nobody to look up")
 
@@ -34,7 +34,7 @@ func TestAPIAbsentLoopsBuildNothing(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, loop, "no refresher, no loop")
 
-	alerting, err := NewTriggerAlerting(TriggerAlertingDeps{Repo: &DBRepo{}, Integrations: &IntegrationSettings{}})
+	alerting, err := NewTriggerAlerting(TriggerAlertingDeps{Integrations: &IntegrationSettings{}})
 	require.NoError(t, err)
 	require.Nil(t, alerting, "no control plane, plain webhooks")
 }
@@ -80,7 +80,7 @@ func TestAPIOmitsAbsentLoops(t *testing.T) {
 				g.ReliantKeySweep()
 				g.GitHubAccessLoop()
 			}))
-			t.Cleanup(func() { _ = g.DBRepo().Repo.Close() })
+			t.Cleanup(func() { _ = g.Database().Close() })
 
 			var supervised []string
 			for _, n := range g.b.Nodes() {
@@ -89,10 +89,10 @@ func TestAPIOmitsAbsentLoops(t *testing.T) {
 			require.Contains(t, supervised, "db_repo")
 			if tc.want {
 				require.Contains(t, supervised, "reliant_key_sweep")
-				require.Contains(t, supervised, "git_hub_access_loop")
+				require.Contains(t, supervised, "github_access_loop")
 			} else {
 				require.NotContains(t, supervised, "reliant_key_sweep")
-				require.NotContains(t, supervised, "git_hub_access_loop")
+				require.NotContains(t, supervised, "github_access_loop")
 			}
 		})
 	}

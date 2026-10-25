@@ -1,7 +1,6 @@
 package attachment
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,14 +9,12 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the attachment service. internal/grpc/server.go
-// constructs it today; forge's composition root takes over in P3c
-// (research/forge-migration/PLAN.md). The rpc methods on *Service are where
-// this service's logic lives; see the forge `api` / `services` skill.
+// Deps holds dependencies for the attachment service. The composition graph
+// constructs it (internal/app/compose.go). The rpc methods on *Service are
+// where this service's logic lives; see the forge `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
@@ -27,13 +24,6 @@ type Deps struct {
 	// MaxFileSize is the largest upload accepted, in bytes (the API server's
 	// MAX_UPLOAD_SIZE). Zero takes the default, 10 MB.
 	MaxFileSize int64
-}
-
-// Repository is the slice of db.Repository the attachment handlers use.
-type Repository interface {
-	CreateAttachment(ctx context.Context, attachment *db.Attachment) error
-	GetAttachment(ctx context.Context, id string) (*db.Attachment, error)
-	DeleteAttachment(ctx context.Context, id string) error
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

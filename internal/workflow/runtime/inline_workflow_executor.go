@@ -531,6 +531,7 @@ func (e *InlineWorkflowExecutor) buildSubWorkflowInputsWithOwnership() (map[stri
 		}
 	}
 
+	rememberPresetModel(subInputs)
 	overlayNodeArgs(subInputs, ownedKeys, e.subWorkflowInputs)
 
 	if len(e.subWorkflow.GetInputs()) > 0 {
@@ -1200,7 +1201,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "paused", "", "", nil)
 
 					// Self-pause and block until resume
-					e.pauseCtrl.DoRequestPause()
+					e.pauseCtrl.DoRequestPauseFor(stepEvent.Error)
 					e.pauseCtrl.DoCheckPause(e.ctx)
 					_ = workflow.Sleep(e.ctx, 0)
 

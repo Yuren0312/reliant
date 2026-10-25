@@ -199,7 +199,7 @@ Test coverage includes:
 import "github.com/reliant-labs/reliant/internal/recovery"
 
 // At workflow start, before any processing
-func StartWorkflow(ctx context.Context, repo db.Repository, temporalClient client.Client, chatID string, thread string) error {
+func StartWorkflow(ctx context.Context, repo *db.Repo, temporalClient client.Client, chatID string, thread string) error {
     // Recover from any interrupted state
     if err := recovery.RecoverConversationState(ctx, repo, temporalClient, chatID, thread); err != nil {
         return fmt.Errorf("recovery failed: %w", err)
@@ -209,16 +209,3 @@ func StartWorkflow(ctx context.Context, repo db.Repository, temporalClient clien
     return nil
 }
 ```
-
-## Migration
-
-Apply migration 041 to add required schema changes:
-
-```bash
-goose -dir internal/db/migrations/postgres up
-```
-
-This adds:
-
-- `assistant_message_streams` table
-- `cancellation_reason` column to `tool_calls` table

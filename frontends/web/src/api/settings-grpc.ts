@@ -1,0 +1,521 @@
+// Copyright (c) 2025 Reliant Labs
+
+import { grpcClient } from "./grpc-client";
+import { create } from "@bufbuild/protobuf";
+import {
+  fetchPreferences,
+  fetchProviderStatuses,
+  invalidatePreferences,
+  invalidateProviderStatuses,
+} from "../hooks/settings-queries";
+import { ConfigScope } from "../gen/reliant/v1/common_pb";
+import { HiddenItemType } from "../gen/reliant/v1/settings_pb";
+import type {
+  Setting as ProtoSetting,
+  ProviderStatus as ProtoProviderStatus,
+} from "../gen/reliant/v1/settings_pb";
+import {
+  // Sub-phase 6a: Core Settings CRUD
+  ListSettingsRequestSchema,
+  DeleteSettingRequestSchema,
+  BatchUpsertSettingsRequestSchema,
+  // Sub-phase 6b: UI Settings
+  GetShortcutsRequestSchema,
+  UpdateShortcutsRequestSchema,
+  UpdatePreferencesRequestSchema,
+  SetHiddenItemRequestSchema,
+  // Sub-phase 6d: Provider Settings
+  ValidateProviderAPIKeyRequestSchema,
+  SyncReliantProviderRequestSchema,
+  CompleteCodexOAuthRequestSchema,
+  CompleteClaudeOAuthRequestSchema,
+  CompleteAntigravityOAuthRequestSchema,
+  StartCopilotDeviceAuthRequestSchema,
+  PollCopilotDeviceAuthRequestSchema,
+  PollCopilotDeviceAuthResponse_Status,
+  // Sub-phase 6e: Privacy
+  GetPrivacySettingsRequestSchema,
+  UpdatePrivacySettingsRequestSchema,
+} from "../gen/reliant/v1/settings_pb";
+
+// ============================================
+// Frontend Type Definitions
+// ============================================
+
+export interface Setting {
+  id: string;
+  key: string;
+  value: string;
+  value_type: string;
+  project_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderStatus {
+  provider: string;
+  /** At least one account of the provider can serve (none is waiting for sign-in). */
+  configured: boolean;
+  /** Accounts connected for the provider, whatever their state. */
+  account_count: number;
+  display_name: string;
+}
+
+/**
+ * What a sign-in completion says happened to the account. Signing in to an upstream account that
+ * is already connected refreshes it (`created` false); signing in as someone other than the
+ * reconnect target saves a separate account and sets `identityMismatch`.
+ */
+export interface SignInOutcome {
+  success: boolean;
+  message: string;
+  created: boolean;
+  identityMismatch?: string;
+  /** The account's label (its detected email, else a name), for the confirmation line. */
+  accountLabel?: string;
+}
+
+export interface Preferences {
+  streaming_enabled: boolean;
+  worktree_archive_mode: string;
+  worktree_default_delete_branch: boolean;
+  additional: Record<string, string>;
+  branch_copy_uncommitted_files_default: boolean;
+  default_mcp_scope: ConfigScope;
+  default_workflow_scope: ConfigScope;
+  default_workflow: string;
+  hide_builtin_workflows: boolean;
+  hide_builtin_presets: boolean;
+  hidden_workflow_slugs: string[];
+  hidden_preset_slugs: string[];
+}
+
+export interface PrivacySettings {
+  analytics_enabled: boolean;
+  crash_reporting_enabled: boolean;
+}
+
+// ============================================
+// Conversion Functions
+// ============================================
+
+function protoSettingToFrontend(proto: ProtoSetting): Setting {
+  return {
+    id: proto.id,
+    key: proto.key,
+    value: proto.value,
+    value_type: proto.valueType,
+    project_id: proto.projectId || undefined,
+    created_at: proto.createdAt,
+    updated_at: proto.updatedAt,
+  };
+}
+
+function protoProviderStatusToFrontend(
+  proto: ProtoProviderStatus
+): ProviderStatus {
+  return {
+    provider: proto.provider,
+    configured: proto.configured,
+    account_count: proto.accountCount,
+    display_name: proto.displayName,
+  };
+}
+
+// ============================================
+// Settings gRPC Client
+// ============================================
+
+export const settingsGrpc = {
+  // ============================================
+  // Sub-phase 6a: Core Settings CRUD
+  // ============================================
+
+  async listSettings(projectId?: string): Promise<{
+    settings: Setting[];
+    total: number;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(ListSettingsRequestSchema, { projectId });
+    const response = await client.listSettings(request);
+    return {
+      settings: response.settings.map(protoSettingToFrontend),
+      total: response.total,
+    };
+  },
+
+  /**
+   * Upsert many settings in ONE request.
+   *
+   * Server-side each entry has CreateSetting's upsert semantics, so callers do
+   * not need to know which keys already exist.
+   */
+  async batchUpsertSettings(
+    settings: Array<{ key: string; value: string; valueType?: string }>,
+    projectId?: string
+  ): Promise<Setting[]> {
+    if (settings.length === 0) return [];
+    const client = grpcClient.settings();
+    const request = create(BatchUpsertSettingsRequestSchema, {
+      settings: settings.map((s) => ({
+        key: s.key,
+        value: s.value,
+        valueType: s.valueType ?? "string",
+      })),
+      projectId,
+    });
+    const response = await client.batchUpsertSettings(request);
+    return response.settings.map(protoSettingToFrontend);
+  },
+
+  async deleteSetting(
+    key: string,
+    projectId?: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(DeleteSettingRequestSchema, { key, projectId });
+    const response = await client.deleteSetting(request);
+    return {
+      success: response.success,
+      message: response.message,
+    };
+  },
+
+  // ============================================
+  // Sub-phase 6b: UI Settings
+  // ============================================
+
+  async getShortcuts(): Promise<string> {
+    const client = grpcClient.settings();
+    const request = create(GetShortcutsRequestSchema, {});
+    const response = await client.getShortcuts(request);
+    return response.shortcuts;
+  },
+
+  async updateShortcuts(shortcuts: string): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(UpdateShortcutsRequestSchema, { shortcuts });
+    const response = await client.updateShortcuts(request);
+    return {
+      success: response.success,
+      message: response.message,
+    };
+  },
+
+  /**
+   * Through hooks/settings-queries' cache entry: concurrent calls share one
+   * RPC, and every mounted usePreferences sees the answer.
+   */
+  async getPreferences(): Promise<Preferences> {
+    const response = await fetchPreferences();
+    return {
+      streaming_enabled: response.streamingEnabled,
+      worktree_archive_mode: response.worktreeArchiveMode,
+      worktree_default_delete_branch: response.worktreeDefaultDeleteBranch,
+      additional: response.additional,
+      branch_copy_uncommitted_files_default:
+        response.branchCopyUncommittedFilesDefault,
+      default_mcp_scope: response.defaultMcpScope ?? ConfigScope.PROJECT,
+      default_workflow_scope:
+        response.defaultWorkflowScope ?? ConfigScope.PROJECT,
+      default_workflow: response.defaultWorkflow || "builtin://agent",
+      hide_builtin_workflows: response.hideBuiltinWorkflows ?? false,
+      hide_builtin_presets: response.hideBuiltinPresets ?? false,
+      hidden_workflow_slugs: response.hiddenWorkflowSlugs ?? [],
+      hidden_preset_slugs: response.hiddenPresetSlugs ?? [],
+    };
+  },
+
+  async updatePreferences(prefs: Partial<Preferences>): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(UpdatePreferencesRequestSchema, {
+      streamingEnabled: prefs.streaming_enabled,
+      worktreeArchiveMode: prefs.worktree_archive_mode,
+      worktreeDefaultDeleteBranch: prefs.worktree_default_delete_branch,
+      additional: prefs.additional || {},
+      branchCopyUncommittedFilesDefault:
+        prefs.branch_copy_uncommitted_files_default,
+      defaultMcpScope: prefs.default_mcp_scope,
+      defaultWorkflowScope: prefs.default_workflow_scope,
+      defaultWorkflow: prefs.default_workflow,
+      hideBuiltinWorkflows: prefs.hide_builtin_workflows,
+      hideBuiltinPresets: prefs.hide_builtin_presets,
+    });
+    const response = await client.updatePreferences(request);
+    invalidatePreferences();
+    return {
+      success: response.success,
+      message: response.message,
+    };
+  },
+
+  async setHiddenItem(itemType: HiddenItemType, slug: string, hidden: boolean): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(SetHiddenItemRequestSchema, {
+      itemType: itemType,
+      slug,
+      hidden,
+    });
+    const response = await client.setHiddenItem(request);
+    invalidatePreferences();
+    return {
+      success: response.success,
+      message: response.message,
+    };
+  },
+
+  // ============================================
+  // Sub-phase 6d: Provider Settings
+  // ============================================
+
+  /**
+   * Through hooks/settings-queries' cache entry (which also dedupes
+   * concurrent callers — the onboarding checklist and apiKeySetupStore both
+   * ask on page load).
+   */
+  async getProviderStatuses(): Promise<ProviderStatus[]> {
+    const response = await fetchProviderStatuses();
+    return response.providers.map(protoProviderStatusToFrontend);
+  },
+
+  async validateProviderAPIKey(
+    provider: string,
+    apiKey: string
+  ): Promise<{
+    valid: boolean;
+    message: string;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(ValidateProviderAPIKeyRequestSchema, {
+      provider,
+      apiKey,
+    });
+    const response = await client.validateProviderAPIKey(request);
+    return {
+      valid: response.valid,
+      message: response.message,
+    };
+  },
+
+  async completeCodexOAuth(
+    code: string,
+    codeVerifier: string,
+    redirectURI: string,
+    accountId?: string
+  ): Promise<SignInOutcome> {
+    const client = grpcClient.settings();
+    const request = create(CompleteCodexOAuthRequestSchema, {
+      code,
+      codeVerifier,
+      redirectUri: redirectURI,
+      accountId,
+    });
+    const response = await client.completeCodexOAuth(request);
+    invalidateProviderStatuses();
+    return {
+      success: response.success,
+      message: response.message,
+      created: response.created,
+      identityMismatch: response.identityMismatch || undefined,
+      accountLabel: response.account?.label || undefined,
+    };
+  },
+
+  /**
+   * Sync the Reliant provider API key from control-plane.
+   *
+   * Mints or fetches the per-user rlat_ LLM key (llm:invoke) and persists it
+   * locally so chat requests can use the reliant provider without manual
+   * configuration. Safe to call once per session post-login; idempotent.
+   *
+   * @param forceRotate If true, force-rotate the existing key on control-plane.
+   */
+  async syncReliantProvider(
+    forceRotate = false
+  ): Promise<{
+    success: boolean;
+    message: string;
+    synced: boolean;
+    createdOrg: boolean;
+    createdKey: boolean;
+    rotatedKey: boolean;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(SyncReliantProviderRequestSchema, {
+      forceRotate,
+    });
+    const response = await client.syncReliantProvider(request);
+    invalidateProviderStatuses();
+    return {
+      success: response.success,
+      message: response.message,
+      synced: response.synced,
+      createdOrg: response.createdOrg,
+      createdKey: response.createdKey,
+      rotatedKey: response.rotatedKey,
+    };
+  },
+
+  async completeClaudeOAuth(
+    code: string,
+    codeVerifier: string,
+    redirectURI: string,
+    state: string,
+    accountId?: string
+  ): Promise<SignInOutcome> {
+    const client = grpcClient.settings();
+    const request = create(CompleteClaudeOAuthRequestSchema, {
+      code,
+      codeVerifier,
+      redirectUri: redirectURI,
+      state,
+      accountId,
+    });
+    const response = await client.completeClaudeOAuth(request);
+    invalidateProviderStatuses();
+    return {
+      success: response.success,
+      message: response.message,
+      created: response.created,
+      identityMismatch: response.identityMismatch || undefined,
+      accountLabel: response.account?.label || undefined,
+    };
+  },
+
+  /**
+   * Exchange an Antigravity (Google) OAuth authorization code for tokens.
+   *
+   * Takes no `state`: Google's token endpoint does not want it echoed back on
+   * the exchange. State is still generated and verified in the browser against
+   * the redirect — see lib/antigravity-oauth.
+   */
+  async completeAntigravityOAuth(
+    code: string,
+    codeVerifier: string,
+    redirectURI: string,
+    accountId?: string
+  ): Promise<SignInOutcome> {
+    const client = grpcClient.settings();
+    const request = create(CompleteAntigravityOAuthRequestSchema, {
+      code,
+      codeVerifier,
+      redirectUri: redirectURI,
+      accountId,
+    });
+    const response = await client.completeAntigravityOAuth(request);
+    invalidateProviderStatuses();
+    return {
+      success: response.success,
+      message: response.message,
+      created: response.created,
+      identityMismatch: response.identityMismatch || undefined,
+      accountLabel: response.account?.label || undefined,
+    };
+  },
+
+  /**
+   * Begin the GitHub Copilot device-authorization flow.
+   *
+   * Returns the user-facing code the caller must display, the verification URI
+   * to open (github.com/login/device), and the polling parameters
+   * (interval + expiry) that govern the subsequent pollCopilotDeviceAuth loop.
+   */
+  async startCopilotDeviceAuth(): Promise<{
+    deviceCode: string;
+    userCode: string;
+    verificationUri: string;
+    intervalSeconds: number;
+    expiresInSeconds: number;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(StartCopilotDeviceAuthRequestSchema, {});
+    const response = await client.startCopilotDeviceAuth(request);
+    return {
+      deviceCode: response.deviceCode,
+      userCode: response.userCode,
+      verificationUri: response.verificationUri,
+      intervalSeconds: response.intervalSeconds,
+      expiresInSeconds: response.expiresInSeconds,
+    };
+  },
+
+  /**
+   * Poll GitHub for completion of a Copilot device-authorization flow.
+   *
+   * On AUTHORIZED the backend persists the Copilot credential. Copilot has a
+   * single flavor — there is no longer a tier concept.
+   */
+  async pollCopilotDeviceAuth(
+    deviceCode: string,
+    accountId?: string
+  ): Promise<{
+    status: PollCopilotDeviceAuthResponse_Status;
+    errorMessage: string;
+    created: boolean;
+    identityMismatch?: string;
+    accountLabel?: string;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(PollCopilotDeviceAuthRequestSchema, {
+      deviceCode,
+      accountId,
+    });
+    const response = await client.pollCopilotDeviceAuth(request);
+    invalidateProviderStatuses();
+    return {
+      status: response.status,
+      errorMessage: response.errorMessage,
+      created: response.created,
+      identityMismatch: response.identityMismatch || undefined,
+      accountLabel: response.account?.label || undefined,
+    };
+  },
+
+  // ============================================
+  // Sub-phase 6e: Privacy Settings
+  // ============================================
+
+  async getPrivacySettings(): Promise<PrivacySettings> {
+    const client = grpcClient.settings();
+    const request = create(GetPrivacySettingsRequestSchema, {});
+    const response = await client.getPrivacySettings(request);
+    return {
+      analytics_enabled: response.analyticsEnabled,
+      crash_reporting_enabled: response.crashReportingEnabled,
+    };
+  },
+
+  async updatePrivacySettings(settings: Partial<PrivacySettings>): Promise<{
+    success: boolean;
+    message: string;
+    analytics_enabled: boolean;
+    crash_reporting_enabled: boolean;
+    requires_restart: boolean;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(UpdatePrivacySettingsRequestSchema, {
+      analyticsEnabled: settings.analytics_enabled,
+      crashReportingEnabled: settings.crash_reporting_enabled,
+    });
+    const response = await client.updatePrivacySettings(request);
+    return {
+      success: response.success,
+      message: response.message,
+      analytics_enabled: response.analyticsEnabled,
+      crash_reporting_enabled: response.crashReportingEnabled,
+      requires_restart: response.requiresRestart,
+    };
+  },
+};

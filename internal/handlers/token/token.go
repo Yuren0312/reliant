@@ -3,14 +3,17 @@ package token
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -27,7 +30,7 @@ func scopeForKind(kind reliantv1.TokenKind) (fat.Scope, error) {
 	case reliantv1.TokenKind_TOKEN_KIND_API:
 		return fat.ScopeReliantAPI, nil
 	default:
-		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("kind is required (DAEMON or API)"))
+		return "", svcerr.InvalidArgument("kind is required (DAEMON or API)")
 	}
 }
 
@@ -54,34 +57,8 @@ func kindForScopes(scopes []string) reliantv1.TokenKind {
 // provisions for a managed daemon (requestedDaemonScopes), so the app's daemon
 // is not the one machine where a deploy needs a second login. Not reliant:api:
 // a daemon's credential stays a daemon's, not an API credential.
-func daemonCeiling() fat.Set {
-	set := fat.SetOf(fat.ScopeDaemonConnect)
-	for _, s := range exchangeableScopes {
-		set[s] = struct{}{}
-	}
-	return set
-}
-
-// widenDaemonCredential gives a just-minted daemon credential the user's own
-// control-plane authority, clipped by the control plane to their org grants.
-//
-// TWO STEPS, NARROW FIRST, ON PURPOSE. MintForUser does not clip, so minting
-// the ceiling directly would hand a member without a deploy grant a token that
-// has one. UpdateForUser does clip (control-plane's access_token_internal), so
-// mint narrow, then widen through the clip. A failed widen leaves a working,
-// narrower daemon credential and is logged, never surfaced: the daemon still
-// connects, and ExchangeToken will say what it lacks.
-func (s *Service) widenDaemonCredential(ctx context.Context, userID, tokenID string) []string {
-	if !s.deps.ControlPlane.ClipsGrants {
-		return nil
-	}
-	info, err := s.deps.Authority.UpdateForUser(ctx, userID, tokenID, nil, daemonCeiling())
-	if err != nil {
-		logging.WarnContext(ctx, "daemon credential minted without control-plane authority", "user_id", userID,
-			"token_id", tokenID, "error", tokenauthority.Describe(err))
-		return nil
-	}
-	return info.Scopes
+func daemonCeiling() []fat.Scope {
+	return append([]fat.Scope{fat.ScopeDaemonConnect}, exchangeableScopes...)
 }
 
 // callerUser returns the authenticated user and whether the caller is a
@@ -89,7 +66,7 @@ func (s *Service) widenDaemonCredential(ctx context.Context, userID, tokenID str
 func callerUser(ctx context.Context) (string, bool, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return "", false, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("unauthenticated"))
+		return "", false, svcerr.Unauthenticated("unauthenticated")
 	}
 	_, isMachine := auth.MachineTokenFromContext(ctx)
 	return userID, isMachine, nil
@@ -123,15 +100,24 @@ func tokenInfoProto(t tokenauthority.TokenInfo) *reliantv1.TokenInfo {
 	return info
 }
 
+// authorityError is a failed token-authority call as the svcerr kind the rpc
+// returns. The authority may be control-plane's (a remote client), so its error
+// is never the verdict itself: it is the logged cause, and the client reads
+// what this rpc says — except a grant the caller asked for and may not have,
+// which is theirs to correct and is reported in the authority's own words.
 func authorityError(op string, err error) error {
 	switch {
 	case tokenauthority.IsNotFound(err):
-		return connect.NewError(connect.CodeNotFound, fmt.Errorf("token not found"))
+		return svcerr.WithCause(svcerr.NotFound("token"), err)
 	case tokenauthority.IsInvalidGrant(err):
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		msg := err.Error()
+		var refused *accesstokenclient.RPCError
+		if errors.As(err, &refused) {
+			msg = refused.Message
+		}
+		return svcerr.WithCause(svcerr.InvalidArgument(msg), err)
 	}
-	logging.Error("token authority failed", "op", op, "error", tokenauthority.Describe(err))
-	return connect.NewError(connect.CodeUnavailable, fmt.Errorf("token service unavailable"))
+	return svcerr.WithCause(svcerr.Unavailable("token service unavailable"), fmt.Errorf("token authority %s: %w", op, err))
 }
 
 // CreateToken mints a token acting as the caller. Interactive session only: a
@@ -144,8 +130,7 @@ func (s *Service) CreateToken(
 		return nil, err
 	}
 	if isMachine {
-		return nil, connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("token management requires an interactive session; a token cannot mint a token"))
+		return nil, svcerr.PermissionDenied("token management requires an interactive session; a token cannot mint a token")
 	}
 	scope, err := scopeForKind(req.Msg.GetKind())
 	if err != nil {
@@ -153,11 +138,10 @@ func (s *Service) CreateToken(
 	}
 	name := strings.TrimSpace(req.Msg.GetName())
 	if name == "" || len(name) > maxTokenNameLen {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("name is required (at most %d characters)", maxTokenNameLen))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("name is required (at most %d characters)", maxTokenNameLen))
 	}
 	if req.Msg.GetTtlSeconds() < 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("ttl_seconds must not be negative"))
+		return nil, svcerr.InvalidArgument("ttl_seconds must not be negative")
 	}
 	var expiresAt *time.Time
 	if ttl := req.Msg.GetTtlSeconds(); ttl > 0 {
@@ -165,18 +149,19 @@ func (s *Service) CreateToken(
 		expiresAt = &at
 	}
 
+	requested := []fat.Scope{scope}
+	if scope == fat.ScopeDaemonConnect && s.deps.ControlPlane.ClipsGrants {
+		requested = daemonCeiling()
+	}
+	// MintForUser clips atomically to current org grants. Never widen later:
+	// UpdateForUser refuses excess grants and must not reset opt-in restrictions.
 	minted, err := s.deps.Authority.MintForUser(ctx, tokenauthority.MintRequest{
-		UserID: userID, Name: name, Scopes: []fat.Scope{scope}, ExpiresAt: expiresAt,
+		UserID: userID, Name: name, Scopes: requested, ExpiresAt: expiresAt,
 	})
 	if err != nil {
 		return nil, authorityError("create", err)
 	}
-	scopes := []string{string(scope)}
-	if scope == fat.ScopeDaemonConnect {
-		if widened := s.widenDaemonCredential(ctx, userID, minted.TokenID); widened != nil {
-			scopes = widened
-		}
-	}
+	scopes := minted.Scopes
 	logging.InfoContext(ctx, "access token created", "user_id", userID, "token_id", minted.TokenID, "scopes", strings.Join(scopes, " "))
 	return connect.NewResponse(&reliantv1.CreateTokenResponse{
 		Info: &reliantv1.TokenInfo{
@@ -237,7 +222,7 @@ func (s *Service) RevokeToken(
 	}
 	id := strings.TrimSpace(req.Msg.GetId())
 	if id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("token id is required"))
+		return nil, svcerr.InvalidArgument("token id is required")
 	}
 	if err := s.deps.Authority.RevokeForUser(ctx, userID, id); err != nil {
 		return nil, authorityError("revoke", err)
@@ -266,19 +251,18 @@ func (s *Service) UpdateToken(
 		return nil, err
 	}
 	if isMachine {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
-			"a machine credential cannot edit a credential; sign in to change a token's permissions"))
+		return nil, svcerr.PermissionDenied("a machine credential cannot edit a credential; sign in to change a token's permissions")
 	}
 	id := strings.TrimSpace(req.Msg.GetId())
 	if id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("token id is required"))
+		return nil, svcerr.InvalidArgument("token id is required")
 	}
 
 	var name *string
 	if req.Msg.Name != nil {
 		trimmed := strings.TrimSpace(req.Msg.GetName())
 		if trimmed == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("name cannot be blank"))
+			return nil, svcerr.InvalidArgument("name cannot be blank")
 		}
 		name = &trimmed
 	}
@@ -290,12 +274,12 @@ func (s *Service) UpdateToken(
 	if req.Msg.Scopes != nil {
 		scopes, err = fat.NewSet(req.Msg.GetScopes().GetScopes())
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			// fat's refusal names the scope it does not know: the caller's to fix.
+			return nil, svcerr.InvalidArgument(err.Error())
 		}
 	}
 	if name == nil && scopes == nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"nothing to update: set name, or set scopes with the permissions to grant"))
+		return nil, svcerr.InvalidArgument("nothing to update: set name, or set scopes with the permissions to grant")
 	}
 
 	info, err := s.deps.Authority.UpdateForUser(ctx, userID, id, name, scopes)

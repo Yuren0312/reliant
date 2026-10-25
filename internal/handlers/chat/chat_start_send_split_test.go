@@ -5,10 +5,12 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
@@ -28,6 +30,8 @@ import (
 // StartChat. SendMessage refuses rather than quietly starting it, and starts
 // nothing.
 func TestSendMessage_PendingChatIsRejected(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -48,8 +52,8 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 	_, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "first message of a branch"))
 	require.Error(t, err)
 
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	assert.Equal(t, connect.CodeFailedPrecondition, connectErr.Code())
 	assert.Contains(t, connectErr.Message(), "StartChat",
 		"the error must name the RPC the caller should use instead")
@@ -69,6 +73,9 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 // same pair, so a chat whose fields were left unset looked neither pending nor
 // paused, whatever its run was doing.
 func TestChatProto_CarriesRootWorkflowState(t *testing.T) {
+	testkit.Slow(t, "a DB-backed chat handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	cases := []struct {
 		name       string
 		status     db.WorkflowStatus

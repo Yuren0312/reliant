@@ -1,0 +1,111 @@
+/**
+ * MobileDaemonList — pins the mobile machine management entry point: users can
+ * create a cloud machine from both empty and populated states, and the request
+ * goes through the shared useCreateDaemon hook/cache path.
+ */
+
+import { render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { VirtuosoMockContext } from "react-virtuoso";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+// Creating a machine is still a control-plane COMMAND, so the create payload
+// carries control-plane's DaemonType/DaemonSize. Only the LIST moved.
+import { DaemonSize, DaemonType } from "@/gen/controlplane/controlplane/v1/shared_pb";
+import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
+
+const mocks = vi.hoisted(() => ({
+  daemons: [] as Daemon[],
+  createDaemon: vi.fn(),
+}));
+
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ children, to, params, ...props }: { children?: React.ReactNode; to?: string; params?: Record<string, string> }) => {
+    const href = to?.replace("$daemonId", params?.daemonId ?? "") ?? "#";
+    return <a href={href} {...props}>{children}</a>;
+  },
+}));
+
+vi.mock("@/hooks/useOnboardingQueries", () => ({
+  isEntitlementDenial: () => false,
+  useDaemonList: () => ({ data: mocks.daemons, isLoading: false }),
+  useCreateDaemon: () => ({ mutateAsync: mocks.createDaemon, isPending: false }),
+}));
+
+vi.mock("../../../store/mobileDrawerStore", () => ({
+  useMobileDrawerStore: (selector: (state: { open: () => void; inboxBadge: unknown }) => unknown) =>
+    selector({ open: vi.fn(), inboxBadge: { count: 0, informational: false, degraded: false, announcement: "" } }),
+}));
+
+vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { includedSmallDaemonSeconds: 576000n } }), usePlans: () => ({ data: { daemonPricing: { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 120 }], storageCentsPerGibMonth: '25', placeholder: false } } }) }));
+
+vi.mock('@tanstack/react-query', async importOriginal => ({ ...await importOriginal<typeof import('@tanstack/react-query')>(), useQuery: () => ({ data: { allowedDaemonSizes: ['small'] } }) }));
+
+const { MobileDaemonList } = await import("../MobileDaemonList");
+
+function daemon(overrides: Partial<Daemon> = {}): Daemon {
+  return {
+    daemonId: "d1",
+    hostname: "work-box",
+    status: DaemonStatus.ACTIVE,
+    size: "small",
+    ...overrides,
+  } as Daemon;
+}
+
+function renderList() {
+  return render(
+    <VirtuosoMockContext.Provider value={{ viewportHeight: 800, itemHeight: 80 }}>
+      <MobileDaemonList />
+    </VirtuosoMockContext.Provider>,
+  );
+}
+
+beforeEach(() => {
+  mocks.daemons = [];
+  mocks.createDaemon.mockReset().mockResolvedValue("d-new");
+});
+
+describe("MobileDaemonList", () => {
+  it("offers a new machine action in the empty state", () => {
+    renderList();
+    expect(screen.getByText("No machines yet")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /new machine/i })).toHaveLength(2);
+  });
+
+  it("creates a small managed machine through the shared hook", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    renderList();
+
+    const [headerAction] = screen.getAllByRole("button", { name: /new machine/i });
+    await user.click(headerAction!);
+    // Name + spec on the card; hours only in the footnote (160 small hours, small is the only size).
+    expect(screen.getByText("Includes 160 hours a month. Extra hours and storage are billed separately.")).toBeInTheDocument();
+    expect(screen.queryByText(/GiB|hrs|\/hr|per month/)).not.toBeInTheDocument();
+    await user.clear(screen.getByLabelText(/^name$/i));
+    await user.type(screen.getByLabelText(/^name$/i), "phone-box");
+    await user.click(screen.getByRole("button", { name: /^create$/i }));
+
+    await waitFor(() =>
+      expect(mocks.createDaemon).toHaveBeenCalledWith({
+        name: "phone-box",
+        daemonType: DaemonType.MANAGED,
+        size: DaemonSize.DAEMON_SIZE_SMALL,
+        idleTimeout: "30m",
+        gitRepo: undefined,
+        gitBranch: "main",
+      }),
+    );
+  });
+
+  it("keeps the new machine action available when machines already exist", async () => {
+    mocks.daemons = [daemon({ daemonId: "d1", hostname: "work-box" })];
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    renderList();
+
+    expect(await screen.findByText("work-box")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /new machine/i }));
+    expect(screen.getByRole("dialog", { name: /new machine/i })).toBeInTheDocument();
+  });
+});

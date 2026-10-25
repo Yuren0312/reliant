@@ -7,7 +7,7 @@ forward-only SQL files under `db/migrations/` (repo root), embedded into the
 binary by `forge generate` (`db/embed_gen.go`) and applied by forge's migrator
 (`forge/pkg/migratekit`, golang-migrate underneath). `forge generate` projects
 the applied schema into `internal/store`, the forge ORM package, where every
-query the Repository runs lives (P5b in `research/forge-migration/PLAN.md`).
+query the Repo runs lives (P5b in `research/forge-migration/PLAN.md`).
 
 ## Files
 
@@ -30,7 +30,8 @@ query the Repository runs lives (P5b in `research/forge-migration/PLAN.md`).
    `make migration` runs `forge db migration new` from the forge go.mod pins,
    which opens the file with the two compatibility declarations (below) as a
    comment to replace. Always let forge pick the version: it allocates a UTC
-   timestamp that sorts after every existing one. There is no down migration —
+   timestamp that sorts after every existing one, including the newest on
+   `origin/main` (it fetches main first and checks the result). There is no down migration —
    a bad migration is repaired by a new one written against the state the
    database is actually in.
 
@@ -42,11 +43,10 @@ query the Repository runs lives (P5b in `research/forge-migration/PLAN.md`).
    its run lock by polling `pg_try_advisory_lock`, holding no statement or
    snapshot between attempts, so the index build never waits on a waiter
    (forge #776; before it, every waiting replica failed its boot with
-   `deadlock detected`. The goose bridge polls for its own lock the same way).
+   `deadlock detected`).
 
    **Say whether the previous release survives it.** Rolling back is
-   redeploying the previous release onto the schema this one left — until a
-   release after the cutover ships, that is the last goose release. Every
+   redeploying the previous release onto the schema this one left. Every
    migration after the baseline carries one of:
 
    ```sql
@@ -88,37 +88,39 @@ older than one that merged first, re-version it before merging:
 forge db migration rebase db/migrations/<version>_my_changes.up.sql
 ```
 
+This is enforced, not advisory: `go run ./tools/test-affected migration-order`
+fetches `origin/main` and fails any migration on your branch that main does not
+carry and whose version is at or below main's newest, naming both versions and
+the remedy. It runs in `make test-affected` and `task ci:merge`
+(`scripts/merge-gate.sh`) whenever the diff touches `db/migrations/`, in the
+`check-migrations` workflow, and after `make migration`. It fails closed: if
+`origin/main` cannot be refreshed it reports that instead of passing
+(`MIGRATION_ORDER_OFFLINE=1` judges the local ref, for an offline desk only).
+`forge lint --migration-safety` has the same rule but reads the local
+`origin/main` as it was last fetched, which is how reliant#1399 passed it.
+
 ## Applying and inspecting
 
 | Command | Description |
 | ------- | ----------- |
 | `reliant db migrate up` | Apply every pending migration (DATABASE_URL, or DATABASE_DIRECT_URL when set) |
-| `reliant db migrate status` | Read-only (one READ ONLY transaction): what `up` would do — up to date, apply N, build fresh, adopt, goose catch-up then adopt, or refuse and why. Exits non-zero on a refusal |
+| `reliant db migrate status` | Read-only (one READ ONLY transaction): what `up` would do — up to date, apply N, build fresh, or refuse and why. Exits non-zero on a refusal |
 | `reliant db migrate force <version>` | Clear a dirty schema after a hand repair (records the version, runs no SQL) |
 
-## goose history (frozen) and the goose bridge
+## Before forge migrations
 
-Until 2026-10 the schema was goose migrations in `migrations/postgres/`. They
-are frozen, byte for byte (`TestGooseHistoryIsFrozen`): a file added or edited
-there fails the build. The baseline in `db/migrations/` is their squashed
-result and lists every goose version in its `-- forge:adopts goose` lines
-(`TestBaselineAdoptsExactlyTheGooseHistory` keeps the list and the directory
-equal). Three kinds of database meet it, through the same `Migrate`:
+Until 2026-10 the schema was goose migrations. The baseline in
+`db/migrations/` is their squashed result (`forge db squash --from-dsn`).
+Every database we keep was adopted from goose by a release carrying the goose
+bridge (v1.8.2 onwards; the cutover runbook,
+`research/forge-migration/04-p5a-cutover-runbook.md`, has the history), and
+goose itself was removed afterwards. `goose_db_version` may still sit in such a
+database; nothing reads it.
 
-- **fresh** (no `goose_db_version`): the baseline's SQL runs;
-- **at goose's frozen head**: **adopted** — the baseline is recorded as
-  applied in forge's bookkeeping (`schema_migrations*`), none of its SQL runs,
-  and `goose_db_version` is left exactly as it was;
-- **behind goose's head** (an older goose release migrated it): the **goose
-  bridge** (`goose_bridge.go`) first runs goose itself — the same `goose.Up`
-  every goose release ran at boot, over these frozen files — to goose's head,
-  then the migrator adopts it, in the same run.
-
-A goose version the frozen history does not hold, a frozen version recorded as
-rolled back, or reliant's tables with no history at all are refused before
-anything runs. `reliant db migrate status` says which of these a database is.
-The goose files and library stay compiled in for the bridge; when they can go
-is in the cutover runbook, `research/forge-migration/04-p5a-cutover-runbook.md`.
+So `Migrate` meets a fresh database (the baseline builds it) or one forge's
+migrator has a record in. reliant's tables with no record are refused before
+anything runs: a goose-era database nobody adopted upgrades by running v1.8.2
+first.
 
 ## Queries on the forge ORM (P5b)
 
@@ -131,10 +133,12 @@ projects every applied table — and the `chats_with_activity` view, which its
 `Delete<E>`), `store_gen.go` (one `<Entity>Store` interface per entity plus the
 aggregate `Store`, from `store.NewStore(ormClient)`), and one hand-owned
 `<entity>_repo_ext.go` seam per entity that forge scaffolds once and never
-rewrites. P5b ported every query the Repository ran (sqlc's and its hand
+rewrites. P5b ported every query the Repo ran (sqlc's and its hand
 SQL) onto these seams, lane by lane (`research/forge-migration/08-p5b-spike.md`);
-sqlc is gone. This package keeps the Repository facade over them until P6
-splits it. The rules every query follows:
+sqlc is gone. This package keeps the concrete `*db.Repo` over them: the
+behaviour (guards, multi-statement transactions, hub emission, sealing) that
+is not one statement. The Repo is concrete; declare the role you need where
+you need it (rule 8). The rules every query follows:
 
 1. **Generated delegate, builder, or hand SQL — in that order.** A by-key get,
    a filtered list or count, or a stamp is a generated delegate (compose
@@ -172,6 +176,22 @@ splits it. The rules every query follows:
    (`internal/store/save_message_atomic.go`). The generated by-key delegates
    (Get, Update, UpdateMasked, Delete) already bind.
 
+   **Never select a relation with a star** — no `SELECT *`, `t.*`,
+   `RETURNING *`, `ColumnExpr("t.*")` or `Returning("*")`. A star is
+   expanded when the statement is prepared, and prepared statements outlive
+   migrations (pgx's per-connection cache, and pgbouncer's server-side one,
+   shared across clients): once a migration adds a column, every statement
+   prepared before it fails with "cached plan must not change result type".
+   That broke `ListArchivedChats` in prod on 2026-10-22, after
+   `chats_with_activity` gained `working_threads`. Name the model's columns
+   instead: `ColumnExpr("?TableColumns")` / `Returning("?TableColumns")` on a
+   builder query (bun expands them from the query's model), `columnsOf[T](alias)`
+   in raw SQL (`internal/store/columns.go`). A bare star over a derived table
+   or a function (`SELECT * FROM (…)`, `FROM unnest(…)`) is fine: the
+   statement fixes that shape. `internal/architecture`'s `TestNoStarSelects`
+   enforces this; `internal/store`'s `TestPreparedQueriesSurviveAnAddedColumn`
+   proves each converted query survives an added column on one connection.
+
 3. **Map entities to `core` at the boundary.** Generated rows are storage
    shapes (`store.Chat`), not domain types (`core.Chat`): `*string` for a
    nullable column, `int32` for `chats.unread`, a JSON document as `string`,
@@ -181,7 +201,7 @@ splits it. The rules every query follows:
    workflow. Behavior stays on the `core` types (`ThreadStatusForStopReason`,
    chat activity, `ComputeStreamingState`). `internal/store` may import
    `internal/db/core` and `gen/`, and must **never** import `internal/db`:
-   the Repository delegates to the store, so the reverse edge is a cycle. Integer columns that hold a `reliantv1` enum already
+   the Repo delegates to the store, so the reverse edge is a cycle. Integer columns that hold a `reliantv1` enum already
    project to it (`COMMENT ON COLUMN … IS 'forge:go-type=…'`; see
    `db/migrations/20261020232630_chats_with_activity_view_entity.up.sql`).
    Mark a new one the same way. A view's comments, its columns' included,
@@ -220,22 +240,22 @@ splits it. The rules every query follows:
    test on `storetest.New(t)`, which hands the test its own migrated database
    reachable through both layers on one pgx pool (`env.ORM` and `env.Repo`).
    The tests the lanes wrote against a sqlc twin (`…AgreeWithSQLC`) now
-   compare the query with the Repository method over it. A new test asserts
+   compare the query with the Repo method over it. A new test asserts
    the rows it expects. Run them with
    `FORGE_TEST_POSTGRES_URL=postgres://…/postgres go test ./internal/store/...`
    (or a `DATABASE_URL`, whose server is used); like this package's tests
    they skip under `-short`.
 
-7. **One transaction, either layer.** The Repository and `internal/store`
+7. **One transaction, either layer.** The Repo and `internal/store`
    share one pool (`repo.ORM()` is the ORM client over it) and one
    transaction: forge's, carried in `ctx`. `Repo.RunTx` opens it through the
-   ORM client, and every hand Repository statement resolves to the
+   ORM client, and every hand Repo statement resolves to the
    transaction `ctx` carries (`tx_bridge.go`). So a transaction opened by
-   either side is joined by both, and Repository and store calls mix in one:
+   either side is joined by both, and Repo and store calls mix in one:
 
    ```go
    err := repo.RunTx(ctx, orm.Serializable, func(ctx context.Context) error { // or repo.ORM().RunTx
-       if err := repo.UpsertProjectDaemon(ctx, projectID, daemonID, path, nil); err != nil { // Repository
+       if err := repo.UpsertProjectDaemon(ctx, projectID, daemonID, path, nil); err != nil { // Repo
            return err
        }
        return store.UpdateChatMasked(ctx, repo.ORM(), chat, []string{store.ChatFieldActiveDaemonID}) // store
@@ -254,10 +274,10 @@ splits it. The rules every query follows:
    `orm.Client.RunTx` — `orm.Serializable`, `orm.ReadCommitted`, or a
    refinement (`.WithMaxAttempts(n)`, `.WithReadOnly()`) — with no default:
    a blank level is refused (`orm.ErrInvalidTxOptions`) naming the call site.
-   It is the Repository's one transaction primitive; `RunTxReadOnly` is sugar
+   It is the Repo's one transaction primitive; `RunTxReadOnly` is sugar
    for `orm.Serializable.WithReadOnly()`, as on the ORM client. The two
    compose like this: the policy's `MaxAttempts` is the TOTAL number of
-   times `fn` runs (begin failures included), and the Repository's ladder
+   times `fn` runs (begin failures included), and the Repo's ladder
    (`isRetryableError`) decides which failures spend an attempt, with
    `calculateBackoff` between them. So:
 
@@ -271,7 +291,7 @@ splits it. The rules every query follows:
    The ladder is the same at every level: the level decides how much budget a
    caller asks for, not which SQLSTATEs count. A failure the ladder does not
    accept, or the last attempt's, is returned verbatim. The last row is what
-   the Repository's READ COMMITTED writers (`CreateUserUpdate`,
+   the Repo's READ COMMITTED writers (`CreateUserUpdate`,
    `SaveMessageAtomic`, `MutateChatSelection`, the daemon registry, the
    workflow drafts) name, keeping the budget they had before the level
    became explicit. `Repo.RunTx` is declared `//forge:tx-opener level-arg=1`
@@ -280,7 +300,7 @@ splits it. The rules every query follows:
    judges `orm.Client.RunTx`'s.
    `runAfterCommit` is `orm.AfterCommit`, so post-commit effects registered
    by either layer run once, after the commit that keeps them. A lock that
-   needs its own transaction uses `BeginDetached` (or the Repository's
+   needs its own transaction uses `BeginDetached` (or the Repo's
    `BeginTxWithOptions`), refusing when `orm.InTx(ctx)`. A statement that
    must commit whatever the caller's transaction does (the write ledger)
    runs with `orm.Detached(ctx)`: on the pool, its own autocommit
@@ -314,12 +334,17 @@ splits it. The rules every query follows:
    is the pattern. A nested opener joins the outer transaction at the
    OUTER's level, whatever policy it passes (the policy is still validated).
 
-8. **Consumers depend on the least they use (P6).** A port never widens a
-   dependency. A handler, service or workflow that needs persistence
-   declares, in its own package, an interface listing only the methods it
-   calls, and takes that — never `db.Repository` or the aggregate
-   `store.Store`, and one `<Entity>Store` only when the generated CRUD is all
-   it needs. While a query is mid-port the Repository still satisfies that
-   interface; when the Repository method goes, a small adapter over
-   `orm.Context` and the ext functions does. A lane narrows the consumers of
-   the methods it ports, and only those.
+8. **The Repo is concrete; declare the role you need where you need it
+   (P6).** `internal/db` declares no interface over `*db.Repo`. A handler,
+   service or workflow that needs persistence declares, in its own package,
+   an interface listing only the methods it calls, and takes that: a
+   handler's or component's `Repository` in `deps.go` (forge mocks it into
+   `mock_gen.go`), a contract package's in `contract.go`, an unexported
+   `<thing>Store` beside the helper that takes it. A consumer that forwards
+   the repo to a callee embeds the callee's exported role. Never the
+   aggregate `store.Store`, and one `<Entity>Store` only when the generated
+   CRUD is all it needs. Composition code (`internal/app`, the activity and
+   tool registries, `workersetup`) takes `*db.Repo` itself. The sub-stores
+   the Repo hands out (`Connections()`, `IntegrationWrites()`) are concrete
+   too (`db.ConnectionStore`, `db.IntegrationWriteLedger`); their consumers
+   declare their own slice of them as well.

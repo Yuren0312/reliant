@@ -11,9 +11,11 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -86,6 +88,9 @@ func (e *triggerTestEnv) createConnection(t *testing.T, userID, integration, acc
 }
 
 func TestCreateWebhookTriggerReturnsItsTokenOnceAndStoresOnlyAHash(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 
 	resp, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: webhookDefinition(env, nil)}))
@@ -111,6 +116,9 @@ func TestCreateWebhookTriggerReturnsItsTokenOnceAndStoresOnlyAHash(t *testing.T)
 }
 
 func TestRotateWebhookTokenInvalidatesTheOldOne(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	resp, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: webhookDefinition(env, nil)}))
 	require.NoError(t, err)
@@ -129,17 +137,22 @@ func TestRotateWebhookTokenInvalidatesTheOldOne(t *testing.T) {
 
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
 	_, err = env.svc.RotateWebhookToken(otherCtx, connect.NewRequest(&reliantv1.RotateWebhookTokenRequest{Id: id}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "another user's trigger is not found")
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "another user's trigger is not found")
 }
 
 func TestRotateWebhookTokenRejectsANonWebhookTrigger(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 	_, err := env.svc.RotateWebhookToken(env.ctx, connect.NewRequest(&reliantv1.RotateWebhookTokenRequest{Id: created.GetId()}))
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }
 
 func TestWebhookHmacSecretIsSealedForTheOwnerAndRequired(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	hmacSource := &reliantv1.TriggerDefinition_Webhook{Webhook: &reliantv1.WebhookSource{
 		Hmac: &reliantv1.WebhookHmac{Header: "X-Hub-Signature-256", Prefix: "sha256="},
@@ -148,7 +161,7 @@ func TestWebhookHmacSecretIsSealedForTheOwnerAndRequired(t *testing.T) {
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: webhookDefinition(env, func(d *reliantv1.TriggerDefinition) { d.Source = hmacSource }),
 	}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "hmac without a secret can never verify")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "hmac without a secret can never verify")
 
 	secret := "s3cret"
 	resp, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
@@ -175,19 +188,21 @@ func TestWebhookHmacSecretIsSealedForTheOwnerAndRequired(t *testing.T) {
 }
 
 func TestTriggerFilterIsValidatedOnWrite(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: webhookDefinition(env, func(d *reliantv1.TriggerDefinition) { d.Filter = "trigger.payload.body ==" }),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "filter")
 
 	_, err = env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.Filter = "true" }),
 	}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "a schedule has no event to filter")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "a schedule has no event to filter")
 
 	created := env.create(t, webhookDefinition(env, func(d *reliantv1.TriggerDefinition) {
 		d.Filter = "trigger.payload.body.action == 'deploy'"
@@ -196,6 +211,8 @@ func TestTriggerFilterIsValidatedOnWrite(t *testing.T) {
 }
 
 func TestCreateIntegrationTriggerBindsTheCallersConnection(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	mine := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
 	theirs := env.createConnection(t, uuid.NewString(), "test", "acct-1", core.ConnectionStatusActive)
@@ -220,15 +237,18 @@ func TestCreateIntegrationTriggerBindsTheCallersConnection(t *testing.T) {
 
 	// Another user's connection is indistinguishable from a missing one.
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: def(&theirs.ID)}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 
 	// A connection for a different integration is refused.
 	other := env.createConnection(t, env.userID, "other", "acct-2", core.ConnectionStatusActive)
 	_, err = env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: def(&other.ID)}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func TestCreateIntegrationTriggerRequiresAnInboundIntegration(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
@@ -238,34 +258,41 @@ func TestCreateIntegrationTriggerRequiresAnInboundIntegration(t *testing.T) {
 		}),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.True(t, strings.Contains(err.Error(), "nope"))
 }
 
 func TestTriggerKindIsNotUpdatable(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 	_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
 		Id: created.GetId(), Trigger: webhookDefinition(env, nil),
 	}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 // A reference to a trigger the workflow does not declare is NotFound, and
 // says what the workflow does declare (builtin://agent declares none).
 // Activating real declarations is trigger_activation_test.go.
 func TestWorkflowTriggerReferenceToAnUndeclaredTrigger(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
 			d.Source = &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: "on-push"}
 		}),
 	}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	assert.Contains(t, err.Error(), `does not declare a trigger named "on-push"`)
 }
 
 func TestFireInboundTriggerGoesThroughIntake(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, intake := setupInboundTriggerTest(t)
 	created := env.create(t, webhookDefinition(env, nil))
 
@@ -294,6 +321,9 @@ func (texterCatalog) UserConfiguredURL(integration string) bool { return integra
 // them the URL to paste into the provider's console; one whose app-level
 // webhook the operator registers does not.
 func TestIntegrationTriggerShowsTheWebhookURLTheUserMustConfigure(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.configure(t, func(d *Deps) {
 		d.PublicURL = "https://api.example.com/"

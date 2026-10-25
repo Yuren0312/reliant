@@ -2,10 +2,10 @@ package forge_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	forge "github.com/reliant-labs/reliant/internal/handlers/forge"
 )
 
@@ -22,12 +22,12 @@ const (
 // reaches a daemon.
 func newOwnedProjectService(t *testing.T) *forge.Service {
 	t.Helper()
-	store := &forge.StubRepo{
+	store := &forge.MockRepository{
 		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
 			if id == ownProjectID && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Name: "proj", Path: "/work"}, nil
 			}
-			return nil, errors.New("project not found")
+			return nil, core.ErrProjectNotFound // the store's shape
 		},
 	}
 	return forge.NewTestForge(t, forge.WithForgeDeps(forge.Deps{Repo: store}))

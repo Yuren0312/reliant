@@ -11,6 +11,8 @@ import (
 )
 
 func TestAskUserTool_Name(t *testing.T) {
+	t.Parallel()
+
 	factory := &tools.ToolsFactory{}
 	tool := factory.AskUser()
 
@@ -19,6 +21,8 @@ func TestAskUserTool_Name(t *testing.T) {
 }
 
 func TestAskUserTool_HasDescription(t *testing.T) {
+	t.Parallel()
+
 	factory := &tools.ToolsFactory{}
 	tool := factory.AskUser()
 
@@ -27,6 +31,8 @@ func TestAskUserTool_HasDescription(t *testing.T) {
 }
 
 func TestAskUserTool_SchemaProperties(t *testing.T) {
+	t.Parallel()
+
 	factory := &tools.ToolsFactory{}
 	tool := factory.AskUser()
 
@@ -54,4 +60,17 @@ func TestAskUserTool_SchemaProperties(t *testing.T) {
 	questionsMap, ok := questionsRaw.(map[string]interface{})
 	assert.True(t, ok)
 	assert.Equal(t, "array", questionsMap["type"])
+
+	// Async is the default (research/ASYNC_ASK_USER.md): blocking is the
+	// opt-in, optional, default false, and the old async option is gone.
+	blockingRaw, hasBlocking := props["blocking"]
+	require.True(t, hasBlocking, "Schema should have the 'blocking' option")
+	blockingMap, ok := blockingRaw.(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "boolean", blockingMap["type"])
+	assert.Equal(t, false, blockingMap["default"])
+	assert.NotContains(t, required, "blocking")
+	assert.NotContains(t, props, "async", "async is the default, not an option")
+	assert.Contains(t, tool.Description(), "blocking: true")
+	assert.Contains(t, tool.Description(), "withdraw_question")
 }

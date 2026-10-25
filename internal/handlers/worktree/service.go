@@ -10,25 +10,23 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the worktree service. internal/grpc/server.go
-// constructs it today, and mounts it with the machine-wake interceptor: a
-// worktree lives on one of the user's machines, and a request that finds that
-// machine asleep wakes it. forge's composition root takes over in P3c
-// (research/forge-migration/PLAN.md). The rpc methods on *Service are where
-// this service's logic lives; see the forge `api` / `services` skill.
+// Deps holds dependencies for the worktree service. The composition graph
+// constructs it (internal/app/compose.go), and the api root mounts it with the
+// machine-wake interceptor (apiMountOptions): a worktree lives on one of the
+// user's machines, and a request that finds that machine asleep wakes it. The
+// rpc methods on *Service are where this service's logic lives; see the forge
+// `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// Repo reads and writes worktrees, their projects, repos and chats. The
-	// whole db.Repository: the handlers call over 20 of its methods, and
-	// repo.AdoptFromDaemon and workspacecreate take it whole.
-	Repo db.Repository
+	// Repo reads and writes worktrees, their projects, repos and chats
+	// (deps.go).
+	Repo Repository
 	// Router carries each worktree command to the machine that holds the
 	// workspace. A router that can also resume a suspended machine
 	// (machinewake.Resumer) has asleep machines woken; see wake. The API

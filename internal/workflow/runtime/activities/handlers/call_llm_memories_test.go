@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/config"
@@ -9,6 +10,8 @@ import (
 )
 
 func TestGetSystemPrompts_ContainsBasePrompt(t *testing.T) {
+	t.Parallel()
+
 	activity := &CallLLMActivity{}
 	prompts := activity.getSystemPrompts(nil, "/tmp/project", "", nil, nil, nil, true)
 	require.NotEmpty(t, prompts)
@@ -22,6 +25,8 @@ func TestGetSystemPrompts_ContainsBasePrompt(t *testing.T) {
 // the specific commands matters: "be careful of other's work" alone does not
 // stop a model reaching for stash to clear a dirty tree before a build.
 func TestGetSystemPrompts_WarnsAgainstDestructiveGitCommands(t *testing.T) {
+	t.Parallel()
+
 	activity := &CallLLMActivity{}
 	prompt := activity.getSystemPrompts(nil, "/tmp/project", "", nil, nil, nil, true)[0]
 
@@ -30,6 +35,8 @@ func TestGetSystemPrompts_WarnsAgainstDestructiveGitCommands(t *testing.T) {
 }
 
 func TestGetSystemPrompts_DoesNotContainMemories(t *testing.T) {
+	t.Parallel()
+
 	activity := &CallLLMActivity{}
 	cfg := &config.Config{
 		GlobalMemoryMD:  "global memory",
@@ -46,11 +53,15 @@ func TestGetSystemPrompts_DoesNotContainMemories(t *testing.T) {
 }
 
 func TestFormatStoredMemories_EmptyWhenNoStoredMemories(t *testing.T) {
+	t.Parallel()
+
 	require.Equal(t, "", formatStoredMemories(nil))
 	require.Equal(t, "", formatStoredMemories(&config.Config{}))
 }
 
 func TestFormatStoredMemories_StandaloneFormat(t *testing.T) {
+	t.Parallel()
+
 	cfg := &config.Config{
 		GlobalMemoryMD:  "global memory",
 		ProjectMemoryMD: "project memory",
@@ -65,6 +76,8 @@ func TestFormatStoredMemories_StandaloneFormat(t *testing.T) {
 }
 
 func TestFormatStoredMemories_ProducesSystemMessage(t *testing.T) {
+	t.Parallel()
+
 	cfg := &config.Config{
 		GlobalMemoryMD: "test memory",
 	}
@@ -80,6 +93,8 @@ func TestFormatStoredMemories_ProducesSystemMessage(t *testing.T) {
 }
 
 func TestFormatRepoMemoryMessages_Empty(t *testing.T) {
+	t.Parallel()
+
 	for _, memories := range []map[string]string{nil, {}, {"api": "", "web": "  "}} {
 		msgs, omitted := formatRepoMemoryMessages(memories, repoMemoryBudgetChars(272_000))
 		require.Nil(t, msgs)
@@ -88,6 +103,8 @@ func TestFormatRepoMemoryMessages_Empty(t *testing.T) {
 }
 
 func TestFormatRepoMemoryMessages_SortedByName(t *testing.T) {
+	t.Parallel()
+
 	msgs, omitted := formatRepoMemoryMessages(map[string]string{
 		"forge":         "forge context",
 		"api":           "api context",
@@ -119,6 +136,8 @@ func TestFormatRepoMemoryMessages_SortedByName(t *testing.T) {
 // place the path appears. It must therefore read as the ANSWER to "where do
 // I open this file", not as provenance.
 func TestGetSystemPrompts_StatesWorkingDirectoryAsTheProjectRoot(t *testing.T) {
+	t.Parallel()
+
 	activity := &CallLLMActivity{}
 
 	t.Run("project path when no worktree", func(t *testing.T) {
@@ -138,4 +157,18 @@ func TestGetSystemPrompts_StatesWorkingDirectoryAsTheProjectRoot(t *testing.T) {
 		require.Contains(t, prompt, "/srv/worktrees/feature-x",
 			"a chat bound to a worktree works in the worktree, and the prompt must name that path")
 	})
+}
+
+func TestSystemPrompt_TellsAgentsToKeepScratchOutsideTheWorkspaceRoot(t *testing.T) {
+	t.Parallel()
+
+	activity := &CallLLMActivity{}
+	with := activity.getSystemPrompts(nil, "/tmp/project", "", nil, nil, nil, true)[0]
+	if !strings.Contains(with, "Keep scratch files") || !strings.Contains(with, "outside this directory") {
+		t.Fatalf("the prompt must steer scratch away from the workspace root:\n%s", with)
+	}
+	none := activity.getSystemPrompts(nil, "", "", nil, nil, nil, true)[0]
+	if strings.Contains(none, "Keep scratch files") {
+		t.Fatal("with no working directory there is no root to keep scratch out of")
+	}
 }

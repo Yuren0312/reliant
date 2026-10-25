@@ -9,7 +9,7 @@ function Write-ColorOutput {
 }
 
 $PROJECT_ROOT = Split-Path -Parent $PSScriptRoot
-$WEB_DIR = Join-Path $PROJECT_ROOT "web"
+$WEB_DIR = Join-Path $PROJECT_ROOT "frontends/web"
 $ELECTRON_DIR = Join-Path $PROJECT_ROOT "electron"
 $DEV_DIR = Join-Path $PROJECT_ROOT "data"
 $LOG_FILE = Join-Path $DEV_DIR "logs.txt"
@@ -514,7 +514,6 @@ try {
     $env:GRPC_PORT = $GRPC_PORT
     $env:TOOLS_DAEMON_PORT = $TOOLS_DAEMON_PORT
     $env:DAEMON_FRONTEND_PORT = $DAEMON_FRONTEND_PORT
-    $env:VITE_GRPC_PORT = $GRPC_PORT
     $env:TEMPORAL_FRONTEND_PORT = $TEMPORAL_FRONTEND_PORT
     $env:TEMPORAL_UI_PORT = $TEMPORAL_UI_PORT
     $env:PPROF_PORT = $PPROF_PORT

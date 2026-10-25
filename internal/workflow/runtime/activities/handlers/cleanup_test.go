@@ -14,20 +14,20 @@ import (
 )
 
 // setupTestRepo creates an in-memory test database
-func setupTestRepo(t *testing.T) db.Repository {
+func setupTestRepo(t *testing.T) *db.Repo {
 	repo := db.NewTestRepo(t)
 	return repo
 }
 
 // createTestChat creates a test project and chat
-func createTestChat(t *testing.T, repo db.Repository) string {
+func createTestChat(t *testing.T, repo *db.Repo) string {
 	chatID, _ := createTestChatWithContextWindow(t, repo)
 	return chatID
 }
 
 // createTestChatWithContextWindow creates a test project, chat, thread, and context window
 // Returns the chatID and contextWindowID for use in message creation
-func createTestChatWithContextWindow(t *testing.T, repo db.Repository) (string, string) {
+func createTestChatWithContextWindow(t *testing.T, repo *db.Repo) (string, string) {
 	ctx := context.Background()
 	projectID := uuid.New().String()
 	chatID := uuid.New().String()
@@ -78,6 +78,8 @@ func createTestChatWithContextWindow(t *testing.T, repo db.Repository) (string, 
 // TestCleanupActivity_CancelsApprovals verifies that cleanup activity
 // cancels all pending approvals for a chat
 func TestCleanupActivity_CancelsApprovals(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID := createTestChat(t, repo)
@@ -135,6 +137,8 @@ func TestCleanupActivity_CancelsApprovals(t *testing.T) {
 
 // TestCleanupActivity_NoApprovals verifies cleanup handles case with no approvals
 func TestCleanupActivity_NoApprovals(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID := createTestChat(t, repo)
@@ -149,6 +153,8 @@ func TestCleanupActivity_NoApprovals(t *testing.T) {
 // TestCleanupActivity_CancelsOrphanedToolCalls verifies that cleanup activity
 // cancels tool calls that don't have matching tool results
 func TestCleanupActivity_CancelsOrphanedToolCalls(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID, contextWindowID := createTestChatWithContextWindow(t, repo)
@@ -239,6 +245,8 @@ func TestCleanupActivity_CancelsOrphanedToolCalls(t *testing.T) {
 
 // TestCleanupActivity_SkipsToolCallsWithResults verifies that tool calls with results are not cancelled
 func TestCleanupActivity_SkipsToolCallsWithResults(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID, contextWindowID := createTestChatWithContextWindow(t, repo)
@@ -319,6 +327,8 @@ func TestCleanupActivity_SkipsToolCallsWithResults(t *testing.T) {
 
 // TestCleanupActivity_OnlyPendingApprovals verifies only pending approvals are cancelled
 func TestCleanupActivity_OnlyPendingApprovals(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID := createTestChat(t, repo)
@@ -367,6 +377,8 @@ func TestCleanupActivity_OnlyPendingApprovals(t *testing.T) {
 
 // TestCleanupActivity_IdempotentRepair verifies that running cleanup twice doesn't duplicate repairs
 func TestCleanupActivity_IdempotentRepair(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID, contextWindowID := createTestChatWithContextWindow(t, repo)
@@ -428,6 +440,8 @@ func TestCleanupActivity_IdempotentRepair(t *testing.T) {
 
 // TestCleanupActivity_MultipleOrphanedToolCalls verifies cleanup handles multiple orphaned tool calls
 func TestCleanupActivity_MultipleOrphanedToolCalls(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID, contextWindowID := createTestChatWithContextWindow(t, repo)

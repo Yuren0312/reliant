@@ -11,6 +11,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -97,6 +98,8 @@ func (f continueFixture) systemNotes(t *testing.T) []string {
 }
 
 func TestReconciler_RunEndedByOthers_StartsTheRunThatAnswersTheMessage_Once(t *testing.T) {
+	t.Parallel()
+
 	f, rec := newTerminatedRunFixture(t)
 
 	_, errs := rec.ReconcileRunningWorkflows(f.ctx)
@@ -121,6 +124,9 @@ func TestReconciler_RunEndedByOthers_StartsTheRunThatAnswersTheMessage_Once(t *t
 // A machine connect delivering the chat's message (queueddelivery) can race
 // the reconciler's pass. Whichever gets there first starts the one run.
 func TestReconciler_RunEndedByOthers_RacingADeliveryStartsOneRun(t *testing.T) {
+	testkit.Slow(t, "a DB-backed chat handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	for i := range 5 {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			f, rec := newTerminatedRunFixture(t)

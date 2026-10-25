@@ -17,7 +17,7 @@
 // LocalClient calls a model server over HTTP, directly or relayed through the
 // user's daemon, and serves nothing inbound.
 //
-//forge:not-a-component: built by reliant's hand-wired drivers (internal/llm/drivers), model catalog (internal/handlers/catalog) and call_llm activity, not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+//forge:not-a-component: built by internal/llm/drivers, the model catalog (internal/handlers/catalog) and the call_llm activity — never a node of the composition graph
 package local
 
 import (
@@ -39,14 +39,14 @@ type EndpointLister interface {
 	ConfiguredEndpoints(ctx context.Context, userID string) ([]EndpointConfig, error)
 }
 
-// Source is the slice of db.Repository RepoDirectory reads.
+// Source is the slice of *db.Repo RepoDirectory reads.
 type Source interface {
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
 	ListDaemonLocalModels(ctx context.Context, userID string) (map[string]string, error)
 	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error)
 }
 
-// EndpointSource is the slice of db.Repository the endpoint listing reads,
+// EndpointSource is the slice of *db.Repo the endpoint listing reads,
 // beyond Source.
 type EndpointSource interface {
 	ListModelEndpoints(ctx context.Context, userID string) ([]*db.ModelEndpoint, error)

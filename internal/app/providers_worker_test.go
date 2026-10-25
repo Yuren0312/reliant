@@ -3,10 +3,15 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/hosteduse"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
+	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,4 +103,35 @@ func TestCatalogSearch_DelegatedFollowsTheWorkersBrokers(t *testing.T) {
 	usable, err = svc.Usable(ctx, "")
 	require.NoError(t, err)
 	assert.False(t, usable["github"], "self-hosted: GitHub needs a saved connection")
+}
+
+// A refused dedicated hosted-action endpoint never stops the whole worker.
+// Cluster DNS does not waive HTTPS; the general API URL never enables actions.
+func TestHostedActionsDegradeInsteadOfFailingTheWorker(t *testing.T) {
+	store := &hosteduse.MockStore{}
+	var logged bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logged, nil))
+
+	assert.Nil(t, HostedActions(log, store, controlplane.Endpoint{}, "", ""), "self-hosted: no control plane, no hosted actions")
+	assert.Empty(t, logged.String(), "no control plane is not an error")
+
+	refused := HostedActions(log, store, controlplane.Endpoint{URL: "http://admin-server.ns.svc.cluster.local:8090", InternalServiceSecret: "s"}, "http://controller.ns.svc.cluster.local:9443", "")
+	require.NotNil(t, refused)
+	assert.Contains(t, logged.String(), "level=WARN")
+	assert.Contains(t, logged.String(), "hosted HTTP actions are DISABLED")
+	assert.Contains(t, logged.String(), "requires HTTPS")
+	_, err := refused.ExecuteAction(context.Background(), "run", "node", "grant", hostedhttp.Request{URL: "https://example.com", Method: "POST"})
+	var disabled *handlers.HostedDisabledError
+	require.ErrorAs(t, err, &disabled)
+	assert.Contains(t, err.Error(), "requires HTTPS")
+	assert.Nil(t, HostedActions(log, store, controlplane.Endpoint{URL: "http://admin-server.ns.svc.cluster.local:8090", InternalServiceSecret: "s"}, "", ""), "general control-plane URL must not enable hosted actions")
+
+	for _, u := range []string{"https://controller.ns.svc.cluster.local:9443", "http://127.0.0.1:8090"} {
+		logged.Reset()
+		enabled := HostedActions(log, store, controlplane.Endpoint{InternalServiceSecret: "s"}, u, "")
+		require.NotNil(t, enabled, u)
+		_, isDisabled := enabled.(disabledHostedActions)
+		assert.False(t, isDisabled, "%s gets the real client", u)
+		assert.Empty(t, logged.String(), u)
+	}
 }

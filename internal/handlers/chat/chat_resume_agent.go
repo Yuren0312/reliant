@@ -219,11 +219,12 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 	workflowID := chat.MainThreadID()
 
 	// The run continues the chat's last one, so it runs on that run's inputs
-	// — the model the user last sent with is in them, and the chat's presets
-	// alone do not say it. Temporal answers the query for a closed run while
-	// it keeps its history; past that, the inputs are rebuilt as a new run's
-	// would be, and checked as SendMessage checks them.
-	inputs := s.runInputsForSend(ctx, workflowID, "")
+	// while that run is still open to say them. A closed run is never asked
+	// (Temporal would replay its whole history to answer; rtemporal.
+	// QueryOpenRun refuses instead): the inputs are rebuilt as a new run's
+	// would be — presets plus the chat's stored selection, which holds the
+	// model the user last sent with — and checked as SendMessage checks them.
+	inputs := s.runInputsForSend(ctx, workflowID)
 	if inputs != nil {
 		delete(inputs, v2.InputKeyLaunchRun)
 		v2.DropActingIdentity(inputs)
@@ -247,10 +248,12 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 		}
 	}
 	s.fallBackFromUnservableModels(ctx, userID, chat.ID, chat.ProjectID, workflowName, workflowID, workflowID, inputs, nil)
+	s.refreshChatProvider(ctx, userID, chat, workflowName, inputs)
 	launch.InjectSessionDaemonID(inputs, chat)
 
 	resume := v2.ResumeInputFromDurableState(ctx, s.deps.Repo, chat.ID, workflowID)
 	resume.ResumeStopped = []v2.SpawnHandoff{*stopped}
+	resume.ResumeAllStopped = true
 	resume.AwaitSpawnsFirst = true
 
 	execContext := &v2.ExecutionContext{

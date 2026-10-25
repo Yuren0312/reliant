@@ -1,0 +1,199 @@
+/**
+ * Tour Navigation Hook
+ *
+ * Single source of truth for "what step is the tour on" and "how do I move
+ * between steps". The active step lives in the URL as `?tour=<step-id>`; this
+ * hook reads/writes that param via tanstack-router. There are no useEffects
+ * here — every transition is the direct, synchronous result of a user action.
+ *
+ * Step components import this hook (not `useTourStore`) for navigation.
+ * `useTourStore` is now strictly the persistence/achievement layer.
+ */
+
+import { useCallback } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import {
+  ONBOARDING_STEP_IDS,
+  getNextStepId,
+  getPreviousStepId,
+} from "./constants";
+import type { OnboardingStepId } from "./types";
+import { WORKFLOWS_LIBRARY_PATH } from "../../lib/workflowsArea";
+import { useTourStore } from "../../store/tourStore";
+import { useChatStore } from "../../store/chatStore";
+import { useProjectStore } from "../../store/projectStore";
+import { chatRouteAfterTour } from "../OnboardingFlow/useOnboardingComplete";
+
+// Whitelist of valid step IDs. The route schemas reject unknown values via
+// Zod, but routes without a schema (or tests using a memory router) can let
+// arbitrary `?tour=...` strings through — coerce those to null so the wizard
+// never tries to render a non-existent step.
+const VALID_STEP_IDS = new Set<string>(ONBOARDING_STEP_IDS);
+
+async function promptApiKeyIfNeededAfterTour(): Promise<void> {
+  const { useApiKeySetupStore } = await import("../../store/apiKeySetupStore");
+  if (useApiKeySetupStore.getState().hasApiKey === true) return;
+  useApiKeySetupStore.setState({ hasChecked: false });
+  await useApiKeySetupStore.getState().ensureApiKeyOrShowModal();
+}
+
+// ─── Per-step expected pathname ─────────────────────────────────────────────
+// Tells callers (and the step components) where each step's spotlight lives:
+//
+//   "/workflows/library" → the Library (the old hub's home since the
+//                  Workflows area merged; WORKFLOW_UI.md §1.3).
+//   "/workflow/" → workflow-builder routes — pathname must start with
+//                  '/workflow/' (the trailing slash distinguishes hub).
+//   null         → step has no path constraint; render wherever the user is.
+//
+// Returned as a path prefix; the wizard's step components check
+// `pathname.startsWith(STEP_EXPECTED_PATH(id))`.
+
+export function STEP_EXPECTED_PATH(stepId: OnboardingStepId): string | null {
+  switch (stepId) {
+    case "workflow-hub":
+      return WORKFLOWS_LIBRARY_PATH;
+    case "workflow-builder":
+      return "/workflow/";
+    default:
+      return null;
+  }
+}
+
+// ─── Hook ───────────────────────────────────────────────────────────────────
+
+export interface TourNavigation {
+  currentStepId: OnboardingStepId | null;
+  isWizardActive: boolean;
+  goToStep: (stepId: OnboardingStepId) => void;
+  exitTour: () => void;
+  completeAndAdvance: () => Promise<void>;
+  goBack: () => void;
+  skipAll: () => Promise<void>;
+}
+
+export function useTourNavigation(): TourNavigation {
+  const navigate = useNavigate();
+  // Reading via { strict: false } so the hook works at the root (which has no
+  // search schema). Wizard is mounted globally — we can't constrain `from`.
+  const search = useSearch({ strict: false }) as { tour?: string };
+  const rawTour = search.tour;
+  const currentStepId: OnboardingStepId | null =
+    rawTour && VALID_STEP_IDS.has(rawTour) ? (rawTour as OnboardingStepId) : null;
+  const isWizardActive = currentStepId !== null;
+
+  const goToStep = useCallback(
+    (stepId: OnboardingStepId) => {
+      const expected = STEP_EXPECTED_PATH(stepId);
+      if (stepId === "workflow-hub") {
+        // workflow-hub specifically needs the Library (not the builder).
+        void navigate({
+          to: WORKFLOWS_LIBRARY_PATH,
+          search: (prev: Record<string, unknown>) => ({ ...prev, tour: stepId }),
+        });
+        return;
+      }
+      if (expected === "/workflow/") {
+        void navigate({
+          to: "/workflow/$workflowName",
+          params: { workflowName: "builtin://get-it-right" },
+          search: (prev: Record<string, unknown>) => ({
+            ...prev,
+            drill: "attempt",
+            tour: stepId,
+          }),
+        });
+        return;
+      }
+      // Path-agnostic step: just update the search param on whatever route
+      // the user is on. tanstack-router preserves the current path when no
+      // `to` is supplied. With `to` omitted the router can't resolve which
+      // route's search schema applies, so it types the reducer's return as
+      // `never`; the runtime contract (merge `tour` into the current
+      // search) is route-agnostic, so we cast the reducer to satisfy the
+      // over-narrowed signature without changing behavior.
+      void navigate({
+        search: ((prev: Record<string, unknown>) => ({ ...prev, tour: stepId })) as never,
+      });
+    },
+    [navigate],
+  );
+
+  // Ending the tour (finish OR skip) must LAND the user somewhere they can
+  // chat, in ONE navigation. exitTour only strips `?tour=`, preserving the
+  // pathname, so a tour whose last steps live on /workflow/... left the user
+  // stranded there. Stripping the param first and then loading the
+  // destination behind a dynamic import was two hops with a chunk load
+  // between them: the tour vanished, the user sat on the workflow builder
+  // until the import settled, and a click in that gap was overridden by the
+  // late jump. The destination's `search: {}` already drops `?tour=`, so the
+  // single navigation both ends the tour and lands the user.
+  const goToChatAfterTour = useCallback(async () => {
+    // Clear the active chat so the user lands on a fresh new-chat view.
+    useChatStore.getState().clearCurrentChat();
+    const projectId = useProjectStore.getState().currentProject?.id;
+    await navigate(chatRouteAfterTour(projectId) as never);
+  }, [navigate]);
+
+  const exitTour = useCallback(() => {
+    // See goToStep: `to` is omitted so the router over-narrows the reducer
+    // return to `never`; the route-agnostic "strip the tour param" contract
+    // is unchanged, so cast to satisfy the signature.
+    void navigate({
+      search: ((prev: Record<string, unknown>) => {
+        const { tour: _tour, ...rest } = prev;
+        return rest;
+      }) as never,
+    });
+  }, [navigate]);
+
+  const completeAndAdvance = useCallback(async () => {
+    if (!currentStepId) return;
+    await useTourStore.getState().completeStep(currentStepId);
+    const nextId = getNextStepId(currentStepId);
+    if (nextId) {
+      goToStep(nextId);
+    } else {
+      // Last step — tour finished. Land on the chat, then prompt for an API
+      // key if we still don't have one.
+      await useTourStore.getState().markTourCompleted();
+      await goToChatAfterTour();
+      void promptApiKeyIfNeededAfterTour();
+    }
+  }, [currentStepId, goToStep, goToChatAfterTour]);
+
+  const goBack = useCallback(() => {
+    if (!currentStepId) return;
+    const prevId = getPreviousStepId(currentStepId);
+    if (prevId) {
+      goToStep(prevId);
+    } else {
+      // First step — Back = exit.
+      exitTour();
+    }
+  }, [currentStepId, goToStep, exitTour]);
+
+  const skipAll = useCallback(async () => {
+    const store = useTourStore.getState();
+    // Mark every remaining (not-completed, not-skipped) step as skipped in
+    // memory, then persist ONCE via markTourCompleted. Awaiting skipStep per
+    // step re-saved the entire tour state on every iteration (~N×3 sequential
+    // RPCs), which made "Skip tour" take ~10s.
+    store.markRemainingSkipped();
+    await store.markTourCompleted();
+    // Skipping ends the tour just as finishing does, and would leave the user
+    // on whatever page the abandoned step had them on — same landing.
+    await goToChatAfterTour();
+    void promptApiKeyIfNeededAfterTour();
+  }, [goToChatAfterTour]);
+
+  return {
+    currentStepId,
+    isWizardActive,
+    goToStep,
+    exitTour,
+    completeAndAdvance,
+    goBack,
+    skipAll,
+  };
+}

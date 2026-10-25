@@ -5,8 +5,11 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -17,6 +20,8 @@ import (
 // specs/interrupt-pause-spec.md, item E.
 
 func TestCancelChatToolCalls_CancelsInFlightCallsOnAllThreads(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -45,6 +50,9 @@ func TestCancelChatToolCalls_CancelsInFlightCallsOnAllThreads(t *testing.T) {
 }
 
 func TestCancelChatToolCalls_LeavesOtherChatsAlone(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -70,6 +78,9 @@ func TestCancelChatToolCalls_LeavesOtherChatsAlone(t *testing.T) {
 }
 
 func TestCancelChatToolCalls_DaemonDeliveryFailureIsNonFatal(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -94,6 +105,9 @@ func TestCancelChatToolCalls_DaemonDeliveryFailureIsNonFatal(t *testing.T) {
 }
 
 func TestCancelChatToolCalls_NothingInFlightSucceeds(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -113,6 +127,8 @@ func TestCancelChatToolCalls_NothingInFlightSucceeds(t *testing.T) {
 }
 
 func TestCancelChatToolCalls_RejectsWrongOwner(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -123,10 +139,12 @@ func TestCancelChatToolCalls_RejectsWrongOwner(t *testing.T) {
 	_, err := svc.CancelChatToolCalls(ctx, CancelChatToolCallsOpts{
 		UserID: "other-user", ChatID: fx.chatID,
 	})
-	require.ErrorIs(t, err, ErrNotFound)
+	require.ErrorIs(t, err, svcerr.ErrNotFound)
 }
 
 func TestCancelChatToolCalls_RequiresChatAndUser(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -135,8 +153,8 @@ func TestCancelChatToolCalls_RequiresChatAndUser(t *testing.T) {
 	svc := NewService(repo)
 
 	_, err := svc.CancelChatToolCalls(ctx, CancelChatToolCallsOpts{UserID: fx.userID})
-	require.ErrorIs(t, err, ErrInvalidArgument)
+	require.ErrorIs(t, err, svcerr.ErrInvalidArgument)
 
 	_, err = svc.CancelChatToolCalls(ctx, CancelChatToolCallsOpts{ChatID: fx.chatID})
-	require.ErrorIs(t, err, ErrInvalidArgument)
+	require.ErrorIs(t, err, svcerr.ErrInvalidArgument)
 }

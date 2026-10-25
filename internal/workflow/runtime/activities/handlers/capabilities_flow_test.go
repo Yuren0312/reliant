@@ -71,7 +71,7 @@ func throughHistory(t *testing.T, caps *reliantv1.ToolCapabilities) *reliantv1.T
 
 // serverToolExecutor runs server-placed tools in-process, as the worker does,
 // so load_tool really runs.
-func serverToolExecutor(repo db.Repository) toolexec.ToolExecutor {
+func serverToolExecutor(repo *db.Repo) toolexec.ToolExecutor {
 	executor := toolexec.NewRemoteExecutor(nil)
 	executor.SetServerExecutor(toolexec.NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo})))
 	return executor
@@ -94,6 +94,8 @@ func (f *noMachineFixture) execute(t *testing.T, executor toolexec.ToolExecutor,
 // in for any tool outside the preloaded bundle (generate_image is the shipped
 // case, but loading it also needs a media provider this test does not have).
 func TestCapabilities_LoadInTurnNIsAcceptedInTurnN1(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, false)
 	cfg := toolsConfig(tools.PermissionMutating, []string{tools.ToolView}, []string{"*"}, nil)
 
@@ -132,6 +134,8 @@ func TestCapabilities_LoadInTurnNIsAcceptedInTurnN1(t *testing.T) {
 // the grants were in a process-global map, so this execute_tools would have
 // read "mutating" and refused start_run.
 func TestCapabilities_SurviveAFreshWorkerBetweenCallLLMAndExecuteTools(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, false)
 	cfg := toolsConfig(tools.PermissionOrchestrator,
 		[]string{tools.ToolView, tools.ToolStartRun}, []string{"*"}, nil)
@@ -156,7 +160,23 @@ func TestCapabilities_SurviveAFreshWorkerBetweenCallLLMAndExecuteTools(t *testin
 // An orchestrator that spawns and runs orchestrator-only tools works when
 // call_llm and execute_tools share no memory: the spawn offer and its presets
 // — what the workflow dispatches against — and the tier all ride the record.
+func TestCapabilities_FireTriggerCannotEscapeParentTierOrUnattendedPolicy(t *testing.T) {
+	f := setupNoMachineFixture(t, false)
+	cfg := toolsConfig(tools.PermissionOrchestrator, []string{tools.ToolView}, []string{"*"}, nil)
+	capped := throughHistory(t, f.turnAs(t, cfg, RuntimeContext{SpawnDepth: 1, ParentPermission: tools.PermissionMutating}).GetCapabilities())
+	assert.Equal(t, tools.PermissionMutating, capped.GetPermission())
+	loaded := f.execute(t, serverToolExecutor(f.h.Repo()), capped, message.ToolCall{ID: "load-fire", Name: tools.ToolLoadTool, Input: `{"name":"fire_trigger"}`})
+	require.Len(t, loaded.GetToolResults(), 1)
+	assert.True(t, loaded.GetToolResults()[0].GetIsError())
+	unattended := throughHistory(t, f.turnAs(t, cfg, RuntimeContext{Unattended: true}).GetCapabilities())
+	loaded = f.execute(t, serverToolExecutor(f.h.Repo()), unattended, message.ToolCall{ID: "load-fire-unattended", Name: tools.ToolLoadTool, Input: `{"name":"fire_trigger"}`})
+	require.Len(t, loaded.GetToolResults(), 1)
+	assert.True(t, loaded.GetToolResults()[0].GetIsError())
+}
+
 func TestCapabilities_OrchestratorToolRunsWithNoSharedMemory(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, false)
 	cfg := toolsConfig(tools.PermissionOrchestrator,
 		[]string{tools.ToolView, tools.ToolStartRun, tools.ToolControlRun}, nil,
@@ -187,6 +207,8 @@ func TestCapabilities_OrchestratorToolRunsWithNoSharedMemory(t *testing.T) {
 // refused as not offered — on the turn right after a fan-out, which is when an
 // orchestrator needs it.
 func TestCapabilities_SpawnHistoryGrantsAreAcceptedAtExecution(t *testing.T) {
+	t.Parallel()
+
 	// No spawn config and no loadable reach: nothing but spawn history can
 	// grant these tools.
 	cfg := toolsConfig(tools.PermissionMutating, []string{tools.ToolView}, nil, nil)
@@ -241,6 +263,8 @@ func TestCapabilities_SpawnHistoryGrantsAreAcceptedAtExecution(t *testing.T) {
 // The set call_llm records is exactly the tool array it sent, spawn and the
 // structural tools included.
 func TestCallLLM_RecordsExactlyTheToolArrayItSent(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, false)
 	cfg := toolsConfig(tools.PermissionMutating,
 		[]string{"tag:coding:default"}, []string{"*"}, []string{"spawn:builtin://agent(general)"})

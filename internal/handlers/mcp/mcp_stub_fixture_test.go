@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	mcp "github.com/reliant-labs/reliant/internal/handlers/mcp"
 )
 
@@ -19,14 +20,15 @@ func (f daemonFunc) SendDaemonCommand(_ context.Context, _, commandType string, 
 // ownedProjectRepo is a store where the harness caller (test-user) owns
 // project p-1 at /work, whose stored project-scope MCP configuration is
 // mcpConfigs. Every other project is not found.
-func ownedProjectRepo(t *testing.T, mcpConfigs string) *mcp.StubRepo {
+func ownedProjectRepo(t *testing.T, mcpConfigs string) *mcp.MockRepository {
 	t.Helper()
-	return &mcp.StubRepo{
+	return &mcp.MockRepository{
 		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
 			if id == "p-1" && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Name: "proj", Path: "/work"}, nil
 			}
-			return nil, errors.New("project not found")
+			// The store's real answer for a project the caller does not own.
+			return nil, core.ErrProjectNotFound
 		},
 		GetProjectMCPConfigsJSONFunc: func(_ context.Context, projectID string) (*string, error) {
 			if projectID != "p-1" {

@@ -6,9 +6,11 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -34,6 +36,8 @@ func asApp(d *reliantv1.TriggerDefinition) {
 // Nothing chose an identity: the activation is the owner's, exactly as every
 // activation was before the field existed.
 func TestCreateTrigger_ActingIdentityDefaultsToTheOwner(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	got := env.create(t, env.definition(nil))
 	assert.Equal(t, reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER, got.GetActingIdentity(), "never UNSPECIFIED on a stored trigger")
@@ -41,6 +45,8 @@ func TestCreateTrigger_ActingIdentityDefaultsToTheOwner(t *testing.T) {
 }
 
 func TestCreateTrigger_ActingAsTheAppIsStoredAndReturned(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t).hosted(t)
 	got := env.create(t, env.definition(asApp))
 	assert.Equal(t, reliantv1.ActingIdentity_ACTING_IDENTITY_APP, got.GetActingIdentity())
@@ -54,16 +60,21 @@ func TestCreateTrigger_ActingAsTheAppIsStoredAndReturned(t *testing.T) {
 // Self-hosted: no control plane, so no App key to mint from. The activation is
 // refused when it is written rather than held as one that could never act.
 func TestCreateTrigger_AppIdentityIsRefusedWithoutAControlPlane(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t) // no control plane
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(asApp)}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "control plane")
 	assert.Zero(t, env.backend.syncCount(), "a refused activation must not touch the schedule backend")
 }
 
 // The owner identity is always available, hosted or not.
 func TestCreateTrigger_ExplicitOwnerWorksEverywhere(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	got := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) {
 		d.ActingIdentity = reliantv1.ActingIdentity_ACTING_IDENTITY_OWNER
@@ -74,6 +85,8 @@ func TestCreateTrigger_ExplicitOwnerWorksEverywhere(t *testing.T) {
 // An update that does not mention the identity leaves it alone, so a client that
 // predates the field cannot flip an activation back to the owner by omission.
 func TestUpdateTrigger_OmittedIdentityIsUnchanged(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t).hosted(t)
 	created := env.create(t, env.definition(asApp))
 
@@ -85,6 +98,8 @@ func TestUpdateTrigger_OmittedIdentityIsUnchanged(t *testing.T) {
 }
 
 func TestUpdateTrigger_IdentityCanBeChangedBothWays(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t).hosted(t)
 	created := env.create(t, env.definition(nil))
 	require.Equal(t, core.ActingIdentityOwner, env.storedIdentity(t, created.GetId()))
@@ -105,17 +120,21 @@ func TestUpdateTrigger_IdentityCanBeChangedBothWays(t *testing.T) {
 // Choosing the bot on an existing activation is refused where it could never
 // work, as at create.
 func TestUpdateTrigger_AppIdentityIsRefusedWithoutAControlPlane(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 	_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
 		Id: created.GetId(), Trigger: env.definition(asApp),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Equal(t, core.ActingIdentityOwner, env.storedIdentity(t, created.GetId()))
 }
 
 func TestListTriggers_CarriesTheIdentity(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t).hosted(t)
 	owner := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "mine" }))
 	bot := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "the bot's"; asApp(d) }))

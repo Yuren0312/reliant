@@ -12,7 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -22,15 +23,15 @@ import (
 )
 
 // newModelEndpoint builds the endpoint handler with no daemon router and no
-// credential store, under the network policy of a deployment hosted by
-// controlPlaneURL ("" is self-hosted).
-func newModelEndpoint(t *testing.T, repo db.Repository, controlPlaneURL string) *model_endpoint.Service {
+// credential store, under a network policy that refuses private targets
+// unless allowPrivateEgress opts a self-hosted deployment in.
+func newModelEndpoint(t *testing.T, repo *db.Repo, allowPrivateEgress bool) *model_endpoint.Service {
 	t.Helper()
 	svc, err := model_endpoint.New(model_endpoint.Deps{
-		Logger:       slog.New(slog.DiscardHandler),
-		Config:       &typedconfig.Config{},
-		Repo:         repo,
-		ControlPlane: &configv1.ControlPlaneConfig{Url: controlPlaneURL},
+		Logger:  slog.New(slog.DiscardHandler),
+		Config:  &typedconfig.Config{},
+		Repo:    repo,
+		Network: &configv1.NetworkConfig{AllowPrivateEgress: allowPrivateEgress},
 	})
 	require.NoError(t, err)
 	return svc
@@ -60,12 +61,12 @@ func openAIModels(t *testing.T, ids ...string) *httptest.Server {
 	return srv
 }
 
-// No control plane configured == self-hosted: loopback httptest servers are
-// legitimate targets.
+// A self-hosted deployment that opted in to private egress: loopback httptest
+// servers are legitimate targets.
 func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	svc := newModelEndpoint(t, repo, "")
+	svc := newModelEndpoint(t, repo, true)
 	srv := openAIModels(t, "llama", "mixtral")
 
 	create, err := svc.CreateModelEndpoint(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
@@ -83,9 +84,9 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 		assert.Empty(t, list.Msg.GetEndpoints())
 
 		_, err = svc.DeleteModelEndpoint(ctxFor("svc-user-b"), connect.NewRequest(&reliantv1.DeleteModelEndpointRequest{Id: ep.GetId()}))
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 		_, err = svc.TestModelEndpoint(ctxFor("svc-user-b"), connect.NewRequest(&reliantv1.TestModelEndpointRequest{Target: &reliantv1.TestModelEndpointRequest_Id{Id: ep.GetId()}}))
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	})
 
 	t.Run("an API key is rejected with a clear message and nothing is stored", func(t *testing.T) {
@@ -94,7 +95,7 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 			Endpoint: &reliantv1.ModelEndpointInput{Name: "Keyed", BaseUrl: srv.URL + "/v1", Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT, ApiKey: &key},
 		}))
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 		assert.Contains(t, err.Error(), "API keys for custom endpoints need the sealed credential store; coming with the next sync")
 		list, _ := svc.ListModelEndpoints(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.ListModelEndpointsRequest{}))
 		assert.Len(t, list.Msg.GetEndpoints(), 1)
@@ -104,26 +105,26 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 		_, err := svc.CreateModelEndpoint(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
 			Endpoint: &reliantv1.ModelEndpointInput{Name: "Bad", BaseUrl: "https://u:p@x.example.com/v1", Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT},
 		}))
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	})
 
 	t.Run("duplicate name is AlreadyExists", func(t *testing.T) {
 		_, err := svc.CreateModelEndpoint(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
 			Endpoint: &reliantv1.ModelEndpointInput{Name: "Lab", BaseUrl: srv.URL + "/v1", Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT},
 		}))
-		assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
 	})
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		_, err := svc.ListModelEndpoints(context.Background(), connect.NewRequest(&reliantv1.ListModelEndpointsRequest{}))
-		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 	})
 
 	t.Run("via_daemon needs a daemon the user owns", func(t *testing.T) {
 		_, err := svc.CreateModelEndpoint(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
 			Endpoint: &reliantv1.ModelEndpointInput{Name: "Via", BaseUrl: "http://10.0.0.5:8000/v1", Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_VIA_DAEMON, DaemonId: "not-mine"},
 		}))
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	})
 
 	t.Run("the catalog lists the endpoint's models grouped under its name, hidden ones omitted", func(t *testing.T) {
@@ -157,10 +158,10 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 	})
 }
 
-func TestModelEndpointServiceRefusesPrivateTargetsWhenHosted(t *testing.T) {
+func TestModelEndpointServiceRefusesPrivateTargetsByDefault(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	svc := newModelEndpoint(t, repo, "http://admin-server.cluster.local:8090")
+	svc := newModelEndpoint(t, repo, false)
 	srv := openAIModels(t, "m") // 127.0.0.1
 
 	for _, url := range []string{srv.URL + "/v1", "http://169.254.169.254/v1", "http://10.0.0.1/v1", "http://localhost:11434/v1"} {
@@ -168,7 +169,7 @@ func TestModelEndpointServiceRefusesPrivateTargetsWhenHosted(t *testing.T) {
 			Endpoint: &reliantv1.ModelEndpointInput{Name: url, BaseUrl: url, Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT},
 		}))
 		require.Error(t, err, url)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), url)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), url)
 		assert.Contains(t, err.Error(), "through one of your machines", url)
 	}
 	list, _ := svc.ListModelEndpoints(ctxFor("hosted-user"), connect.NewRequest(&reliantv1.ListModelEndpointsRequest{}))

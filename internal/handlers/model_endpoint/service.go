@@ -8,7 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
-	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/modelendpoints"
@@ -16,12 +16,11 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the model_endpoint service.
-// internal/grpc/server.go constructs it today; forge's composition root takes
-// over in P3c (research/forge-migration/PLAN.md). The rpc methods on *Service
+// Deps holds dependencies for the model_endpoint service. The composition
+// graph constructs it (internal/app/compose.go). The rpc methods on *Service
 // are where this service's logic lives; see the forge `api` / `services`
-// skill. Service is the thin Connect layer over modelendpoints.Manager,
-// which New builds from these.
+// skill. Service is the thin Connect layer over modelendpoints.Manager, which
+// New builds from these.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
@@ -36,13 +35,13 @@ type Deps struct {
 	// unavailable.
 	// forge:optional-dep
 	Credentials modelendpoints.EndpointCredentials
-	// ControlPlane is the control plane hosting this deployment. Its URL
-	// picks which addresses a user-supplied endpoint URL may resolve to
-	// (netguard.ForDeployment): a URL is hosted, so no private targets; none
-	// is self-hosted, so the user's own network. Required, and an empty
-	// block (not nil) is self-hosted, so a forgotten wire fails New instead
-	// of silently choosing a policy.
-	ControlPlane *configv1.ControlPlaneConfig
+	// Network picks which addresses a user-supplied endpoint URL may resolve
+	// to (netguard.ForDeployment): private, loopback and link-local targets
+	// only when Network.AllowPrivateEgress is set, which a self-hosted
+	// operator does on purpose. Required, and an empty block (not nil) refuses
+	// them, so a forgotten wire fails New instead of silently choosing a
+	// policy.
+	Network *configv1.NetworkConfig
 }
 
 // Router is the slice of toolexec.DaemonRouter a VIA_DAEMON endpoint
@@ -64,8 +63,8 @@ func (d Deps) validateDeps() error {
 	if d.Repo == nil {
 		return fmt.Errorf("model_endpoint: Deps.Repo is required")
 	}
-	if d.ControlPlane == nil {
-		return fmt.Errorf("model_endpoint: Deps.ControlPlane is required (an empty ControlPlaneConfig is self-hosted)")
+	if d.Network == nil {
+		return fmt.Errorf("model_endpoint: Deps.Network is required (an empty NetworkConfig refuses private targets)")
 	}
 	return nil
 }
@@ -79,7 +78,7 @@ type Service struct {
 
 // New creates a new model_endpoint service instance with the supplied Deps.
 // Returns an error when validateDeps rejects a nil required field. The
-// network policy for endpoint targets is derived from Deps.ControlPlane and
+// network policy for endpoint targets is derived from Deps.Network and
 // fixed at construction.
 func New(deps Deps) (*Service, error) {
 	if err := deps.validateDeps(); err != nil {
@@ -88,7 +87,7 @@ func New(deps Deps) (*Service, error) {
 	cfg := modelendpoints.Config{
 		Store:       deps.Repo,
 		Credentials: deps.Credentials,
-		Policy:      netguard.ForDeployment(deps.ControlPlane.GetUrl()),
+		Policy:      netguard.ForDeployment(deps.Network.GetAllowPrivateEgress()),
 	}
 	if deps.Router != nil {
 		cfg.Daemons = routerDaemonControl{router: deps.Router}

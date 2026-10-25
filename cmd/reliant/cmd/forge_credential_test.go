@@ -16,15 +16,18 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/cloudcred"
 	"github.com/reliant-labs/forge/pkg/credentials"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/handlers/token"
+	"github.com/reliant-labs/reliant/internal/memtemp"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -45,7 +48,9 @@ const testControlPlane = "https://admin.example.com"
 // any helper the developer's own shell exported. Returns forge's file path.
 func isolateForgeCredHome(t *testing.T) (credPath, home string) {
 	t.Helper()
-	home = t.TempDir()
+	// In memory: forge's credentials.Save fsyncs, and on the shared disk under
+	// a full test lane that made these tests 8-20s (internal/memtemp).
+	home = memtemp.Dir(t)
 	t.Setenv("HOME", home)
 	if runtime.GOOS == "windows" {
 		t.Setenv("USERPROFILE", home)
@@ -88,7 +93,10 @@ func serveReliantAPI(t *testing.T, controlPlane string) *reliantAPI {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewTokenServiceHandler(tokenService)
+	// svcerr.Interceptor ends every production chain (serverkit.NewChain): it
+	// is what gives the handler's svcerr errors their Connect code on the wire.
+	path, handler := reliantv1connect.NewTokenServiceHandler(tokenService,
+		connect.WithInterceptors(svcerr.Interceptor()))
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)

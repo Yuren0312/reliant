@@ -26,6 +26,8 @@ import (
 // That is the worst shape for a bug: correct on the path you check afterwards,
 // wrong on the path you watch while it happens.
 func TestEnrichMessageUpdate_CarriesSpawnChildWorkflowID(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -76,7 +78,7 @@ func TestEnrichMessageUpdate_CarriesSpawnChildWorkflowID(t *testing.T) {
 		RequestedAt:     now, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	enriched, err := repo.EnrichMessageUpdate(ctx, ChatUpdate{
+	enriched, err := repo.enrichMessageUpdate(ctx, ChatUpdate{
 		ID:         uuid.New().String(),
 		ChatID:     chatID,
 		UpdateType: reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE,
@@ -106,6 +108,8 @@ func TestEnrichMessageUpdate_CarriesSpawnChildWorkflowID(t *testing.T) {
 // otherwise. An empty-string default would make "has a child thread" untestable
 // at the consumer.
 func TestEnrichMessageUpdate_NonSpawnToolCallHasNoChildWorkflowID(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -145,7 +149,7 @@ func TestEnrichMessageUpdate_NonSpawnToolCallHasNoChildWorkflowID(t *testing.T) 
 		RequestedAt: now, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	enriched, err := repo.EnrichMessageUpdate(ctx, ChatUpdate{
+	enriched, err := repo.enrichMessageUpdate(ctx, ChatUpdate{
 		ID: uuid.New().String(), ChatID: chatID,
 		UpdateType: reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE,
 		EntityID:   messageID,

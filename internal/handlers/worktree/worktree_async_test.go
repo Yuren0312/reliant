@@ -10,9 +10,11 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -86,7 +88,7 @@ func (r *blockingWorktreeDaemonRouter) SendDaemonCommand(ctx context.Context, us
 }
 
 // seedWorktreeProject creates the project + one nested repo CreateWorktree needs.
-func seedWorktreeProject(t *testing.T, repo db.Repository, userID string) string {
+func seedWorktreeProject(t *testing.T, repo *db.Repo, userID string) string {
 	t.Helper()
 	projectID := uuid.New().String()
 	now := time.Now().UTC()
@@ -116,6 +118,9 @@ func seedWorktreeProject(t *testing.T, repo db.Repository, userID string) string
 // is what let a client disconnect cancel the request context and abort the work
 // mid-flight.
 func TestCreateWorktreeReturnsBeforeDaemonWorkFinishes(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{release: make(chan struct{})}
 	svc := newWorktreeService(t, repo, router)
@@ -155,6 +160,9 @@ func TestCreateWorktreeReturnsBeforeDaemonWorkFinishes(t *testing.T) {
 // client going away cancelled the work — and the rollback meant to clean up
 // after it.
 func TestCreateWorktreeSurvivesClientDisconnect(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{release: make(chan struct{})}
 	svc := newWorktreeService(t, repo, router)
@@ -189,6 +197,9 @@ func TestCreateWorktreeSurvivesClientDisconnect(t *testing.T) {
 // failed create leaves a visible row the user can retry or dismiss, rather than
 // a workspace that silently never appears.
 func TestCreateWorktreeMarksFailedRatherThanVanishing(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{failCreate: true}
 	svc := newWorktreeService(t, repo, router)
@@ -213,6 +224,9 @@ func TestCreateWorktreeMarksFailedRatherThanVanishing(t *testing.T) {
 // Prod, 2026-10-13: a base branch that did not exist became a Sentry error and,
 // in the UI, a bare "Failed" badge.
 func TestCreateWorktreeFailureReasonReachesTheClient(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name        string
 		undiagnosed bool
@@ -260,6 +274,9 @@ func TestCreateWorktreeFailureReasonReachesTheClient(t *testing.T) {
 // A branch name git would refuse is refused by the RPC itself, with its code
 // and a sentence — before any row or checkout exists.
 func TestCreateWorktreeRefusesAnInvalidBranchNameUpFront(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{}
 	svc := newWorktreeService(t, repo, router)
@@ -274,7 +291,7 @@ func TestCreateWorktreeRefusesAnInvalidBranchNameUpFront(t *testing.T) {
 		Branch:    "feat..x",
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "feat..x")
 
 	rows, err := repo.ListWorktrees(ctx, db.WorktreeFilters{ProjectID: &projectID, Limit: 10})
@@ -290,6 +307,9 @@ func TestCreateWorktreeRefusesAnInvalidBranchNameUpFront(t *testing.T) {
 // from a dropped reply, and the natural retry would otherwise produce a second
 // workspace with a second on-disk checkout.
 func TestCreateWorktreeIdempotencyKeyPreventsDuplicates(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{}
 	svc := newWorktreeService(t, repo, router)
@@ -326,6 +346,9 @@ func TestCreateWorktreeIdempotencyKeyPreventsDuplicates(t *testing.T) {
 // TestCreateWorktreeWithoutIdempotencyKeyStillCreates guards the opt-out: the
 // desktop UI sends no key today, and every create must still work.
 func TestCreateWorktreeWithoutIdempotencyKeyStillCreates(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := &blockingWorktreeDaemonRouter{}
 	svc := newWorktreeService(t, repo, router)

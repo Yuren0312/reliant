@@ -17,13 +17,15 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	mcpclient "github.com/reliant-labs/reliant/internal/mcp"
 )
 
 // mcpReadRepo is the repository the MCP read RPCs run against, in memory,
-// counting reads of the whole project config record.
+// counting reads of the whole project config record. Any other method falls
+// through to the embedded MockRepository, which fails it as "Func not set".
 type mcpReadRepo struct {
-	Repository
+	MockRepository
 
 	project     *db.Project
 	mcpConfigs  string
@@ -33,7 +35,8 @@ type mcpReadRepo struct {
 
 func (r *mcpReadRepo) GetProjectWithUserCheck(_ context.Context, id, userID string) (*db.Project, error) {
 	if r.project.ID != id || r.project.UserID != userID {
-		return nil, fmt.Errorf("project not found")
+		// The store's real answer for a project the caller does not own.
+		return nil, core.ErrProjectNotFound
 	}
 	return r.project, nil
 }

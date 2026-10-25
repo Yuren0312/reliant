@@ -456,8 +456,22 @@ func (r *Repo) RunTxReadOnly(ctx context.Context, f func(ctx context.Context) er
 	return r.RunTx(ctx, orm.Serializable.WithReadOnly(), f)
 }
 
+// attemptFailure is the error one attemptTransaction ended with: BEGIN's, or
+// the transaction's own when it did not commit. nil when it committed.
+func attemptFailure(beginErr error, result *txResult) error {
+	if beginErr != nil {
+		return beginErr
+	}
+	if result.committed {
+		return nil
+	}
+	return result.err
+}
+
 // runTxWithRetries runs the transaction up to opts.MaxAttempts times, while
-// it fails with an error isRetryableError accepts.
+// it fails with an error isRetryableError accepts. When the caller's context
+// has ended it stops at once and logs nothing above DEBUG: the failure is the
+// cancellation, and the caller reports it.
 func (r *Repo) runTxWithRetries(ctx context.Context, opts orm.TxOptions, f func(ctx context.Context) error, metrics *txMetrics) error {
 	// Each attempt is one forge transaction; this loop owns the retries.
 	attemptOpts := opts.WithMaxAttempts(1)
@@ -466,6 +480,22 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts orm.TxOptions, f func(
 
 	for attempt := 0; attempt <= retries; attempt++ {
 		result, err := r.attemptTransaction(ctx, attemptOpts, f, metrics)
+		if failure := attemptFailure(err, result); failure != nil && ctx.Err() != nil {
+			// The caller's context ended — an activity's start-to-close
+			// timeout, a request's deadline, a cancel — so BEGIN, or a
+			// statement inside, failed for that reason and not for anything
+			// the database did. Retrying is pointless and an ERROR here
+			// pins the failure on the DB: during the 2026-10-23 worker CPU
+			// stall every starved activity logged "Failed to begin
+			// transaction" while Postgres was idle. The caller reports it,
+			// once, with what it was doing (the activity wrapper: one WARN).
+			logging.DebugContext(ctx, "Transaction abandoned: the caller's context ended",
+				"error", failure,
+				"ctxErr", ctx.Err(),
+				"attempts", attempt+1,
+				"duration", time.Since(metrics.txStartTime))
+			return failure
+		}
 		if err != nil {
 			// Begin transaction failed
 			if isRetryableError(err) && attempt < retries {
@@ -864,7 +894,7 @@ func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int6
 			if err := json.Unmarshal(update.Data, &dataMap); err == nil {
 				// Only enrich if content_blocks is missing
 				if _, hasContentBlocks := dataMap["content_blocks"]; !hasContentBlocks {
-					enrichedData, err := r.EnrichMessageUpdate(ctx, *update)
+					enrichedData, err := r.enrichMessageUpdate(ctx, *update)
 					if err != nil {
 						// Log error but continue with original data
 						logging.WarnContext(ctx, "Failed to enrich message update",
@@ -881,9 +911,9 @@ func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int6
 	return updates, nil
 }
 
-// EnrichMessageUpdate adds content blocks to a message update
+// enrichMessageUpdate adds content blocks to a message update
 // This ensures websocket clients receive complete MessageWithBlocks objects
-func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json.RawMessage, error) {
+func (r *Repo) enrichMessageUpdate(ctx context.Context, update ChatUpdate) (json.RawMessage, error) {
 	// Parse the existing update data
 	var updateData map[string]interface{}
 	if err := json.Unmarshal(update.Data, &updateData); err != nil {
@@ -977,8 +1007,8 @@ func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 		}
 
 	}
-	// One serializer for a block's wire shape (see ContentBlockPayloads).
-	contentBlocks := r.ContentBlockPayloads(ctx, blocks)
+	// One serializer for a block's wire shape (see contentBlockPayloads).
+	contentBlocks := r.contentBlockPayloads(ctx, blocks)
 
 	// Get context_sequence from context_window for frontend compatibility
 	var contextSequence int
@@ -1140,29 +1170,54 @@ func (r *Repo) GetUserUpdatesSince(ctx context.Context, userID string, sinceSeq 
 
 // UpdateChatState updates a chat's state and emits a user update
 func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatState, reason string) error {
-	// Get the chat first to get user_id and project_id
-	chat, err := r.GetChat(ctx, chatID)
-	if err != nil {
-		return fmt.Errorf("failed to get chat: %w", err)
-	}
-
-	previousState := chat.State
-
-	// If we're archiving, capture the worktree name onto the chat so archived chat
-	// display remains stable even if the worktree row is later deleted.
-	archivedWorktreeName := chat.ArchivedWorktreeName
-	if state == ChatStateArchived && archivedWorktreeName == nil {
+	var chat *Chat
+	// The chat and worktree move together or neither moves. Serializable also
+	// protects the shared-binding read/check/write against concurrent changes.
+	err := r.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
+		var err error
+		chat, err = r.GetChat(ctx, chatID)
+		if err != nil {
+			return fmt.Errorf("failed to get chat: %w", err)
+		}
+		var wt *Worktree
 		if chat.WorktreeID != nil {
-			if wt, err := r.GetWorktree(ctx, *chat.WorktreeID); err == nil {
-				archivedWorktreeName = &wt.Name
+			wt, err = r.GetWorktree(ctx, *chat.WorktreeID)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("get bound worktree: %w", err)
 			}
 		}
-	}
-
-	// Update the chat state
-	now := time.Now().UTC()
-	if err := store.UpdateChatState(ctx, r.ORM(), chatID, state, archivedWorktreeName, now); err != nil {
+		name := chat.ArchivedWorktreeName
+		if state == ChatStateArchived && name == nil && wt != nil {
+			name = &wt.Name
+		}
+		if err := store.UpdateChatState(ctx, r.ORM(), chatID, state, name, time.Now().UTC()); err != nil {
+			return err
+		}
+		if wt == nil || wt.IsMain {
+			return nil
+		}
+		if state == ChatStateArchived {
+			live, err := r.GetLiveChatIDForWorktree(ctx, wt.ID)
+			if err != nil {
+				return fmt.Errorf("check shared worktree: %w", err)
+			}
+			if live == "" && wt.DeletedAt == nil {
+				// Only archive the row: the reaper still protects dirty/unpushed files.
+				return r.ArchiveWorktree(ctx, wt.ID)
+			}
+		} else if state == ChatStateIdle && chat.State == ChatStateArchived && wt.DeletedAt != nil {
+			return r.UnarchiveWorktree(ctx, wt.ID)
+		}
+		return nil
+	})
+	if err != nil {
 		return err
+	}
+	previousState := chat.State
+	if chat.WorktreeID != nil {
+		if err := r.EmitUserRefetch(ctx, chat.UserID, RefetchWorktreeChanges, RefetchOpts{ProjectID: &chat.ProjectID, WorktreeID: chat.WorktreeID}); err != nil {
+			logging.WarnContext(ctx, "Failed to notify worktree state change", "chatID", chatID, "error", err)
+		}
 	}
 
 	// Create user update for the state change
@@ -1268,20 +1323,31 @@ func (r *Repo) SetChatQueuedForMachine(ctx context.Context, chatID string, queue
 	return changed, err
 }
 
-// ListChatsQueuedForMachine lists chats holding a message queued for their
-// machine; see the Repository interface.
+// ListChatsQueuedForMachine lists non-archived chats holding a message
+// queued for their machine, oldest first, at most limit; userID "" lists
+// every user's.
 func (r *Repo) ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error) {
 	return store.ListChatsQueuedForMachine(ctx, r.ORM(), userID, limit)
 }
 
+// SetChatRunID records runID as the run currently executing the chat's root
+// workflow (workflowID), and reports whether it changed. Each root run calls it
+// as it starts, so a continue-as-new successor or a reset replaces the closed
+// run's id rather than leaving the chat naming it.
+func (r *Repo) SetChatRunID(ctx context.Context, chatID, workflowID, runID string) (bool, error) {
+	return store.SetChatRunID(ctx, r.ORM(), chatID, workflowID, runID)
+}
+
 // SetChatPausedForMachine records (or clears) that the daemon-offline breaker
-// paused the chat's run, and reports whether the stored value changed.
+// paused the chat's run (as opposed to the user), and reports whether the
+// stored value changed — clearing it is how a resumer claims the chat.
 func (r *Repo) SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error) {
 	return store.SetChatPausedForMachine(ctx, r.ORM(), chatID, paused)
 }
 
-// ListChatsPausedForMachine lists chats the breaker paused; see the Repository
-// interface.
+// ListChatsPausedForMachine lists non-archived chats the breaker paused
+// whose root run still reads paused, oldest first, at most limit; userID ""
+// lists every user's.
 func (r *Repo) ListChatsPausedForMachine(ctx context.Context, userID string, limit int) ([]PausedForMachineChat, error) {
 	return store.ListChatsPausedForMachine(ctx, r.ORM(), userID, limit)
 }

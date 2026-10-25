@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -150,6 +151,8 @@ func transcriptBodies(t *testing.T, ctx context.Context, repo *db.Repo, chatID s
 // transcript. The run's first call_llm drains and frames them before reading
 // history, exactly like every subsequent turn.
 func TestSendMessage_NonRunningWorkflowLeavesMailboxForCallLLM(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -187,6 +190,8 @@ func TestSendMessage_NonRunningWorkflowLeavesMailboxForCallLLM(t *testing.T) {
 // the envelope framing that tells the model those messages arrived mid-turn.
 // Claiming them here would reorder them AND defeat the mailbox's purpose.
 func TestSendMessage_RunningWorkflowLeavesMailboxAlone(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -234,6 +239,8 @@ func TestSendMessage_RunningWorkflowLeavesMailboxAlone(t *testing.T) {
 // seq 1, the in-flight reply at seq 2, and the run ended with it unanswered.
 // Queued, it is drained at the next turn boundary — after the reply.
 func TestSendMessage_RunningWorkflowNeverWritesIntoHistoryMidTurn(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -265,6 +272,8 @@ func TestSendMessage_RunningWorkflowNeverWritesIntoHistoryMidTurn(t *testing.T) 
 // row id and the key a retry is recognized by, so one the server quietly
 // replaced would defeat both: the send is refused, and nothing is queued.
 func TestSendMessage_RunningWorkflowRefusesAMalformedClientID(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -279,7 +288,7 @@ func TestSendMessage_RunningWorkflowRefusesAMalformedClientID(t *testing.T) {
 	req.Msg.ClientMessageId = &bad
 	_, err := service.SendMessage(ctx, req)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
@@ -289,6 +298,8 @@ func TestSendMessage_RunningWorkflowRefusesAMalformedClientID(t *testing.T) {
 // TestSendMessage_LeavesEveryMailboxKindQueued verifies SendMessage does not
 // become a second deliverer for either human or peer-agent mailbox rows.
 func TestSendMessage_LeavesEveryMailboxKindQueued(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -331,6 +342,8 @@ func TestSendMessage_LeavesEveryMailboxKindQueued(t *testing.T) {
 // non-running entry point. Resume mechanics remain separate from queue delivery;
 // the resumed run drains on its next call_llm.
 func TestSendMessage_PausedResumeLeavesMailboxForCallLLM(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

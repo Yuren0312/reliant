@@ -11,31 +11,30 @@ import (
 	"connectrpc.com/connect"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the chat service. internal/grpc/server.go (and
-// the worker, for the run-management tools) constructs it today; forge's
-// composition root takes over in P3c (research/forge-migration/PLAN.md). The
-// rpc methods on *Service are where this service's logic lives; see the forge
+// Deps holds dependencies for the chat service. The composition graph
+// constructs it (internal/app/compose.go), and the worker root builds its own
+// for the run-management tools (internal/app/providers_worker.go). The rpc
+// methods on *Service are where this service's logic lives; see the forge
 // `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// Repo stores chats, threads, messages and runs. It is the whole
-	// db.Repository: the handlers call far more than ~15 of its methods and
-	// hand it whole to launch, threads and runs.
-	Repo db.Repository
+	// Repo stores chats, threads, messages and runs. Repository (deps.go)
+	// is what the handlers call plus the roles of launch, threads, runs and
+	// the other callees they hand it to.
+	Repo Repository
 	// Temporal starts, queries, signals and cancels chat runs.
 	Temporal Temporal
 	// Pause pauses and resumes runs. runs.Service drives it; the handlers
@@ -51,13 +50,21 @@ type Deps struct {
 	// tool calls wait for the machine.
 	// forge:optional-dep
 	Router Router
+	// LocalModels lists the models the user's machines and endpoints serve,
+	// so an explicit pick of a local model is checked the way its run will
+	// resolve it. Without it a local pick cannot be checked and is refused.
+	// forge:optional-dep
+	LocalModels local.Directory
 }
 
 // Temporal is the slice of the Temporal client the chat handlers use, and
 // what they hand to runs and launch.
 type Temporal interface {
 	ExecuteWorkflow(ctx context.Context, options client.StartWorkflowOptions, workflow interface{}, args ...interface{}) (client.WorkflowRun, error)
-	QueryWorkflow(ctx context.Context, workflowID string, runID string, queryType string, args ...interface{}) (converter.EncodedValue, error)
+	// QueryWorkflowWithOptions, not QueryWorkflow: every query goes through
+	// temporal.QueryOpenRun, which targets the current run and refuses a
+	// closed one instead of having a worker replay it.
+	QueryWorkflowWithOptions(ctx context.Context, request *client.QueryWorkflowWithOptionsRequest) (*client.QueryWorkflowWithOptionsResponse, error)
 	SignalWorkflow(ctx context.Context, workflowID string, runID string, signalName string, arg interface{}) error
 	CancelWorkflow(ctx context.Context, workflowID string, runID string) error
 	DescribeWorkflowExecution(ctx context.Context, workflowID, runID string) (*workflowservice.DescribeWorkflowExecutionResponse, error)

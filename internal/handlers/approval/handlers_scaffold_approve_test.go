@@ -2,7 +2,6 @@ package approval_test
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -21,12 +20,12 @@ func TestApprove_Generated(t *testing.T) {
 	t.Parallel()
 
 	// a-1 is pending in another user's chat; no other approval exists.
-	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.StubRepo{
+	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
 		GetApprovalFunc: func(_ context.Context, id string) (*db.Approval, error) {
 			if id == "a-1" {
 				return &db.Approval{ID: id, ChatID: "chat-1", Status: int32(pb.ApprovalStatus_APPROVAL_STATUS_PENDING)}, nil
 			}
-			return nil, sql.ErrNoRows
+			return nil, nil // the store answers a missing approval with (nil, nil)
 		},
 		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
 			return &db.Chat{ID: id, UserID: "someone-else"}, nil

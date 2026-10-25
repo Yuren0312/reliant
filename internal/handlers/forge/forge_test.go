@@ -12,12 +12,15 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
@@ -52,22 +55,23 @@ func (r *forgeTestRouter) SendDaemonCommand(_ context.Context, _ string, command
 	return r.reply, r.replyErr
 }
 
-// forgeTestProjects resolves one project owned by the authed test user.
-type forgeTestProjects struct {
-	path string
-	err  error
-}
-
-func (p forgeTestProjects) GetProjectWithUserCheck(_ context.Context, id, _ string) (*db.Project, error) {
-	if p.err != nil {
-		return nil, p.err
+// forgeTestProjects resolves one project owned by the authed test user, at
+// path. Its forge name is never written: the tests that use it assert on the
+// dispatch, not on the row.
+func forgeTestProjects(path string) *MockRepository {
+	return &MockRepository{
+		GetProjectWithUserCheckFunc: func(_ context.Context, id, _ string) (*db.Project, error) {
+			return &db.Project{ID: id, Path: path}, nil
+		},
+		SetProjectForgeNameFunc: func(context.Context, string, string, string) (bool, error) {
+			return false, nil
+		},
 	}
-	return &db.Project{ID: id, Path: p.path}, nil
 }
 
 // newForgeTestService wires the Service over a stub router and project lookup.
 func newForgeTestService(router *forgeTestRouter) *Service {
-	return newForgeService(router, forgeTestProjects{path: "/daemon/workspace/control-plane"})
+	return newForgeService(router, forgeTestProjects("/daemon/workspace/control-plane"))
 }
 
 // newForgeService builds the Service as server.go does. Every required Dep is
@@ -220,7 +224,9 @@ func TestForgeService_ForgeExit1_IsDrift_ObservedNotUnreachable(t *testing.T) {
 // a release defect.
 func TestForgeService_DispatchTimeout_OnClusterRead_IsUnreachableNotError(t *testing.T) {
 	router := &forgeTestRouter{
-		replyErr: fmt.Errorf("daemon command forge.env_verify (subject x, timeout 75s): nats: timeout"),
+		// As the NATS router reports a request no reply answered in time.
+		replyErr: fmt.Errorf("daemon command forge.env_verify (subject x, timeout 75s) via NATS failed: %w: %w",
+			toolexec.ErrDaemonTimeout, nats.ErrTimeout),
 	}
 
 	resp, err := newForgeTestService(router).VerifyEnv(authedCtx(),
@@ -247,7 +253,7 @@ func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 			connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err),
+		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err),
 			"a deleted directory is a missing resource, not a retryable outage")
 	})
 
@@ -257,7 +263,7 @@ func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 			connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 	})
 
 	t.Run("a forge command failure is not laundered into unreachable", func(t *testing.T) {
@@ -270,7 +276,7 @@ func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 			connect.NewRequest(&reliantv1.VerifyForgeEnvRequest{ProjectId: "p", Env: "prod"}))
 
 		require.Error(t, err, "a substantive forge failure must not be reported as 'cluster unknown'")
-		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	})
 
 	t.Run("timeout on a non-cluster command is a real error", func(t *testing.T) {
@@ -279,7 +285,7 @@ func TestForgeService_NonTimeoutFailures_StillFailLoudly(t *testing.T) {
 			connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
 
 		require.Error(t, err, "secret_list reads no cluster, so a timeout says nothing about reachability")
-		assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 	})
 }
 
@@ -308,7 +314,7 @@ func TestForgeService_CommandTimedOut_IsATimeoutNotAFailure(t *testing.T) {
 			connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeDeadlineExceeded, connect.CodeOf(err),
+		assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(err),
 			"a forge run that ran out of budget is neither an outage nor a project defect")
 	})
 }
@@ -365,7 +371,7 @@ func TestForgeService_CommandFailed_IsFailedPreconditionNotUnavailable(t *testin
 		t.Run(name, func(t *testing.T) {
 			err := call(newForgeTestService(&forgeTestRouter{replyErr: fmt.Errorf("%s", daemonErr)}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err),
+			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err),
 				"forge ran and failed: retrying cannot help, and it is not a daemon outage")
 			// Forge's own diagnosis survives — it is the only thing that tells
 			// the user what to fix.
@@ -420,7 +426,7 @@ func TestForgeService_Validation(t *testing.T) {
 			connect.NewRequest(&reliantv1.GetForgeEnvStatusRequest{ProjectId: "p", Env: "  "}))
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 		assert.Empty(t, router.lastCommandType, "must not dispatch an invalid request")
 	})
 
@@ -430,7 +436,7 @@ func TestForgeService_Validation(t *testing.T) {
 			connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "", Env: "prod"}))
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 		assert.Empty(t, router.lastCommandType)
 	})
 
@@ -440,7 +446,7 @@ func TestForgeService_Validation(t *testing.T) {
 			connect.NewRequest(&reliantv1.ListForgeSecretsRequest{ProjectId: "p", Env: "prod"}))
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 		assert.Empty(t, router.lastCommandType)
 	})
 }
@@ -554,9 +560,9 @@ func TestForgeService_ListSecrets_ErrorCarriesNoReportText(t *testing.T) {
 	assert.NotContains(t, err.Error(), canary)
 	// The re-mapped error is built from the daemon's (already stderr-withheld)
 	// text alone — re-classifying it must not widen what it carries.
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Equal(t, "daemon command forge.secret_list failed: forge command failed: exit 1",
-		err.(*connect.Error).Message())
+		svcerr.ToConnect(err).Message())
 }
 
 // THE DAEMON SENDS AN OBJECT, NOT A STRING, and this pins that contract.

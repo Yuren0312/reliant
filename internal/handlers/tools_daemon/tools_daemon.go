@@ -151,8 +151,12 @@ type daemonConnection struct {
 	// connect wrote it (renewLease).
 	attachedAt   time.Time
 	attachSource db.DaemonAttachmentSource
-	podIP        *string
-	podPort      *int
+	// build is the build the daemon reported at registration (zero = unknown
+	// build). It is constant for the session, so renewLease re-creating a lost
+	// lease row writes it back.
+	build   db.DaemonBuild
+	podIP   *string
+	podPort *int
 	// leaseMu orders lease renewals against teardown's release, so a renewal
 	// can never land after teardownConnection released the row and leave a
 	// lease for a stream that is gone.
@@ -256,8 +260,8 @@ type daemonConnection struct {
 // expected outcome: every held stream ends this way on every rollout, and
 // logging each one as a failed stream at ERROR paged on a rollout that went
 // exactly as designed.
-var errGatewayDraining = connect.NewError(connect.CodeUnavailable, svcerr.Draining(
-	"gateway draining: this daemon-gateway replica is shutting down; reconnect to reach a live replica"))
+var errGatewayDraining = svcerr.Draining(
+	"gateway draining: this daemon-gateway replica is shutting down; reconnect to reach a live replica")
 
 // Close ends every daemon stream this service is holding, with a status the
 // daemon can act on.
@@ -380,9 +384,9 @@ func (s *Service) sweepStaleConnections() {
 }
 
 // errDaemonStreamSilent ends a stream the stale-connection sweeper reaped.
-var errDaemonStreamSilent = connect.NewError(connect.CodeUnavailable, fmt.Errorf(
+var errDaemonStreamSilent = svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf(
 	"daemon-gateway has read nothing from this stream for over %s; closing it so the daemon redials",
-	staleConnectionThreshold))
+	staleConnectionThreshold)))
 
 // AddConnectionListener registers a listener that will be notified when
 // daemon connections are established or torn down. Safe to call before Start.
@@ -722,9 +726,8 @@ func (s *Service) PublishDaemonListChanged(ctx context.Context, userID, daemonID
 //
 // CodeAborted ("concurrency conflict") is the daemon's cue to stop rather than
 // redial — see isFatalError in internal/toolexec/daemonruntime.
-var errDaemonSuperseded = connect.NewError(connect.CodeAborted, fmt.Errorf(
-	"daemon identity claimed by another daemon process on the same gateway; "+
-		"this process is superseded and must not reconnect (only one daemon may hold a daemon id)"))
+var errDaemonSuperseded = svcerr.ToConnect(svcerr.Aborted("daemon identity claimed by another daemon process on the same gateway; " +
+	"this process is superseded and must not reconnect (only one daemon may hold a daemon id)"))
 
 func (c *daemonConnection) closeDone() { c.closeWith(nil) }
 
@@ -793,12 +796,12 @@ func (c *daemonConnection) closedReason() error {
 func daemonRegistrationUserID(ctx context.Context, reg *reliantv1.DaemonRegister) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || strings.TrimSpace(userID) == "" {
-		return "", connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("PAT authentication required — no user identity in context"))
+		return "", svcerr.Unauthenticated("PAT authentication required — no user identity in context")
 	}
 	return userID, nil
 }
 
-// daemonHostnameLookup is the subset of db.Repository needed to find an
+// daemonHostnameLookup is the slice of Repository needed to find an
 // existing daemon row by (userID, hostname). Kept narrow so the
 // hostname-reuse helper is trivially testable with a fake.
 type daemonHostnameLookup interface {
@@ -880,8 +883,7 @@ func validateAssertedDaemonID(id string) error {
 	if id == "" || assertedDaemonIDPattern.MatchString(id) {
 		return nil
 	}
-	return connect.NewError(connect.CodeInvalidArgument,
-		fmt.Errorf("daemon_id must match [A-Za-z0-9-]{1,64}"))
+	return svcerr.InvalidArgument("daemon_id must match [A-Za-z0-9-]{1,64}")
 }
 
 func truncateForLog(s string) string {
@@ -927,7 +929,7 @@ func (s *Service) WhoAmI(
 ) (*connect.Response[reliantv1.WhoAmIResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || strings.TrimSpace(userID) == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("a daemon credential is required"))
+		return nil, svcerr.Unauthenticated("a daemon credential is required")
 	}
 	return connect.NewResponse(&reliantv1.WhoAmIResponse{UserId: userID}), nil
 }
@@ -963,7 +965,7 @@ func (s *Service) ConnectDaemon(
 	// racing, a parked Receive.
 	if !serverkit.CanAbortReceive(ctx) {
 		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" ConnectDaemon is served without an abortable request body; serve it through a serverkit listener")
-		return connect.NewError(connect.CodeInternal, errors.New("daemon stream handler is misconfigured"))
+		return svcerr.Internal("daemon stream handler is misconfigured")
 	}
 
 	// Wait for registration message
@@ -975,8 +977,7 @@ func (s *Service) ConnectDaemon(
 
 	reg := msg.GetRegister()
 	if reg == nil {
-		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" First message must be registration")
-		return connect.NewError(connect.CodeInvalidArgument, nil)
+		return svcerr.InvalidArgument("first message must be registration")
 	}
 
 	userID, err := daemonRegistrationUserID(ctx, reg)
@@ -1003,18 +1004,17 @@ func (s *Service) ConnectDaemon(
 
 	requestedProjectPaths, err := s.listAllProjectPaths(ctx, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to list project paths", "error", err, "userID", userID)
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list project paths: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("failed to list project paths"))
 	}
 
 	now := leaseTime(time.Now())
 	capabilitiesJSON, err := jsonStringSlicePtr(reg.Capabilities)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to encode capabilities: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("failed to encode capabilities"))
 	}
 	projectPathsJSON, err := jsonStringSlicePtr(requestedProjectPaths)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to encode project paths: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("failed to encode project paths"))
 	}
 
 	if err := s.deps.Repo.UpsertDaemon(ctx, &db.Daemon{
@@ -1029,8 +1029,7 @@ func (s *Service) ConnectDaemon(
 		if errors.Is(err, db.ErrDaemonOwnedByAnotherUser) {
 			return s.rejectForeignDaemon(ctx, userID, daemonID)
 		}
-		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to persist daemon registration", "error", err, "daemonID", daemonID)
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to persist daemon registration: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("failed to persist daemon registration"))
 	}
 
 	if err := s.deps.Repo.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
@@ -1039,6 +1038,7 @@ func (s *Service) ConnectDaemon(
 		Source:             db.DaemonAttachmentSourceInbound,
 		AttachedAt:         now,
 		LastStreamActivity: now,
+		Build:              daemonBuildFromRegister(reg),
 	}); err != nil {
 		// The stream is still accepted: the first keepalive re-creates the
 		// lease (renewLease) and says so. Until then the registry reports
@@ -1071,6 +1071,7 @@ func (s *Service) ConnectDaemon(
 		stream:              &inboundStream{stream: stream, ctx: ctx},
 		attachSource:        db.DaemonAttachmentSourceInbound,
 		movesOnDrain:        reg.GetMovesOnDrain(),
+		build:               daemonBuildFromRegister(reg),
 		sendCh:              make(chan *reliantv1.ServerMessage, 256),
 		done:                make(chan struct{}),
 		pendingCommands:     make(map[string]chan *reliantv1.DaemonCommandResponse),
@@ -1108,7 +1109,7 @@ func (s *Service) ConnectDaemon(
 	// Notify listeners outside the mutex.
 	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
 	if s.deps.StatePublisher != nil {
-		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType)
+		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType, wireBuild(conn.build))
 	}
 
 	// Publish an immediate heartbeat so the frontend knows the daemon is
@@ -1166,11 +1167,6 @@ func (s *Service) ConnectDaemon(
 	return s.handleIncoming(ctx, conn)
 }
 
-// Repo returns the underlying repository. Used by the daemon connector for resync queries.
-func (s *Service) Repo() db.Repository {
-	return s.deps.Repo
-}
-
 // RegisterOutboundConnection registers an outbound gateway→daemon connection.
 // The DaemonConnector calls this after opening a ConnectGateway bidi stream and
 // receiving the DaemonRegister message. Identity (userID, daemonID) is provided
@@ -1221,6 +1217,7 @@ func (s *Service) RegisterOutboundConnection(
 		PodPort:            &podPort,
 		AttachedAt:         now,
 		LastStreamActivity: now,
+		Build:              daemonBuildFromRegister(reg),
 	}); err != nil {
 		// See the inbound path: the first keepalive re-creates it.
 		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to write the reachability lease for a new daemon stream; "+
@@ -1272,7 +1269,7 @@ func (s *Service) RegisterOutboundConnection(
 
 	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
 	if s.deps.StatePublisher != nil {
-		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType)
+		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType, wireBuild(conn.build))
 	}
 	s.publishDaemonHeartbeat(context.Background(), userID, daemonID, time.Now().UTC(), nil)
 	s.publishDaemonListChanged(userID, daemonID)
@@ -1534,6 +1531,7 @@ func (s *Service) renewLease(ctx context.Context, conn *daemonConnection, stream
 			PodPort:            conn.podPort,
 			AttachedAt:         conn.attachedAt,
 			LastStreamActivity: leaseTime(time.Now()),
+			Build:              conn.build,
 		})
 	}()
 	if err != nil {
@@ -1756,7 +1754,7 @@ func (c *daemonConnection) routeInboundReply(msg *reliantv1.DaemonMessage) bool 
 // to report tool execution results when the bidirectional stream was unavailable.
 // This path has been removed in favour of the bidi stream.
 func (s *Service) ReportToolResult(ctx context.Context, req *connect.Request[reliantv1.ReportToolResultRequest]) (*connect.Response[reliantv1.ReportToolResultResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("ReportToolResult is no longer supported; use the bidi stream"))
+	return nil, svcerr.Unimplemented("ReportToolResult is no longer supported; use the bidi stream")
 }
 
 func (s *Service) handleProjectDiscovery(ctx context.Context, conn *daemonConnection, discovery *reliantv1.ProjectDiscovery) error {
@@ -2208,16 +2206,6 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 	return project, nil
 }
 
-// projectConfigPushedAtReader reads when the daemon pushed a project's stored
-// config record, and nothing else from it (db.Repo.GetProjectConfigPushedAt).
-// It returns sql.ErrNoRows, unwrapped, when the project has no record.
-type projectConfigPushedAtReader interface {
-	GetProjectConfigPushedAt(ctx context.Context, projectID string) (time.Time, error)
-}
-
-// The repository every server wires in must answer it, checked at build time.
-var _ projectConfigPushedAtReader = (*db.Repo)(nil)
-
 // shouldApplyProjectConfigUpdate drops a snapshot or delta older than the one
 // already stored. It runs on every push a daemon sends, and it needs only the
 // stored pushed_at: the whole record it used to read for that one timestamp
@@ -2228,15 +2216,7 @@ func (s *Service) shouldApplyProjectConfigUpdate(ctx context.Context, projectID 
 		return true, nil
 	}
 
-	// The method lives on *db.Repo, not on db.Repository; every production
-	// wiring passes a *db.Repo. A repository that cannot answer is a wiring
-	// fault, and it fails loudly here rather than quietly falling back to the
-	// full-record read.
-	reader, ok := s.deps.Repo.(projectConfigPushedAtReader)
-	if !ok {
-		return false, fmt.Errorf("project config staleness check: %T cannot read pushed_at (GetProjectConfigPushedAt)", s.deps.Repo)
-	}
-	pushedAt, err := reader.GetProjectConfigPushedAt(ctx, projectID)
+	pushedAt, err := s.deps.Repo.GetProjectConfigPushedAt(ctx, projectID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return true, nil

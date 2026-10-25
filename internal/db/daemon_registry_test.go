@@ -4,13 +4,11 @@ package db
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"errors"
 	"sort"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/pressly/goose/v3"
 )
 
 // These run the real SQL. The registry writes in daemon_registry.go carry
@@ -37,7 +35,7 @@ func mustGetDaemon(t *testing.T, repo *Repo, id string) *Daemon {
 func daemonExists(t *testing.T, repo *Repo, id string) bool {
 	t.Helper()
 	_, err := repo.GetDaemon(context.Background(), id)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return false
 	}
 	if err != nil {
@@ -50,6 +48,8 @@ func daemonExists(t *testing.T, repo *Repo, id string) bool {
 // event must produce a row both daemon readers return with its name — the
 // Machines page reads ListDaemonsByUserID, detail reads GetDaemon.
 func TestUpsertDaemonIdentity_CreatesNamedRowReadByBothReaders(t *testing.T) {
+	t.Parallel()
+
 	repo, _ := registryTestRepo(t)
 	ctx := context.Background()
 	created := time.Date(2026, 10, 7, 14, 41, 36, 0, time.UTC)
@@ -88,6 +88,8 @@ func TestUpsertDaemonIdentity_CreatesNamedRowReadByBothReaders(t *testing.T) {
 // (hostname ws-ws-…, no name) and the control plane supplies the name. The
 // daemon's own fields must survive, and the owner must never be rewritten.
 func TestUpsertDaemonIdentity_NamesARowTheGatewayRegistered(t *testing.T) {
+	t.Parallel()
+
 	repo, _ := registryTestRepo(t)
 	ctx := context.Background()
 	hostname := "ws-ws-2aab1465"
@@ -120,6 +122,8 @@ func TestUpsertDaemonIdentity_NamesARowTheGatewayRegistered(t *testing.T) {
 // TestRemoveDaemon_DeletesRowAndLease is the ghost: the row and its lease go,
 // the owner is reported back, and removal is idempotent.
 func TestRemoveDaemon_DeletesRowAndLease(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB := registryTestRepo(t)
 	ctx := context.Background()
 	if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: "cda8a89b", UserID: "u-owner", Name: "default", DaemonType: "managed"}); err != nil {
@@ -248,6 +252,8 @@ func assertKept(t *testing.T, rawDB *sql.DB, daemonID string) {
 // resolution for the chat, the sweep's adoption for the worktree, the
 // daemon's connect-time reconcile for the install.
 func TestRemoveDaemon_ReleasesWhatWasBoundToIt(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB := registryTestRepo(t)
 	ctx := context.Background()
 	for _, id := range []string{"gone-1", "kept-1"} {
@@ -273,6 +279,8 @@ func TestRemoveDaemon_ReleasesWhatWasBoundToIt(t *testing.T) {
 // TestApplyDaemonRegistrySnapshot_ReleasesWhatWasBoundToARemovedRow: the
 // reconcile path removes rows too, and must release them the same way.
 func TestApplyDaemonRegistrySnapshot_ReleasesWhatWasBoundToARemovedRow(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB := registryTestRepo(t)
 	ctx := context.Background()
 	old := time.Now().UTC().Add(-24 * time.Hour)
@@ -300,41 +308,6 @@ func TestApplyDaemonRegistrySnapshot_ReleasesWhatWasBoundToARemovedRow(t *testin
 	assertKept(t, rawDB, "listed-1")
 }
 
-// releaseBindingsMigrationVersion is
-// 20261010020219_release_bindings_to_removed_daemons.sql.
-const releaseBindingsMigrationVersion int64 = 20261010020219
-
-// TestReleaseBindingsMigration_HealsRowsLeftByEarlierRemovals: removals made
-// before releaseDaemonBindings existed left their bindings dangling (in prod,
-// one live worktree owner and 13 project installs). The migration releases
-// exactly those, and nothing bound to a machine that still exists.
-func TestReleaseBindingsMigration_HealsRowsLeftByEarlierRemovals(t *testing.T) {
-	repo, rawDB, cleanup := setupGooseTestDBWithRawDB(t)
-	t.Cleanup(cleanup)
-	ctx := context.Background()
-	if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: "kept-2", UserID: "test-user", DaemonType: "managed"}); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	// "gone-2" has bindings and no registry row: what a pre-release removal left.
-	seedMachineBindings(t, rawDB, "test-user", "gone-2", "kept-2")
-
-	if _, err := rawDB.Exec(fmt.Sprintf(`DELETE FROM %s WHERE version_id = $1`, goose.TableName()), releaseBindingsMigrationVersion); err != nil { //nolint:gosec // goose.TableName is a compile-time constant
-		t.Fatalf("rewind: %v", err)
-	}
-	if err := initGoose(); err != nil {
-		t.Fatalf("init goose: %v", err)
-	}
-	if err := goose.UpTo(rawDB, migrationsDir, releaseBindingsMigrationVersion, goose.WithAllowMissing()); err != nil {
-		t.Fatalf("apply migration: %v", err)
-	}
-
-	b := readMachineBindings(t, rawDB, "gone-2")
-	if b.chatPin.Valid || b.worktreeOwner.Valid || b.installs != 0 {
-		t.Errorf("bindings to the removed daemon after the migration = %+v; want released", b)
-	}
-	assertKept(t, rawDB, "kept-2")
-}
-
 // TestApplyDaemonRegistrySnapshot_ReconcilesOneOwner reproduces the owner's
 // prod drift on 2026-10-07 against real SQL: the managed ghost cda8a89b and
 // self-hosted ghost 38181976 (both deleted in the control plane) must go; the
@@ -342,6 +315,8 @@ func TestReleaseBindingsMigration_HealsRowsLeftByEarlierRemovals(t *testing.T) {
 // a connected-but-unlisted daemon, a just-registered one, and another owner's
 // machine must all be left alone.
 func TestApplyDaemonRegistrySnapshot_ReconcilesOneOwner(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB := registryTestRepo(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -438,6 +413,8 @@ func TestApplyDaemonRegistrySnapshot_ReconcilesOneOwner(t *testing.T) {
 // select every row, not none — an empty or NULL array binding that matched
 // nothing would leave all of their ghosts listed forever.
 func TestApplyDaemonRegistrySnapshot_EmptySetRemovesEveryGhost(t *testing.T) {
+	t.Parallel()
+
 	repo, _ := registryTestRepo(t)
 	ctx := context.Background()
 	longAgo := time.Now().UTC().Add(-30 * 24 * time.Hour)

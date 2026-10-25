@@ -9,9 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
@@ -632,6 +634,10 @@ func TestScopeRequiredAndValidated(t *testing.T) {
 
 	_, err = f.svc.List(ctx, inputoptions.ListRequest{UserID: "alice", Type: "acme.tag", Scope: map[string]any{"team": 7}})
 	require.ErrorIs(t, err, inputoptions.ErrBadScope)
+	// A bad scope is the caller's error: InvalidArgument on the wire, and a
+	// user error to the logger (WARN, never an ERROR or a Sentry event).
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err))
 
 	res, err := f.svc.List(ctx, inputoptions.ListRequest{UserID: "alice", Type: "acme.tag", Scope: map[string]any{"team": "core", "extra": "ignored"}})
 	require.NoError(t, err)
@@ -944,6 +950,30 @@ func TestAMutatingListActionIsRefusedAtCallTime(t *testing.T) {
 	_, err = svc.List(context.Background(), inputoptions.ListRequest{UserID: "alice", Type: "acme.team"})
 	require.ErrorIs(t, err, inputoptions.ErrInvalidType)
 	assert.Zero(t, f.count("teams.list"), "nothing was run")
+}
+
+// Every typed failure is the svcerr kind a handler sends, and what the client
+// reads is the part a person should: a detail's message, never the kind's name.
+func TestTypedFailuresAreSvcerrKinds(t *testing.T) {
+	f := newFixture(t, time.Minute)
+	_, err := f.svc.List(context.Background(), inputoptions.ListRequest{UserID: "alice", Type: "acme.nothing"})
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
+	assert.Equal(t, `no integration declares the type "acme.nothing"`, svcerr.ToConnect(err).Message())
+	assert.Equal(t, inputoptions.Message(err), svcerr.ToConnect(err).Message())
+
+	_, err = f.svc.List(context.Background(), inputoptions.ListRequest{UserID: "alice", Type: ""})
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, "type is required", svcerr.ToConnect(err).Message())
+	assert.Contains(t, err.Error(), "inputoptions: invalid request", "the log keeps the kind")
+
+	retry := error(&inputoptions.UpstreamError{Message: "GitHub is rate limiting", Retryable: true})
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(retry))
+	assert.Equal(t, "GitHub is rate limiting", svcerr.ToConnect(retry).Message())
+	refused := error(&inputoptions.UpstreamError{Message: "GitHub refused the request"})
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(refused))
+	assert.Equal(t, "GitHub refused the request", svcerr.ToConnect(refused).Message())
+
+	assert.False(t, svcerr.IsClassified(inputoptions.ErrInvalidType), "a defect has no kind: the handler's Internal names it")
 }
 
 func TestUpstreamErrorMessageIsTheErrorString(t *testing.T) {

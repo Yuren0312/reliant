@@ -16,7 +16,7 @@ import (
 // createResolverDraft inserts a draft owned by "test-user", with unique
 // names. Names and slugs are unique per call because drafts are unique on
 // (user_id, slug) and these tests run in parallel against one database.
-func createResolverDraft(t *testing.T, repo db.Repository) *db.WorkflowDraft {
+func createResolverDraft(t *testing.T, repo *db.Repo) *db.WorkflowDraft {
 	t.Helper()
 	now := time.Now()
 	unique := uuid.New().String()[:8]
@@ -197,14 +197,14 @@ func TestCreateWorkflow_DuplicateSlugIsClearToolError(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, first.IsError, first.Content)
 
-	start := time.Now()
+	retries := db.RecordRetryBackoffs(repo)
 	second, err := NewCreateWorkflowTool(repo).Run(ctx, call)
 	require.NoError(t, err)
 	require.True(t, second.IsError)
 	assert.Contains(t, second.Content, name)
 	assert.Contains(t, second.Content, "list_workflows")
 	assert.NotContains(t, second.Content, "SQLSTATE")
-	assert.Less(t, time.Since(start), 700*time.Millisecond)
+	assert.Zero(t, retries.Len(), "a duplicate slug must not walk the retry ladder")
 }
 
 // TestCreateWorkflow_ReturnedIDWorksWithoutChatBinding: create_workflow's id is

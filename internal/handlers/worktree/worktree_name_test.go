@@ -7,9 +7,11 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -22,6 +24,8 @@ func createNamed(ctx context.Context, svc *Service, projectID, name, branch stri
 }
 
 func TestCreateWorktree_NameRule(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	svc := newWorktreeService(t, repo, &blockingWorktreeDaemonRouter{})
 	userID := uuid.New().String()
@@ -35,7 +39,7 @@ func TestCreateWorktree_NameRule(t *testing.T) {
 	// A live row holds the name: AlreadyExists, not a raw constraint error.
 	_, err = createNamed(ctx, svc, projectID, "feat", "feat-2", false)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "already exists")
 
 	// Archiving releases it; the old branch stays off limits, force or not.
@@ -43,7 +47,7 @@ func TestCreateWorktree_NameRule(t *testing.T) {
 	for _, force := range []bool{false, true} {
 		_, err = createNamed(ctx, svc, projectID, "feat", "feat-1", force)
 		require.Error(t, err, "force=%v", force)
-		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 		assert.Contains(t, err.Error(), "pass a different branch")
 	}
 	second, err := createNamed(ctx, svc, projectID, "feat", "feat-2", false)
@@ -52,6 +56,9 @@ func TestCreateWorktree_NameRule(t *testing.T) {
 }
 
 func TestUnarchiveWorktree_RefusesWhenTheNameIsTaken(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	svc := newWorktreeService(t, repo, &blockingWorktreeDaemonRouter{})
 	userID := uuid.New().String()
@@ -68,7 +75,7 @@ func TestUnarchiveWorktree_RefusesWhenTheNameIsTaken(t *testing.T) {
 
 	_, err = svc.UnarchiveWorktree(ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: old.Msg.Worktree.Id}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "another worktree in this project now uses that name")
 	assert.Contains(t, err.Error(), "archive or rename")
 

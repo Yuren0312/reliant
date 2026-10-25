@@ -4,6 +4,7 @@ package worktreereclaim
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -11,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	"gopkg.in/yaml.v3"
 )
 
 // This is forge's worktree policy (forge/internal/storage/worktrees.go,
@@ -33,6 +36,9 @@ var defaultRebuildable = []string{
 	".forge/logs", ".forge/workspace-base.tag",
 	// forge's own scratch and its generate fixed-point cache.
 	".forge/tmp", ".forge/generate-cache.json",
+	// forge's build/push state records (one JSON file per env or service) and
+	// the temp files its atomic writes leave behind when interrupted.
+	".forge/state", ".forge/.forge-tmp-*",
 	// Non-JS build and tool caches, the same additions forge is making.
 	"target", ".venv", "venv", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".gradle",
 	// Pinned tools a project installs into its checkout (bin, stamps, tmp,
@@ -67,7 +73,8 @@ const maxCompareBytes int64 = 64 << 20
 //     exists elsewhere, which is how a worktree gets its .env or dev secrets.
 //     This one applies to never-listed paths too, because nothing is lost.
 //     A file that differs from the source's, even only by being older, is
-//     data: it may hold a credential the source no longer has;
+//     data: it may hold a credential the source no longer has. The one
+//     exception is secrets/dev.yaml, compared by value (devSecrets);
 //   - it is inside another checkout, which is classified on its own.
 //
 // Judging these during the walk, not after it, matters: the walk stops at
@@ -81,12 +88,17 @@ type dataWalk struct {
 	// and every git process a pass starts is budgeted.
 	source func() string
 	out    []string
+	// seen holds every path already judged. git lists both a directory and
+	// the ignored files inside it when the directory is only partly ignored
+	// (secrets/ and secrets/dev.yaml), and descending into the directory
+	// reaches the file a second time.
+	seen map[string]bool
 }
 
 // newDataWalk returns a walk of checkout whose source checkout is looked up
 // on first use.
 func newDataWalk(ctx context.Context, checkout string, nested []string) *dataWalk {
-	return &dataWalk{checkout: checkout, nested: nested, source: sync.OnceValue(func() string { return sourceCheckout(ctx, checkout) })}
+	return &dataWalk{checkout: checkout, nested: nested, seen: map[string]bool{}, source: sync.OnceValue(func() string { return sourceCheckout(ctx, checkout) })}
 }
 
 // visit judges one ignored path. git collapses a directory holding only
@@ -98,6 +110,11 @@ func (d *dataWalk) visit(rel string) {
 	if len(d.out) >= maxDataNames {
 		return
 	}
+	key := strings.TrimSuffix(rel, "/")
+	if d.seen[key] {
+		return
+	}
+	d.seen[key] = true
 	if rebuildablePath(rel) {
 		return
 	}
@@ -148,13 +165,77 @@ func (d *dataWalk) copyInSource(rel, full string, info os.FileInfo) bool {
 	}
 	src := filepath.Join(source, filepath.FromSlash(rel))
 	si, err := os.Lstat(src)
-	if err != nil || !si.Mode().IsRegular() || si.Size() != info.Size() || os.SameFile(si, info) {
+	if err != nil || !si.Mode().IsRegular() || si.Size() > maxCompareBytes || os.SameFile(si, info) {
 		return false
 	}
 	if !within(source, src) || within(d.checkout, src) {
 		return false
 	}
-	return sameBytes(full, src)
+	if si.Size() == info.Size() && sameBytes(full, src) {
+		return true
+	}
+	return devSecrets(rel) && yamlValuesIn(full, src)
+}
+
+// devSecrets reports whether rel is a dev secrets file: secrets/dev.yaml, where
+// every developer's copy is the same handful of keys. What it holds that the
+// source's copy lacks is the only thing removal could lose; reordering, comments
+// and whitespace lose nothing.
+func devSecrets(rel string) bool {
+	return matchesRun(splitSegments(rel), "secrets/dev.yaml")
+}
+
+// yamlValuesIn reports whether every non-empty value in the YAML file `have` is
+// also in the YAML file `other` at the same key path. A file that does not parse
+// is not covered: the caller then holds the worktree.
+func yamlValuesIn(have, other string) bool {
+	a, ok := yamlLeaves(have)
+	if !ok {
+		return false
+	}
+	b, ok := yamlLeaves(other)
+	if !ok {
+		return false
+	}
+	for path, v := range a {
+		if v != "" && b[path] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// yamlLeaves flattens a YAML document to its scalar leaves, keyed by key path
+// (list items by index). Anchors and aliases are resolved by the parser.
+func yamlLeaves(path string) (map[string]string, bool) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	var doc any
+	if err := yaml.Unmarshal(b, &doc); err != nil {
+		return nil, false
+	}
+	out := map[string]string{}
+	var walk func(prefix string, v any)
+	walk = func(prefix string, v any) {
+		switch t := v.(type) {
+		case map[string]any:
+			for k, c := range t {
+				walk(prefix+"/"+k, c)
+			}
+		case []any:
+			for i, c := range t {
+				walk(fmt.Sprintf("%s/[%d]", prefix, i), c)
+			}
+		case nil:
+			out[prefix] = ""
+		default:
+			out[prefix] = fmt.Sprint(t)
+		}
+	}
+	walk("", doc)
+	return out, true
 }
 
 // sameBytes reports whether two files have identical contents. Any read error

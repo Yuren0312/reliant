@@ -102,12 +102,15 @@ func ListQuestionsByChat(ctx context.Context, db orm.Context, chatID string) ([]
 	return questionsFromRows(rows), nil
 }
 
-// ListPendingQuestionsByChat returns a chat's pending questions, oldest
-// first.
+// ListPendingQuestionsByChat returns a chat's pending blocking questions,
+// oldest first: the ones a thread is waiting on. An async question (asked
+// without waiting) is no gate, so it is not listed; ListAsyncQuestionsByChat
+// lists those.
 func ListPendingQuestionsByChat(ctx context.Context, db orm.Context, chatID string) ([]*core.Question, error) {
 	rows, err := ListQuestion(ctx, db,
 		orm.WhereEq(QuestionFieldChatID, chatID),
 		orm.WhereEq(QuestionFieldStatus, core.QuestionStatusPending),
+		orm.WhereEq(QuestionFieldAsync, false),
 		orm.WithOrderBy(QuestionFieldCreatedAt, orm.Asc))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pending questions by chat: %w", err)
@@ -120,12 +123,25 @@ func ListPendingQuestionsByChat(ctx context.Context, db orm.Context, chatID stri
 // rule (ListInboxPending): a question whose asking run — pending_input_gates
 // names it — completed or was cancelled can never be answered, since nothing
 // expires the row when its run stops, so it is not listed. A failed or paused
-// run resumes into the same wait and keeps its question.
+// run resumes into the same wait and keeps its question. An async question is
+// not listed: nothing waits on it, so it must not take over the composer.
 func ListAnswerablePendingQuestionsByChat(ctx context.Context, db orm.Context, chatID string) ([]*core.Question, error) {
+	return listAnswerablePendingQuestions(ctx, db, "questions.chat_id = ?", chatID)
+}
+
+// ListAnswerablePendingQuestionsByUser is ListAnswerablePendingQuestionsByChat
+// across every chat the user owns, oldest first.
+func ListAnswerablePendingQuestionsByUser(ctx context.Context, db orm.Context, userID string) ([]*core.Question, error) {
+	return listAnswerablePendingQuestions(ctx, db,
+		"questions.chat_id IN (SELECT c.id FROM chats c WHERE c.user_id = ?)", userID)
+}
+
+func listAnswerablePendingQuestions(ctx context.Context, db orm.Context, scope string, arg string) ([]*core.Question, error) {
 	var rows []*Question
 	err := db.Bun().NewSelect().Model(&rows).
-		Where("questions.chat_id = ?", chatID).
+		Where(scope, arg).
 		Where("questions.status = ?", core.QuestionStatusPending).
+		Where("NOT questions.async").
 		Where(`NOT EXISTS (
             SELECT 1 FROM pending_input_gates g
             WHERE g.kind = 'question' AND g.id = questions.id
@@ -133,7 +149,24 @@ func ListAnswerablePendingQuestionsByChat(ctx context.Context, db orm.Context, c
 		OrderExpr("questions.created_at ASC, questions.id ASC").
 		Scan(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list answerable pending questions by chat: %w", err)
+		return nil, fmt.Errorf("failed to list answerable pending questions: %w", err)
+	}
+	return questionsFromRows(rows), nil
+}
+
+// ListAsyncQuestionsByChat returns every async question in a chat (asked
+// without waiting), pending and resolved alike, oldest first: what the chat
+// timeline renders them from. Read through the builder rather than the
+// generated List, which caps a limit-less list at its default page.
+func ListAsyncQuestionsByChat(ctx context.Context, db orm.Context, chatID string) ([]*core.Question, error) {
+	var rows []*Question
+	err := db.Bun().NewSelect().Model(&rows).
+		Where("chat_id = ?", chatID).
+		Where("async").
+		OrderExpr("created_at ASC, id ASC").
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list async questions by chat: %w", err)
 	}
 	return questionsFromRows(rows), nil
 }
@@ -167,6 +200,8 @@ func questionToRow(q *core.Question) *Question {
 		CreatedAt:          q.CreatedAt,
 		ResolvedAt:         q.ResolvedAt,
 		ToolCallID:         q.ToolCallID,
+		Async:              q.Async,
+		WithdrawnReason:    q.WithdrawnReason,
 	}
 	if q.LoopIteration != nil {
 		it := int64(*q.LoopIteration)
@@ -189,6 +224,8 @@ func questionFromRow(row *Question) *core.Question {
 		CreatedAt:          row.CreatedAt,
 		ResolvedAt:         row.ResolvedAt,
 		ToolCallID:         row.ToolCallID,
+		Async:              row.Async,
+		WithdrawnReason:    row.WithdrawnReason,
 	}
 	if row.Status != nil {
 		q.Status = int(*row.Status)

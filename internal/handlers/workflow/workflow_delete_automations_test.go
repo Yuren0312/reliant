@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -17,7 +18,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
+// retirer accumulates every trigger the delete hands it to retire.
 type retirer struct{ retired []*core.Trigger }
+
+var _ workflow.AutomationRetirer = (*retirer)(nil)
 
 func (r *retirer) RetireDeletedTriggers(_ context.Context, deleted []*core.Trigger) {
 	r.retired = append(r.retired, deleted...)
@@ -27,13 +31,13 @@ func (r *retirer) RetireDeletedTriggers(_ context.Context, deleted []*core.Trigg
 // function and, as a transaction does, discards the deletions it made when the
 // function fails.
 type automationsStore struct {
-	*workflow.StubRepo
+	*workflow.MockRepository
 	triggers []*core.Trigger
 	deleted  []string
 }
 
 func newAutomationsStore(slug string, triggers ...*core.Trigger) *automationsStore {
-	s := &automationsStore{StubRepo: draftsRepo(callerDraftNoT(slug)), triggers: triggers}
+	s := &automationsStore{MockRepository: draftsRepo(callerDraftNoT(slug)), triggers: triggers}
 	s.DeleteWorkflowDraftBySlugFunc = func(context.Context, string, string) error { return nil }
 	s.ListTriggersFunc = func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return s.triggers, nil }
 	s.DeleteTriggerFunc = func(_ context.Context, id string) error {
@@ -133,7 +137,7 @@ func TestDeleteWorkflow_IsAllOrNothing(t *testing.T) {
 	_, err := deleteFlow(t, store, r, "pr-review")
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
 	assert.Empty(t, store.deleted, "the automation deletion rolled back with the workflow's")
 	assert.Empty(t, r.retired, "nothing is retired for a delete that did not happen")
 }

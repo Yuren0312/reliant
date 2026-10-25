@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runs"
@@ -197,7 +199,7 @@ func inputValidationError(validationErrors []error) error {
 	for i, e := range validationErrors {
 		errMsgs[i] = e.Error()
 	}
-	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
+	return svcerr.InvalidArgument(fmt.Sprintf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
 }
 
 // applyRequestPresets makes a send's preset selection the chat's, in memory
@@ -425,11 +427,11 @@ func (s *Service) resurrectGhostWorkflow(
 	// left there: the resurrected run's first call_llm delivers it.
 	savedMessageID, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 	if err != nil {
-		logging.ErrorContext(ctx, "[Ghost Recovery] Failed to save messages", "error", err, "chatID", req.Msg.ChatId)
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save messages"))
 	}
 	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
 		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
+	s.refreshChatProvider(ctx, userID, chat, workflowName, initialData)
 	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
 
 	// Step 4: Build execution context - inheriting existing thread
@@ -458,14 +460,13 @@ func (s *Service) resurrectGhostWorkflow(
 		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, req.Msg.ChatId),
 		// A ghost (Temporal lost the running execution) is an infra failure,
 		// not user intent — the fresh execution resumes at position.
-		Resume: v2.ResumeInputFromDurableState(ctx, s.deps.Repo, req.Msg.ChatId, workflowID),
+		Resume: resumeWholeChatInput(v2.ResumeInputFromDurableState(ctx, s.deps.Repo, req.Msg.ChatId, workflowID)),
 	}
 
 	// Step 5: Start fresh Temporal execution
 	workflowRun, err := s.deps.Temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
-		logging.ErrorContext(ctx, "[Ghost Recovery] Failed to start workflow", "error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resurrect workflow"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resurrect workflow"))
 	}
 
 	runID := workflowRun.GetRunID()
@@ -504,7 +505,7 @@ func (s *Service) SendMessage(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Extract user and system messages from input
@@ -512,7 +513,7 @@ func (s *Service) SendMessage(
 
 	// Require at least one user message or attachments
 	if !hasUserContent && len(req.Msg.Attachments) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("at least one user message or attachment is required"))
+		return nil, svcerr.InvalidArgument("at least one user message or attachment is required")
 	}
 
 	clientID, err := parseClientMessageID(req.Msg.GetClientMessageId())
@@ -523,8 +524,7 @@ func (s *Service) SendMessage(
 	// Get chat with ownership check (defense-in-depth via single query)
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get chat", "error", err, "chatID", req.Msg.ChatId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	// A repeat of a send whose message has already been read is answered
@@ -534,7 +534,7 @@ func (s *Service) SendMessage(
 	// without the run-control lock because "read" never un-happens; every
 	// other outcome is decided under the lock, below.
 	if early, err := s.findPriorSend(ctx, chat, clientID, userContent, req.Msg.Attachments); err != nil {
-		return nil, asConnectError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check for an earlier send"))
 	} else if early != nil && early.settled {
 		return replayResponse(chat, early), nil
 	}
@@ -568,7 +568,7 @@ func (s *Service) SendMessage(
 	// for completed/failed/cancelled workflows (see status switch below).
 
 	if err := launch.ValidateWorkflowParamStructure(req.Msg.WorkflowParams); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 
 	// Resume-at-position state, populated when the prior run for this chat was
@@ -640,12 +640,7 @@ func (s *Service) SendMessage(
 				temporalState, temporalErr := s.runs.State(ctx, workflowID)
 				if temporalErr != nil {
 					// Temporal query failed - this is an error we should surface
-					logging.ErrorContext(ctx, "Failed to query Temporal for workflow status",
-						"error", temporalErr,
-						"chatID", req.Msg.ChatId,
-						"workflowID", workflowID,
-					)
-					return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to check workflow status: %w", temporalErr))
+					return nil, svcerr.WrapOr(temporalErr, svcerr.Unavailable("failed to check workflow status"))
 				}
 
 				if !temporalState.Exists {
@@ -683,8 +678,7 @@ func (s *Service) SendMessage(
 				// Never started (a branch awaiting its first send). The first
 				// send is StartChat's, which records the launch exactly once;
 				// letting SendMessage start it would bypass that.
-				return nil, connect.NewError(connect.CodeFailedPrecondition,
-					fmt.Errorf("chat has not started; call StartChat"))
+				return nil, svcerr.WithReason(svcerr.FailedPrecondition("chat has not started; call StartChat"), errreason.ChatNotStarted)
 
 			case db.Paused():
 				// Refuse bad params before anything is written; see
@@ -739,9 +733,7 @@ func (s *Service) SendMessage(
 				if err != nil {
 					// The message itself failed to save — there is nothing to
 					// resume the workflow FOR, so this really is fatal.
-					logging.ErrorContext(ctx, "Failed to save messages while resuming paused workflow",
-						"error", err, "workflowID", workflowID, "chatID", req.Msg.ChatId)
-					return nil, connect.NewError(connect.CodeInternal, err)
+					return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save messages"))
 				}
 
 				// Get RunID from chat (workflow struct doesn't have it)
@@ -759,10 +751,7 @@ func (s *Service) SendMessage(
 					// shows work in progress, and nothing is executing. Report
 					// it instead — the user's message is already durable, so a
 					// retry resumes from exactly here.
-					logging.ErrorContext(ctx, "Failed to resume paused workflow",
-						"error", resumeErr, "workflowID", workflowID, "chatID", req.Msg.ChatId)
-					return nil, connect.NewError(connect.CodeInternal,
-						fmt.Errorf("failed to resume paused workflow: %w", resumeErr))
+					return nil, svcerr.WrapOr(resumeErr, svcerr.Internal("failed to resume paused workflow"))
 				}
 				if outcome.Kind != runs.OutcomeResumed {
 					logging.WarnContext(ctx, "Paused workflow could not be resumed in place during SendMessage - resuming at position with a new run",
@@ -833,8 +822,7 @@ func (s *Service) SendMessage(
 				for _, sysMsg := range systemMessages {
 					_, err := s.deps.Repo.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle))
 					if err != nil {
-						logging.ErrorContext(ctx, "Failed to save system message to running workflow", "error", err)
-						return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save system message: %w", err))
+						return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save system message"))
 					}
 				}
 
@@ -869,8 +857,7 @@ func (s *Service) SendMessage(
 					// (the wake below is what the first may not have reached).
 					queued, _, err := s.enqueueHumanMessage(ctx, queuedMsg, clientID != "")
 					if err != nil {
-						logging.ErrorContext(ctx, "Failed to queue message for running workflow", "error", err)
-						return nil, asConnectError(connect.CodeInternal, fmt.Errorf("failed to save message: %w", err))
+						return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save message"))
 					}
 					queuedMsg = queued
 				}
@@ -879,17 +866,14 @@ func (s *Service) SendMessage(
 				// above, after the send-time model policy (#685) has moved any
 				// model no connected provider can serve.
 				if len(stateUpdate) > 0 {
-					runID := ""
-					if chat.RunID != nil {
-						runID = *chat.RunID
-					}
 					modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
-						return s.checkParamsActuallyChanged(ctx, workflowID, runID, map[string]interface{}{input: stateUpdate[input]})
+						return s.checkParamsActuallyChanged(ctx, workflowID, map[string]interface{}{input: stateUpdate[input]})
 					})
+					s.refreshLiveChatProvider(ctx, userID, chat, existingWorkflow.WorkflowName, stateUpdate)
 					_, _ = s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, stateUpdate, modelMoves, 0)
 
 					// Only add "params changed" message if params actually changed from current workflow state
-					if s.checkParamsActuallyChanged(ctx, workflowID, runID, stateUpdate) {
+					if s.checkParamsActuallyChanged(ctx, workflowID, stateUpdate) {
 						hiddenStyle := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
 						_, err := s.deps.Repo.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), "Some of your params have changed, which may include mode, tools, temperature, or something else. Please continue as planned.", &workflowID, nil, &hiddenStyle)
 						if err != nil {
@@ -898,7 +882,9 @@ func (s *Service) SendMessage(
 						}
 					}
 
-					if err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, runID, "update_workflow_state", stateUpdate); err != nil {
+					// The current run (empty run id), not the chat row's: that
+					// one is stale after a continue-as-new.
+					if err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, "", "update_workflow_state", stateUpdate); err != nil {
 						logging.WarnContext(ctx, "Failed to signal workflow with param updates", "error", err, "workflowID", workflowID)
 					}
 				}
@@ -971,12 +957,10 @@ func (s *Service) SendMessage(
 				// cannot be restarted - user must branch to continue.
 				inspection, inspectErr := s.runs.Inspect(ctx, req.Msg.ChatId)
 				if inspectErr != nil {
-					logging.ErrorContext(ctx, "Failed to inspect run", "error", inspectErr, "chatID", req.Msg.ChatId)
-					return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to check workflow status: %w", inspectErr))
+					return nil, svcerr.WrapOr(inspectErr, svcerr.Unavailable("failed to check workflow status"))
 				}
 				if inspection.Stuck {
-					return nil, connect.NewError(connect.CodeFailedPrecondition,
-						fmt.Errorf("this conversation experienced a workflow error and cannot be resumed - use the branch feature to start a new conversation from any previous message"))
+					return nil, svcerr.FailedPrecondition("this conversation experienced a workflow error and cannot be resumed - use the branch feature to start a new conversation from any previous message")
 				}
 
 				// Both recoveries below save the message before they know
@@ -1000,10 +984,15 @@ func (s *Service) SendMessage(
 				var inputUpdate map[string]interface{}
 				var modelNotices, modelMoves []launch.ModelSubstitution
 				if inspection.Recoverable {
-					recorded := s.runInputsForSend(ctx, workflowID, "")
+					// The failed run is closed, so it is never queried for its
+					// inputs (Temporal would replay its whole history to
+					// answer — rtemporal.QueryOpenRun). What it was running on
+					// is rebuilt from the chat's presets and stored selection.
+					recorded := s.inputsAfterClosedRun(ctx, chat, activeWorkflowNameForResume(chat, existingWorkflow))
 					inputUpdate, modelNotices, modelMoves = s.resumeInputUpdate(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID,
 						s.underSelection(ctx, chat.ID, activeWorkflowNameForResume(chat, existingWorkflow), stateUpdate), recorded)
 					inputUpdate = s.withProviderPolicy(ctx, userID, chat, recorded, inputUpdate)
+					inputUpdate = s.refreshLiveChatProvider(ctx, userID, chat, existingWorkflow.WorkflowName, inputUpdate)
 				}
 
 				// A run that died parked on an unanswered ask_question wakes on
@@ -1066,14 +1055,14 @@ func (s *Service) SendMessage(
 					// thread still belongs ahead of the new message.
 					presavedID, saveErr := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 					if saveErr != nil {
-						return nil, connect.NewError(connect.CodeInternal, saveErr)
+						return nil, svcerr.WrapOr(saveErr, svcerr.Internal("failed to save messages"))
 					}
 					resumeMessagesSaved = true
 					resumePresavedMessageID = presavedID
 
 					outcome, resumeErr := s.runs.ResumeInterrupted(ctx, req.Msg.ChatId, inputUpdate)
 					if resumeErr != nil {
-						return nil, connect.NewError(connect.CodeInternal, resumeErr)
+						return nil, svcerr.WrapOr(resumeErr, svcerr.Internal("failed to resume the interrupted run"))
 					}
 					if outcome.Kind == runs.OutcomeResumed {
 						s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
@@ -1137,15 +1126,13 @@ func (s *Service) SendMessage(
 	// StartChat's.
 	workflowID := chat.MainThreadID()
 	if workflowID == "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("chat has not started; call StartChat"))
+		return nil, svcerr.WithReason(svcerr.FailedPrecondition("chat has not started; call StartChat"), errreason.ChatNotStarted)
 	}
 
 	// A started chat's workflow is fixed. Switching is only possible while a
 	// chat is pending, and StartChat owns that.
 	if req.Msg.Workflow != nil && *req.Msg.Workflow != "" && *req.Msg.Workflow != workflowName {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("cannot change workflow after chat has started - use Branch to create a new chat with a different workflow"))
+		return nil, svcerr.FailedPrecondition("cannot change workflow after chat has started - use Branch to create a new chat with a different workflow")
 	}
 
 	// The request's presets replace the chat's. Applied in memory here, and
@@ -1235,8 +1222,7 @@ func (s *Service) SendMessage(
 
 		saved, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to save messages for new workflow", "error", err, "chatID", req.Msg.ChatId)
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save messages"))
 		}
 		savedMessageID = saved
 	}
@@ -1245,6 +1231,7 @@ func (s *Service) SendMessage(
 	// so a composer still sending the original pin does not repeat the notice.
 	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
 		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
+	s.refreshChatProvider(ctx, userID, chat, workflowName, initialData)
 	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
 
 	// Inject session daemon if set on chat
@@ -1268,15 +1255,14 @@ func (s *Service) SendMessage(
 		Inputs:       initialData,
 		ExecContext:  execContext,
 		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, req.Msg.ChatId),
-		Resume:       resumeInput,
+		Resume:       resumeWholeChatInput(resumeInput),
 
 		GreenfieldProbe: greenfieldProbe,
 	}
 
 	workflowRun, err := s.deps.Temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to start workflow", "error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to start workflow"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to start workflow"))
 	}
 
 	runID := workflowRun.GetRunID()
@@ -1322,13 +1308,13 @@ func (s *Service) SendAgentMessage(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 	if req.Msg.ThreadId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("thread_id is required"))
+		return nil, svcerr.InvalidArgument("thread_id is required")
 	}
 	if strings.TrimSpace(req.Msg.Message) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("message is required"))
+		return nil, svcerr.InvalidArgument("message is required")
 	}
 	clientID, err := parseClientMessageID(req.Msg.GetClientMessageId())
 	if err != nil {
@@ -1339,20 +1325,26 @@ func (s *Service) SendAgentMessage(
 	// thread.ChatID check below, this is what stops a user from addressing
 	// an arbitrary thread in someone else's chat.
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
-	if err != nil || chat == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+	}
+	if chat == nil {
+		return nil, svcerr.NotFound("chat")
 	}
 
 	target, err := s.deps.Repo.GetThread(ctx, req.Msg.ThreadId)
-	if err != nil || target == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get thread"))
+	}
+	if target == nil {
+		return nil, svcerr.NotFound("thread")
 	}
 	if target.ChatID != req.Msg.ChatId {
 		// Deliberately the same NotFound the chat-ownership check above
 		// returns, rather than a distinguishable error: revealing that a
 		// thread ID exists but belongs to a different chat is an
 		// enumeration leak we don't need to offer.
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
+		return nil, svcerr.NotFound("thread")
 	}
 
 	// A repeat of a send whose message the agent already read is answered with
@@ -1363,11 +1355,11 @@ func (s *Service) SendAgentMessage(
 	if clientID != "" {
 		prior, err := s.deps.Repo.GetAgentMessage(ctx, clientID)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check for an earlier send: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check for an earlier send"))
 		}
 		if prior != nil {
 			if !humanMessageIs(prior, chat.ID, req.Msg.Message, req.Msg.Attachments) {
-				return nil, errClientMessageReused()
+				return nil, launch.ErrClientMessageReused
 			}
 			if prior.Status == core.AgentMessageStatusDelivered {
 				return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
@@ -1507,11 +1499,7 @@ func (s *Service) SendAgentMessage(
 	// queued twice.
 	queued, inserted, err := s.enqueueHumanMessage(ctx, msg, clientID != "")
 	if err != nil {
-		if connect.CodeOf(err) != connect.CodeUnknown {
-			return nil, err
-		}
-		logging.ErrorContext(ctx, "Failed to queue agent message", "error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to queue message"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to queue message"))
 	}
 	msg = queued
 	if !inserted && msg.Status != core.AgentMessageStatusQueued {
@@ -1624,11 +1612,14 @@ func (s *Service) notifyThreadWake(ctx context.Context, chat *db.Chat, threadID 
 		workflowID = *chat.WorkflowID
 	}
 	// Every caller is delivering a person's input, so the doorbell says so:
-	// a thread waiting on the user's answer to a question yields to it.
+	// a thread waiting on the user's answer to a question yields to it. The
+	// one exception is an async question's answer (the question service,
+	// threadwake.WithoutQuestionYield): it answers a different question
+	// than the one its thread may be parked on, which must stay open.
 	if err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, "", v2.ThreadWakeSignalName, v2.ThreadWakeSignal{
 		Thread:   threadID,
 		Reason:   reason,
-		FromUser: true,
+		FromUser: threadwake.YieldsQuestions(ctx),
 	}); err != nil {
 		logging.WarnContext(ctx, "Could not wake thread",
 			"error", err, "chatID", chat.ID, "threadID", threadID, "workflowID", workflowID, "reason", string(reason))
@@ -1645,16 +1636,16 @@ func (s *Service) notifyThreadWake(ctx context.Context, chat *db.Chat, threadID 
 //
 // It is the run the closed one would have continued as had the doorbell
 // arrived a moment sooner (late_wake.go): the same workflow at graph entry on
-// the same thread, with the closed run's own inputs — read back with its
-// get_workflow_inputs query, which Temporal answers for a closed workflow too.
-// The queue carries no params of its own to build fresh inputs from.
+// the same thread, with the inputs the closed run was running on
+// (inputsAfterClosedRun: presets plus the chat's stored selection). The queue
+// carries no params of its own to build fresh inputs from.
 //
 // Ordering is what keeps the reconciler off the row. The closed run left the
 // thread terminal, and a terminal thread with queued mail is exactly what
 // resolveOrphanedAgentMessages marks undelivered; so the thread is revived
 // BEFORE the run starts, and the sweep never sees the row as orphaned.
 //
-// If the inputs cannot be read, the row is withdrawn and the user told to send
+// If the run cannot be started, the row is withdrawn and the user told to send
 // it as a message — the composer keeps the text on a refusal — rather than
 // promised a delivery nothing will make.
 func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threadID, messageID string) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
@@ -1674,19 +1665,10 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 	if chat.WorkflowName == nil || *chat.WorkflowName == "" {
 		return refuse(fmt.Errorf("chat has no workflow"))
 	}
-	encoded, err := s.deps.Temporal.QueryWorkflow(ctx, workflowID, "", "get_workflow_inputs")
-	if err != nil {
-		return refuse(err)
-	}
-	var inputs map[string]interface{}
-	if err := encoded.Get(&inputs); err != nil {
-		return refuse(err)
-	}
+	inputs := s.inputsAfterClosedRun(ctx, chat, *chat.WorkflowName)
 	// This run answers a person, not whatever launched the chat.
 	delete(inputs, v2.InputKeyLaunchRun)
 	v2.DropActingIdentity(inputs)
-	inputs = s.overSelection(ctx, chat.ID, *chat.WorkflowName, inputs)
-	s.refreshProviderPolicy(ctx, chat, inputs)
 	launch.InjectSessionDaemonID(inputs, chat)
 
 	if _, err := s.deps.Repo.ReviveThread(ctx, threadID); err != nil {
@@ -1709,6 +1691,7 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 		Inputs:       inputs,
 		ExecContext:  execContext,
 		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, chat.ID),
+		Resume:       resumeWholeChatInput(nil),
 	})
 	if err != nil {
 		return refuse(err)
@@ -1780,32 +1763,37 @@ func (s *Service) ListQueuedAgentMessages(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 	if req.Msg.ThreadId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("thread_id is required"))
+		return nil, svcerr.InvalidArgument("thread_id is required")
 	}
 
 	// Ownership check: mirrors SendAgentMessage exactly -- the chat must
 	// belong to the caller, and the thread must belong to that chat, both
 	// returning the same NotFound so thread IDs can't be enumerated.
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
-	if err != nil || chat == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+	}
+	if chat == nil {
+		return nil, svcerr.NotFound("chat")
 	}
 
 	target, err := s.deps.Repo.GetThread(ctx, req.Msg.ThreadId)
-	if err != nil || target == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get thread"))
+	}
+	if target == nil {
+		return nil, svcerr.NotFound("thread")
 	}
 	if target.ChatID != req.Msg.ChatId {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
+		return nil, svcerr.NotFound("thread")
 	}
 
 	queued, err := s.deps.Repo.ListQueuedAgentMessagesForThread(ctx, req.Msg.ThreadId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list queued agent messages", "error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list queued messages"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list queued messages"))
 	}
 
 	messages := make([]*reliantv1.QueuedAgentMessage, len(queued))
@@ -1840,10 +1828,10 @@ func (s *Service) CancelQueuedAgentMessage(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 	if req.Msg.MessageId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("message_id is required"))
+		return nil, svcerr.InvalidArgument("message_id is required")
 	}
 
 	// Ownership check: the chat must belong to the caller. The DELETE
@@ -1851,14 +1839,16 @@ func (s *Service) CancelQueuedAgentMessage(
 	// a message ID from another chat, this ownership check is what stops
 	// them from cancelling it.
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
-	if err != nil || chat == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+	}
+	if chat == nil {
+		return nil, svcerr.NotFound("chat")
 	}
 
 	cancelled, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, req.Msg.MessageId, req.Msg.ChatId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to cancel queued agent message", "error", err, "chatID", req.Msg.ChatId, "messageID", req.Msg.MessageId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to cancel message"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to cancel message"))
 	}
 
 	if !cancelled {

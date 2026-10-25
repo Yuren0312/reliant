@@ -23,6 +23,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -30,7 +31,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
-	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
 
 const (
@@ -61,8 +62,7 @@ type fakeGitHub struct {
 func newFake(t *testing.T) *fakeGitHub {
 	t.Helper()
 	f := &fakeGitHub{t: t, routes: map[string]http.HandlerFunc{}}
-	f.srv = httptest.NewTLSServer(http.HandlerFunc(f.serve))
-	t.Cleanup(f.srv.Close)
+	f.srv = netguardtest.NewTLSServer(t, http.HandlerFunc(f.serve))
 	return f
 }
 
@@ -146,8 +146,7 @@ func (f *fakeGitHub) action(id string) (*reliantv1.IntegrationManifest, *reliant
 func (f *fakeGitHub) runner() *httpaction.Runner {
 	pool := x509.NewCertPool()
 	pool.AddCert(f.srv.Certificate())
-	g := netguard.New()
-	g.AllowLoopback = true
+	g := netguardtest.Guard()
 	return httpaction.NewRunner(g).WithRootCAs(pool)
 }
 
@@ -1035,6 +1034,7 @@ var errorCases = []errorCase{
 }
 
 func TestErrorMappingForEveryAction(t *testing.T) {
+	testkit.Slow(t, "runs every action against every error case over an HTTP test server")
 	for id, params := range minimal {
 		for _, tc := range errorCases {
 			t.Run(id+"/"+tc.name, func(t *testing.T) {

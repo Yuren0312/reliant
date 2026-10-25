@@ -52,7 +52,7 @@ type APIHTTPRoutesDeps struct {
 	// Required.
 	Auth *UserAuth
 	// Repo is the database. Required.
-	Repo db.Repository
+	Repo APIHTTPRoutesStore
 	// Router reaches the user's daemons: the terminal websocket and the
 	// connector MCP endpoint are a route to one. Required.
 	Router toolexec.DaemonRouter
@@ -83,6 +83,21 @@ type APIHTTPRoutesDeps struct {
 	// ControlPlaneURL wakes a suspended workspace for a connector request;
 	// empty reports it as one that cannot be started.
 	ControlPlaneURL string
+	// HostedHTTPRedeem is the internally authenticated controller ticket route.
+	// Optional on deployments without hosted execution; no public auth fallback.
+	HostedHTTPRedeem http.Handler
+}
+
+// APIHTTPRoutesStore is what the routes read from the database. The routes
+// only forward it: the attachment bytes to the attachment handler, the
+// working-directory classification to the terminal websocket, and the daemon
+// attachments to the connector endpoint's workspace waker.
+type APIHTTPRoutesStore interface {
+	attachment.Repository
+	mcpserver.AttachmentReader
+	// The terminal websocket's checkouts (terminal.WithTerminalCheckouts).
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
 }
 
 // NewAPIHTTPRoutes builds the routes; nothing is mounted until Register.
@@ -109,6 +124,9 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	// Inbound trigger receivers: authenticated by the trigger's own token or
 	// the provider's signature rather than a user's JWT.
 	deps.Inbound.Register(handle)
+	if deps.HostedHTTPRedeem != nil {
+		handle("/internal/hosted-http/redeem", deps.HostedHTTPRedeem)
+	}
 
 	// Connector MCP endpoint: third-party MCP clients (ChatGPT, Claude, and
 	// their mobile apps) driving a cloud daemon under a connector grant.
@@ -135,7 +153,7 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 
 	// JSON health endpoint on the API listener so the frontend can discover
 	// auth_mode without needing to reach the dedicated health port
-	// (web/src/hooks/useAuthMode.ts).
+	// (frontends/web/src/hooks/useAuthMode.ts).
 	authMode := settings.ModeName()
 	handle("/health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -190,7 +208,7 @@ func terminalTokenValidator(settings auth.Settings) auth.TokenValidator {
 var corsAllowedHeaders = []string{
 	"Accept", "Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms",
 	"X-CSRF-Token", "traceparent", "tracestate", "sentry-trace", "baggage", "Range",
-	// The last DAEMON_HEARTBEAT the web client saw (web/src/api/transport.ts),
+	// The last DAEMON_HEARTBEAT the web client saw (frontends/web/src/api/transport.ts),
 	// which lets the auth interceptor skip the IsDaemonOnline query. The client
 	// attaches it to every RPC once a cloud machine heartbeats; missing here,
 	// it made every web RPC fail CORS for any user with a running machine.
@@ -206,11 +224,21 @@ var corsAllowedHeaders = []string{
 // fails when a header it reads is missing here.
 var corsExposedHeaders = []string{
 	"Link", "Content-Range", "Accept-Ranges", "Content-Length",
-	// The billing/quota reason and upgrade link on a Connect error. The web
-	// client's upgradeInterceptor (web/src/api/upgradeInterceptor.ts) reads
-	// them on errors from every transport to open the upgrade and
-	// billing-email modals instead of a raw error toast.
-	"X-Reliant-Reason", "X-Reliant-Upgrade-Url",
+	// forge's svcerr.ReasonHeader: the stable reason on a Connect error that
+	// the web client branches on instead of the message text — every reader
+	// goes through frontends/web/src/lib/errorReasons.ts. The control plane
+	// exposes it through forge's DefaultCORSExposeHeaders; a reliant RPC that
+	// returns one must be readable the same way, or a cross-origin browser
+	// (the hosted SPA, Electron's app://) reads every reason as absent.
+	"X-Forge-Error-Reason",
+	// The scopes a scope_missing refusal names (errorReasons.ts errorScopes),
+	// so the deploy panel says which grant to ask for without parsing prose.
+	"X-Forge-Error-Scopes",
+	// The pre-svcerr reason header (forge_api_disabled here; the billing and
+	// daemon-gate reasons on the control plane). Read as a fallback until
+	// both servers send X-Forge-Error-Reason (P9 R3, expand/contract), then
+	// deleted with the web's fallback.
+	"X-Reliant-Reason",
 }
 
 // newCORSHandler builds the CORS middleware that wraps the entire mux. An
@@ -252,7 +280,7 @@ func bindEventStreams(next http.Handler) http.Handler {
 // it: grants resolves each call's connector grant and OAuth client binding,
 // and router carries the call to the grant's daemon.
 func connectorMCPRoutes(
-	database db.Repository,
+	database mcpserver.AttachmentReader,
 	grants connectorgrant.Store,
 	router toolexec.DaemonRouter,
 	publicURL string,

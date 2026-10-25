@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,6 +90,8 @@ func newTestToolCall(f toolCallFixture, id string) *ToolCall {
 }
 
 func TestUpsertAndGetToolCall(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -113,6 +117,8 @@ func TestUpsertAndGetToolCall(t *testing.T) {
 // re-sending the same call must converge on one row rather than fail on the
 // primary key -- that is the whole reason these are upserts.
 func TestUpsertToolCallIsIdempotent(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -143,6 +149,8 @@ func TestUpsertToolCallIsIdempotent(t *testing.T) {
 // completion time. The repository rejects it earlier with a named error, but
 // both layers must hold.
 func TestUpsertToolCallRejectsCompletedWithoutCompletedAt(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -158,6 +166,8 @@ func TestUpsertToolCallRejectsCompletedWithoutCompletedAt(t *testing.T) {
 }
 
 func TestUpsertToolCallResultIsIdempotent(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -182,7 +192,7 @@ func TestUpsertToolCallResultIsIdempotent(t *testing.T) {
 	result.UpdatedAt = time.Now().UTC()
 	require.NoError(t, repo.UpsertToolCallResult(ctx, f.chatID, result))
 
-	results, err := repo.ListToolCallResultsByMessageIDs(ctx, []string{f.messageID})
+	results, err := store.ListToolCallResultsByMessageIDs(ctx, repo.ORM(), []string{f.messageID})
 	require.NoError(t, err)
 	require.Len(t, results, 1, "a second result for the same call must replace, not duplicate")
 	require.Equal(t, "second", results[0].Content)
@@ -194,6 +204,8 @@ func TestUpsertToolCallResultIsIdempotent(t *testing.T) {
 // the LLM a tool_use block without a matching tool_result) relies on repair
 // code noticing after the fact.
 func TestToolCallResultRequiresExistingCall(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -214,6 +226,8 @@ func TestToolCallResultRequiresExistingCall(t *testing.T) {
 // Deleting the call must take its result with it; a result that outlives its
 // call is the orphan case in the other direction.
 func TestDeletingToolCallCascadesToResult(t *testing.T) {
+	t.Parallel()
+
 	repo, db, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -246,6 +260,8 @@ func TestDeletingToolCallCascadesToResult(t *testing.T) {
 // id), so these stores hand-build the IN clause. This test is what catches a
 // regression back to the generated version.
 func TestListToolCallsByMessageIDsMatchesEveryID(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -274,12 +290,14 @@ func TestListToolCallsByMessageIDsMatchesEveryID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, calls, 3, "every message id in the batch must match, not just the first")
 
-	results, err := repo.ListToolCallResultsByMessageIDs(ctx, ids)
+	results, err := store.ListToolCallResultsByMessageIDs(ctx, repo.ORM(), ids)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 }
 
 func TestListToolCallsByMessageIDsEmptyInput(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -288,12 +306,14 @@ func TestListToolCallsByMessageIDsEmptyInput(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, calls)
 
-	results, err := repo.ListToolCallResultsByMessageIDs(ctx, nil)
+	results, err := store.ListToolCallResultsByMessageIDs(ctx, repo.ORM(), nil)
 	require.NoError(t, err)
 	require.Empty(t, results)
 }
 
 func TestListToolCallsByChatOrdersByRequestedAt(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -319,6 +339,9 @@ func TestListToolCallsByChatOrdersByRequestedAt(t *testing.T) {
 // Input is nullable because tool arguments have not finished arriving while
 // the assistant message is still streaming.
 func TestToolCallWithNullInput(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -335,6 +358,8 @@ func TestToolCallWithNullInput(t *testing.T) {
 }
 
 func TestGetToolCallNotFound(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()

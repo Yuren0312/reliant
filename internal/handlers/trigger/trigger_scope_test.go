@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -60,6 +61,8 @@ func reposParam(t *testing.T, repos ...string) map[string]*structpb.Value {
 // An activation stores its scope resolved from its params, on create and on
 // every update of them, so routing never needs the workflow to decide.
 func TestActivationProjectsTheScopeFromItsParams(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", scopedActivationYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -98,6 +101,8 @@ func TestActivationProjectsTheScopeFromItsParams(t *testing.T) {
 // be left out any more (T5 refuses it), so this is the optional form
 // (`default: []`), which is how a workflow says "off until you pick some".
 func TestActivationWithoutParamsProjectsAnEmptyScope(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", strings.Replace(scopedActivationYAML,
 		"    required: true\n    min_items: 1\n", "    default: []\n", 1))
@@ -114,6 +119,8 @@ func TestActivationWithoutParamsProjectsAnEmptyScope(t *testing.T) {
 
 // The required form refuses an activation with no repositories outright.
 func TestRequiredScopeInputCannotBeLeftOutOfAnActivation(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", scopedActivationYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -122,7 +129,7 @@ func TestRequiredScopeInputCannotBeLeftOutOfAnActivation(t *testing.T) {
 		Trigger: env.activation("pr", func(d *reliantv1.TriggerDefinition) { d.ConnectionId = &conn.ID }),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "repos is required")
 }
 

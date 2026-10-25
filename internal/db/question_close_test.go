@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -61,6 +62,9 @@ func resolvedQuestionUpdates(t *testing.T, repo *Repo, chatID string) []string {
 }
 
 func TestUpdateThreadStatus_FinishingAThreadClosesItsQuestions(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	for _, status := range []ThreadStatus{ThreadStatusCompleted, ThreadStatusCancelled} {
 		t.Run(core.ThreadStatusLabel(status), func(t *testing.T) {
 			repo, cleanup := SetupTestDB(t)
@@ -102,6 +106,8 @@ func TestUpdateThreadStatus_FinishingAThreadClosesItsQuestions(t *testing.T) {
 // a stopped sub-agent resumed by a message), which only an answer to the
 // still-pending row can end.
 func TestUpdateThreadStatus_FailingAThreadKeepsItsQuestionsAnswerable(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -123,6 +129,8 @@ func TestUpdateThreadStatus_FailingAThreadKeepsItsQuestionsAnswerable(t *testing
 
 // A live status write (started) is not an end.
 func TestUpdateThreadStatus_StartingAThreadLeavesItsQuestions(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -140,6 +148,8 @@ func TestUpdateThreadStatus_StartingAThreadLeavesItsQuestions(t *testing.T) {
 }
 
 func TestCascadeTerminalStatusToThreadSubtree_ClosesTheSubtreesQuestions(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -176,6 +186,8 @@ func TestCascadeTerminalStatusToThreadSubtree_ClosesTheSubtreesQuestions(t *test
 }
 
 func TestReapOrphanedThreads_ClosesTheReapedThreadsQuestions(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

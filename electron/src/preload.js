@@ -65,6 +65,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Get the current config
   getConfig: () => reliantConfig,
   getVersion: () => ipcRenderer.invoke('get-version'),
+  getInstallInfo: () => ipcRenderer.invoke('install:get-info'),
+  markFirstLaunchReported: () => ipcRenderer.invoke('install:mark-first-launch-reported'),
+  setTelemetryUser: (userId) => ipcRenderer.invoke('telemetry:set-user', userId),
   getBackendPort: () => ipcRenderer.invoke('get-backend-port'),
   getWebPort: () => ipcRenderer.invoke('get-web-port'),
   getBackendStatus: () => ipcRenderer.invoke('get-backend-status'),
@@ -421,7 +424,7 @@ const injectReliantConfig = async () => {
       //                  reliant.v1.* services (ProjectService, ChatService, …).
       //                  In prod the two collapse; in cloud-dev they're distinct
       //                  processes on different ports. getGRPCBaseURL() in
-      //                  web/src/api/grpc-client.ts reads window.RELIANT_CONFIG.grpcUrl.
+      //                  frontends/web/src/api/grpc-client.ts reads window.RELIANT_CONFIG.grpcUrl.
       const apiUrl = status?.apiUrl || 'http://localhost:8080';
       const rendererApiUrl = status?.rendererApiUrl || apiUrl;
       return {
@@ -429,7 +432,7 @@ const injectReliantConfig = async () => {
         apiUrl: apiUrl,
         gatewayUrl: status?.gatewayUrl || '',
         // controlPlaneURL = the admin-server origin (billing, coupons,
-        // /api/proxy-session). getControlPlaneURL() in web/src/lib/constants.ts
+        // /api/proxy-session). getControlPlaneURL() in frontends/web/src/lib/constants.ts
         // prefers THIS over the build-time VITE_CONTROL_PLANE_API_URL, so
         // injecting it at runtime lets a config change reach the app without
         // rebuilding the renderer. It was never set, which is why coupons threw

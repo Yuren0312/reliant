@@ -30,7 +30,7 @@ import (
 // The definition's `name:` must match the draft's own name, or an edit
 // re-derives a different slug and every later lookup misses for that reason
 // instead of the one under test.
-func createPersistDraft(t *testing.T, repo db.Repository, status db.WorkflowDraftStatus) *db.WorkflowDraft {
+func createPersistDraft(t *testing.T, repo *db.Repo, status db.WorkflowDraftStatus) *db.WorkflowDraft {
 	t.Helper()
 	now := time.Now()
 	name := "persist-" + uuid.New().String()[:8]
@@ -56,7 +56,7 @@ edges: []
 	return draft
 }
 
-func createValidPersistDraft(t *testing.T, repo db.Repository) *db.WorkflowDraft {
+func createValidPersistDraft(t *testing.T, repo *db.Repo) *db.WorkflowDraft {
 	return createPersistDraft(t, repo, db.WorkflowDraftStatusComplete)
 }
 
@@ -73,7 +73,7 @@ func boolPtr(b bool) *bool { return &b }
 
 // assertUnchanged reads the row back: the rejected write must not have
 // touched it, so it is still the last valid definition and still runnable.
-func assertUnchanged(t *testing.T, repo db.Repository, before *db.WorkflowDraft) {
+func assertUnchanged(t *testing.T, repo *db.Repo, before *db.WorkflowDraft) {
 	t.Helper()
 	stored, err := repo.GetWorkflowDraft(context.Background(), before.ID)
 	require.NoError(t, err)
@@ -100,6 +100,16 @@ func TestEditWorkflow_CompleteWorkflowRejectsInvalidEdit(t *testing.T) {
 		assert.Contains(t, resp.Content, "NOT updated")
 		assert.Contains(t, resp.Content, "no-such-node")
 		assert.Contains(t, resp.Content, "complete: false", "the rejection names the way to keep iterating")
+		assertUnchanged(t, repo, draft)
+	})
+
+	t.Run("unknown runtime key is rejected without changing the runnable row", func(t *testing.T) {
+		draft := createValidPersistDraft(t, repo)
+		resp := runWorkflowTool(t, tool, EditWorkflowToolName, EditWorkflowParams{
+			ID: draft.ID, OldString: "edges: []", NewString: "edges: []\ninvented_runtime_field: true",
+		})
+		assert.True(t, resp.IsError, "%s", resp.Content)
+		assert.Contains(t, resp.Content, "invented_runtime_field")
 		assertUnchanged(t, repo, draft)
 	})
 

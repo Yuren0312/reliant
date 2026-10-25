@@ -97,7 +97,7 @@ func newNestedAgentFixture(t *testing.T, noMachine bool) *nestedAgentFixture {
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(),
 		connections.OAuthClientsFromEnv(func(string) string { return "" }))
 	require.NoError(t, err)
-	store := h.Repo().(*db.Repo).Connections()
+	store := h.Repo().Connections()
 	tokens := connections.NewTokenSource(store, v, providers, nil)
 	broker := connections.NewBroker(store, v, providers, nil, "https://reliant.example")
 	_, err = connections.NewService(store, v, providers, tokens, broker, nil).CreateAPIKey(ctx, connections.CreateAPIKeyParams{
@@ -146,6 +146,8 @@ func (f *nestedAgentFixture) turn(t *testing.T) []string {
 // all of them, whether or not its run has a machine, on the thread layout a
 // nested workflow node produces.
 func TestAgentNodeIsOfferedItsIntegrationToolsAndResponseTool(t *testing.T) {
+	t.Parallel()
+
 	for name, noMachine := range map[string]bool{"no machine": true, "machine attached": false} {
 		t.Run(name, func(t *testing.T) {
 			f := newNestedAgentFixture(t, noMachine)

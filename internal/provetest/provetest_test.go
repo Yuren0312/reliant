@@ -3,6 +3,7 @@ package provetest
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,14 +24,63 @@ const (
 	fixedCalc = "package calc\n\nfunc Add(a, b int) int { return a + b }\n"
 )
 
+// gitRepoTemplate is the repository gitRepo hands out, built once per test
+// binary and copied per test. Every git process is a fork and an exec, and on a
+// machine with every heavy slot busy the box sustains only a few execs a second
+// across all its processes: building the same three-command repository in
+// each of ~30 tests was a large share of the package's -short run.
+var gitRepoTemplate struct {
+	once sync.Once
+	dir  string
+	err  error
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if gitRepoTemplate.dir != "" {
+		_ = os.RemoveAll(gitRepoTemplate.dir)
+	}
+	os.Exit(code)
+}
+
+func buildGitRepoTemplate() (string, error) {
+	dir, err := os.MkdirTemp("", "provetest-template-")
+	if err != nil {
+		return "", err
+	}
+	gitRepoTemplate.dir = dir
+	for _, step := range [][]string{
+		{"init", "-q"},
+		// No housekeeping child after the commit: nothing here needs it.
+		{"config", "maintenance.auto", "false"},
+		{"config", "gc.auto", "0"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, step...)...).CombinedOutput(); err != nil {
+			return "", fmt.Errorf("git %v: %v: %s", step, err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "calc.go"), []byte(buggyCalc), 0o644); err != nil {
+		return "", err
+	}
+	for _, step := range [][]string{
+		{"add", "-A"},
+		{"-c", "user.name=prove-test", "-c", "user.email=prove-test@example.com", "-c", "commit.gpgsign=false", "commit", "-qm", "buggy add"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, step...)...).CombinedOutput(); err != nil {
+			return "", fmt.Errorf("git %v: %v: %s", step, err, out)
+		}
+	}
+	return dir, nil
+}
+
 // gitRepo creates a repository whose HEAD holds the buggy calc.go and whose
 // working tree holds the fix — the state an agent is in after writing a fix.
 func gitRepo(t *testing.T) string {
 	t.Helper()
+	gitRepoTemplate.once.Do(func() { _, gitRepoTemplate.err = buildGitRepoTemplate() })
+	require.NoError(t, gitRepoTemplate.err, "build the repository template")
 	dir := t.TempDir()
-	git(t, dir, "init", "-q")
-	writeFile(t, dir, "calc.go", buggyCalc)
-	commitAll(t, dir, "buggy add")
+	require.NoError(t, os.CopyFS(dir, os.DirFS(gitRepoTemplate.dir)))
 	writeFile(t, dir, "calc.go", fixedCalc)
 	return dir
 }
@@ -99,6 +150,9 @@ func activeJournalEntries(t *testing.T, dir string) []string {
 }
 
 func TestProve_Proven(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	runner := &observingRunner{dir: dir}
 
@@ -118,6 +172,9 @@ func TestProve_Proven(t *testing.T) {
 }
 
 func TestProve_PassesWithoutFix(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	report, err := prove(t, dir, func(context.Context) RunOutcome { return RunOutcome{Output: "ok"} }, "calc.go")
 	require.NoError(t, err)
@@ -126,6 +183,9 @@ func TestProve_PassesWithoutFix(t *testing.T) {
 }
 
 func TestProve_FailsWithFix(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	report, err := prove(t, dir, func(context.Context) RunOutcome { return RunOutcome{ExitCode: 1, Output: "FAIL"} }, "calc.go")
 	require.NoError(t, err)
@@ -134,6 +194,9 @@ func TestProve_FailsWithFix(t *testing.T) {
 }
 
 func TestProve_BaselineCompileFailureIsNotProof(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	run := func(context.Context) RunOutcome {
 		if strings.Contains(readFile(t, dir, "calc.go"), "a - b") {
@@ -150,6 +213,9 @@ func TestProve_BaselineCompileFailureIsNotProof(t *testing.T) {
 }
 
 func TestProve_RestoresWhenTheRunnerTimesOut(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	run := func(context.Context) RunOutcome {
 		return RunOutcome{ExitCode: -1, TimedOut: true, Output: "still compiling..."}
@@ -164,21 +230,27 @@ func TestProve_RestoresWhenTheRunnerTimesOut(t *testing.T) {
 // A runner that ignores both its own timeout and cancellation must not hold
 // the baseline in place forever: the backstop abandons it and restores.
 func TestProve_RestoresWhenTheRunnerHangs(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
+	var runnerReturned atomic.Bool
 	run := func(context.Context) RunOutcome {
 		<-release
+		runnerReturned.Store(true)
 		return RunOutcome{}
 	}
 
-	start := time.Now()
 	report, err := Prove(context.Background(), Options{
 		Workspace: dir, Files: []string{"calc.go"}, Run: run, RunTimeout: 200 * time.Millisecond,
 	})
 	require.NoError(t, err)
 
-	assert.Less(t, time.Since(start), 5*time.Second)
+	// Prove returned while the runner is still parked on release: it abandoned
+	// the hung command rather than waiting for it. No wall-clock bound needed.
+	assert.False(t, runnerReturned.Load(), "Prove must return without the hung runner having finished")
 	assert.Equal(t, VerdictInconclusive, report.Verdict)
 	assert.True(t, report.Before.TimedOut)
 	assert.Equal(t, fixedCalc, readFile(t, dir, "calc.go"), "the fix must be back while the hung command is still running")
@@ -186,6 +258,9 @@ func TestProve_RestoresWhenTheRunnerHangs(t *testing.T) {
 }
 
 func TestProve_RestoresOnCancellation(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -214,6 +289,9 @@ func TestProve_RestoresOnCancellation(t *testing.T) {
 }
 
 func TestProve_RestoresWhenTheRunnerPanics(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	calls := 0
 	run := func(context.Context) RunOutcome {
@@ -231,7 +309,10 @@ func TestProve_RestoresWhenTheRunnerPanics(t *testing.T) {
 	assert.Equal(t, fixedCalc, readFile(t, dir, "calc.go"))
 }
 
+// Not parallel: testHookAfterSwap is package state, and a parallel proof would
+// panic in it too. Parallel tests wait until every serial one has finished.
 func TestProve_RestoresWhenProveItselfPanics(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	dir := gitRepo(t)
 	testHookAfterSwap = func() { panic("boom after swap") }
 	t.Cleanup(func() { testHookAfterSwap = nil })
@@ -250,6 +331,9 @@ func TestProve_RestoresWhenProveItselfPanics(t *testing.T) {
 // Another agent writes the file while it holds the baseline. Their write is
 // kept, never clobbered; the fix is preserved where the result says.
 func TestProve_ConcurrentModificationKeepsTheirContent(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	const theirs = "package calc\n\n// another agent's edit\nfunc Add(a, b int) int { return b + a }\n"
 	dir := gitRepo(t)
 	afterRuns := 0
@@ -283,6 +367,9 @@ func TestProve_ConcurrentModificationKeepsTheirContent(t *testing.T) {
 // Rewriting the file with the SAME baseline bytes is still someone else's
 // write — a deliberate revert, say — and must not be overwritten either.
 func TestProve_IdenticalRewriteIsStillAConflict(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	run := func(context.Context) RunOutcome {
 		path := filepath.Join(dir, "calc.go")
@@ -304,6 +391,8 @@ func TestProve_IdenticalRewriteIsStillAConflict(t *testing.T) {
 // without the workspace check the proof would go ahead and rewrite it — the
 // refusal is the only thing that can make these cases pass.
 func TestProve_RefusesPathsOutsideTheWorkspace(t *testing.T) {
+	t.Parallel()
+
 	// The workspace is a subdirectory of the repository (a project inside a
 	// monorepo), so "../calc.go" is in the same repo yet outside the workspace.
 	repoRoot := gitRepo(t)
@@ -343,6 +432,9 @@ func TestProve_RefusesPathsOutsideTheWorkspace(t *testing.T) {
 }
 
 func TestProve_SerializesConcurrentCallsOnTheSameFile(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	var active, maxActive atomic.Int32
 	run := func(context.Context) RunOutcome {
@@ -409,6 +501,9 @@ func orphanSwap(t *testing.T, dir, rel string) {
 }
 
 func TestProve_RecoversASwapLeftByACrashedRun(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	orphanSwap(t, dir, "calc.go")
 	require.Equal(t, buggyCalc, readFile(t, dir, "calc.go"), "precondition: the crash left the baseline on disk")
@@ -428,6 +523,9 @@ func TestProve_RecoversASwapLeftByACrashedRun(t *testing.T) {
 // Recovery is not limited to the files a later call names: any orphan whose
 // lock is free is put back.
 func TestProve_RecoversOrphansOfOtherFiles(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	writeFile(t, dir, "other.go", "package calc\n\nconst Version = 1\n")
 	git(t, dir, "add", "other.go")
@@ -446,6 +544,9 @@ func TestProve_RecoversOrphansOfOtherFiles(t *testing.T) {
 // A crashed run that had put back a file the fix deleted — inside directories
 // it created — leaves both behind; recovery removes them again.
 func TestProve_RecoveryRemovesWhatACrashedRunRecreated(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	writeFile(t, dir, "legacy/override/override.go", "package override\n")
 	git(t, dir, "add", "legacy")
@@ -465,6 +566,9 @@ func TestProve_RecoveryRemovesWhatACrashedRunRecreated(t *testing.T) {
 // A call that is refused after recovery ran must still say what it
 // recovered: the agent has to learn its file was put back.
 func TestProve_ReportsRecoveryEvenWhenTheCallFails(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	orphanSwap(t, dir, "calc.go")
 
@@ -478,6 +582,9 @@ func TestProve_ReportsRecoveryEvenWhenTheCallFails(t *testing.T) {
 }
 
 func TestProve_RecoveryNeverClobbersALaterEdit(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	orphanSwap(t, dir, "calc.go")
 	const edited = "package calc\n\n// edited after the crash\nfunc Add(a, b int) int { return a + b }\n"
@@ -494,6 +601,9 @@ func TestProve_RecoveryNeverClobbersALaterEdit(t *testing.T) {
 }
 
 func TestProve_FileAddedByTheFixIsRemovedForTheBeforeRun(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	writeFile(t, dir, "internal/helper/helper.go", "package helper\n")
 	var existedBefore, existedAfter bool
@@ -519,6 +629,9 @@ func TestProve_FileAddedByTheFixIsRemovedForTheBeforeRun(t *testing.T) {
 }
 
 func TestProve_FileDeletedByTheFixIsRecreatedForTheBeforeRun(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	writeFile(t, dir, "legacy/override/override.go", "package override\n")
 	commitAll(t, dir, "add override")
@@ -546,6 +659,9 @@ func TestProve_FileDeletedByTheFixIsRecreatedForTheBeforeRun(t *testing.T) {
 }
 
 func TestProve_ExplicitBaselineRevision(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	commitAll(t, dir, "fix add") // HEAD now holds the fix; HEAD~1 the bug
 	writeFile(t, dir, "calc.go", fixedCalc+"\n// tidy\n")
@@ -559,6 +675,9 @@ func TestProve_ExplicitBaselineRevision(t *testing.T) {
 }
 
 func TestProve_PreservesTheFileMode(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	if runtime.GOOS == "windows" {
 		t.Skip("no POSIX modes")
 	}
@@ -574,6 +693,9 @@ func TestProve_PreservesTheFileMode(t *testing.T) {
 }
 
 func TestProve_SkipsFilesUnchangedFromBaseline(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	writeFile(t, dir, "doc.go", "package calc\n")
 	writeFile(t, dir, "calc.go", buggyCalc)
@@ -594,6 +716,8 @@ func TestProve_SkipsFilesUnchangedFromBaseline(t *testing.T) {
 // git would find no such path at baseline and the proof would delete the file
 // for the before-run. The path must be read back in the stored case.
 func TestProve_MiscasedPathOnACaseInsensitiveFilesystem(t *testing.T) {
+	t.Parallel()
+
 	dir := gitRepo(t)
 	if _, err := os.Stat(filepath.Join(dir, "CALC.GO")); err != nil {
 		t.Skip("filesystem is case-sensitive")
@@ -618,6 +742,9 @@ func TestProve_MiscasedPathOnACaseInsensitiveFilesystem(t *testing.T) {
 }
 
 func TestProve_WarnsWhenTheTestFileIsNamed(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	writeFile(t, dir, "calc_test.go", "package calc\n")
 	report, err := prove(t, dir, (&observingRunner{dir: dir}).run, "calc.go", "calc_test.go")
@@ -627,6 +754,9 @@ func TestProve_WarnsWhenTheTestFileIsNamed(t *testing.T) {
 }
 
 func TestProve_RefusesBadRequests(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
+	t.Parallel()
+
 	dir := gitRepo(t)
 	noop := func(context.Context) RunOutcome { return RunOutcome{} }
 
@@ -651,6 +781,8 @@ func TestProve_RefusesBadRequests(t *testing.T) {
 // End to end with a real `go test`: the failure the before-run reports is the
 // test's own assertion, not a stand-in.
 func TestProve_RealGoTest(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("compiles and runs a real `go test` twice; skipped under -short")
 	}
@@ -672,6 +804,8 @@ func TestProve_RealGoTest(t *testing.T) {
 }
 
 func TestProve_RealGoTestBaselineDoesNotCompile(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("compiles and runs a real `go test`; skipped under -short")
 	}

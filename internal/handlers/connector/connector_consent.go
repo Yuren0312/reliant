@@ -4,13 +4,13 @@ package connector
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
@@ -30,13 +30,12 @@ func (s *Service) AuthorizeClient(
 ) (*connect.Response[reliantv1.AuthorizeClientResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	clientID := strings.TrimSpace(req.Msg.GetClientId())
 	if clientID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("client id is required"))
+		return nil, svcerr.InvalidArgument("client id is required")
 	}
 
 	grant, credential, err := s.grantForConsent(ctx, userID, req.Msg)
@@ -52,7 +51,7 @@ func (s *Service) AuthorizeClient(
 		ClientName: strings.TrimSpace(req.Msg.GetClientName()),
 	}
 	if err := s.deps.Grants.PutBinding(ctx, binding); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("record consent: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record consent"))
 	}
 
 	return connect.NewResponse(&reliantv1.AuthorizeClientResponse{
@@ -78,36 +77,36 @@ func (s *Service) grantForConsent(
 
 	switch {
 	case existingID != "" && newConnector != nil:
-		return nil, "", connect.NewError(connect.CodeInvalidArgument,
-			errors.New("specify either an existing connector or a new one, not both"))
+		return nil, "", svcerr.InvalidArgument("specify either an existing connector or a new one, not both")
 
 	case existingID != "":
 		// Scoped by user, so a guessed id cannot bind a client to someone
 		// else's connector.
 		grant, err := s.deps.Grants.GetGrant(ctx, userID, existingID)
+		if errors.Is(err, connectorgrant.ErrNotFound) {
+			return nil, "", svcerr.NotFound("connector")
+		}
 		if err != nil {
-			return nil, "", connect.NewError(connect.CodeNotFound, errors.New("connector not found"))
+			return nil, "", svcerr.WrapOr(err, svcerr.Internal("failed to get connector"))
 		}
 		if err := grant.IsLive(time.Now()); err != nil {
-			return nil, "", connect.NewError(connect.CodeFailedPrecondition,
-				errors.New("that connector has been revoked or has expired"))
+			return nil, "", svcerr.FailedPrecondition("that connector has been revoked or has expired")
 		}
 		return grant, "", nil
 
 	case newConnector != nil:
 		grant, err := s.buildGrant(userID, newConnector)
 		if err != nil {
-			return nil, "", connect.NewError(connect.CodeInvalidArgument, err)
+			return nil, "", err
 		}
 		raw, err := s.createGrantWithCredential(ctx, grant)
 		if err != nil {
-			return nil, "", connect.NewError(connect.CodeInternal, err)
+			return nil, "", svcerr.WrapOr(err, svcerr.Internal("failed to create connector"))
 		}
 		return grant, raw, nil
 
 	default:
-		return nil, "", connect.NewError(connect.CodeInvalidArgument,
-			errors.New("choose an existing connector or describe a new one"))
+		return nil, "", svcerr.InvalidArgument("choose an existing connector or describe a new one")
 	}
 }
 
@@ -119,12 +118,12 @@ func (s *Service) ListAuthorizedClients(
 ) (*connect.Response[reliantv1.ListAuthorizedClientsResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	bindings, err := s.deps.Grants.ListBindingsByUser(ctx, userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list authorized clients: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list authorized clients"))
 	}
 
 	// Connector names are resolved so the UI can say "ChatGPT → my-project"
@@ -160,17 +159,17 @@ func (s *Service) RevokeClientAuthorization(
 ) (*connect.Response[reliantv1.RevokeClientAuthorizationResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	clientID := strings.TrimSpace(req.Msg.GetClientId())
 	if clientID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("client id is required"))
+		return nil, svcerr.InvalidArgument("client id is required")
 	}
 
 	revoked, err := s.deps.Grants.DeleteBinding(ctx, userID, clientID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("revoke authorization: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to revoke authorization"))
 	}
 	return connect.NewResponse(&reliantv1.RevokeClientAuthorizationResponse{Revoked: revoked}), nil
 }

@@ -4,7 +4,9 @@ package controlplane.v1;
 
 import "buf/validate/validate.proto";
 import "controlplane/v1/deploy.proto";
+import "controlplane/v1/issues.proto";
 import "forge/v1/forge.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/reliant-labs/control-plane/gen/services/observability/v1;observabilityv1";
@@ -21,7 +23,9 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/observab
 // ORG-SCOPED, AND THE ORG IS A REQUEST FIELD THAT IS NEVER TRUSTED. Every RPC
 // carries scope.org_id; the handler verifies the caller is a member of that org
 // (controlplane.org_memberships) before touching ClickHouse — a non-member gets
-// PermissionDenied. Every query then runs as THAT org's own ClickHouse user
+// PermissionDenied. A machine credential (CI, an agent) is let in by the obs:read
+// scope instead: it must act for scope.org_id, and its environment binding, if
+// any, must cover scope.env_ids. Every query then runs as THAT org's own ClickHouse user
 // (EXECUTE AS r_<org>), so the database, not this code, is the tenant boundary.
 //
 // BOUNDED. scope.time_range is required on every RPC and capped per RPC (see
@@ -79,7 +83,36 @@ service ObservabilityService {
 
   // QueryMetric returns time series for one metric: an aggregation, optional
   // group-by attribute keys, and a step. Max range 30 days.
+  //
+  // Deprecated: it is a one-series line panel; call QueryPanel instead, which
+  // runs the same evaluator and also returns series_meta, series_total and
+  // warnings. Removed in a follow-up once the console and forge's cloud backend
+  // no longer call it.
   rpc QueryMetric(QueryMetricRequest) returns (QueryMetricResponse) {
+    option deprecated = true;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetMetric is the metric detail the explorer's side pane opens on: the
+  // catalog entry, the export-interval estimate, whether the metric mixes
+  // temporalities, every attribute key with its distinct-value estimate (and
+  // the declared closed value set), and suggested breakdown keys. The range
+  // is capped at 24 hours for the attribute scan. Cached for a minute.
+  rpc GetMetric(GetMetricRequest) returns (GetMetricResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListMetricExemplars returns up to 20 exemplars (a sampled observation with
+  // the trace it came from) of one metric, optionally narrowed to a series
+  // group and a minimum value. Exemplars whose trace is stored sort first.
+  // Max range 7 days.
+  rpc ListMetricExemplars(ListMetricExemplarsRequest) returns (ListMetricExemplarsResponse) {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -192,6 +225,26 @@ service ObservabilityService {
       idempotent: true
     };
   }
+
+  // GetReleaseHealth answers "did this release make things worse": for one
+  // environment and one promotion (default: the environment's current one) it
+  // compares the window before the promotion with the window after, per service,
+  // over weighted server spans, and lists what the release opened: issues first
+  // seen in it, issues it regressed, alerts that opened and are still firing,
+  // and workload restarts. The verdict is PASS, FAIL or INCONCLUSIVE. The
+  // windows, the findings and their default thresholds are defined once, here,
+  // so the console, `forge obs check` and alerting agree.
+  //
+  // scope must name exactly one environment (scope.env_ids has one id);
+  // scope.time_range is ignored: the windows come from the promotion. Reads
+  // issues and alerts as well as telemetry, all under obs:read for a machine
+  // credential.
+  rpc GetReleaseHealth(GetReleaseHealthRequest) returns (GetReleaseHealthResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
 }
 
 // === Shared ===
@@ -295,6 +348,17 @@ enum AttributeOp {
 message TimePoint {
   google.protobuf.Timestamp time = 1;
   double value = 2;
+  // The point's bucket is still open (it ends after now minus the metric's
+  // export interval), so its value may still grow: draw it dashed. Metrics
+  // panels only.
+  bool partial = 3;
+  // No value in this bucket: a gap, not a zero. `value` is 0 and must be
+  // ignored. Metrics panels only (a formula over a missing operand).
+  // A flag rather than `optional double value`: the latter turns the Go field
+  // into *float64 for every message that carries a TimePoint (service
+  // overview trends, QueryMetric, sql panels), a source-breaking change for
+  // callers that never see a gap.
+  bool null = 4;
 }
 
 // === Logs ===
@@ -378,10 +442,20 @@ message ListTracesRequest {
   // environment. scope.filters on span-level keys keep a trace when ANY of its
   // spans matches; on resource keys they select the spans counted.
   repeated string group_by = 8 [(buf.validate.field).repeated.max_items = 3];
+  // Row order. Default newest first.
+  optional TraceOrder order = 9 [(buf.validate.field).enum.defined_only = true];
+}
+
+enum TraceOrder {
+  // Newest first.
+  TRACE_ORDER_UNSPECIFIED = 0;
+  TRACE_ORDER_NEWEST = 1;
+  // Slowest first: the traces to open when latency regressed.
+  TRACE_ORDER_DURATION_DESC = 2;
 }
 
 message ListTracesResponse {
-  // Newest first.
+  // In request.order (default newest first).
   repeated TraceSummary traces = 1;
   string next_page_token = 2;
   // RED summary of the matched traces in the range (not just this page).
@@ -475,7 +549,15 @@ enum MetricType {
   METRIC_TYPE_UNSPECIFIED = 0;
   METRIC_TYPE_GAUGE = 1;
   METRIC_TYPE_SUM = 2; // counters and up-down counters
-  METRIC_TYPE_HISTOGRAM = 3;
+  METRIC_TYPE_HISTOGRAM = 3; // explicit-bounds histogram
+  METRIC_TYPE_EXPONENTIAL_HISTOGRAM = 4;
+  METRIC_TYPE_SUMMARY = 5;
+}
+
+enum MetricTemporality {
+  METRIC_TEMPORALITY_UNSPECIFIED = 0; // gauge, summary, or not known
+  METRIC_TEMPORALITY_DELTA = 1;
+  METRIC_TEMPORALITY_CUMULATIVE = 2;
 }
 
 enum MetricAggregation {
@@ -508,11 +590,134 @@ message ListMetricsResponse {
   bool truncated = 2;
 }
 
+// One catalog entry: what ListMetrics returns and GetMetric echoes. A metric
+// stored as more than one kind appears once per kind.
 message MetricInfo {
   string name = 1;
   MetricType type = 2;
   string unit = 3;
   string description = 4;
+  // Sums only: a counter (true) or an up-down counter (false).
+  bool monotonic = 5;
+  // Sums and histograms: how the SDK exports the value.
+  MetricTemporality temporality = 6;
+  // Up to 10 service.name values that emit the metric, in the scope's range
+  // (the catalog range, capped at 24 hours).
+  repeated string services = 7 [(buf.validate.field).repeated.max_items = 10];
+  // How many distinct services emit it (>= len(services)).
+  int32 service_count = 8;
+  // Newest data point in the range. Unset for a declared metric never seen.
+  google.protobuf.Timestamp last_seen = 9;
+  // Estimated number of distinct series (resource + data-point attributes).
+  int64 series_estimate = 10;
+  // False for a kind the query evaluator cannot run yet.
+  bool queryable = 11;
+  // A runtime or forge built-in metric (rpc., go., forge. prefixes), as
+  // opposed to an application's own.
+  bool builtin = 12;
+  // The release's declared metrics schema lists it; description and stability
+  // then come from the declaration.
+  bool declared = 13;
+  // It has data in the range. false with declared = true: declared but no data
+  // in this window.
+  bool seen = 14;
+  // The declaration's stability: "stable", "experimental" or "deprecated".
+  // Empty when not declared.
+  string stability = 15;
+  // The declared data-point attributes, with the closed value set when the
+  // declaration enumerates one. Empty when not declared.
+  repeated MetricAttributeSpec declared_attributes = 16;
+}
+
+message MetricAttributeSpec {
+  string key = 1;
+  // The declared closed set of values; empty when the attribute is open.
+  repeated string values = 2;
+}
+
+message GetMetricRequest {
+  // The range is capped at the last 24 hours for the attribute scan.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  string metric_name = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 256
+  ];
+  // Unset: looked up from the org's data.
+  optional MetricType metric_type = 3;
+}
+
+message GetMetricResponse {
+  MetricInfo info = 1;
+  // Estimated export interval of the metric's series, in seconds: the floor of
+  // a useful query step. 0 when it cannot be estimated.
+  int32 interval_seconds = 2;
+  // The metric's series report both delta and cumulative temporality.
+  bool mixed_temporality = 3;
+  // At most 200 keys: the data-point attributes and the resource attributes
+  // that vary, most useful breakdown first.
+  repeated MetricAttribute attributes = 4;
+  // Attribute keys worth grouping by, best first: enumerated keys, then keys
+  // with 2 to 50 distinct values.
+  repeated string suggested_breakdowns = 5;
+}
+
+message MetricAttribute {
+  string key = 1;
+  // A resource attribute (service.name, k8s.*), not a data-point attribute.
+  bool resource = 2;
+  // Estimated distinct values over the range.
+  int64 distinct_estimate = 3;
+  // The declared closed value set, when there is one.
+  repeated string enumerated = 4;
+  // Grouping by this key (with the rest of the panel's group-by) could exceed
+  // the series cap; the builder allows it with a top-N.
+  bool high_cardinality = 5;
+}
+
+message ListMetricExemplarsRequest {
+  // Max range 7 days.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  string metric_name = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 256
+  ];
+  // Unset: looked up from the org's data.
+  optional MetricType metric_type = 3;
+  // Narrow to series matching these predicates (same vocabulary as
+  // Panel.where).
+  repeated PanelPredicate where = 4 [(buf.validate.field).repeated.max_items = 10];
+  // Narrow to one series group: attribute key -> value (a PanelSeriesResult.group).
+  map<string, string> group = 5;
+  // The window to read exemplars from, inside scope.time_range (the bucket the
+  // user clicked). Unset: scope.time_range.
+  TimeRange time_range = 6;
+  // Only exemplars whose value is at or above this (the tail of a latency
+  // histogram). Unset: any value.
+  optional double min_value = 7;
+  // Default 20, max 20.
+  int32 limit = 8 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 20
+  ];
+}
+
+message ListMetricExemplarsResponse {
+  // Exemplars whose trace is stored first, then by time.
+  repeated MetricExemplar exemplars = 1;
+}
+
+message MetricExemplar {
+  google.protobuf.Timestamp time = 1;
+  double value = 2;
+  string trace_id = 3;
+  string span_id = 4;
+  // The exemplar's filtered attributes.
+  map<string, string> attributes = 5;
+  // The trace is in the trace store. false: it was sampled out and the trace
+  // view would be empty.
+  bool trace_stored = 6;
 }
 
 message QueryMetricRequest {
@@ -756,9 +961,35 @@ message Workload {
   // returns. Unset when the environment has no recorded bundle or the bundle
   // does not declare it.
   DeclaredWorkload declared = 18;
+  // Whose side the fault is on, when health is not HEALTHY. The platform alerts
+  // on PLATFORM; the console says "this is on us" instead of asking the user to
+  // fix something they cannot.
+  WorkloadCause health_cause = 19;
+  // The raw machinery behind health_reason (the container's last exit reason, the
+  // Kubernetes event reason and its message with addresses removed), for a
+  // "details" disclosure. Never the headline: health_reason is plain language.
+  string health_detail = 20;
 }
 
-// WorkloadHealth is computed once, on the server, from the deploy ledger's
+// WorkloadCause says whose side a workload's fault is on.
+enum WorkloadCause {
+  WORKLOAD_CAUSE_UNSPECIFIED = 0;
+  // Nothing is wrong, or nothing is wrong that anyone must fix (a rollout in
+  // flight, a workload its owner stopped, one nothing has observed yet).
+  WORKLOAD_CAUSE_NONE = 1;
+  // The workload's own: it crashes, runs out of memory, fails its health check,
+  // or names an image that cannot be pulled.
+  WORKLOAD_CAUSE_WORKLOAD = 2;
+  // The platform's: no capacity, our registry or a node or volume fault. The
+  // platform alerts on this.
+  WORKLOAD_CAUSE_PLATFORM = 3;
+  // Unhealthy, and nothing we hold says whose side.
+  WORKLOAD_CAUSE_UNDETERMINED = 4;
+}
+
+// WorkloadHealth is computed once, on the server (internal/workloadhealth), and
+// its reason is plain language: no Kubernetes vocabulary and no addresses. Whose
+// side a fault is on is health_cause. It is computed from the deploy ledger's
 // rollout verdict and observation, the replica counts, and the restarts in the
 // window. The first rule that matches wins:
 //
@@ -910,6 +1141,11 @@ message WorkloadEvent {
   string object_kind = 7;
   string object_name = 8;
   string container = 9;
+  // The reason in plain language ("Waiting for capacity", "Not passing its
+  // readiness check at /readyz"); empty when there is no plain wording and the
+  // raw reason should be shown as it is. `message` is already stripped of pod
+  // and node addresses, node names and internal DNS names.
+  string plain_reason = 10;
 }
 
 message GetWorkloadRequest {
@@ -1071,14 +1307,45 @@ message QueryPanelResponse {
   // sessions panels: browser sessions that started in the range, newest first.
   repeated PanelSession sessions = 11;
   // With QueryPanelRequest.explain: what the panel compiles to, one entry per
-  // statement (a metrics panel runs one per series). Empty otherwise, and for
-  // the console kinds (funnel, issues, sessions), whose statements are the
-  // control plane's own.
+  // statement. A metrics panel lists, for each series, its metric's lookup, its
+  // attribute-key lookup when a group-by or filter needs one, and the series'
+  // own statement. Empty otherwise, and for the console kinds (funnel, issues,
+  // sessions), whose statements are the control plane's own.
   repeated CompiledStatement compiled_sql = 12;
   // heatmap panels: the non-empty cells, by time then value.
   repeated HeatmapCell heatmap = 13;
   // sql panels: the result's columns.
   repeated SqlColumn sql_columns = 14;
+  // metrics panels: what each entry of `series` means, in the same order and
+  // of the same length. Empty for every other signal.
+  repeated PanelSeriesMeta series_meta = 15;
+  // How many series (groups) matched before the cap; compare with
+  // len(series) (or len(rows)) for "showing 10 of 1,204". 0 when unknown or
+  // for a panel that is not capped by series.
+  int32 series_total = 16;
+  // Non-fatal notes about the result, as stable codes: mixed_bounds,
+  // mixed_temporality, step_raised, metric_stored_as_n_kinds. Metrics panels.
+  repeated string warnings = 17;
+}
+
+// What one PanelSeriesResult of a metrics panel measures, so a client can
+// format and label it without re-deriving the metric's semantics.
+message PanelSeriesMeta {
+  // PanelSeriesResult.label of the entry this describes.
+  string label = 1;
+  // The series' metric name. Empty for a formula entry.
+  string metric = 2;
+  MetricType metric_type = 3;
+  bool monotonic = 4;
+  MetricTemporality temporality = 5;
+  // The dashspec agg after defaulting (rate, increase, sum, avg, min, max,
+  // last, count, quantile).
+  string aggregation = 6;
+  // The quantile in (0, 1] when aggregation is "quantile"; 0 otherwise.
+  double quantile = 7;
+  // The unit of the values: <unit>/s for rate, {count} for count, otherwise the
+  // metric's unit.
+  string value_unit = 8;
 }
 
 message FunnelStepResult {
@@ -1406,4 +1673,134 @@ message ServiceUsage {
   string service = 1;
   string signal = 2;
   int64 billed_bytes = 3;
+}
+
+// === Release health ===
+
+message GetReleaseHealthRequest {
+  // Must name exactly one environment in env_ids.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // Which promotion. Unset = the environment's current one. At most one.
+  oneof subject {
+    option (buf.validate.oneof).required = false;
+    string promotion_id = 2 [(buf.validate.field).string.max_len = 128];
+    string release_version = 3 [(buf.validate.field).string.max_len = 256];
+  }
+  // The width of each of the two windows. Default 15 minutes, max 6 hours. A
+  // window stops at the neighbouring promotion and at now.
+  google.protobuf.Duration window = 4;
+  // Per-call overrides of the thresholds, by name (max_error_rate_increase,
+  // max_p95_ratio, min_requests, new_issue_min_events). An unknown name is
+  // InvalidArgument.
+  map<string, string> threshold_overrides = 5 [(buf.validate.field).map.max_pairs = 16];
+}
+
+message GetReleaseHealthResponse {
+  ReleasePromotionRef promotion = 1;
+  // [promotion - window, promotion) and [promotion, promotion + window), each
+  // cut off at the neighbouring promotion and at now.
+  TimeRange before = 2;
+  TimeRange after = 3;
+  // False while the after window is still open.
+  bool after_complete = 4;
+  repeated ServiceHealthDelta services = 5;
+  // Issues first seen in this release, and issues it regressed. Same shape the
+  // IssuesService returns.
+  repeated Issue new_issues = 6;
+  repeated Issue regressed_issues = 7;
+  // Alerts that opened at or after the promotion and are still firing.
+  repeated ReleaseAlertRef firing_alerts = 8;
+  repeated WorkloadFinding workload_findings = 9;
+  ReleaseVerdict verdict = 10;
+  repeated ReleaseFinding findings = 11;
+  // The thresholds actually applied, and where each came from.
+  repeated EffectiveThreshold thresholds = 12;
+  // Finding codes this server could not check (no alert state, no issue
+  // reader), so a PASS is not read as covering them.
+  repeated string not_evaluated = 13;
+}
+
+// ReleasePromotionRef names the promotion a health check judged.
+message ReleasePromotionRef {
+  string id = 1;
+  string release_version = 2;
+  string git_commit = 3;
+  google.protobuf.Timestamp promoted_at = 4;
+  // The release it replaced, empty for the first.
+  string previous_release_version = 5;
+}
+
+// ServiceHealthDelta is one service's before and after, over weighted server
+// spans (tail sampling is corrected for, so the rates are not inflated).
+message ServiceHealthDelta {
+  string service = 1;
+  ServiceWindowStats before = 2;
+  ServiceWindowStats after = 3;
+  // The fraction (0..1) of after-window traffic served by the judged version:
+  // rollout and canary progress.
+  double version_share = 4;
+}
+
+message ServiceWindowStats {
+  int64 requests = 1;
+  double error_rate = 2; // fraction, 0..1
+  double p50_ms = 3;
+  double p95_ms = 4;
+  double p99_ms = 5;
+}
+
+message ReleaseAlertRef {
+  string rule = 1;
+  string fingerprint = 2;
+  google.protobuf.Timestamp firing_at = 3;
+  map<string, string> labels = 4;
+}
+
+// WorkloadFinding is a restart or OOM kill during the after window.
+message WorkloadFinding {
+  string workload = 1;
+  int64 restarts = 2;
+  // The last terminated reason, e.g. "OOMKilled".
+  string last_terminated_reason = 3;
+}
+
+enum ReleaseVerdict {
+  RELEASE_VERDICT_UNSPECIFIED = 0;
+  RELEASE_VERDICT_PASS = 1;
+  // A finding whose policy is fail fired.
+  RELEASE_VERDICT_FAIL = 2;
+  // The after window has not finished, or every service is below min_requests:
+  // not proven good, not proven bad.
+  RELEASE_VERDICT_INCONCLUSIVE = 3;
+}
+
+enum ReleaseFindingCode {
+  RELEASE_FINDING_CODE_UNSPECIFIED = 0;
+  RELEASE_FINDING_CODE_ERROR_RATE = 1;
+  RELEASE_FINDING_CODE_LATENCY = 2;
+  RELEASE_FINDING_CODE_NEW_ISSUE = 3;
+  RELEASE_FINDING_CODE_REGRESSED_ISSUE = 4;
+  RELEASE_FINDING_CODE_ALERT_FIRING = 5;
+  RELEASE_FINDING_CODE_WORKLOAD_RESTARTS = 6;
+}
+
+message ReleaseFinding {
+  ReleaseFindingCode code = 1;
+  // Empty for a finding that is not about one service.
+  string service = 2;
+  // What was measured and the limit it crossed, in the unit the code implies
+  // (a fraction for error_rate, a ratio for latency, a count for the rest).
+  double value = 3;
+  double threshold = 4;
+  // "fail" or "warn".
+  string policy = 5;
+  // One line a person or an agent can act on.
+  string message = 6;
+}
+
+message EffectiveThreshold {
+  string name = 1;
+  string value = 2;
+  // "release_shape" (declared in KCL), "default" or "request".
+  string source = 3;
 }

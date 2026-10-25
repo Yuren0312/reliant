@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -15,6 +16,8 @@ import (
 )
 
 func TestChatService_CreateChat_RejectsDottedWorkflowParams(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -46,12 +49,14 @@ func TestChatService_CreateChat_RejectsDottedWorkflowParams(t *testing.T) {
 		},
 	}))
 	require.Error(t, err)
-	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	require.Contains(t, err.Error(), "agent.model")
 	require.Contains(t, err.Error(), "nested objects")
 }
 
 func TestChatService_SendMessage_RejectsDottedWorkflowParamsForActiveWorkflowUpdate(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -95,12 +100,14 @@ func TestChatService_SendMessage_RejectsDottedWorkflowParamsForActiveWorkflowUpd
 		},
 	}))
 	require.Error(t, err)
-	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	require.Contains(t, err.Error(), "agent.model")
 	require.Contains(t, err.Error(), "nested objects")
 }
 
 func TestChatService_UpdateWorkflowParams_RejectsDottedKeysForActiveWorkflowUpdate(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -140,7 +147,7 @@ func TestChatService_UpdateWorkflowParams_RejectsDottedKeysForActiveWorkflowUpda
 		},
 	}))
 	require.Error(t, err)
-	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	require.Contains(t, err.Error(), "agent.model")
 	require.Contains(t, err.Error(), "nested objects")
 }

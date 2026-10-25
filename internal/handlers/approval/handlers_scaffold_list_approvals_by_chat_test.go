@@ -2,7 +2,7 @@ package approval_test
 
 import (
 	"context"
-	"database/sql"
+	"fmt"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -12,6 +12,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	approval "github.com/reliant-labs/reliant/internal/handlers/approval"
 )
 
@@ -21,12 +22,12 @@ func TestListApprovalsByChat_Generated(t *testing.T) {
 	t.Parallel()
 
 	// chat-1 belongs to another user; no other chat exists.
-	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.StubRepo{
+	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
 		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
 			if id == "chat-1" {
 				return &db.Chat{ID: id, UserID: "someone-else"}, nil
 			}
-			return nil, sql.ErrNoRows
+			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 		},
 	}}))
 

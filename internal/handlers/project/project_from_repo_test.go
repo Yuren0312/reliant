@@ -14,6 +14,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
@@ -57,7 +59,9 @@ func (s *cloneStubControlPlane) CloneRepoOntoDaemon(
 	return s.result, nil
 }
 
-func newFromRepoService(t *testing.T, cp *cloneStubControlPlane) (*Service, db.Repository, func()) {
+var _ CloneDispatcher = (*cloneStubControlPlane)(nil)
+
+func newFromRepoService(t *testing.T, cp *cloneStubControlPlane) (*Service, *db.Repo, func()) {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	svc := NewTestProject(t, WithProjectDeps(Deps{
@@ -125,7 +129,7 @@ func TestCreateProjectFromRepo_RefusedClonePersistsNothing(t *testing.T) {
 	// The control plane's own code reaches the user, rather than being
 	// flattened to Internal — "connect GitHub" is actionable, "internal
 	// error" is not.
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 
 	projects, err := repo.ListProjects(ctx, db.ProjectFilters{UserID: userID})
 	require.NoError(t, err)
@@ -152,7 +156,7 @@ func TestCreateProjectFromRepo_DeletedMachinePersistsNothing(t *testing.T) {
 		DaemonId: "cda8a89b-d15c-455d-a506-4c40335e4278",
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 
 	projects, err := repo.ListProjects(ctx, db.ProjectFilters{UserID: userID})
 	require.NoError(t, err)
@@ -197,7 +201,7 @@ func TestCreateProjectFromRepo_RequiresATargetMachine(t *testing.T) {
 		CloneUrl: "https://github.com/acme/widgets.git",
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Zero(t, cp.calls, "must not dispatch a clone with no target")
 }
 
@@ -321,7 +325,7 @@ func TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed(t *testing.T) {
 // daemon gateway (tools_daemon) over ConnectDaemon and returns the stream
 // once the gateway has acknowledged the registration, for the test to send
 // what a daemon sends.
-func dialToolsDaemon(t *testing.T, repo db.Repository, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+func dialToolsDaemon(t *testing.T, repo tools_daemon.Repository, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
 	gateway, err := tools_daemon.New(tools_daemon.Deps{
 		Logger: slog.New(slog.DiscardHandler),
@@ -333,9 +337,11 @@ func dialToolsDaemon(t *testing.T, repo db.Repository, userID, daemonID string) 
 
 	routes := http.NewServeMux()
 	gateway.Register(routes) // the production mount
-	mux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// A serverkit listener gives every request an abortable body; ConnectDaemon
+	// refuses a stream without one.
+	mux := serverkit.NewStreams().Install(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		routes.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), auth.UserIDContextKey, userID)))
-	})
+	}))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.Start()
 	t.Cleanup(srv.Close)

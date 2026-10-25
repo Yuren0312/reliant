@@ -19,7 +19,7 @@ import (
 // the server's comparable on the About page, and the script refuses — exits
 // non-zero — rather than print nothing, which each caller's `set -e` turns
 // into a failed build. The script's behaviour is tested against real git
-// repositories in web/src/lib/__tests__/versionJson.test.ts.
+// repositories in frontends/web/src/lib/__tests__/versionJson.test.ts.
 //
 // control-plane's scripts/build-reliant-image.sh (the prod image) calls the
 // same script from the pinned tree and is pinned by its own test there.
@@ -43,7 +43,7 @@ func TestShippedBuildsStampTheReleaseIdentity(t *testing.T) {
 	}
 
 	for _, rel := range []string{
-		"Makefile",
+		"Taskfile.yml",
 		".github/workflows/release.yml",
 		".github/workflows/build-images.yml",
 	} {
@@ -62,5 +62,24 @@ func TestShippedBuildsStampTheReleaseIdentity(t *testing.T) {
 	}
 	if strings.Contains(read(".github/workflows/build-images.yml"), "0.0.0-dev-") {
 		t.Error("build-images.yml invents a 0.0.0-dev-<sha> stamp again; use scripts/release-identity.sh")
+	}
+
+	// The build number daemons report on registration (DaemonRegister.
+	// commit_time_unix) rides the same stamp. A path that stamps Version but not
+	// CommitTime ships a daemon the platform cannot order.
+	for _, rel := range []string{
+		"Dockerfile",
+		"Taskfile.yml",
+		"scripts/build-electron.sh",
+		".github/workflows/release.yml",
+		".github/workflows/build-images.yml",
+	} {
+		body := read(rel)
+		if !strings.Contains(body, "CommitTime") && !strings.Contains(body, "COMMIT_TIME") {
+			t.Errorf("%s does not stamp internal/version.CommitTime; derive it with scripts/release-identity.sh --commit-time", rel)
+		}
+		if !strings.Contains(body, "commit-time") && rel != "Dockerfile" {
+			t.Errorf("%s does not derive the build number from scripts/release-identity.sh --commit-time", rel)
+		}
 	}
 }

@@ -12,8 +12,7 @@ package grpc
 //
 // Run:
 //
-//	DATABASE_URL=postgres://postgres:postgres@127.0.0.1:<port>/reliant?sslmode=disable \
-//	  go test -tags localmodel_e2e -run ModelEndpointE2E -v ./internal/grpc -count=1
+//	go test -tags localmodel_e2e -run ModelEndpointE2E -v ./internal/grpc -count=1
 
 import (
 	"context"
@@ -30,7 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -115,8 +114,9 @@ func TestModelEndpointE2E(t *testing.T) {
 		Config: &typedconfig.Config{},
 		Repo:   repo,
 		Router: router,
-		// No control plane: self-hosted, so loopback is a legitimate DIRECT target.
-		ControlPlane: &configv1.ControlPlaneConfig{},
+		// Self-hosted: the operator allows private egress, so loopback is a
+		// legitimate DIRECT target.
+		Network: &configv1.NetworkConfig{AllowPrivateEgress: true},
 	})
 	require.NoError(t, err)
 
@@ -245,11 +245,12 @@ func TestModelEndpointE2E(t *testing.T) {
 
 	t.Run("f_hosted_policy_refuses_the_same_direct_endpoint", func(t *testing.T) {
 		hosted, err := model_endpoint.New(model_endpoint.Deps{
-			Logger:       slog.Default(),
-			Config:       &typedconfig.Config{},
-			Repo:         repo,
-			Router:       router,
-			ControlPlane: &configv1.ControlPlaneConfig{Url: "http://admin.cluster.local:8090"},
+			Logger: slog.Default(),
+			Config: &typedconfig.Config{},
+			Repo:   repo,
+			Router: router,
+			// Hosted: an empty network block refuses private targets.
+			Network: &configv1.NetworkConfig{},
 		})
 		require.NoError(t, err)
 		_, err = hosted.CreateModelEndpoint(epCtx(e2eUserA), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{

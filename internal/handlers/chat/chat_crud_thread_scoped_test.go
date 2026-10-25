@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -93,6 +94,8 @@ func listThreadMessagesReq(chatID, threadID string) *connect.Request[reliantv1.L
 // asking for a thread returns that thread's messages and no others, whatever
 // the rest of the chat looks like.
 func TestListMessages_ThreadScoped_ReturnsOnlyThatThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
@@ -119,6 +122,8 @@ func TestListMessages_ThreadScoped_ReturnsOnlyThatThread(t *testing.T) {
 // hundreds of messages. A thread-scoped read cannot have that failure mode:
 // there is no window sized for somebody else.
 func TestListMessages_ThreadScoped_UnaffectedByMainThreadVolume(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
@@ -138,6 +143,8 @@ func TestListMessages_ThreadScoped_UnaffectedByMainThreadVolume(t *testing.T) {
 // TestListMessages_ThreadScoped_Bounded checks the cursor form: `recent`
 // bounds the page and has_more reports honestly.
 func TestListMessages_ThreadScoped_Bounded(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
@@ -162,6 +169,8 @@ func TestListMessages_ThreadScoped_Bounded(t *testing.T) {
 // an error, not a quiet fall back to the chat-wide list. Answering a different
 // question than the one asked is the failure mode this change removes.
 func TestListMessages_ThreadScoped_UnknownThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
@@ -171,12 +180,14 @@ func TestListMessages_ThreadScoped_UnknownThread(t *testing.T) {
 
 	_, err := svc.ListMessages(ctx, listThreadMessagesReq(f.chatID, uuid.New().String()))
 	require.Error(t, err)
-	require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 // TestListMessages_ThreadScoped_ThreadFromAnotherChat proves the thread must
 // belong to the authorized chat -- a thread id alone is not an access grant.
 func TestListMessages_ThreadScoped_ThreadFromAnotherChat(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
@@ -187,12 +198,14 @@ func TestListMessages_ThreadScoped_ThreadFromAnotherChat(t *testing.T) {
 
 	_, err := svc.ListMessages(ctx, listThreadMessagesReq(a.chatID, b.spawnThread))
 	require.Error(t, err)
-	require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 // TestListMessages_ThreadIDUnset_MatchesChatWideBehavior pins the additive
 // property: the field is opt-in, and omitting it changes nothing.
 func TestListMessages_ThreadIDUnset_MatchesChatWideBehavior(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")

@@ -4,11 +4,12 @@
 // on a worker (NewWorker) and runs it as a supervised component (Worker), for
 // the temporal-worker and the test harnesses alike.
 //
-//forge:exclude-contract: Temporal worker composition (workflow/activity registration over injected collaborators) shared by reliant's hand-wired server mains; it wires services rather than being one, and becomes a supervised forge worker in P3c (research/forge-migration/PLAN.md)
+//forge:exclude-contract: Temporal worker composition (workflow/activity registration over injected collaborators), built as the worker root's TemporalWorker node (internal/app) and by the test harnesses; it wires services rather than being one
 package workersetup
 
 import (
 	"context"
+	"runtime"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
@@ -50,7 +51,7 @@ const maxHeartbeatThrottleInterval = 2 * time.Second
 type Config struct {
 	// Required dependencies
 	TemporalClient client.Client
-	Database       db.Repository
+	Database       *db.Repo
 	StreamingHub   streaming.StreamingHub
 	ToolsFactory   *tools.ToolsFactory
 	ToolExecutor   toolexec.ToolExecutor
@@ -89,10 +90,14 @@ type Config struct {
 	// a credential identically. nil refuses every authenticated call.
 	IntegrationCredentials httpaction.CredentialSource
 
-	// ControlPlaneURL is the control plane hosting this deployment, "" when it
-	// is self-hosted (ServerProcessConfig's ControlPlaneConfig). It decides which
-	// addresses a user-supplied model endpoint may resolve to.
-	ControlPlaneURL string
+	// HostedActions is fixed-action-only hosted HTTP execution, never a tool
+	// credential source. nil refuses nodes that request hosted_use.
+	HostedActions handlers.HostedActionExecutor
+
+	// AllowPrivateEgress is ServerProcessConfig.network.allow_private_egress:
+	// whether a user-supplied model endpoint may resolve to a private,
+	// loopback or link-local address. False is the default.
+	AllowPrivateEgress bool
 	// WriteLedger records the action node's mutating integration calls, so an
 	// event they cause can be attributed. nil records nothing.
 	WriteLedger writeledger.Service
@@ -110,8 +115,56 @@ type Config struct {
 	// passes none.
 	WorkflowInterceptors []interceptor.WorkerInterceptor
 
+	// WorkflowTaskSlots is worker.Options.MaxConcurrentWorkflowTaskExecutionSize
+	// (WorkerConfig's RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS). 0 derives
+	// it from the CPU budget; see WorkflowTaskSlots.
+	WorkflowTaskSlots int
+	// WorkflowTaskPollers is worker.Options.MaxConcurrentWorkflowTaskPollers.
+	// 0 keeps defaultWorkflowTaskPollers.
+	WorkflowTaskPollers int
+
 	// Task queue configuration
 	TaskQueueSuffix string // Optional suffix for test isolation
+}
+
+// defaultWorkflowTaskPollers is the workflow-task poller count when the
+// config names none.
+const defaultWorkflowTaskPollers = 5
+
+// WorkflowTaskSlots is how many workflow tasks a worker runs at once:
+// configured when it is set, else max(2, gomaxprocs-1).
+//
+// The cap exists because a workflow task can be a full history replay, which
+// is CPU-bound for as long as the history takes to re-execute (a 37k-event
+// run took ~15 minutes of two cores in prod, 2026-10-23). The SDK's default is
+// 1000 slots, so a burst of replays took every core, and the activities in the
+// same process missed their DB deadlines. Activities draw from their own
+// slots, so capping workflow tasks below the core count leaves them a core.
+//
+// gomaxprocs-1, not gomaxprocs: a replay runs on one goroutine, so N slots
+// can occupy N cores, and a cap equal to the core count protects nothing. The
+// floor of 2 is the SDK's: it refuses 1, which would leave its sticky-queue
+// poller the only one. The cost of a low cap is head-of-line blocking: while
+// every slot is held by a long replay, this worker starts no other workflow
+// task until one finishes (queries waiting for a slot time out instead of
+// replaying, which is the other half of the point). Raise the setting when
+// that latency matters more than isolation.
+//
+// gomaxprocs is the runtime's, which since Go 1.25 already honours the
+// container's CPU limit (ceil(limit), at least 2), so a 3-core pod gets 2.
+func WorkflowTaskSlots(configured, gomaxprocs int) int {
+	if configured > 0 {
+		return configured
+	}
+	return max(2, gomaxprocs-1)
+}
+
+// workflowTaskPollers is the configured poller count, or the default.
+func workflowTaskPollers(configured int) int {
+	if configured > 0 {
+		return configured
+	}
+	return defaultWorkflowTaskPollers
 }
 
 // taskQueueName returns the full task queue name with optional suffix.
@@ -155,21 +208,104 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 
 	activityDeps.Connections = cfg.IntegrationCredentials
-	activityDeps.ControlPlaneURL = cfg.ControlPlaneURL
+	activityDeps.HostedActions = cfg.HostedActions
+	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
 	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits)
 
 	// Register all activities
 	v2activities.RegisterAll(registry, activityDeps)
 
-	// Create shared worker with standard options
 	onFatalError, fatal := fatalErrorSink()
-	workerOpts := worker.Options{
+	w := worker.New(cfg.TemporalClient, cfg.taskQueueName(), workerOptions(cfg, onFatalError, runtime.GOMAXPROCS(0)))
+
+	// Register activities with worker
+	registry.RegisterWithWorker(w)
+
+	// Register workflows
+	w.RegisterWorkflowWithOptions(v2.DynamicWorkflow, workflow.RegisterOptions{
+		Name: v2workflow.WorkflowDynamic,
+	})
+	w.RegisterWorkflowWithOptions(GenerateTitleWorkflow, workflow.RegisterOptions{
+		Name: "GenerateTitleWorkflow",
+	})
+
+	// Schedule triggers. The workflow is always registered — it is pure
+	// orchestration — but the activity needs a launcher. Registering the
+	// workflow without the activity means a fire on a launcher-less worker
+	// retries rather than failing to start at all, which is what makes a
+	// partially-rolled-out deploy safe.
+	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow, workflow.RegisterOptions{
+		Name: triggers.FireWorkflowName,
+	})
+	// Inbound triggers (webhook, integration, workflow event) fire through
+	// their own workflow: the api-server's receiver records the event and
+	// starts it, and its activity launches the recorded event.
+	w.RegisterWorkflowWithOptions(triggers.TriggerEventFireWorkflow, workflow.RegisterOptions{
+		Name: triggers.EventFireWorkflowName,
+	})
+	// Polled integration triggers: the schedule runs the poll workflow; the
+	// activity asks the integration's poller what is new and records it.
+	w.RegisterWorkflowWithOptions(triggers.TriggerPollWorkflow, workflow.RegisterOptions{
+		Name: triggers.PollWorkflowName,
+	})
+	// An activation of a workflow-declared trigger fires from the
+	// declaration as it is now; every fire path reads it through the same
+	// resolution run start uses.
+	declarations := triggers.LaunchWorkflows{Repo: cfg.Database}
+	if cfg.TriggerPollers != nil {
+		if repo := cfg.Database; repo != nil {
+			poller := triggers.NewTriggerPoller(
+				triggerPollRepo{Repo: repo, connections: repo.Connections()},
+				cfg.TriggerPollers,
+				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations),
+				cfg.TriggerCredentials,
+			)
+			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
+		}
+	}
+	if cfg.TriggerLauncher != nil {
+		w.RegisterActivityWithOptions(
+			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).Fire,
+			activity.RegisterOptions{Name: triggers.FireActivityName},
+		)
+		w.RegisterActivityWithOptions(
+			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).Fire,
+			activity.RegisterOptions{Name: triggers.EventFireActivityName},
+		)
+	} else {
+		logging.Warn("no trigger launcher configured; this worker will not execute scheduled fires")
+	}
+
+	// Workflow-event triggers: same split as schedules. The dispatch workflow
+	// is always registered; its activity needs the launcher.
+	w.RegisterWorkflowWithOptions(workflowevent.RunEventDispatchWorkflow, workflow.RegisterOptions{
+		Name: workflowevent.DispatchWorkflowName,
+	})
+	if cfg.TriggerLauncher != nil {
+		dispatcher := workflowevent.NewDispatcher(cfg.Database, cfg.TriggerLauncher, nil).WithWorkflows(declarations)
+		w.RegisterActivityWithOptions(
+			workflowevent.NewActivity(cfg.Database, dispatcher).Dispatch,
+			activity.RegisterOptions{Name: workflowevent.DispatchActivityName},
+		)
+	}
+
+	return newWorker(w, fatal), registry, nil
+}
+
+// workerOptions is the shared worker's worker.Options, gomaxprocs being the
+// runtime's (a parameter so the derivation is testable).
+func workerOptions(cfg *Config, onFatalError func(error), gomaxprocs int) worker.Options {
+	return worker.Options{
 		// How Worker.Run learns the worker died; see temporalWorker.
-		OnFatalError:                     onFatalError,
-		StickyScheduleToStartTimeout:     5 * time.Second,
-		MaxConcurrentWorkflowTaskPollers: 5,
-		MaxConcurrentActivityTaskPollers: 10,
+		OnFatalError:                 onFatalError,
+		StickyScheduleToStartTimeout: 5 * time.Second,
+		// Workflow tasks are capped (WorkflowTaskSlots has why); activities
+		// are not, and keep the SDK's own 1000-slot budget: they are mostly
+		// waiting on an LLM stream, a daemon or the DB, not burning CPU.
+		MaxConcurrentWorkflowTaskExecutionSize: WorkflowTaskSlots(cfg.WorkflowTaskSlots, gomaxprocs),
+		MaxConcurrentWorkflowTaskPollers:       workflowTaskPollers(cfg.WorkflowTaskPollers),
+		MaxConcurrentActivityTaskPollers:       10,
 		// On Stop, in-flight tasks get activityReleaseGrace to finish; then
 		// activityRelease cancels the activities still running, and the rest
 		// is time for them to report, so Temporal re-dispatches them at once.
@@ -241,81 +377,6 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 			newActivityRelease(),
 		}, cfg.WorkflowInterceptors...),
 	}
-
-	w := worker.New(cfg.TemporalClient, cfg.taskQueueName(), workerOpts)
-
-	// Register activities with worker
-	registry.RegisterWithWorker(w)
-
-	// Register workflows
-	w.RegisterWorkflowWithOptions(v2.DynamicWorkflow, workflow.RegisterOptions{
-		Name: v2workflow.WorkflowDynamic,
-	})
-	w.RegisterWorkflowWithOptions(GenerateTitleWorkflow, workflow.RegisterOptions{
-		Name: "GenerateTitleWorkflow",
-	})
-
-	// Schedule triggers. The workflow is always registered — it is pure
-	// orchestration — but the activity needs a launcher. Registering the
-	// workflow without the activity means a fire on a launcher-less worker
-	// retries rather than failing to start at all, which is what makes a
-	// partially-rolled-out deploy safe.
-	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow, workflow.RegisterOptions{
-		Name: triggers.FireWorkflowName,
-	})
-	// Inbound triggers (webhook, integration, workflow event) fire through
-	// their own workflow: the api-server's receiver records the event and
-	// starts it, and its activity launches the recorded event.
-	w.RegisterWorkflowWithOptions(triggers.TriggerEventFireWorkflow, workflow.RegisterOptions{
-		Name: triggers.EventFireWorkflowName,
-	})
-	// Polled integration triggers: the schedule runs the poll workflow; the
-	// activity asks the integration's poller what is new and records it.
-	w.RegisterWorkflowWithOptions(triggers.TriggerPollWorkflow, workflow.RegisterOptions{
-		Name: triggers.PollWorkflowName,
-	})
-	// An activation of a workflow-declared trigger fires from the
-	// declaration as it is now; every fire path reads it through the same
-	// resolution run start uses.
-	declarations := triggers.LaunchWorkflows{Repo: cfg.Database}
-	if cfg.TriggerPollers != nil {
-		if repo, ok := cfg.Database.(*db.Repo); ok {
-			poller := triggers.NewTriggerPoller(
-				triggerPollRepo{Repo: repo, connections: repo.Connections()},
-				cfg.TriggerPollers,
-				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations),
-				cfg.TriggerCredentials,
-			)
-			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
-		}
-	}
-	if cfg.TriggerLauncher != nil {
-		w.RegisterActivityWithOptions(
-			triggers.NewFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).Fire,
-			activity.RegisterOptions{Name: triggers.FireActivityName},
-		)
-		w.RegisterActivityWithOptions(
-			triggers.NewEventFirer(cfg.Database, cfg.TriggerLauncher).WithWorkflows(declarations).Fire,
-			activity.RegisterOptions{Name: triggers.EventFireActivityName},
-		)
-	} else {
-		logging.Warn("no trigger launcher configured; this worker will not execute scheduled fires")
-	}
-
-	// Workflow-event triggers: same split as schedules. The dispatch workflow
-	// is always registered; its activity needs the launcher.
-	w.RegisterWorkflowWithOptions(workflowevent.RunEventDispatchWorkflow, workflow.RegisterOptions{
-		Name: workflowevent.DispatchWorkflowName,
-	})
-	if cfg.TriggerLauncher != nil {
-		dispatcher := workflowevent.NewDispatcher(cfg.Database, cfg.TriggerLauncher, nil).WithWorkflows(declarations)
-		w.RegisterActivityWithOptions(
-			workflowevent.NewActivity(cfg.Database, dispatcher).Dispatch,
-			activity.RegisterOptions{Name: workflowevent.DispatchActivityName},
-		)
-	}
-
-	return newWorker(w, fatal), registry, nil
 }
 
 // TaskQueueName returns the task queue name that would be used by a worker with the given config.
@@ -329,7 +390,7 @@ func TaskQueueName(suffix string) string {
 // store rather than the main repository.
 type triggerPollRepo struct {
 	*db.Repo
-	connections core.ConnectionStore
+	connections db.ConnectionStore
 }
 
 func (r triggerPollRepo) GetConnection(ctx context.Context, userID, id string) (*core.Connection, error) {

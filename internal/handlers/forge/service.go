@@ -1,7 +1,6 @@
 package forge
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,17 +9,15 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the forge service. internal/grpc/server.go
-// constructs it today, and mounts it only when the API server has a daemon
-// router and RELIANT_DISABLE_FORGE_API is unset: a forge project's state is
-// on the user's machine, never on this server. forge's composition root takes
-// over in P3c (research/forge-migration/PLAN.md). The rpc methods on *Service
-// are where this service's logic lives; see the forge `api` / `services`
-// skill.
+// Deps holds dependencies for the forge service. The composition graph
+// constructs it (internal/app/compose.go); every rpc reaches a daemon through
+// the router, because a forge project's state is on the user's machine, never
+// on this server, and RELIANT_DISABLE_FORGE_API turns the whole service off
+// (apiMountOptions). The rpc methods on *Service are where this service's
+// logic lives; see the forge `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
@@ -30,25 +27,6 @@ type Deps struct {
 	// Repo resolves a project to its path on the daemon, enforcing that the
 	// caller owns it, and records forge's name for the project.
 	Repo Repository
-}
-
-// Router is the slice of toolexec.DaemonRouter the forge handlers use
-// (daemoncmd.Sender).
-type Router interface {
-	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
-}
-
-// Repository is the only database capability this service needs: resolve a
-// project id to its row, enforcing that the caller owns it, and record forge's
-// name for the project when a topology report carries one.
-//
-// Two methods are all this service uses, and a narrow dependency is what makes
-// the handler testable without a database — which is what lets the
-// secret-safety and reachability tests run as plain unit tests.
-// db.Repository satisfies it.
-type Repository interface {
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
-	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

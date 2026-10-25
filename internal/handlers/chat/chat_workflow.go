@@ -13,12 +13,15 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
+	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow"
+	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
 // UpdateWorkflowParams updates workflow parameters for a running chat
@@ -30,33 +33,28 @@ func (s *Service) UpdateWorkflowParams(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Get chat to verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Always signal the root workflow. Child workflows are inline goroutines
 	// with synthetic DB IDs that Temporal doesn't know about.
 	// Thread-scoped updates use the __thread key in the signal payload.
 	workflowID := chat.MainThreadID()
-	runID := ""
-	if workflowID != "" {
-		if chat.RunID != nil {
-			runID = *chat.RunID
-		}
-	} else {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no active workflow for chat"))
+	if workflowID == "" {
+		return nil, svcerr.FailedPrecondition("no active workflow for chat")
 	}
 
 	if err := launch.ValidateWorkflowParamStructure(req.Msg.Params); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 
 	// If targeting a specific thread, verify there is a run of it for the
@@ -86,15 +84,30 @@ func (s *Service) UpdateWorkflowParams(
 		for i, e := range validationErrors {
 			errMsgs[i] = e.Error()
 		}
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
 	}
 
 	if threadScoped {
+		// While the chat is bound to a provider every thread runs on it, so
+		// a sub-agent's pick on another provider (or a local one) is refused
+		// here rather than accepted and then held at its next model call.
+		if value, picked := stateUpdate["model"]; picked {
+			if bound := s.chatProvider(ctx, chat.ID); bound != "" {
+				pick, err := s.launcher().ValidateSelectedModel(ctx, userID, value, s.selectionCheck(chat, bound))
+				if err != nil {
+					return nil, svcerr.FailedPrecondition("The selected model cannot be served. The agent's model has not changed: " + err.Error())
+				}
+				if pick.Local || pick.Driver != bound {
+					return nil, svcerr.FailedPrecondition(fmt.Sprintf(
+						"This chat runs on %s, so its agents do too. Pick a model %s serves for this agent, or switch the whole chat's model to change provider.", bound, bound))
+				}
+			}
+		}
 		// A thread's params are that run's state, not the chat's choice: they
 		// are signalled and remembered by the run, never stored as the
 		// selection (which would hand the sub-agent's model to the next root run).
 		stateUpdate["__thread"] = *req.Msg.ThreadId
-		if err := s.signalParamUpdate(ctx, req.Msg.ChatId, workflowID, runID, req.Msg.ThreadId, stateUpdate); err != nil {
+		if err := s.signalParamUpdate(ctx, workflowID, stateUpdate); err != nil {
 			return nil, err
 		}
 		return connect.NewResponse(&reliantv1.UpdateWorkflowParamsResponse{
@@ -109,13 +122,52 @@ func (s *Service) UpdateWorkflowParams(
 	// provider that cannot serve it first, exactly as a send moves it, so what
 	// is stored is what runs.
 	live := s.rootRunIsLive(ctx, workflowID)
+	_, explicitModelPick := req.Msg.Params["model"]
+	// The provider binding is decided here and nowhere else (see
+	// chat_provider_binding.go): a pick that names another provider than the
+	// root runs on switches the chat to it, a local pick unbinds it, and any
+	// other pick leaves it as it was.
+	bound := s.chatProvider(ctx, chat.ID)
+	binding := bound
+	if explicitModelPick {
+		pick, err := s.launcher().ValidateSelectedModel(ctx, userID, stateUpdate["model"], s.selectionCheck(chat, bound))
+		if err != nil {
+			return nil, svcerr.FailedPrecondition("The selected model/provider cannot be served. Your previous selection has not changed: " + err.Error())
+		}
+		switch {
+		case pick.Local:
+			binding = ""
+		case pick.NamesProvider && pick.Driver != s.launcher().RootProvider(ctx, userID, chat, workflowName):
+			binding = pick.Driver
+		}
+	}
 	var moves []launch.ModelSubstitution
 	if live {
-		moves = s.moveUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, stateUpdate)
+		// Preserve the root picker choice, but retain send-time recovery for
+		// unrelated grouped model inputs changed in the same request.
+		recoverable := make(map[string]interface{}, len(stateUpdate))
+		for key, value := range stateUpdate {
+			if key != "model" || !explicitModelPick {
+				recoverable[key] = value
+			}
+		}
+		moves = s.moveUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, recoverable)
+		for key, value := range recoverable {
+			stateUpdate[key] = value
+		}
 	}
-	sel, err := s.recordSelection(ctx, userID, chat, workflowName, req.Msg.Params, stateUpdate, moves, req.Msg.GetExpectedVersion())
+	var bindingPatch *string
+	if explicitModelPick {
+		bindingPatch = &binding
+	}
+	sel, err := s.recordSelection(ctx, userID, chat, workflowName, req.Msg.Params, stateUpdate, moves, req.Msg.GetExpectedVersion(), bindingPatch)
 	if err != nil {
-		return nil, versionConflictError()
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record the chat's selection"))
+	}
+	if binding != bound {
+		// The run learns of the switch with the model it switched to
+		// (runtime applyProviderSwitch); "" unbinds it.
+		stateUpdate[v2.InputKeyProviderSwitch] = binding
 	}
 	if sel == nil {
 		sel, _ = s.selections().Get(ctx, chat.ID)
@@ -125,13 +177,27 @@ func (s *Service) UpdateWorkflowParams(
 		// A move is news only when it changes what the run already uses.
 		news := make([]launch.ModelSubstitution, 0, len(moves))
 		for _, sub := range moves {
-			if s.checkParamsActuallyChanged(ctx, workflowID, runID, map[string]interface{}{topLevelInput(sub.Input): stateUpdate[topLevelInput(sub.Input)]}) {
+			if s.checkParamsActuallyChanged(ctx, workflowID, map[string]interface{}{topLevelInput(sub.Input): stateUpdate[topLevelInput(sub.Input)]}) {
 				news = append(news, sub)
 			}
 		}
 		s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, workflowID, news)
-		if err := s.signalParamUpdate(ctx, req.Msg.ChatId, workflowID, runID, nil, stateUpdate); err != nil {
+		modelChanged := false
+		if newModel, ok := stateUpdate["model"]; ok {
+			modelChanged = s.checkParamsActuallyChanged(ctx, workflowID, map[string]interface{}{"model": newModel})
+		}
+		if err := s.signalParamUpdate(ctx, workflowID, stateUpdate); err != nil {
 			return nil, err
+		}
+		if modelChanged {
+			// Switching the chat's model is a way out of a provider's limit,
+			// for the whole chat: every thread blocked on a provider retries
+			// now, on the new model where it follows the chat's. A thread
+			// pinned to its own model on the provider it is waiting on may
+			// continue on the switched-to one until that provider resets —
+			// switching providers is the user opting the chat in
+			// (CapacityWakeSignal.UseModel).
+			s.wakeChatBestEffort(ctx, chat, s.launcher().ResolvedModelAtDriver(ctx, userID, stateUpdate["model"]), "the chat's model changed")
 		}
 	}
 
@@ -159,22 +225,19 @@ func (s *Service) rootRunIsLive(ctx context.Context, workflowID string) bool {
 	return wf.Status == db.Active() || wf.Status == db.Paused()
 }
 
-// signalParamUpdate delivers an input update to the chat's run. Thread-scoped
-// updates ride in the payload under __thread.
-func (s *Service) signalParamUpdate(ctx context.Context, chatID, workflowID, runID string, threadID *string, update map[string]interface{}) error {
-	err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, runID, "update_workflow_state", update)
+// signalParamUpdate delivers an input update to the chat's CURRENT run (empty
+// run id): the run id on the chat row names whichever run was current when it
+// was written, and a continue-as-new closes that one. Thread-scoped updates
+// ride in the payload under __thread.
+func (s *Service) signalParamUpdate(ctx context.Context, workflowID string, update map[string]interface{}) error {
+	err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, "", "update_workflow_state", update)
 	if err == nil {
 		return nil
 	}
 	if stale := staleWorkflowSignalError(err); stale != nil {
 		return stale
 	}
-	logging.ErrorContext(ctx, "Failed to signal workflow for param update",
-		"chatID", chatID,
-		"workflowID", workflowID,
-		"threadID", threadID,
-		"error", err)
-	return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow params"))
+	return svcerr.WrapOr(fmt.Errorf("signal workflow %s: %w", workflowID, err), svcerr.Internal("failed to update workflow params"))
 }
 
 // threadAcceptsParamUpdate reports whether thread-scoped params can be applied
@@ -184,8 +247,11 @@ func (s *Service) signalParamUpdate(ctx context.Context, chatID, workflowID, run
 // A thread that finished has no next run for them to apply to.
 func (s *Service) threadAcceptsParamUpdate(ctx context.Context, chat *db.Chat, threadID string) error {
 	wf, err := s.deps.Repo.GetWorkflowByThread(ctx, chat.ID, threadID)
-	if err != nil || wf == nil {
-		return connect.NewError(connect.CodeNotFound, fmt.Errorf("no workflow found for thread"))
+	if err != nil {
+		return svcerr.WrapOr(err, svcerr.Internal("failed to get the thread's workflow"))
+	}
+	if wf == nil {
+		return svcerr.WithMessage(svcerr.ErrNotFound, "no workflow found for thread")
 	}
 	if wf.Status == db.Active() {
 		return nil
@@ -193,7 +259,7 @@ func (s *Service) threadAcceptsParamUpdate(ctx context.Context, chat *db.Chat, t
 	if s.canResumeStoppedAgent(ctx, chat, threadID) {
 		return nil
 	}
-	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("thread workflow is not running"))
+	return svcerr.FailedPrecondition("thread workflow is not running")
 }
 
 // staleWorkflowSignalError is the error for a param-update signal that found
@@ -209,7 +275,7 @@ func staleWorkflowSignalError(err error) error {
 	if !errors.As(err, &notFound) {
 		return nil
 	}
-	return connect.NewError(connect.CodeFailedPrecondition, errors.New("the chat's workflow is no longer running"))
+	return svcerr.FailedPrecondition("the chat's workflow is no longer running")
 }
 
 // GetWorkflowExecutions returns the workflow execution tree for a chat
@@ -220,23 +286,22 @@ func (s *Service) GetWorkflowExecutions(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Get all workflows for this chat
 	workflows, err := s.deps.Repo.ListWorkflowsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list workflows", "error", err, "chatID", req.Msg.ChatId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list workflows"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list workflows"))
 	}
 
 	if len(workflows) == 0 {
@@ -268,8 +333,7 @@ func (s *Service) GetWorkflowExecutions(
 		steps, err = s.deps.Repo.GetBasicStepExecutionsForChat(ctx, req.Msg.ChatId)
 	}
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get step executions", "error", err, "chatID", req.Msg.ChatId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get step executions"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get step executions"))
 	}
 	stepsByWorkflow := make(map[string][]*db.ChatStepExecution)
 	for _, step := range steps {
@@ -388,25 +452,25 @@ func (s *Service) GetThreadWorkflowInputs(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" || req.Msg.ThreadId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id and thread_id are required"))
+		return nil, svcerr.InvalidArgument("chat_id and thread_id are required")
 	}
 
 	// Verify chat ownership
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Look up the workflow record for this thread
 	wf, err := s.deps.Repo.GetWorkflowByThread(ctx, req.Msg.ChatId, req.Msg.ThreadId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no workflow found for thread"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get the thread's workflow"))
 	}
 	if wf == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no workflow found for thread"))
+		return nil, svcerr.WithMessage(svcerr.ErrNotFound, "no workflow found for thread")
 	}
 
 	isRunning := wf.Status == db.Active()
@@ -419,18 +483,13 @@ func (s *Service) GetThreadWorkflowInputs(
 	// Child workflows are inline goroutines with synthetic DB IDs that Temporal doesn't know.
 	// All queries must target the root workflow (the only real Temporal workflow).
 	rootWorkflowID := chat.MainThreadID()
-	rootRunID := ""
-	if rootWorkflowID != "" {
-		if chat.RunID != nil {
-			rootRunID = *chat.RunID
-		}
-	}
 
-	// Try to query Temporal for thread-specific inputs (only works for running workflows)
+	// Query Temporal for thread-specific inputs. Only the root's current run
+	// can answer, and only while it is open (rtemporal.QueryOpenRun).
 	inputsMap := make(map[string]*structpb.Value)
 	if (isRunning || resumable) && rootWorkflowID != "" {
 		// Use get_thread_inputs query which returns the thread's subInputs map
-		queryResp, err := s.deps.Temporal.QueryWorkflow(ctx, rootWorkflowID, rootRunID, "get_thread_inputs", req.Msg.ThreadId)
+		queryResp, err := rtemporal.QueryOpenRun(ctx, s.deps.Temporal, rootWorkflowID, "get_thread_inputs", req.Msg.ThreadId)
 		if err == nil {
 			var currentInputs map[string]interface{}
 			if err := queryResp.Get(&currentInputs); err == nil {

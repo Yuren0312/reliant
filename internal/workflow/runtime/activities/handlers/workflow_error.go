@@ -61,11 +61,11 @@ type WorkflowErrorOutput struct {
 
 // WorkflowErrorActivity writes workflow-level errors to chat_updates for UI notifications
 type WorkflowErrorActivity struct {
-	repo db.Repository
+	repo WorkflowErrorWriter
 }
 
 // NewWorkflowErrorActivity creates a new WorkflowErrorActivity
-func NewWorkflowErrorActivity(repo db.Repository) *WorkflowErrorActivity {
+func NewWorkflowErrorActivity(repo WorkflowErrorWriter) *WorkflowErrorActivity {
 	return &WorkflowErrorActivity{
 		repo: repo,
 	}
@@ -89,18 +89,18 @@ func (a *WorkflowErrorActivity) Execute(ctx context.Context, input WorkflowError
 // returns the id it was written under.
 //
 // This is the payload shape the frontend's ErrorUpdate interface reads
-// (web/src/types/streaming.ts), and it lives here — outside the activity — so
+// (frontends/web/src/types/streaming.ts), and it lives here — outside the activity — so
 // that callers who are NOT running inside a workflow can emit the same error
 // the workflow would have. The reconciler is the motivating one: on a hard
 // Temporal termination the worker never receives another workflow task, so no
 // workflow code (and therefore no activity) ever runs again, and the
 // reconciler is the only component left that observes the death. It has a
-// db.Repository but no activity context, so it calls this directly.
+// repository but no activity context, so it calls this directly.
 //
 // Duplicating the payload in that caller instead would mean the two error
 // shapes drift the first time a field is added, and the UI would silently
 // render one of them wrong.
-func WriteWorkflowError(ctx context.Context, repo db.Repository, input WorkflowErrorInput) (string, error) {
+func WriteWorkflowError(ctx context.Context, repo WorkflowErrorWriter, input WorkflowErrorInput) (string, error) {
 	// An explicit id means this error REPLACES an existing row rather than
 	// adding one — see WorkflowErrorInput.ErrorID. Absent it, the error is its
 	// own event and gets its own id.
@@ -110,7 +110,7 @@ func WriteWorkflowError(ctx context.Context, repo db.Repository, input WorkflowE
 	}
 
 	// Build error data matching the ErrorUpdate interface expected by frontend
-	// See web/src/types/streaming.ts ErrorUpdate interface
+	// See frontends/web/src/types/streaming.ts ErrorUpdate interface
 	errorData := map[string]interface{}{
 		"update_type":   "error",
 		"id":            errorID,

@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -58,18 +59,18 @@ func (s *Service) CreateConnector(
 ) (*connect.Response[reliantv1.CreateConnectorResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	msg := req.Msg
 	grant, err := s.buildGrant(userID, msg)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 
 	raw, err := s.createGrantWithCredential(ctx, grant)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create connector"))
 	}
 
 	return connect.NewResponse(&reliantv1.CreateConnectorResponse{
@@ -85,7 +86,18 @@ func (s *Service) CreateConnector(
 // Validation lives here, above the store, so the user gets a specific message
 // instead of a constraint violation. The store and the DB re-check the same
 // rules; this is the layer that explains them.
+//
+// Every refusal is an InvalidArgument whose text, written for the person
+// creating the connector, is what they read.
 func (s *Service) buildGrant(userID string, msg *reliantv1.CreateConnectorRequest) (*connectorgrant.Grant, error) {
+	grant, err := grantFromRequest(userID, msg)
+	if err != nil {
+		return nil, svcerr.InvalidArgument(err.Error())
+	}
+	return grant, nil
+}
+
+func grantFromRequest(userID string, msg *reliantv1.CreateConnectorRequest) (*connectorgrant.Grant, error) {
 	daemonID := strings.TrimSpace(msg.GetDaemonId())
 	if daemonID == "" {
 		return nil, errors.New("a connector must be bound to a specific workspace")
@@ -252,12 +264,12 @@ func (s *Service) ListConnectors(
 ) (*connect.Response[reliantv1.ListConnectorsResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	grants, err := s.deps.Grants.ListGrantsByUser(ctx, userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list connectors: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list connectors"))
 	}
 
 	out := make([]*reliantv1.Connector, 0, len(grants))
@@ -274,25 +286,25 @@ func (s *Service) RevokeConnector(
 ) (*connect.Response[reliantv1.RevokeConnectorResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	id := strings.TrimSpace(req.Msg.GetId())
 	if id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("connector id is required"))
+		return nil, svcerr.InvalidArgument("connector id is required")
 	}
 
 	// Scoped by user in the store, so a guessed id cannot revoke someone
 	// else's connector.
 	revoked, err := s.deps.Grants.RevokeGrant(ctx, userID, id)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("revoke connector: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to revoke connector"))
 	}
 	// Kill the credential too, not only the policy: the grant is re-checked
 	// per call, but a revoked grant must leave no live token behind.
 	if revoked {
 		if _, err := s.deps.Tokens.RevokeResource(ctx, connectorResource(id)); err != nil {
-			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("revoke connector credential: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Unavailable("failed to revoke connector credential"))
 		}
 	}
 	return connect.NewResponse(&reliantv1.RevokeConnectorResponse{Revoked: revoked}), nil
@@ -305,7 +317,7 @@ func (s *Service) ListConnectorActivity(
 ) (*connect.Response[reliantv1.ListConnectorActivityResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	limit := int(req.Msg.GetLimit())
@@ -320,7 +332,7 @@ func (s *Service) ListConnectorActivity(
 		records, err = s.deps.Grants.ListAuditByUser(ctx, userID, limit)
 	}
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list connector activity: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list connector activity"))
 	}
 
 	out := make([]*reliantv1.ConnectorActivity, 0, len(records))
@@ -349,7 +361,7 @@ func (s *Service) ListAvailableTools(
 	_ *connect.Request[reliantv1.ListAvailableToolsRequest],
 ) (*connect.Response[reliantv1.ListAvailableToolsResponse], error) {
 	if _, ok := auth.GetUserIDFromContext(ctx); !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	catalog := mcpserver.Tools()

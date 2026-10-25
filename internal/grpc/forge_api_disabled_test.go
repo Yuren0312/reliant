@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 )
@@ -43,8 +44,12 @@ func requireForgeAPIDisabled(t *testing.T, err error) {
 	require.True(t, errors.As(err, &connectErr), "want a Connect error, got %v", err)
 	require.Equal(t, connect.CodeFailedPrecondition, connectErr.Code(), "got %v", err)
 	require.Contains(t, connectErr.Message(), "the forge API is disabled in this deployment")
-	require.Equal(t, forgeAPIDisabledReason, connectErr.Meta().Get("X-Reliant-Reason"),
+	require.Equal(t, "the forge API is disabled in this deployment (RELIANT_DISABLE_FORGE_API)", connectErr.Message(),
+		"byte-identical: clients from before the reason match on it")
+	require.Equal(t, "forge_api_disabled", connectErr.Meta().Get(svcerr.ReasonHeader),
 		"the reason is how the web tells this apart from forge failing")
+	require.Equal(t, forgeAPIDisabledReason, connectErr.Meta().Get("X-Reliant-Reason"),
+		"the legacy header stays until R3w2")
 }
 
 func TestDisabledForgeAPIAnswersFailedPrecondition(t *testing.T) {
@@ -65,7 +70,7 @@ func TestDisabledForgeAPIAnswersFailedPrecondition(t *testing.T) {
 		// An anonymous caller learns nothing about how this deployment is
 		// configured: it is refused for its missing credential first.
 		_, err := forge.GetTopology(context.Background(), connect.NewRequest(&reliantv1.GetForgeTopologyRequest{}))
-		require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "got %v", err)
+		require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "got %v", err)
 	})
 }
 
@@ -85,6 +90,6 @@ func TestEnabledForgeAPIReachesItsHandlers(t *testing.T) {
 	_, baseURL := startTestServer(t, testForge(t))
 
 	_, err := forgeClient(baseURL).GetTopology(context.Background(), authed(&reliantv1.GetForgeTopologyRequest{}))
-	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err),
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err),
 		"the handler's own answer to an empty project_id; got %v", err)
 }

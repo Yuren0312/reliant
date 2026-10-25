@@ -13,15 +13,20 @@ next to every selection, so a surprising test is one line away from its cause.
 It is the first thing to run before pushing. It does not replace the full lane
 (`go test ./...`, `npm test`): that is what a release or a `go.mod` bump needs.
 
+It is also the test step of the **merge gate** (`task ci:merge`), whose other
+half is the **release gate** (`task release:gate`) that runs everything on main
+before a release: `dev-docs/merge-and-release-gates.md`.
+
 ## What runs
 
 | Lane | Command it runs | Selected by |
 |---|---|---|
-| Go | `go test -short -timeout 60s <pkgs>` (cached, no `-race`) | the changed package, **plus every package whose test binary imports it** |
-| web | `npx vitest run <files>` in `web/` | every vitest file that imports a changed module, transitively |
+| Go | `go test -short -timeout 5m <pkgs>` (cached, no `-race`) | the changed package, **plus every package whose test binary imports it** |
+| web | `npx vitest run <files>` in `frontends/web/` | every vitest file that imports a changed module, transitively |
 | electron | `npm test` in `electron/` | any change under `electron/`, or a changed file an electron test names |
 | forge-generate | `make forge-generate-check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**`, `*_gen.go`, `gen/**`, `deploy/**`, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml` (`forgeInputs` in `rules.go`) |
 | docs-generate | `make docs-generate-check`, second (in a heavy slot): every docs generator (the Makefile's `DOCGEN_TARGETS`), failing (and naming each file) if it changed anything | a change to something a docs generator reads or writes (below) |
+| migration-order | `go run ./tools/test-affected migration-order`, first: fetches `origin/main` and fails a migration the branch added whose version is at or below main's newest (never applied; the migrator refuses to start on it, reliant#1399). Fails closed when `origin/main` cannot be fetched (`MIGRATION_ORDER_OFFLINE=1` to override) | any added or changed file under `db/migrations/` (a deletion cannot put a file below the head) |
 
 The forge-generate lane is CI's **forge generate is a no-op** check, run
 locally. CI runs that check on main only (it alone cost a PR 110-160s), so
@@ -61,6 +66,12 @@ selects it (`docGenInput` in `plan.go`):
   that `DOCGEN_TARGETS` names every docs generator and that CI runs
   `make docs-generate-check` instead of naming targets itself.
 
+`-reach direct` (or `TEST_REACH=direct`) stops the Go fan-out after one hop:
+the changed packages and the packages that import one by name. The plan lists
+what it left out as `deferred`. The merge gate runs that mode
+(`dev-docs/merge-and-release-gates.md`). The default, `-reach all`, is the full
+closure described below.
+
 Knobs (environment): `TEST_BASE=<rev>` moves the diff base (a stacked branch),
 `TEST_FULL=1` runs every lane in full, `LANES=go,web` picks lanes. For other
 flags: `go run ./tools/test-affected -h` (`-json` prints the plan,
@@ -79,22 +90,35 @@ rule claims and no Go package owns runs **everything** (fail-safe).
 | a Go file behind a build tag (`e2e`, `live`, ...) | nothing: `go test -short` does not build it |
 | a file a package `go:embed`s | its package + reverse dependencies, like code |
 | a file a Go test names in a path literal (`deploy/...`, `config/...`) | only the packages that name it |
-| `db/migrations/**`, `internal/db/migrations/**` | the packages with DB-backed tests. Their tests skip under `-short`, so they run only when **you** set `DATABASE_URL` (then under `REQUIRE_TEST_DB=1`); otherwise the plan says so |
+| `db/migrations/**`, `internal/db/migrations/**` | the packages with DB-backed tests (the migrations reach them through `go:embed`, which the import graph does not see). They run in the same `-short` step as everything else: each test copies a migrated template on forge pgtest's server, which needs no configuration |
 | `proto/**/*.proto`, `proto-vendor/**/*.proto` | its generated Go package and the vitest files importing its `_pb.ts` |
-| `web/src/**` module | the vitest files importing it (import graph below) |
-| `web/src/**/*.test.ts(x)` | that test only |
+| `frontends/web/src/**` module | the vitest files importing it (import graph below) |
+| `frontends/web/src/**/*.test.ts(x)` | that test only |
 | a file a web or electron test reads at run time | those tests |
-| `web/e2e/**` | nothing (Playwright is separate) |
+| `frontends/web/e2e/**` | nothing (Playwright is separate) |
 | `electron/**` | the electron lane |
 | `docs/**`, `**/*.md`, `.github/**`, `research/**`, lint config | nothing, unless a test names the file |
 | `go.mod`, `go.sum`, `tools/tools.go` | **Go: full** (`go.mod`/`go.sum` also run forge-generate and docs-generate) |
 | `package.json`, lockfiles at the root | **web and electron: full** |
-| `web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `web/src/test/setup.ts` | **web: full** |
-| `Makefile`, `buf*.yaml` | **everything: full** |
+| `frontends/web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `frontends/web/src/test/setup.ts` | **web: full** |
+| `buf*.yaml` | **everything: full** |
+| `Taskfile.yml`, `Makefile` | **forge-generate and docs-generate: full** (the tasks they run); the test lanes do not run through the Taskfile |
 | `forge.yaml` (the forge pin) | Go and forge-generate: full |
 | `proto/**` that is not a `.proto` | **Go and web: full** |
 | a deleted web module | **web: full** (its importers can no longer be found) |
 | anything else | **everything: full** |
+
+**npm lockfiles.** Every lane tests against the `node_modules` already on disk,
+so none of them notices a lockfile `npm ci` would reject. When a diff changes a
+`package.json` or `package-lock.json` of an npm project (`npmProjects` in
+`tools/test-affected/plan.go`: the root, `frontends/web`, `electron`,
+`tools/protoc-gen-es`), the runner first runs
+`npm ci --dry-run --ignore-scripts` there (~10s; it validates the lockfile
+against the manifest and touches nothing), provided a lane that installs from
+that project is enabled. #1343 shipped a lockfile every fresh install rejected
+("Missing: zone.js from lock file") with every local test green. PR CI installs
+with plain `npm ci` for the same reason: an `npm ci || npm install` fallback
+repaired the drift on the runner and hid it.
 
 ## How the selection works, and where it errs
 
@@ -113,8 +137,8 @@ What counts as naming a path (`scanSources`, `literalCandidates` in
   argument, because that is the directory the literals after it are relative to
   (package string constants count as literals):
   - joined from the first argument on, the path is relative to the package
-    directory, where `go test` runs: `filepath.Join("..", "..", "web", "src")` in
-    `internal/grpc` names `web/src`;
+    directory, where `go test` runs: `filepath.Join("..", "..", "frontends", "web", "src")` in
+    `internal/grpc` names `frontends/web/src`;
   - joined onto the repo root, it names that path under the root:
     `filepath.Join(repoRoot(t), "scripts", name)` names `scripts/`. The root is
     whatever the package's sources derive from `os.Getwd()`,
@@ -124,7 +148,7 @@ What counts as naming a path (`scanSources`, `literalCandidates` in
   - joined onto anything else (`t.TempDir()`, a fixture's checkout, a parameter)
     it names a directory outside the repo and is **no read at all**:
     `filepath.Join(ws, "web")` builds a fixture's `web` checkout, not a read of
-    `web/`. Before this rule such fixtures made every web-only diff run their
+    `frontends/web/`. Before this rule such fixtures made every web-only diff run their
     Go packages.
 - **Any other literal is judged alone**: a multi-segment one that is a tracked
   file or directory (`"deploy/kcl/main.k"` in a table) is a read wherever it is
@@ -144,7 +168,7 @@ without that, a type import of a hub module (`routeSchemas.ts`) made one
 leaf change select 523 of 750 test files. The result was checked against vitest's
 own `related` selection for five changed files (`logger.ts`, `transport.ts`, `ChatMessage.tsx`,
 `deliveryScope.ts`, a test file): it was a superset every time, with nothing missing
-(it also selects the tests that read whole directories of `web/`, which vitest
+(it also selects the tests that read whole directories of `frontends/web/`, which vitest
 cannot see).
 
 **Known blind spots** (both directions are over-selection except these):
@@ -158,7 +182,6 @@ cannot see).
 - A web test that reads a file through a variable path. The marker scan
   (`readFileSync`, `readdirSync`, `process.cwd()`, `__dirname`) selects any test
   that reads files and names the changed file as a literal.
-- `-short` hides DB-backed tests. That is today's inner-loop behavior too.
 
 ## CI tiers: which tests run where
 
@@ -178,12 +201,12 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
 - **What decides a PR's lanes.** The `Detect what changed` job runs this tool
   (`plan -base <merge base>`) for the Go package and vitest file selection, and
   path patterns (in the job's script) for the rest: lint and the e2e stories
-  run unless the change is confined to `web/`, `electron/`, docs, research or
+  run unless the change is confined to `frontends/web/`, `electron/`, docs, research or
   `.github/`; codegen drift runs unless it is confined to the frontends,
-  electron, research or `.github/` (the generated `web/src/gen/` and
-  `shortcutsData.generated.ts` still count); the web build runs on `web/`, the
+  electron, research or `.github/` (the generated `frontends/web/src/gen/` and
+  `shortcutsData.generated.ts` still count); the web build runs on `frontends/web/`, the
   root Node manifests, `electron/release.config.json` or `verify-bundle.mjs`;
-  Playwright on `web/` changes that are not unit tests; the electron package on
+  Playwright on `frontends/web/` changes that are not unit tests; the electron package on
   `electron/` or the web build config. Its job summary prints the decision.
 - **A PR that changes `pr-ci.yml` runs everything**, so a CI change is proven
   against the whole PR path it changes.
@@ -196,8 +219,13 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
   passed; a lane the change skipped is fine) and its summary shows each job's
   queue wait and run time.
 
-- **DB-backed tests run in both tiers.** CI sets `REQUIRE_TEST_DB=1`, which
-  overrides their short-mode skip (`internal/db/testutil.go`).
+- **DB-backed tests run in both tiers**, `-short` included, and never skip.
+  Each test gets its own copy of a template database on forge pgtest's server
+  (`internal/db/testutil.go`): an embedded Postgres of the major `forge.yaml`
+  declares (`database.postgres_version`), shared by every test process on the
+  machine, or `FORGE_TEST_POSTGRES_URL`'s server, which must run that major.
+  Tests never read `DATABASE_URL`, and `REQUIRE_TEST_DB` no longer means
+  anything: a server that cannot boot fails the test.
 - **A short-gated test runs only on main and nightly.** Gating is for tests that
   are inherently slow: a NATS cluster (`*_Cluster_*`), a real subprocess or a
   daemon that must outlive a kill. A test that is slow because it waits out a
@@ -233,10 +261,11 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
   PR's `go test` fetches a module only when go.sum moved. Refresh the weights when a shard
   runs much longer than the others: `gh run view <run-id> --log | go run
   ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv`.
-- **The short tier's test Postgres runs without durability** (fsync,
-  synchronous_commit and full_page_writes off): per-test template databases
-  made the DB-backed packages fsync-bound (internal/db 166s -> 54s). It also
-  passes `-vet=off`: vet, like golangci-lint, runs on main.
+- **The test Postgres runs without durability** (fsync, synchronous_commit
+  and full_page_writes off; pgtest's embedded server is configured that way):
+  per-test template databases made the DB-backed packages fsync-bound
+  (internal/db 166s -> 54s). The short tier also passes `-vet=off`: vet, like
+  golangci-lint, runs on main.
 - **Other jobs**: `Lint (forge)` (at the pinned forge; blocks). On a PR:
   `go build ./...` (every package compiles) and forge's fast gating lanes over
   the whole project (`forge lint --no-fix --contract --migration-safety
@@ -256,7 +285,7 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
 
 ## Parallelism and timeouts
 
-- **vitest** (`web/vite.config.ts`): one worker per core, capped at 8, and the
+- **vitest** (`frontends/web/vite.config.ts`): one worker per core, capped at 8, and the
   5-second test timeout scales 1x to 6x with the one-minute load per core. On an
   idle machine nothing changes. Under load (many agents share the box) a "timed
   out in 5000ms" is the machine, not the code. `VITEST_MAX_WORKERS` and

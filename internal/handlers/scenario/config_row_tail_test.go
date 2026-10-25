@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
@@ -26,7 +27,7 @@ import (
 // record carries every skill body and repo memory the daemon indexed — 18 MB
 // in prod — and none of the paths below needs more than one small column.
 //
-// It embeds the concrete *db.Repo, not db.Repository, so the narrow column
+// It embeds the concrete *db.Repo, not the Repository role, so the narrow column
 // read the scenario RPCs use (GetProjectScenariosJSON) is still there to be
 // used.
 type wholeConfigRowReads struct {
@@ -136,7 +137,7 @@ expect:
 	_, err = service.ExportScenario(ctx, connect.NewRequest(&reliantv1.ExportScenarioRequest{
 		ProjectId: otherProject, ScenarioId: scenarioID,
 	}))
-	require.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "err = %v", err)
+	require.Equal(t, connect.CodeNotFound, svcerr.Code(err), "err = %v", err)
 
 	require.Empty(t, spy.reads(), "a scenario RPC read the whole project config row")
 }

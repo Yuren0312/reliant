@@ -17,7 +17,7 @@ not from reading forge's source. Commands are quoted so each claim can be re-run
 | Step | Result |
 |---|---|
 | `reliant forge project new --in-place --name reliant --mod github.com/reliant-labs/reliant --disable frontend` | **Succeeded** (1m51s). Wrote 38 new paths, **kept 15 existing files** untouched (`.air.toml`, `Dockerfile`, `buf.yaml`, `buf.gen.yaml`, `.golangci.yml`, 2 workflows, README, …), merged `.gitignore`, no git init. Detected `web/` and printed the exact opt-in: `frontends: [{name: web, type: vite-spa, path: web}]`. |
-| New paths | `forge.yaml`, `Taskfile.yml`, `cmd/reliant/cmd/` (forge cobra tree: `root.go server.go db.go version.go commands.go services/ workers/ operators/`), `db/` (`migrations/ queries/ seeds/ sqlc.yaml`), `deploy/` (`k3d.yaml kcl/ observability/`), `pkg/middleware/`, `proto/config/v1/config.proto`, `proto/forge/`, `gen/go.mod` (**gen becomes a separate module**), `.github/workflows/{ci,pre-commit,proto-breaking}.yml`, `.githooks/`, `docs/{runbook,slo}.md`. |
+| New paths | `forge.yaml`, `Taskfile.yml`, `cmd/reliant/cmd/` (forge cobra tree: `root.go server.go db.go version.go commands.go services/ workers/ operators/`), `db/` (`migrations/ queries/ seeds/ sqlc.yaml`), `deploy/` (`k3d.yaml kcl/ observability/`), `pkg/middleware/`, `proto/reliant/config/v1/config.proto` (was `proto/config/v1` until forge #1154), `proto/forge/`, `gen/go.mod` (**gen becomes a separate module**), `.github/workflows/{ci,pre-commit,proto-breaking}.yml`, `.githooks/`, `docs/{runbook,slo}.md`. |
 | `forge generate` #1 | **Refused before writing anything**: 3 existing `contract.go` are non-canonical — `accesstokenclient/client.go:43`, `gitcredentialclient/client.go:36` (constructor not `func(Deps) Service`), `integrations/ghusers/contract.go:38,43` (`TokenSource`/`User` instead of `Service`/`Deps`). |
 | `forge generate` #2 | Failed at buf: reliant's kept `buf.gen.yaml` needs `tools/protoc-gen-es` installed (`npm ci`). Forge rolled back cleanly and preserved output under `.forge/failed-generate/`. |
 | `forge generate` #3 | Failed at composition: `cliauth` and `forgecred` (CLI-only contract packages) have Deps (`credentials.Dirs`, `oauth2.HTTPDoer`, `func(string) error`, `Exchanger`, …) with no server provider. Forge assumes **every contract package is a server component**. Workaround: `//forge:external-component`. |
@@ -157,7 +157,7 @@ Every change ships as its own **small PR** that leaves everything that works tod
 | reliant P5a: goose → forge migrations. `db/migrations/20261014050404_baseline.up.sql` is goose's 156 migrations (through #909) cut with `forge db squash --from-dsn`, schema identical to a goose-built database; `db.Migrate` runs a goose bridge (catches up a database behind goose's head) then `migratekit.Apply`, adopting a goose database without running SQL; every forge migration declares `-- forge:backward-compatible` or `-- reliant:breaks-rollback`; goose's history is frozen; `schema.sql` and its drift test are gone (sqlc reads `db/migrations`) | reliant #910, #912, #914 |
 | reliant: main a generate fixed point and contract-clean again after #893/#895; node-type guard allows #909's `trigger.origin` key; the preset concurrency test counts overlapping reads instead of timing them | reliant #902, #916, #917 |
 
-**After P5a, before the next prod deploy (human):** the merge's first prod deploy adopts `reliant_cp`. Run the Cloud SQL clone rehearsal first (runbook §6.3), then §6.4. Still open for the user: when goose can be removed (§9) and the `reliant_cp_session` pool size (§11). (`check-migrations.yml`'s schema.sql drift step is replaced by the migration-path tests: runbook §10, applied.)
+**After P5a (done):** prod's `reliant_cp` was adopted by the first prod release carrying the goose bridge (release `20261019.065845-812e040da1af`, reliant pin `15495975`, live 2026-10-19; runbook §9 has the evidence). **goose removed (owner decision 2026-10-22, no backwards compatibility):** the bridge, goose's frozen history, the `goose` module, the goose-only tests and scripts, and the baseline's `-- forge:adopts goose` declaration; reliant's tables with no forge record are now refused, naming v1.8.2 as the upgrade step. Still open for the user: the `reliant_cp_session` pool size (runbook §11).
 
 **Merged in wave 6 (2026-10-14/15):**
 
@@ -168,9 +168,16 @@ Every change ships as its own **small PR** that leaves everything that works tod
 | forge: harness/mock/decorator keep a cross-package embedded interface's methods; package directives from any file, conflicts refused; handler-error-mapping counts only sentinels mapped to connect errors; struct-value deps explained; migratekit run-lock waiters poll `pg_try_advisory_lock` (no deadlock with CONCURRENTLY); `forge:breaks-rollback` + opt-in compat lint; short `migration new` header | forge #771, #772, #774–#778 |
 | forge: generate reports what each step wrote and skips dependents of a failed step; ORM collision names the declared rpcs; `shapes` handler lines are `Service.Rpc` with `--service`/`--unimplemented`; the merge driver runs only the pinned forge; stale generated files deleted by default; `generate --steps harness`; harness stubs for optional deps; deps-are-interfaces accepts maps/slices of interfaces; observability spec/saved searches/alert inputs split per service so parallel branches merge into the render | forge #783–#785, #788, #789, #791–#793, #799 |
 
+**Merged: P3c, as composition-graph roots (2026-10-21, `09-roots-plan.md`):**
+
+| Item | PR |
+|---|---|
+| R1–R2: the shared server blocks are one `server` subtree config (`ServerProcessConfig`, `DatabaseConfig`); `cmd/reliant/commands` → forge's `cmd/reliant/cmd` | reliant #1155 (R2) |
+| R3–R5: the gateway, the Temporal worker and the api-server are `//forge:root`s in `internal/app` (`roots_gateway.go`, `roots_worker.go`, `roots_api.go`), each built from the composition graph and run under the one process policy (`cmd/reliant/cmd/serve.go`); `internal/serverapi`, `internal/serverworker` and `internal/grpc/server.go`'s `NewAPI` are gone | reliant #1221, #1234, #1236 |
+| R6: `forge lint --graph` gates through plain `forge lint` (no `lint.rules` override); `main.go` is forge's `pid1.Init(); heavyjob.Dispatch(); cmd.Execute()`; the server configs' invariants are `buf.validate` rules forge checks as the config loads, so a bad value stops `server api` before it migrates; the `//forge:not-a-component` markers that named the hand-wired servers are `//forge:provided` (built by an `internal/app` provider) or name the package that builds them | reliant (R6), forge #1103 |
+
 **In flight / next:**
 - **Re-pin reliant** onto forge main past #799: picks up `--steps harness`, optional-dep stubs and the per-service observability layout (one-time: ~53 new files, the two aggregates deleted). Check whether any local compose's HyperDX saved-search loader needs forge's new `listFiles` block.
-- **P3c:** compose the handlers through forge's composition root instead of `internal/grpc/server.go`.
 
 **Next:**
 - **1h (needs a human):** CI runs pinned `forge generate` plus a clean-tree check, and `forge lint` goes non-gating, then gating. The GitHub App token cannot push `.github/workflows/*`, so someone with workflow permission lands it.
@@ -181,7 +188,7 @@ Every change ships as its own **small PR** that leaves everything that works tod
 
 **Still open in forge:** no way to opt out of CI scaffolding except deleting the files; F6 cross-project KCL; F7 Sentry hook and file log sink; F12 ORM gaps; `EnsureDevWebRuntimeLink` still adds `/package.json` to `.gitignore`.
 
-**Dev databases (user decision, 2026-10-12): fully destroyable.** At the P5a cutover, dev databases (the `forge env up` stack's `reliant` DB on 5434, per-developer 5433 DBs) may be dropped and rebuilt from the new baseline rather than reconciling branch-only goose versions (a dev DB on the goose history is simply caught up and adopted; one with a branch-only version is refused and must be rebuilt). **Goose adoption stays mandatory for prod (`reliant_cp` on Cloud SQL `reliant-pg`)** and for any env holding data we keep. Never touch prod in a "dev DB" teardown.
+**Dev databases (user decision, 2026-10-12): fully destroyable.** At the P5a cutover, dev databases (the `forge env up` stack's `reliant` DB on 5434, per-developer 5433 DBs) may be dropped and rebuilt from the new baseline rather than reconciling branch-only goose versions (a dev DB on the goose history is simply caught up and adopted; one with a branch-only version is refused and must be rebuilt). **Goose adoption stays mandatory for prod (`reliant_cp` on Cloud SQL `reliant-pg`)** and for any env holding data we keep. (Done: prod adopted 2026-10-19; goose removed 2026-10-22.) Never touch prod in a "dev DB" teardown.
 - As of 2026-10-12 this sandbox has no dev Postgres (no `postgres_data` volume, no k3d cluster); only prod kube contexts exist, and they are untouched. The dev stacks rebuild their DB on next `forge env up`.
 - Reliant pins forge `f3fd8c02` (reliant #938).
 
@@ -223,19 +230,19 @@ Then P2 onward proceed one service, one package or one concern at a time under t
 - (Split `ScenarioService` out of `workflow.proto`: moved to P1 slice 1b.)
 - Make the 45 list filters `optional`, fixing Go/TS call sites. One PR per proto file; it's wire-compatible but changes Go/TS field types.
 - Declare the 9 public rpcs with `auth_required: false`, replacing the `publicMethods` slice.
-- Optionally add `buf.validate` rules + `forge/pkg/validate`.
+- Optionally add `buf.validate` rules + `forge/pkg/validate` to the rpc messages (the config messages have them since R6).
 
 **P3 — Handlers onto forge's `*Service` model (L, the biggest phase).** Depends on P2.
 - P3a (M, serial): extract the shared helpers in `internal/grpc/services` (`chat_helpers.go`, `daemon_proxy_base.go`, `daemon_choice.go`, `log_redact.go`, …) into real packages, so each service can move independently.
 - P3b (L, **parallel per service**; each lane owns `internal/handlers/<svc>/` + its source files in `internal/grpc/services/`): move each service's methods onto `internal/handlers/<svc>/Service`. In `internal/grpc/server.go`, swap that one `New*Handler` call for the forge handler. Delete the scaffold stubs as each lands.
-- P3c (M): replace `internal/grpc/server.go` + `internal/serverapi|serverworker|servergateway` with forge's `Serve` + `ServeSpec` per role:
+- P3c (M) — **done** as composition-graph roots (`09-roots-plan.md`, R1–R6): replace `internal/grpc/server.go` + `internal/serverapi|serverworker|servergateway` with forge's `Serve` + `ServeSpec` per role:
   - `server api` = subset `Mount`;
   - `server worker` = Temporal worker as a supervised component;
   - `server gateway` = the NATS bridge;
 - reliant's extra interceptors (timeout, domain whitelist, machine-wake, slow-rpc watchdog, error reporter) join `observe.Chain` as named `Deps`.
 
-**P4 — Typed config + secrets (M).** Depends on P1. Owns `proto/config/`, `pkg/config`, the `os.Getenv` sites.
-- Declare the ~85 vars in `proto/config/v1/config.proto` with **today's env-var names** (explicit `env_var:`), so control-plane KCL needs no change.
+**P4 — Typed config + secrets (M).** Depends on P1. Owns `proto/reliant/config/`, `pkg/config`, the `os.Getenv` sites.
+- Declare the ~85 vars in `proto/reliant/config/v1/config.proto` with **today's env-var names** (explicit `env_var:`), so control-plane KCL needs no change.
 - Mark secrets `sensitive: true` (DB URL, NATS creds, Supabase/Sentry/Statsig keys, JWT keys, `INTERNAL_SERVICE_SECRET`, …). Dev values go in `secrets/dev.yaml`.
 - Migrate call sites package by package (parallel lanes by package), then flip `enforce_typed_access: error`.
 - Daemon and CLI configs are separate messages loaded with `config.Load` (flags > env > file > defaults). The product's user config (`config/reliant-schema.json`, `~/.reliant`) stays bespoke.
@@ -262,7 +269,7 @@ Then P2 onward proceed one service, one package or one concern at a time under t
 - Set `contracts: {strict: true}` in warn mode.
 - Classify all 104 packages: service / strategy / adapter (`forge:outbound-io`) / pure (`//forge:exclude-contract: <why>`) / worker.
 - Roll out `contract.go` in waves of disjoint packages. Highest seam value first: `llm`, `workflow`, `daemon`, `threads`, `mcp`, `integrations/*`, `temporal`.
-- Split `internal/db`'s Repository into consumer-declared narrow interfaces (`api/role-interface` pattern) rather than one generated mega-mock.
+- Split `internal/db`'s Repository into consumer-declared narrow interfaces (`api/role-interface` pattern) rather than one generated mega-mock. **Done** (`10-repo-split-plan.md`, option A): lanes W1, A–F and Z (reliant #1249 #1256 #1273 #1277 #1294 #1297 #1300 #1303) moved every consumer onto a role it declares, and lane Y deleted `db.Repository`, the implementation-side `core.{ProviderAccountStore,RunEventStore,ConnectionStore,SecretsTx,IntegrationWriteStore}`, 41 dead `*db.Repo` methods, and unexported 11 internal-only ones. `*db.Repo` is the one concrete persistence API; `Connections()` / `IntegrationWrites()` return the concrete `db.ConnectionStore` / `db.IntegrationWriteLedger`. The compiler is the regression gate: there is no interface left to widen.
 - Replace hand fakes where a recorder mock is enough; keep stateful in-memory fakes.
 - Each contract also gets the generated observability decorator, which is how per-component tracing and metrics arrive.
 
@@ -270,7 +277,7 @@ Then P2 onward proceed one service, one package or one concern at a time under t
 - Adopt `observe` (logging/tracing/metrics interceptors, `LogCall/TraceCall/RecordCall`) and serverkit health/readiness/pprof/drain (`PreStopDelay` exists).
 - Move probes from the separate `HEALTH_PORT` 8081 to serverkit's endpoints, **together with control-plane's `RELIANT_PROBES`** in `workloads.k:163`.
 - Keep the daemon's rotating file logs (lumberjack, user machines) and Sentry + scrub as an adapter until F7 lands.
-- Move the 1,290 `connect.NewError` sites to `svcerr.Wrap` package by package (lint `forgeconv-no-handler-error-mapping`).
+- ✅ **P7a done (Z):** the 1,290 `connect.NewError` sites are on `svcerr` (plan `11-svcerr-plan.md`: L0, C0, L1–L5, then a re-run of `forge fix connect-errors` at forge #1160 that dropped the last test-read-only `svcerr.ToConnect` wrappers). `forge.yaml` holds `forgeconv-no-handler-error-mapping` and `forgeconv-handler-connect-error` at **error**, so a hand-built Connect error in `internal/handlers/` fails `forge lint`. The remaining `connect.NewError` / `svcerr.ToConnect` sites are outside handler packages (interceptors, `daemonerr`, `daemoncmd`, `machinewake`, the daemon router), where a `*connect.Error` is the contract.
 - Turn on the LGTM stack + `forge env status` in dev.
 
 **P8 — Dev tooling, CI, deploy (M).** Depends on P4 and P5.
@@ -290,7 +297,7 @@ Then P2 onward proceed one service, one package or one concern at a time under t
 P0 ─► P1 ─┬─► P2 ─► P3a ─► P3b (×36 parallel) ─► P3c ─► P7
           ├─► P4 (parallel by package) ─────────────────┐
           ├─► P5a ─┬────────────────────────────────────┼─► P8
-          │        └─► P5b (needs F5/F12, + P3b per svc) ─► P6 Repository split
+          │        └─► P5b (needs F5/F12, + P3b per svc) ─► P6 Repository split (done)
           ├─► P6 (non-handler pkgs, parallel waves) ────┘
           └─► P9
 ```
@@ -301,7 +308,7 @@ P0 ─► P1 ─┬─► P2 ─► P3a ─► P3b (×36 parallel) ─► P3c �
 |---|---|---|---|
 | F1 | No adoption path from an existing **goose** history (`goose_db_version`) to migratekit; backfill assumes `schema_migrations` already exists | migratekit API has `Open/Up/Force/State` only; reliant prod/desktop DBs are goose | P5 |
 | F2 | Forge assumes every `contract.go` package is a **server** component; CLI-/daemon-only packages fail composition | `forge generate` #3: `Cliauth.Deps.Dirs … has no provider` | P1 (workaround `forge:external-component`) |
-| F3 | Per-binary config (`forge.v1.binary_config {binary}`) is keyed on `cmd/<name>`; reliant's roles are **subcommands of one binary** (api/worker/gateway/daemon/CLI). Needs role/subcommand-scoped config, or forge has to bless splitting binaries | `proto/config/v1/config.proto` header comment | P4 |
+| F3 | Per-binary config (`forge.v1.binary_config {binary}`) is keyed on `cmd/<name>`; reliant's roles are **subcommands of one binary** (api/worker/gateway/daemon/CLI). Needs role/subcommand-scoped config, or forge has to bless splitting binaries | `proto/reliant/config/v1/config.proto` header comment | P4 |
 | F4 | No **incremental service adoption**: the first `generate` scaffolds stubs for all 36 services / 307 rpcs at once, with no way to exclude a proto service until it's ported | §1 #4 output | P1/P3 |
 | F5 | **CRUD auto-detection on name collisions**: 52 reliant rpcs match `Verb<E>` + table + message. Need an explicit per-rpc/per-entity opt-out, unless `//forge:no-orm` already suppresses it (to verify) | §2 | P5 |
 | F6 | **Cross-project workload/config composition**: control-plane consuming reliant's `config_gen.k` + workload definitions from `../reliant` (KCL module dep) | D4 | P8 |

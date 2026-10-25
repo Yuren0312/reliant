@@ -16,15 +16,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// branchAtomicityRepo wraps db.Repository so it satisfies the whole
-// interface, but fails the CreateUserUpdate call — the last write inside
+// branchAtomicityRepo wraps the real repository behind the chat Repository
+// role, but fails the CreateUserUpdate call — the last write inside
 // BranchChat's transaction — so the test can assert that nothing earlier in
 // the transaction (branch chat row, forked workflow/thread) survives the
 // abort.
 type branchAtomicityRepo struct {
-	db.Repository
+	Repository
 	shouldFail bool
 }
+
+var _ Repository = (*branchAtomicityRepo)(nil)
 
 func (r *branchAtomicityRepo) CreateUserUpdate(ctx context.Context, update *db.UserUpdate) error {
 	if r.shouldFail {
@@ -35,7 +37,7 @@ func (r *branchAtomicityRepo) CreateUserUpdate(ctx context.Context, update *db.U
 
 // setupBranchAtomicitySource creates a source chat with one message,
 // suitable as a branch point, and returns (sourceChatID, messageID).
-func setupBranchAtomicitySource(t *testing.T, repo db.Repository, ctx context.Context, projectID string) (string, string) {
+func setupBranchAtomicitySource(t *testing.T, repo *db.Repo, ctx context.Context, projectID string) (string, string) {
 	t.Helper()
 	now := time.Now().UTC()
 
@@ -89,6 +91,8 @@ func setupBranchAtomicitySource(t *testing.T, repo db.Repository, ctx context.Co
 // forked workflow/thread. Before the transaction wrapper this test fails —
 // verified by reverting the wrapper, confirming failure, and restoring it.
 func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -144,6 +148,8 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 // disabled, branching must succeed and leave a consistent branch chat +
 // forked workflow/thread + chat_created update behind.
 func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

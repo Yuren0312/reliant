@@ -1,7 +1,6 @@
 package file_system
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,17 +9,14 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the file_system service. internal/grpc/server.go
-// constructs it today, and mounts it only when the API server has a daemon
-// router: the files live on the user's machines, never on this server.
-// forge's composition root takes over in P3c (research/forge-migration/PLAN.md).
-// The rpc methods on *Service are where this service's logic lives; see the
-// forge `api` / `services` skill.
+// Deps holds dependencies for the file_system service. The composition graph
+// constructs it (internal/app/compose.go); every rpc reaches a daemon through
+// the router, because the files live on the user's machines, never on this
+// server. The rpc methods on *Service are where this service's logic lives;
+// see the forge `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
@@ -30,29 +26,6 @@ type Deps struct {
 	// Repo resolves a request's workspace, the machine it is on, and that
 	// machine's owner.
 	Repo Repository
-}
-
-// Repository is the slice of db.Repository the filesystem handlers use.
-type Repository interface {
-	// GetChat, GetWorktree and GetProject resolve a request's workspace
-	// (filepreview.ResolveBasePath) and its machine (daemonplacement).
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
-	GetProject(ctx context.Context, id string) (*db.Project, error)
-	// ListProjectDaemonsForProject reads a missing checkout's clone records.
-	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error)
-	// GetDaemon checks that a machine about to be woken is the caller's
-	// (machinewake.Owners).
-	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
-}
-
-// Router is the slice of toolexec.DaemonRouter the filesystem handlers use.
-// A router that can also resume a suspended machine (machinewake.Resumer)
-// has asleep machines woken; see wake.
-type Router interface {
-	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
-	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
-	ResolveDaemonID(ctx context.Context, userID string) (string, error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

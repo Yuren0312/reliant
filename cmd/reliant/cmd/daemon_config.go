@@ -7,12 +7,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/diskguard"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// loadDaemonConfig loads `daemon start`'s config (proto/config/v1 DaemonConfig)
+// loadDaemonConfig loads `daemon start`'s config (proto/reliant/config/v1 DaemonConfig)
 // and refuses one the daemon cannot run with. The loader refuses a value that
 // does not parse or lies outside a field's allowed set (DAEMON_TLS_MODE,
 // RELIANT_DAEMON_TYPE); this adds a port that is not a port. So a typo in any
@@ -51,6 +52,14 @@ func daemonHost(cfg *config.DaemonConfig) daemonruntime.Host {
 		RuntimeType:  cfg.GetRuntimeType(),
 		FrontendPort: int(cfg.GetFrontendPort()),
 		ProjectPath:  cfg.GetProjectPath(),
+
+		AllowPrivateFetch: cfg.GetFetchAllowPrivateNetwork(),
+		Egress: egresslimit.Limits{
+			UserPerMinute:     int(cfg.GetEgressUserPerMinute()),
+			UserBurst:         int(cfg.GetEgressUserBurst()),
+			UserMaxConcurrent: int(cfg.GetEgressUserMaxConcurrent()),
+			HostMaxConcurrent: int(cfg.GetEgressHostMaxConcurrent()),
+		},
 	}
 }
 

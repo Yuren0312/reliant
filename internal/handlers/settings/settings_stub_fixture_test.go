@@ -2,9 +2,10 @@ package settings_test
 
 import (
 	"context"
-	"database/sql"
+	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	settings "github.com/reliant-labs/reliant/internal/handlers/settings"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
@@ -15,14 +16,14 @@ import (
 // accepted and dropped.
 type memorySettings map[string]*db.Setting
 
-func (m memorySettings) repo() *settings.StubRepo {
-	return &settings.StubRepo{
+func (m memorySettings) repo() *settings.MockRepository {
+	return &settings.MockRepository{
 		GetSettingFunc: func(_ context.Context, _ string, _ *string, key string) (*db.Setting, error) {
 			if s, ok := m[key]; ok {
 				cp := *s
 				return &cp, nil
 			}
-			return nil, sql.ErrNoRows
+			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("setting"), key) // the store's shape
 		},
 		ListSettingsFunc: func(context.Context, string, *string) ([]*db.Setting, error) {
 			out := make([]*db.Setting, 0, len(m))
@@ -55,7 +56,7 @@ func (m memorySettings) repo() *settings.StubRepo {
 // The control plane and the code exchanges are stand-ins that fail loudly if a row
 // reaches them. The Copilot poll is the one the real flow has: it fails on a cancelled
 // context before anything leaves the process.
-func newSettingsService(t *testing.T, repo db.Repository) *settings.Service {
+func newSettingsService(t *testing.T, repo settings.Repository) *settings.Service {
 	t.Helper()
 	return settings.NewTestSettings(t, settings.WithSettingsDeps(settings.Deps{
 		Repo: repo,

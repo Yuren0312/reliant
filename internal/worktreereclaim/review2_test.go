@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // Regression tests ported from the second review of #574 (probes N1-N8).
@@ -20,6 +22,7 @@ import (
 // exactly what WorktreeService.relockActive sends) is then a cache hit and a
 // no-op, so the fence survives the unarchive and a phase-two removal succeeds.
 func TestReview2_N1_RelockCacheDefeatsTheFence(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -50,6 +53,7 @@ func TestReview2_N1_RelockCacheDefeatsTheFence(t *testing.T) {
 // as the "other process".
 func TestReview2_N2_DataWrittenInsideTheRemovalWindow(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~63 git processes")
 	for _, mode := range []string{"auto", "confirmed"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
@@ -87,6 +91,7 @@ func TestReview2_N2_DataWrittenInsideTheRemovalWindow(t *testing.T) {
 // TrimSpaces stdout.
 func TestReview2_N3_RestoreRoundTrip(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~45 git processes")
 	f := newFixture(t)
 	// A tracked file whose edit's hunk ends on blank context lines, and whose
 	// last added line has trailing whitespace.
@@ -165,6 +170,7 @@ func gitOut(dir string, args ...string) (string, error) {
 // blank context line: git() TrimSpaces stdout before the patch is written.
 func TestReview2_N3b_RestorePatchTail(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~92 git processes")
 	for name, tc := range map[string]struct{ base, edited string }{
 		"trailing-ws-last-added": {"a\n", "a\nend with spaces   \n"},
 		"blank-context-tail":     {"a\nb\nc\n\n\n\n", "a\nB\nc\n\n\n\n"},
@@ -199,6 +205,7 @@ func TestReview2_N3b_RestorePatchTail(t *testing.T) {
 // answer to the re-lock is "gone"; WorktreeService.relockActive discards it.
 func TestReview2_N5_RelockAfterRemovalSaysGone(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~33 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("n5", "feat/n5")
@@ -214,6 +221,7 @@ func TestReview2_N5_RelockAfterRemovalSaysGone(t *testing.T) {
 // reads the real index; on the auto path git's own (non-forced) check must save it.
 func TestReview2_N6_StagedButRevertedInWorktree(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~36 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("n6", "feat/n6")
@@ -246,6 +254,7 @@ func TestReview2_N6_StagedButRevertedInWorktree(t *testing.T) {
 // sweep, or a clean-up batch that read the row before the DB flip) simply
 // re-claims, and its phase two removes.
 func TestReview2_N7_ReclaimAfterRelockWithSameFence(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -271,6 +280,7 @@ func TestReview2_N7_ReclaimAfterRelockWithSameFence(t *testing.T) {
 // N8: the automatic classifier (no snapshot, no consent) hashes untracked
 // files into the SHARED object store via `git add -A` on a temp index.
 func TestReview2_N8_ClassifierWritesUntrackedIntoSharedObjects(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -295,6 +305,7 @@ func TestReview2_N8_ClassifierWritesUntrackedIntoSharedObjects(t *testing.T) {
 // before it can claim the worktree again, and a newer archive can.
 func TestFence_IsSingleUseAndMonotonic(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~40 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("mono", "feat/mono")
@@ -321,6 +332,7 @@ func TestFence_IsSingleUseAndMonotonic(t *testing.T) {
 // not flip the row to active over nothing.
 func TestRelockOfARemovedDirectoryReportsGone(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~33 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("rg", "feat/rg")
@@ -337,6 +349,7 @@ func TestRelockOfARemovedDirectoryReportsGone(t *testing.T) {
 // path saves them too, then removes: see backup_test.go.)
 func TestReconcile_OrphanHistoryIsReportedAndIsSavedByConfirmed(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~59 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("orph", "feat/orph")
@@ -375,6 +388,7 @@ func TestReconcile_OrphanHistoryIsReportedAndIsSavedByConfirmed(t *testing.T) {
 // R-B1: a commit that IS on a branch is not an orphan, however the worktree got there.
 func TestReconcile_ReflogOfAnOrdinaryBranchIsNotAnOrphan(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~36 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("ordinary", "feat/ordinary")
@@ -392,6 +406,7 @@ func TestReconcile_ReflogOfAnOrdinaryBranchIsNotAnOrphan(t *testing.T) {
 // and the change is noticed, so everything is put back.
 func TestQuarantine_PathWriterLosesAndTheWorktreeIsPutBack(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~69 git processes")
 	for _, mode := range []string{"auto", "confirmed"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
@@ -439,6 +454,7 @@ func TestQuarantine_PathWriterLosesAndTheWorktreeIsPutBack(t *testing.T) {
 // R-S3: removal is per checkout and each is quarantined at its own moment.
 func TestQuarantine_MultiCheckoutIsRemovedOneAtATimeAndRestoredOnChange(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "a multi-checkout quarantined, restored and removed (~61 git processes)")
 	f := newFixture(t)
 	f.idle()
 	ws := filepath.Join(f.root, "proj", "qm")
@@ -491,6 +507,7 @@ func TestQuarantine_MultiCheckoutIsRemovedOneAtATimeAndRestoredOnChange(t *testi
 // R-S5: byte-exact restore, and a failed apply reports failure.
 func TestApplySnapshot_ByteExactAndVerified(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~43 git processes")
 	f := newFixture(t)
 	w := f.worktree("bx", "feat/bx")
 	files := map[string][]byte{
@@ -523,6 +540,7 @@ func TestApplySnapshot_ByteExactAndVerified(t *testing.T) {
 }
 
 func TestApplySnapshot_RefusesADirtyCheckoutAndFailsLoudly(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("dirtyapply", "feat/dirtyapply")
@@ -539,6 +557,7 @@ func TestApplySnapshot_RefusesADirtyCheckoutAndFailsLoudly(t *testing.T) {
 
 // R-S8: the automatic classifier writes NOTHING into the shared object store.
 func TestAutoClassifierWritesNoObjects(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -564,6 +583,7 @@ func TestSnapshotRemove_TooLargeReasonName(t *testing.T) {
 
 // R-S8: a worktree the daemon runs out of time for is deferred untouched.
 func TestReconcile_BatchBudgetDefersTheRest(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()

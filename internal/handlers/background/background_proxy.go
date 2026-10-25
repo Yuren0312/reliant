@@ -4,17 +4,19 @@ package background
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/processproto"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // bgListTimeoutMs bounds the daemon round trip for a process LIST.
@@ -33,7 +35,7 @@ const bgListTimeoutMs int32 = 5_000
 func (s *Service) getUserID(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return "", fmt.Errorf("user ID not found in context")
+		return "", svcerr.Unauthenticated("user ID not found in context")
 	}
 	return userID, nil
 }
@@ -41,25 +43,59 @@ func (s *Service) getUserID(ctx context.Context) (string, error) {
 func (s *Service) sendCommand(ctx context.Context, userID, commandType string, req any, resp any, timeoutMs int32) error {
 	payload, err := json.Marshal(req)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("marshal request"))
 	}
 
 	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 	if err != nil {
-		// A machine that is starting, asleep or absent is not a server
-		// fault: Unavailable while it is on its way, FailedPrecondition when
-		// the user has none. ListProcesses used to return the second as
-		// Internal (ELECTRON-A6).
-		if cerr, ok := daemonerr.MachineStateConnectError("", err); ok {
-			return cerr
-		}
-		return connect.NewError(connect.CodeInternal, err)
+		return daemonFailure("daemon command "+commandType, err)
 	}
 
 	if err := json.Unmarshal(respBytes, resp); err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal response: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
 	}
 	return nil
+}
+
+// daemonFailure is a failed daemon round trip as the svcerr kind the rpc
+// returns. A machine that is starting, asleep or absent is not a server
+// fault: Unavailable while it is on its way, FailedPrecondition when the user
+// has none (daemonerr.MachineState; ListProcesses used to return the second as
+// Internal, ELECTRON-A6). A daemon older than this server is FailedPrecondition
+// in the daemon's own words (daemonerr.Outdated). Anything else is Internal,
+// saying what was being done: the daemon's own words reach the user, the
+// router's and the transport's stay on the error as its logged cause.
+func daemonFailure(doing string, err error) error {
+	if daemonerr.IsOutdated(err) {
+		return daemonerr.Outdated(err)
+	}
+	if serr, ok := daemonerr.MachineState("", err); ok {
+		return serr
+	}
+	msg := doing + " failed"
+	if text, ok := toolexec.DaemonReportedText(err); ok {
+		msg += ": " + text
+	}
+	return svcerr.WithCause(svcerr.Internal(msg), err)
+}
+
+// processNotRunningMarker is the phrase the daemon's BackgroundManager.KillProcess
+// writes for a process that already exited ("process <id> is not running
+// (status: …)"). Daemon-command errors cross NATS as text, so the text is the
+// wire contract between the two (as in daemonerr's markers).
+const processNotRunningMarker = "is not running"
+
+// processNotRunning reclassifies a kill of a process that had already exited:
+// not a server fault (it answered Internal) but FailedPrecondition with the
+// process_not_running reason, which the web treats as "already stopped" and
+// refreshes. The message is unchanged — older clients match on it.
+func processNotRunning(err error) error {
+	text, ok := toolexec.DaemonReportedText(err)
+	if !ok || !strings.Contains(text, processNotRunningMarker) {
+		return err
+	}
+	return svcerr.WithReason(svcerr.WithCause(svcerr.FailedPrecondition(svcerr.ToConnect(err).Message()), err),
+		errreason.ProcessNotRunning)
 }
 
 // ListProcesses returns all background processes.
@@ -69,7 +105,7 @@ func (s *Service) ListProcesses(
 ) (*connect.Response[reliantv1.ListBackgroundProcessesResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	var cmdResp []daemonProcessInfo
@@ -117,11 +153,11 @@ func (s *Service) GetProcessOutput(
 ) (*connect.Response[reliantv1.GetProcessOutputResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	if req.Msg.ProcessId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("process_id is required"))
+		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 
 	cmdReq := map[string]any{
@@ -150,11 +186,11 @@ func (s *Service) KillProcess(
 ) (*connect.Response[reliantv1.KillProcessResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	if req.Msg.ProcessId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("process_id is required"))
+		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 
 	cmdReq := map[string]any{
@@ -163,7 +199,7 @@ func (s *Service) KillProcess(
 
 	var cmdResp struct{}
 	if err := s.sendCommand(ctx, userID, "exec.bg_kill", cmdReq, &cmdResp, 30000); err != nil {
-		return nil, err
+		return nil, processNotRunning(err)
 	}
 
 	return connect.NewResponse(&reliantv1.KillProcessResponse{
@@ -180,16 +216,16 @@ func (s *Service) StreamProcessOutput(
 ) error {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return err
 	}
 
 	if req.Msg.ProcessId == "" {
-		return connect.NewError(connect.CodeInvalidArgument, errors.New("process_id is required"))
+		return svcerr.InvalidArgument("process_id is required")
 	}
 
 	outputCh, unsub, err := s.deps.Router.SubscribeProcessOutput(ctx, userID, req.Msg.ProcessId, req.Msg.NewOnly)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("subscribe process output: %w", err))
+		return daemonFailure("subscribe process output", err)
 	}
 	defer unsub()
 

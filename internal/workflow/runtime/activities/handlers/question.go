@@ -34,6 +34,11 @@ type QuestionCreateInput struct {
 	NodePath   string  `json:"node_path,omitempty" reliant:"-"`
 	Metadata   *string `json:"metadata,omitempty" reliant:"-"`
 	ToolCallID string  `json:"tool_call_id,omitempty" reliant:"-"`
+	// Async records a question asked without waiting (ask_user async:
+	// true): nothing in the run waits on it, so it neither marks the chat
+	// unread nor records the run as blocked. Its answer is delivered to
+	// the thread as a message (research/ASYNC_ASK_USER.md).
+	Async bool `json:"async,omitempty" reliant:"-"`
 }
 
 // QuestionCreateOutput is the output from the QuestionCreate activity.
@@ -66,11 +71,11 @@ type QuestionResolveOutput struct {
 // QuestionCreateActivity creates a question record in the DB and returns immediately.
 // The workflow then waits on a signal channel for resolution — no polling needed.
 type QuestionCreateActivity struct {
-	repo db.Repository
+	repo QuestionCreateStore
 }
 
 // NewQuestionCreateActivity creates a new QuestionCreateActivity
-func NewQuestionCreateActivity(repo db.Repository) *QuestionCreateActivity {
+func NewQuestionCreateActivity(repo QuestionCreateStore) *QuestionCreateActivity {
 	return &QuestionCreateActivity{repo: repo}
 }
 
@@ -181,6 +186,7 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 		Status:             db.QuestionStatusPending,
 		Metadata:           input.Metadata,
 		ToolCallID:         toolCallID,
+		Async:              input.Async,
 		CreatedAt:          time.Now().UTC(),
 	}
 
@@ -190,11 +196,14 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 			return fmt.Errorf("failed to create question: %w", err)
 		}
 
-		// Mark chat as unread so UI shows notification badge
-		if err := a.repo.UpdateChatUnread(txCtx, input.ChatID, true, "question_pending"); err != nil {
-			logger.Warn("[QuestionCreate] Failed to mark chat as unread",
-				"error", err,
-				"chatID", input.ChatID)
+		// Mark chat as unread so UI shows notification badge. An async
+		// question waits on no one in the chat: the inbox is its notice.
+		if !input.Async {
+			if err := a.repo.UpdateChatUnread(txCtx, input.ChatID, true, "question_pending"); err != nil {
+				logger.Warn("[QuestionCreate] Failed to mark chat as unread",
+					"error", err,
+					"chatID", input.ChatID)
+			}
 		}
 
 		// Emit question update (include metadata so frontend can render the question)
@@ -215,8 +224,22 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 			StepID:     input.StepID,
 			Status:     "pending",
 			Metadata:   metadata,
+			Async:      input.Async,
+			ToolCallID: input.ToolCallID,
 		}); err != nil {
 			return fmt.Errorf("failed to emit question update: %w", err)
+		}
+
+		// An async question blocks nothing: the run goes on. It is an item
+		// in the user's inbox, which no activity change announces, so the
+		// inbox is told to re-read.
+		if input.Async {
+			if chat, err := a.repo.GetChat(txCtx, input.ChatID); err == nil && chat != nil {
+				if err := a.repo.EmitUserRefetch(txCtx, chat.UserID, db.RefetchInbox, db.RefetchOpts{ChatID: &input.ChatID}); err != nil {
+					logger.Warn("[QuestionCreate] Failed to announce an async question to the inbox", "error", err, "chatID", input.ChatID)
+				}
+			}
+			return nil
 		}
 
 		// The run is now waiting on a human: a workflow-event "blocked"
@@ -255,11 +278,11 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 // when it stops waiting on a question without an answer: the signal timer
 // expired, or (ask_user) the asking thread was messaged or interrupted.
 type QuestionResolveActivity struct {
-	repo db.Repository
+	repo QuestionResolveStore
 }
 
 // NewQuestionResolveActivity creates a new QuestionResolveActivity
-func NewQuestionResolveActivity(repo db.Repository) *QuestionResolveActivity {
+func NewQuestionResolveActivity(repo QuestionResolveStore) *QuestionResolveActivity {
 	return &QuestionResolveActivity{repo: repo}
 }
 

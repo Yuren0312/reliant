@@ -5,7 +5,8 @@
 // Package stories contains story-based end-to-end tests that exercise the
 // full Reliant backend hermetically:
 //
-//	real Postgres (DATABASE_URL, same conventions as internal/db tests)
+//	real Postgres (internal/db's test database: forge pgtest's embedded
+//	  server, or FORGE_TEST_POSTGRES_URL)
 //	real Temporal (ephemeral dev server owned by TestMain)
 //	real worker (workersetup.NewWorker — production registration path)
 //	real Connect service handlers (chat.Service etc., called in-process)
@@ -15,11 +16,7 @@
 //
 // Run with:
 //
-//	DATABASE_URL=postgres://postgres:postgres@localhost:5433/reliant?sslmode=disable \
-//	  go test -tags e2e ./e2e/stories/ -v
-//
-// (`make test-e2e` runs the suite against your DATABASE_URL, or, when it is
-// unset, brings up the compose Postgres and uses that.)
+//	go test -tags e2e ./e2e/stories/ -v     # or: task test:e2e
 //
 // Each story is independent and parallel-safe: it creates its own user,
 // project, chat, and Temporal worker on a unique task queue. The Postgres
@@ -38,6 +35,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -59,6 +57,12 @@ const temporalNamespace = "reliant"
 
 // setupQuietLogging suppresses the (very chatty) server logging during tests.
 // Set E2E_VERBOSE=1 to keep full logging for debugging.
+//
+// The server's ERROR records are kept, in serverErrors, and printed when the
+// run fails: a story whose handler failed sees only the redacted wire error
+// ("internal: failed to create chat"), and the cause is in the ERROR the
+// handler logged. Discarding those left a release-gate failure with no
+// evidence to find its cause by.
 func setupQuietLogging() {
 	if os.Getenv("E2E_VERBOSE") == "1" {
 		return
@@ -68,30 +72,54 @@ func setupQuietLogging() {
 		Level: slog.LevelError + 10, // effectively silent
 	}))
 	slog.SetDefault(silent)
-	logging.DefaultOutput = io.Discard
-	logging.Setup(logging.Settings{}, slog.LevelError+10)
+	logging.DefaultOutput = serverErrors
+	logging.Setup(logging.Settings{}, slog.LevelError)
+}
+
+// serverErrors keeps the last serverErrorLines lines the server logged at
+// ERROR and above.
+var serverErrors = &lineTail{max: serverErrorLines}
+
+const serverErrorLines = 300
+
+type lineTail struct {
+	mu    sync.Mutex
+	max   int
+	lines []string
+}
+
+func (l *lineTail) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, line := range strings.Split(strings.TrimRight(string(p), "\n"), "\n") {
+		l.lines = append(l.lines, line)
+	}
+	if over := len(l.lines) - l.max; over > 0 {
+		l.lines = append([]string(nil), l.lines[over:]...)
+	}
+	return len(p), nil
+}
+
+func (l *lineTail) dump(w io.Writer) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.lines) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "e2e/stories: the last %d server ERROR lines of this run:\n", len(l.lines))
+	for _, line := range l.lines {
+		fmt.Fprintln(w, "  "+line)
+	}
 }
 
 func TestMain(m *testing.M) {
 	setupQuietLogging()
 
-	// The stories are DB-backed the same way internal/db tests are: they skip
-	// when DATABASE_URL is not set. In that case don't pay for a Temporal dev
-	// server either — every story checks requireStack(t) and skips.
-	if os.Getenv("DATABASE_URL") == "" {
-		// REQUIRE_TEST_DB=1 (CI) turns the skip into a failure, the same
-		// contract internal/db's SetupTestDB honours. Without it the CI job
-		// reported green for months while running 1 of 11 stories — the other
-		// ten skipped, which is how three of them stopped compiling and three
-		// more collided on shared tool-call ids with nobody noticing.
-		if v := os.Getenv("REQUIRE_TEST_DB"); v != "" && v != "0" && !strings.EqualFold(v, "false") {
-			fmt.Fprintln(os.Stderr, "e2e/stories: REQUIRE_TEST_DB is set but DATABASE_URL is not — refusing to skip every story")
-			os.Exit(1)
-		}
-		fmt.Fprintln(os.Stderr, "e2e/stories: DATABASE_URL not set — all stories will be skipped (run `make postgres-up` and set DATABASE_URL)")
-		os.Exit(m.Run())
-	}
-
+	// The stories always run: their database is internal/db's test database,
+	// which needs no configuration. (They used to skip without DATABASE_URL,
+	// and CI reported green for months while running 1 of 11 stories — which
+	// is how three of them stopped compiling and three more collided on shared
+	// tool-call ids with nobody noticing.)
 	if err := startTemporalDevServer(); err != nil {
 		fmt.Fprintf(os.Stderr, "e2e/stories: failed to start Temporal dev server: %v\n", err)
 		os.Exit(1)
@@ -102,6 +130,9 @@ func TestMain(m *testing.M) {
 	restoreGrace := v2.SetDaemonOfflinePauseGraceForTest(storyDaemonOfflinePauseGrace)
 	code := m.Run()
 	restoreGrace()
+	if code != 0 {
+		serverErrors.dump(os.Stderr)
+	}
 
 	if temporalDev.server != nil {
 		_ = temporalDev.server.Stop()

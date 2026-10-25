@@ -18,6 +18,7 @@ import (
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -27,14 +28,12 @@ import (
 // sessionTracker tracks active user sessions to avoid duplicate session_start events
 type sessionTracker struct {
 	sessions map[string]time.Time // userID -> last seen time
-	everSeen map[string]bool      // userID -> has been seen at least once
 	mu       sync.RWMutex
 }
 
 func newSessionTracker() *sessionTracker {
 	tracker := &sessionTracker{
 		sessions: make(map[string]time.Time),
-		everSeen: make(map[string]bool),
 	}
 	// Clean up old sessions every hour
 	go tracker.cleanup()
@@ -58,13 +57,6 @@ func (t *sessionTracker) updateSession(userID string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.sessions[userID] = time.Now()
-	t.everSeen[userID] = true
-}
-
-func (t *sessionTracker) isFirstTimeSeen(userID string) bool {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	return !t.everSeen[userID]
 }
 
 func (t *sessionTracker) cleanup() {
@@ -173,16 +165,14 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	if authHeader == "" {
 		logging.DebugContext(ctx, "[gRPC Auth] Missing authorization token",
 			"procedure", procedure)
-		return nil, nil, connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("missing authorization token"))
+		return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("missing authorization token"))
 	}
 
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 	if tokenString == authHeader {
 		logging.DebugContext(ctx, "[gRPC Auth] Invalid authorization header format",
 			"procedure", procedure)
-		return nil, nil, connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("invalid authorization header format"))
+		return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid authorization header format"))
 	}
 
 	// Shape dispatch: `rlat_` bearers are access tokens (resolved by the token
@@ -197,8 +187,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 		if i.accessTokens == nil {
 			logging.WarnContext(ctx, "[gRPC Auth] access token presented but access-token auth is not enabled",
 				"procedure", procedure)
-			return nil, nil, connect.NewError(connect.CodeUnauthenticated,
-				fmt.Errorf("invalid or expired token"))
+			return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid or expired token"))
 		}
 		claims, principal, err = auth.ClaimsForAPIToken(ctx, i.accessTokens, tokenString)
 	} else {
@@ -221,12 +210,12 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 		logging.DebugContext(ctx, "[gRPC Auth] Invalid token",
 			"error", err,
 			"procedure", procedure)
-		return nil, nil, connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("invalid or expired token"))
+		return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid or expired token"))
 	}
 
 	// Add claims to context
 	ctx = auth.WithUser(ctx, claims.Sub, claims.Role, claims.Email)
+	ctx = telemetry.BindUser(ctx, claims.Sub)
 	if principal != nil {
 		ctx = auth.WithMachineToken(ctx, principal)
 	}
@@ -278,11 +267,6 @@ func (i *AuthInterceptor) AuthenticateHTTP(r *http.Request) (string, error) {
 func (i *AuthInterceptor) trackSession(ctx context.Context, claims *auth.JWTClaims) {
 	if claims == nil {
 		return
-	}
-
-	// Update the Sentry user context on first authentication
-	if i.sessionTracker.isFirstTimeSeen(claims.Sub) {
-		telemetry.GetReporter().SetUser(claims.Sub, claims.Email)
 	}
 
 	// Track session if new (first request in 30 minutes)

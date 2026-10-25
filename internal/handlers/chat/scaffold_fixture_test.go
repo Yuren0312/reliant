@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	chat "github.com/reliant-labs/reliant/internal/handlers/chat"
 )
 
@@ -25,20 +26,22 @@ const (
 // newChatRepo returns a StubRepo whose chat reads answer from the three
 // fixture chats, with a missing id as an error, as the real store does.
 // Every other method is left for a row to program.
-func newChatRepo() *chat.StubRepo {
+func newChatRepo() *chat.MockRepository {
 	chats := map[string]db.Chat{
 		ownChatID:      {ID: ownChatID, UserID: "test-user", ProjectID: "project-1", Title: "Own chat", State: db.ChatStateIdle},
 		otherChatID:    {ID: otherChatID, UserID: "someone-else", ProjectID: "project-1", Title: "Other chat", State: db.ChatStateIdle},
 		archivedChatID: {ID: archivedChatID, UserID: "test-user", ProjectID: "project-1", Title: "Archived chat", State: db.ChatStateArchived},
 	}
+	// A miss answers as the store does: core.ErrChatNotFound, the
+	// classified NotFound, wrapped with the id.
 	get := func(id string) (*db.Chat, error) {
 		c, ok := chats[id]
 		if !ok {
-			return nil, fmt.Errorf("chat %s not found", id)
+			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 		}
 		return &c, nil
 	}
-	return &chat.StubRepo{
+	return &chat.MockRepository{
 		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
 			return get(id)
 		},
@@ -48,7 +51,7 @@ func newChatRepo() *chat.StubRepo {
 				return nil, err
 			}
 			if c.UserID != userID {
-				return nil, fmt.Errorf("chat %s not found", id)
+				return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 			}
 			return c, nil
 		},

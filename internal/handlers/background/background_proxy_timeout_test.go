@@ -11,9 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
+	"github.com/reliant-labs/reliant/internal/wirecheck"
 )
 
 // bgProxyRouter records the timeout the proxy asks the daemon for. It embeds
@@ -58,7 +61,7 @@ func TestBackgroundProxy_ListProcesses_UsesAShortDaemonTimeout(t *testing.T) {
 
 // Failing fast must not mean failing loud: the list budget running out on a
 // busy machine is DeadlineExceeded (a WARN), not Internal (an ERROR and a
-// Sentry event per poll). The proxies share daemonerr.MachineStateConnectError with the
+// Sentry event per poll). The proxies share daemonerr.MachineState with the
 // file tree, whose 2026-10-10 timeouts paged as "[gRPC] Request error".
 func TestBackgroundProxy_DaemonTimeoutIsDeadlineExceeded(t *testing.T) {
 	router := &bgProxyRouter{err: fmt.Errorf("daemon command exec.bg_list (subject s) via NATS failed: %w: %w",
@@ -67,7 +70,7 @@ func TestBackgroundProxy_DaemonTimeoutIsDeadlineExceeded(t *testing.T) {
 
 	_, err := svc.ListProcesses(AuthedContext(t), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeDeadlineExceeded, connect.CodeOf(err), "error: %v", err)
+	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(err), "error: %v", err)
 }
 
 // The mutating commands keep the longer budget: killing a process group can
@@ -87,4 +90,29 @@ func TestBackgroundProxy_KillProcess_KeepsTheLongerTimeout(t *testing.T) {
 
 	assert.Equal(t, "exec.bg_kill", router.lastCommandType)
 	assert.Equal(t, int32(30_000), router.lastTimeoutMs)
+}
+
+// Killing a process that already exited is "already stopped", not a server
+// fault: FailedPrecondition with process_not_running (13-p9 §7.1 #11), which
+// the web treats as success and refreshes. The message is the one the kill
+// always answered with — clients from before the reason match "not running".
+func TestBackgroundProxy_KillProcess_NotRunningOnTheWire(t *testing.T) {
+	router := &bgProxyRouter{err: toolexec.DaemonReportedFailure("exec.bg_kill",
+		"process proc-1 is not running (status: completed)")}
+	svc := NewTestBackground(t, WithBackgroundDeps(Deps{Router: router}))
+
+	_, err := svc.KillProcess(AuthedContext(t), connect.NewRequest(&reliantv1.KillProcessRequest{ProcessId: "proc-1"}))
+	wirecheck.Assert(t, err, wirecheck.Want{
+		Code:    connect.CodeFailedPrecondition,
+		Message: "daemon command exec.bg_kill failed: process proc-1 is not running (status: completed)",
+		Reason:  errreason.ProcessNotRunning,
+	})
+
+	// Any other kill failure is unchanged: no reason, Internal.
+	router.err = toolexec.DaemonReportedFailure("exec.bg_kill", "permission denied")
+	_, err = svc.KillProcess(AuthedContext(t), connect.NewRequest(&reliantv1.KillProcessRequest{ProcessId: "proc-1"}))
+	wirecheck.Assert(t, err, wirecheck.Want{
+		Code:    connect.CodeInternal,
+		Message: "daemon command exec.bg_kill failed: permission denied",
+	})
 }

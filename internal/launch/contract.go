@@ -12,12 +12,18 @@
 // never comes here.
 //
 // The package runs on both the api-server and the worker, so it never reads the
-// caller from a request context — the owner is always explicit in the Spec —
-// and it does not import connect: handlers map its errors to wire codes.
+// caller from a request context — the owner is always explicit in the Spec.
+// Its errors carry their svcerr kind (each typed error unwraps to one, with the
+// underlying cause withheld from the client), so a handler returns them as they
+// are and the svcerr interceptor picks the wire code.
 //
 // See research/TRIGGERS.md.
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/handlers, internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewRunLauncher provider
+// (providers_worker.go) and the chat handler: never a node compose.go
+// constructs from Deps.
+//
+//forge:provided
 package launch
 
 import (
@@ -28,9 +34,14 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/threads"
 )
 
 // Event is the uniform envelope every trigger source produces.
@@ -163,10 +174,14 @@ func (e *AlreadyLaunchedError) Error() string {
 // Is makes errors.Is(err, ErrAlreadyLaunched) match.
 func (e *AlreadyLaunchedError) Is(target error) bool { return target == ErrAlreadyLaunched }
 
+// Unwrap makes it an AlreadyExists, with its own text as the client message.
+func (e *AlreadyLaunchedError) Unwrap() error { return svcerr.AlreadyExists(e.Error()) }
+
 // ErrClientMessageReused reports that Spec.ClientMessageID already names a
 // different message: the same id with other text or attachments. A repeat of
 // the same message is not an error; it is answered with the chat it started.
-var ErrClientMessageReused = errors.New("client message id already used for a different message")
+// Its text is what the client reads.
+var ErrClientMessageReused = svcerr.AlreadyExists("client_message_id was already used for a different message; use a new id for a new message")
 
 // ErrDeclined reports that Spec.Guard declined the launch. Nothing was
 // written. Match with errors.Is; *DeclinedError carries the reason.
@@ -184,7 +199,7 @@ func (e *DeclinedError) Is(target error) bool { return target == ErrDeclined }
 
 // ErrNotPending reports that Spec.ChatID names a chat whose root run has
 // already started; the caller should continue it with SendMessage instead.
-var ErrNotPending = errors.New("chat has already started; use SendMessage")
+var ErrNotPending = svcerr.FailedPrecondition("chat has already started; use SendMessage")
 
 // ValidationKind distinguishes "the request is malformed" from "the world is
 // not in a state where this request can succeed". Both are validation failures
@@ -205,8 +220,9 @@ const (
 
 // ValidationError reports a Spec that can never launch as written — an unknown
 // workflow, a missing required input, an unavailable model. Retrying will not
-// help. Handlers map it to InvalidArgument / FailedPrecondition per Kind; the
-// schedule fire path records it as a failed event without retrying.
+// help. It is an InvalidArgument or a FailedPrecondition per Kind, reading
+// Reason; the schedule fire path records it as a failed event without
+// retrying.
 type ValidationError struct {
 	Kind   ValidationKind
 	Reason string
@@ -220,7 +236,15 @@ func (e *ValidationError) Error() string {
 	return e.Reason
 }
 
-func (e *ValidationError) Unwrap() error { return e.Err }
+// Unwrap is the svcerr kind the client reads, Reason as its message; Err is
+// the withheld cause, still reachable by errors.Is and errors.As.
+func (e *ValidationError) Unwrap() error {
+	kind := svcerr.InvalidArgument(e.Reason)
+	if e.Kind == ValidationFailedPrecondition {
+		kind = svcerr.FailedPrecondition(e.Reason)
+	}
+	return svcerr.WithCause(kind, e.Err)
+}
 
 // ErrNotFound reports that the project, worktree or chat named in the Spec does
 // not exist or does not belong to the owner.
@@ -241,7 +265,10 @@ func (e *NotFoundError) Error() string {
 	return e.Reason
 }
 
-func (e *NotFoundError) Unwrap() error { return e.Err }
+// Unwrap is a NotFound reading Reason; Err is the withheld cause.
+func (e *NotFoundError) Unwrap() error {
+	return svcerr.WithCause(svcerr.WithMessage(svcerr.ErrNotFound, e.Reason), e.Err)
+}
 
 // Is makes errors.Is(err, ErrNotFound) match.
 func (e *NotFoundError) Is(target error) bool { return target == ErrNotFound }
@@ -251,8 +278,8 @@ func (e *NotFoundError) Is(target error) bool { return target == ErrNotFound }
 // committed but could not be read back.
 var ErrInternal = errors.New("internal")
 
-// InternalError is the concrete ErrInternal. Reason is the message a handler
-// surfaces; Err is the detail, which stays in the logs rather than on the wire.
+// InternalError is the concrete ErrInternal. Reason is the message the client
+// reads; Err is the detail, which stays in the logs rather than on the wire.
 type InternalError struct {
 	Reason string
 	Err    error
@@ -265,7 +292,98 @@ func (e *InternalError) Error() string {
 	return e.Reason
 }
 
-func (e *InternalError) Unwrap() error { return e.Err }
+// Unwrap is an Internal reading Reason; Err is the withheld cause, which the
+// observe interceptor logs.
+func (e *InternalError) Unwrap() error { return svcerr.WithCause(svcerr.Internal(e.Reason), e.Err) }
 
 // Is makes errors.Is(err, ErrInternal) match.
 func (e *InternalError) Is(target error) bool { return target == ErrInternal }
+
+// The Launcher reads and writes through these role interfaces instead of the
+// whole *db.Repo, so each dependency of a launch is visible here and a
+// fake implements only what a test exercises.
+
+// ChatWriter creates and updates the chat a launch materializes.
+type ChatWriter interface {
+	CreateChat(ctx context.Context, chat *db.Chat) error
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	UpdateChat(ctx context.Context, chat *db.Chat) error
+	UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error
+	CountMessagesInChat(ctx context.Context, chatID string) (int, error)
+	SaveMessageToThread(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*db.Message, error)
+	SaveMessageToThreadOnce(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (msg *db.Message, created bool, err error)
+	CreateUserUpdate(ctx context.Context, update *db.UserUpdate) error
+}
+
+// TriggerEventStore is the trigger_events ledger a launch dedupes against.
+type TriggerEventStore interface {
+	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
+	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
+	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error
+	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
+	// ClaimPendingTriggerEvent adopts an inbound event a receiver recorded
+	// as pending; claimed=false means another launch got it first.
+	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (claimed bool, err error)
+}
+
+// WorkflowStore is the root workflow row a launch starts.
+type WorkflowStore interface {
+	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
+	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus db.WorkflowStatus) (bool, error)
+	UpdateWorkflowName(ctx context.Context, id string, workflowName string) error
+}
+
+// WorkflowResolver looks up the workflow definition and presets a spec names.
+type WorkflowResolver interface {
+	GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
+	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
+	GetPresetBySlug(ctx context.Context, userID, slug string) (*db.Preset, error)
+	GetPresetBySlugAndProject(ctx context.Context, userID, slug, projectID string) (*db.Preset, error)
+	// One column each, never the whole project config record: see
+	// db.Repo.GetProjectWorkflowsJSON.
+	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
+	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
+}
+
+// ProjectLookup resolves the project, worktrees and settings a launch runs in.
+type ProjectLookup interface {
+	GetProject(ctx context.Context, id string) (*db.Project, error)
+	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
+	GetSetting(ctx context.Context, userID string, projectID *string, key string) (*db.Setting, error)
+}
+
+// Transactor runs f in one transaction; repository calls made with the ctx f
+// receives join it.
+type Transactor interface {
+	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
+}
+
+// ChatSelections is the chat selection store: the layer between a chat's
+// presets and a send's params, and where a start records its first choice.
+type ChatSelections interface {
+	chatselection.Store
+}
+
+// Store is everything a Launcher needs from the database. *db.Repo satisfies it.
+type Store interface {
+	ChatWriter
+	ChatSelections
+	TriggerEventStore
+	WorkflowStore
+	WorkflowResolver
+	ProjectLookup
+	Transactor
+}
+
+// ThreadCreator creates the root workflow and its thread inside the launch
+// transaction. Satisfied by *threads.Service.
+type ThreadCreator interface {
+	CreateWorkflowWithThread(ctx context.Context, opts threads.CreateWorkflowWithThreadOpts) (*db.Workflow, *db.Thread, *db.ContextWindow, error)
+}
+
+var (
+	_ Store         = (*db.Repo)(nil)
+	_ ThreadCreator = (*threads.Service)(nil)
+)

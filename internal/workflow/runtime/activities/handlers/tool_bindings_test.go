@@ -12,15 +12,17 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolbindings"
 )
 
-// settingsOnlyRepo is a db.Repository that implements only the settings read
-// the binding resolver performs. Embedding the interface means any other
+// settingsOnlyRepo is a CallLLMStore that implements only the settings read
+// the binding resolver performs. Embedding the (nil) role means any other
 // method panics, which is the assertion: resolving bindings must not reach for
-// anything else, and no database is required to prove it.
+// anything else, and no database is required to prove it. A generated mock
+// would answer such a call with an error the resolver swallows, so it could
+// not make this assertion.
 //
 // This is not the postgres harness on purpose. A package that reports "ok"
 // having t.Skip'd every case is indistinguishable from one that passed.
 type settingsOnlyRepo struct {
-	db.Repository
+	CallLLMStore
 	rows []*db.Setting
 	err  error
 	// asked records the pattern the resolver queried with.
@@ -76,6 +78,8 @@ func effectiveBinding(t *testing.T, tool tools.Tool, param string) any {
 // server-run tool never sees them; this asserts tool bindings do not repeat
 // that.
 func TestCallLLMActivity_ResolveToolBindingScopes_ReadsGlobalSettingsServerSide(t *testing.T) {
+	t.Parallel()
+
 	repo := &settingsOnlyRepo{rows: []*db.Setting{{
 		Key:   toolbindings.GlobalSettingKey("generate_image"),
 		Value: `{"model":{"literal":{"tags":["image-gen"],"providers":["codex"]}}}`,
@@ -105,6 +109,8 @@ func TestCallLLMActivity_ResolveToolBindingScopes_ReadsGlobalSettingsServerSide(
 // settings read that fails must degrade to tool defaults, not take the turn
 // down. Losing a preference is recoverable; losing the LLM call is not.
 func TestCallLLMActivity_ResolveToolBindingScopes_SettingsFailureIsNotFatal(t *testing.T) {
+	t.Parallel()
+
 	repo := &settingsOnlyRepo{err: fmt.Errorf("settings unavailable")}
 	activityUnderTest := &CallLLMActivity{repo: repo}
 
@@ -130,6 +136,8 @@ func TestCallLLMActivity_ResolveToolBindingScopes_SettingsFailureIsNotFatal(t *t
 // of what a user configures in Settings: a stored provider preference replaces
 // the tool's shipped default, and the parameter stays invisible to the model.
 func TestApplyToolBindings_GlobalPreferenceReachesTheTool(t *testing.T) {
+	t.Parallel()
+
 	repo := &settingsOnlyRepo{rows: []*db.Setting{{
 		Key:   toolbindings.GlobalSettingKey("generate_image"),
 		Value: `{"model":{"literal":"gpt-image-2"}}`,
@@ -162,6 +170,8 @@ func TestApplyToolBindings_GlobalPreferenceReachesTheTool(t *testing.T) {
 // invariant at the wiring layer: a tool nobody has configured comes back
 // exactly as it went in.
 func TestApplyToolBindings_UnconfiguredToolIsUntouched(t *testing.T) {
+	t.Parallel()
+
 	tool := newBindableStub("some_tool", nil)
 	bound := applyToolBindings(context.Background(), []tools.Tool{tool}, toolbindings.Scopes{})
 

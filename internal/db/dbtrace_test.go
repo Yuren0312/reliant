@@ -24,13 +24,13 @@ func TestQueriesUnderASpanAreTraced(t *testing.T) {
 	otel.SetTracerProvider(tp)
 	t.Cleanup(func() { otel.SetTracerProvider(prev) })
 
-	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
+	repo, rawDB, dsn, cleanup := setupTestRepoWithDSN(t)
 	t.Cleanup(cleanup)
 	if !dbtrace.IsTraced(rawDB) {
 		t.Fatal("the test harness pool is not traced; it must open the way the served pool does")
 	}
 
-	session, err := openSessionPool(resolveTestDSN(t))
+	session, err := openSessionPool(dsn)
 	if err != nil {
 		t.Fatalf("openSessionPool: %v", err)
 	}

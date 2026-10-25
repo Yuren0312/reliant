@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // Regression tests ported from the third review of #574 (probes Q1-Q3, R1-R3, P9).
@@ -19,6 +21,7 @@ import (
 // put-back). Simulated by doing exactly what removeOne does up to the move,
 // then running the next ordinary pass.
 func TestReview3_Q1_CrashMidQuarantine(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -55,6 +58,7 @@ func TestReview3_Q1_CrashMidQuarantine(t *testing.T) {
 // Q2: the put-back move fails because the original path was re-created while
 // the checkout sat in quarantine. Is the stranded copy still locked?
 func TestReview3_Q2_PutBackFailureLeavesItUnlocked(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -99,6 +103,7 @@ func TestReview3_Q2_PutBackFailureLeavesItUnlocked(t *testing.T) {
 // one out, then the root's quarantine re-scan expects 1+len(nested) repos.
 func TestReview3_Q3_RootCheckoutWithNestedCheckout(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "a root checkout and a nested one, both through a full reclaim (~75 git processes)")
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, "web/\n")
@@ -131,6 +136,7 @@ func TestReview3_Q3_RootCheckoutWithNestedCheckout(t *testing.T) {
 // clean-up is applied again on a later restore.
 func TestReview3_R1_StaleSnapshotReappliedOverNewerCommits(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "a snapshot, newer commits, and a reapply (~79 git processes)")
 	f := newFixture(t)
 	ctx := context.Background()
 	w := f.worktree("r1", "feat/r1")
@@ -181,6 +187,7 @@ func TestReview3_R1_StaleSnapshotReappliedOverNewerCommits(t *testing.T) {
 // (committed to from another workspace) before the restore.
 func TestReview3_R2_SnapshotOverAMovedBranch(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~41 git processes")
 	f := newFixture(t)
 	ctx := context.Background()
 	w := f.worktree("r2", "feat/r2")
@@ -220,6 +227,7 @@ func TestReview3_R2_SnapshotOverAMovedBranch(t *testing.T) {
 // R3: does ApplySnapshot leave partial writes behind when it fails?
 func TestReview3_R3_FailedApplyLeavesPartialState(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~44 git processes")
 	f := newFixture(t)
 	ctx := context.Background()
 	w := f.worktree("r3", "feat/r3")
@@ -253,6 +261,7 @@ func TestReview3_R3_FailedApplyLeavesPartialState(t *testing.T) {
 // P9: an empty ORIG_HEAD in the admin dir.
 func TestReview3_P9_EmptyPseudoRef(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~34 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("p9", "feat/p9")
@@ -287,6 +296,7 @@ func errString(err error) string {
 }
 
 func TestRecoverQuarantined_PutsACrashedCheckoutBack(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -327,13 +337,13 @@ func TestRowLock_SerializesAcrossReclaimersOnOneRoot(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	other := NewReclaimer(f.r.Root)
-	release, err := f.r.rowLock("row1")
+	release, err := f.r.rowLock(context.Background(), "row1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	acquired := make(chan struct{})
 	go func() {
-		un, err := other.rowLock("row1")
+		un, err := other.rowLock(context.Background(), "row1")
 		if err == nil {
 			un()
 		}
@@ -350,8 +360,8 @@ func TestRowLock_SerializesAcrossReclaimersOnOneRoot(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the second reclaimer never got the lock after release")
 	}
-	r1, _ := f.r.rowLock("a")
-	r2, err := other.rowLock("b")
+	r1, _ := f.r.rowLock(context.Background(), "a")
+	r2, err := other.rowLock(context.Background(), "b")
 	if err != nil {
 		t.Fatal(err)
 	}

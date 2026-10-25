@@ -1022,7 +1022,7 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 		// Execute this iteration
 		iterOutputs, err := e.executeIteration()
 		if err != nil {
-			e.logger.Error("[InlineLoop] Iteration failed, exiting loop",
+			logFailure(e.logger, err, "[InlineLoop] Iteration failed, exiting loop",
 				"loopID", e.loopID,
 				"iteration", e.iteration,
 				"error", err,
@@ -1286,6 +1286,7 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 		}
 	}
 
+	rememberPresetModel(iterInputs)
 	for key, value := range model.NodeMergedSubWorkflowInputs(evalResult) {
 		if key == "loop" {
 			continue
@@ -1716,7 +1717,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				// Execute workflow inline
 				inlineOutput, err := inlineExecutor.Execute()
 				if err != nil {
-					e.logger.Error("[InlineLoop] Inline workflow execution failed",
+					logFailure(e.logger, err, "[InlineLoop] Inline workflow execution failed",
 						"stepID", step.Node.GetId(),
 						"error", err,
 					)
@@ -2040,7 +2041,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "paused", "", "", nil)
 
 					// Self-pause and block until resume
-					e.pauseCtrl.DoRequestPause()
+					e.pauseCtrl.DoRequestPauseFor(stepEvent.Error)
 					e.pauseCtrl.DoCheckPause(e.ctx)
 					_ = workflow.Sleep(e.ctx, 0)
 
@@ -2067,7 +2068,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 
 				if routingErr := EnsureStepEventRoutable(stepEvent); routingErr != nil {
 					recordFailedNode(e.ctx, joinNodePath(e.nodePath(), stepEvent.StepID), e.iteration+1)
-					e.logger.Error("[InlineLoop] Step failed, aborting iteration",
+					logFailure(e.logger, routingErr, "[InlineLoop] Step failed, aborting iteration",
 						"loopID", e.loopID,
 						"iteration", e.iteration,
 						"stepID", stepEvent.StepID,

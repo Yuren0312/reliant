@@ -36,7 +36,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"go.temporal.io/sdk/client"
 
-	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/certs"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -49,7 +49,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/streaming"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -58,8 +57,10 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// DBRepo is reliant's database: the Repository over the serving pool (and the
-// session pool, when DATABASE_DIRECT_URL names one).
+// DBRepo is the database's LIFECYCLE: it opens the Repository over the
+// serving pool (and the session pool, when DATABASE_DIRECT_URL names one),
+// gates /readyz on it, and closes it after every node that reads it. Nothing
+// but Database reads it: every consumer takes the Repository itself.
 type DBRepo struct{ Repo *db.Repo }
 
 // DBRepoDeps is the database config and the data directory.
@@ -71,7 +72,7 @@ type DBRepoDeps struct {
 // NewDBRepo opens the database, retrying the first connect for up to
 // DB_CONNECT_TIMEOUT, and waits for the schema the migrating process (the
 // api-server, or `reliant db migrate up`) applies: a server role never races
-// it (db.MigrationPolicy). It refuses a pool setting it cannot honour.
+// it (db.MigrationPolicy).
 func NewDBRepo(d DBRepoDeps) (*DBRepo, error) {
 	driver, url, directURL := DatabaseURLs(d.Database)
 	if url == "" {
@@ -81,16 +82,12 @@ func NewDBRepo(d DBRepoDeps) (*DBRepo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid DATABASE_DRIVER %q: %w", driver, err)
 	}
-	pool, err := DatabasePool(d.Database)
-	if err != nil {
-		return nil, err
-	}
 	repo, err := db.NewRepoFromConfig(db.DatabaseConfig{
 		Driver:    dbDriver,
 		DataDir:   d.DataDir,
 		URL:       url,
 		DirectURL: directURL,
-		Pool:      pool,
+		Pool:      DatabasePool(d.Database),
 		Migrate:   db.MigrateWait,
 	})
 	if err != nil {
@@ -108,6 +105,17 @@ func (r *DBRepo) Close(context.Context) error {
 	logging.Info("Closing database")
 	return r.Repo.Close()
 }
+
+// DatabaseDeps is the lifecycle node that owns the pools.
+type DatabaseDeps struct{ Pool *DBRepo }
+
+// NewDatabase is the database's VALUE: the persistence API every consumer's
+// role interface is filled with. It is the only node producing *db.Repo, so
+// forge fills a persistence field it resolves by type with g.Database(), and
+// TestPersistenceRolesAreTheDatabase holds every hand-written one to that.
+// Reaching it reaches DBRepo, so whatever reads the database still stops
+// before the pools close.
+func NewDatabase(d DatabaseDeps) (*db.Repo, error) { return d.Pool.Repo, nil }
 
 // NATSConn is the process's NATS connection.
 type NATSConn struct{ Conn *nats.Conn }
@@ -196,7 +204,7 @@ func (h *UserUpdateHub) Close(context.Context) error { return h.NATSUpdateHub.Cl
 // control plane, when one is configured, else reliant's own store.
 type TokenAuthorityDeps struct {
 	ControlPlane *configv1.ControlPlaneConfig
-	Repo         *DBRepo
+	DB           *db.Repo
 }
 
 // NewTokenAuthority is the ONE machine-credential authority (`rlat_`):
@@ -204,7 +212,7 @@ type TokenAuthorityDeps struct {
 // self-hosted (tokenauthority). Uncached here: a revoked credential is
 // refused on its next check.
 func NewTokenAuthority(d TokenAuthorityDeps) (tokenauthority.Authority, error) {
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(ControlPlaneEndpoint(d.ControlPlane), d.Repo.Repo.ORM()))
+	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(ControlPlaneEndpoint(d.ControlPlane), d.DB.ORM()))
 	if err != nil {
 		return nil, fmt.Errorf("token authority: %w", err)
 	}
@@ -275,9 +283,6 @@ type DebugServerDeps struct {
 // NewDebugServer is the listener on 127.0.0.1:PPROF_PORT. PPROF_PORT=0 serves
 // none: the node is absent.
 func NewDebugServer(d DebugServerDeps) (*DebugServer, error) {
-	if err := CheckPprofPort(d.Port); err != nil {
-		return nil, err
-	}
 	if d.Port == 0 {
 		logging.Info("Debug server (pprof) disabled", "pprof_port", 0)
 		return nil, nil
@@ -315,23 +320,18 @@ type IntegrationSettingsDeps struct {
 }
 
 // NewIntegrationSettings is the integrations config as the server packages
-// take it (Integrations): read and validated once, for every node that needs
-// a part of it — the vault key, the webhook registry, the OAuth clients, the
-// GitHub App.
+// take it (Integrations): read once, for every node that needs a part of it —
+// the vault key, the webhook registry, the OAuth clients, the GitHub App.
 func NewIntegrationSettings(d IntegrationSettingsDeps) (*IntegrationSettings, error) {
-	s, err := Integrations(d.Integrations)
-	if err != nil {
-		return nil, err
-	}
+	s := Integrations(d.Integrations)
 	return &s, nil
 }
 
 // ProcessSettings records that the process-wide settings that need nothing
 // but config are installed: what the LLM layer, the preview URLs, the model
 // registry and the GitHub App bot read from package state. A root lists it
-// as its LAST field, so it is built before any other node — none can observe
-// the settings unset — and a value they refuse stops the process before
-// anything is dialled.
+// as its LAST field, so it is built before any other node: none can observe
+// the settings unset.
 type ProcessSettings struct{}
 
 // ProcessSettingsDeps is the config the process-wide settings come from.
@@ -344,14 +344,8 @@ type ProcessSettingsDeps struct {
 
 // NewProcessSettings installs the config-only process globals.
 func NewProcessSettings(d ProcessSettingsDeps) (*ProcessSettings, error) {
-	llmSettings, err := LLMSettings(d.LLM)
-	if err != nil {
-		return nil, err
-	}
-	preview, err := PreviewSettings(d.Preview)
-	if err != nil {
-		return nil, err
-	}
+	llmSettings := LLMSettings(d.LLM)
+	preview := PreviewSettings(d.Preview)
 	// Activities locate files under the data directory through it.
 	if err := os.Setenv("RELIANT_DATA_DIR", d.DataDir); err != nil {
 		logging.Warn("Failed to set RELIANT_DATA_DIR env var", "error", err)
@@ -379,35 +373,28 @@ type ProcessRuntime struct {
 // ProcessRuntimeDeps is what that state reads. Settings orders it after the
 // config-only globals (drivers.Configure before the key provider).
 type ProcessRuntimeDeps struct {
-	Settings      *ProcessSettings
-	Repo          *DBRepo
-	ControlPlane  *configv1.ControlPlaneConfig
-	Analytics     *configv1.AnalyticsConfig
-	Sentry        *configv1.SentryConfig
-	Observability *configv1.ObservabilityConfig
+	Settings     *ProcessSettings
+	DB           *db.Repo
+	ControlPlane *configv1.ControlPlaneConfig
+	Network      *configv1.NetworkConfig
+	Analytics    *configv1.AnalyticsConfig
 }
 
 // NewProcessRuntime installs the database-backed process globals.
 func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
-	sentry, err := SentrySettings(d.Sentry, d.Observability)
-	if err != nil {
-		return nil, err
-	}
+	warnPrivateEgress(d.Network, slog.Default())
 	cp := ControlPlaneEndpoint(d.ControlPlane)
-	repo := d.Repo.Repo
+	repo := d.DB
 	// LLM drivers resolve per-user keys from the database.
 	drivers.InitializeAPIKeyProvider(repo)
 	healer := drivers.InstallReliantKeyHealer(repo, cp.URL, cp.InternalServiceSecret)
 	analytics.Start(AnalyticsSettings(d.Analytics), repo)
-	// Sentry in prod (when SENTRY_DSN is set), a no-op in dev and test; the
-	// root policy flushes it after the last node stopped.
-	telemetry.SetReporter(telemetry.NewReporter(sentry))
 	return &ProcessRuntime{KeyHealer: healer}, nil
 }
 
 // PayloadStoreDeps is the database the claim-checked payloads live in.
 type PayloadStoreDeps struct {
-	Repo *DBRepo
+	DB *db.Repo
 }
 
 // NewPayloadStore is where large Temporal payloads are claim-checked: the
@@ -415,7 +402,7 @@ type PayloadStoreDeps struct {
 // process's Temporal client must use the same store, or histories become
 // unreadable across them.
 func NewPayloadStore(d PayloadStoreDeps) (*claimcheck.PostgresStore, error) {
-	return claimcheck.NewPostgresStore(d.Repo.Repo.ORM()), nil
+	return claimcheck.NewPostgresStore(d.DB.ORM()), nil
 }
 
 // TemporalClient is the process's client of the external Temporal server.
@@ -436,9 +423,6 @@ func NewTemporalClient(d TemporalClientDeps) (*TemporalClient, error) {
 	host, port, namespace := TemporalEndpoint(d.Temporal)
 	if host == "" {
 		return nil, errors.New("config: TEMPORAL_HOST is required")
-	}
-	if err := CheckPorts(Port{Name: "TEMPORAL_PORT (--temporal-port)", Port: int32(port)}); err != nil {
-		return nil, err
 	}
 	var c client.Client
 	err := serverkit.RetryConnect(d.Ctx, serverkit.ConnectPolicy{Name: "temporal", Logger: slog.Default()}, func(ctx context.Context) error {
@@ -535,14 +519,14 @@ type RepoUpdateFeed struct{}
 
 // RepoUpdateFeedDeps is the repository and the hubs it publishes on.
 type RepoUpdateFeedDeps struct {
-	Repo  *DBRepo
+	DB    *db.Repo
 	Users *UserUpdateHub
 	Chats *ChatUpdateHub
 }
 
 // NewRepoUpdateFeed wires the repository's update notifiers to the hubs.
 func NewRepoUpdateFeed(d RepoUpdateFeedDeps) (*RepoUpdateFeed, error) {
-	d.Repo.Repo.SetUpdateNotifiers(
+	d.DB.SetUpdateNotifiers(
 		func(update *db.UserUpdate) {
 			d.Users.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
 				Key: update.UserID, SequenceNumber: update.SequenceNumber, Payload: *update,
@@ -561,7 +545,7 @@ func NewRepoUpdateFeed(d RepoUpdateFeedDeps) (*RepoUpdateFeed, error) {
 // VaultDeps is what boots the credential vault.
 type VaultDeps struct {
 	Ctx          context.Context
-	Repo         *DBRepo
+	DB           *db.Repo
 	ControlPlane *configv1.ControlPlaneConfig
 	DataDir      string
 	Integrations *IntegrationSettings
@@ -570,18 +554,18 @@ type VaultDeps struct {
 // NewVault boots the credential vault: its key is required when hosted and
 // generated when self-hosted. A missing or malformed key fails startup.
 func NewVault(d VaultDeps) (vault.Service, error) {
-	return db.BootVault(d.Ctx, d.Repo.Repo, ControlPlaneEndpoint(d.ControlPlane).Hosted(), d.DataDir, d.Integrations.VaultKey)
+	return db.BootVault(d.Ctx, d.DB, ControlPlaneEndpoint(d.ControlPlane).Hosted(), d.DataDir, d.Integrations.VaultKey)
 }
 
 // PauseServiceDeps is what pauses and resumes runs.
 type PauseServiceDeps struct {
 	Temporal *TemporalClient
-	Repo     *DBRepo
+	DB       *db.Repo
 }
 
 // NewPauseService pauses and resumes runs through their workflows.
 func NewPauseService(d PauseServiceDeps) (*v2workflow.PauseService, error) {
-	return v2workflow.NewPauseService(d.Temporal.Client, d.Repo.Repo), nil
+	return v2workflow.NewPauseService(d.Temporal.Client, d.DB), nil
 }
 
 // TriggerPollersDeps is which integrations this deployment serves.

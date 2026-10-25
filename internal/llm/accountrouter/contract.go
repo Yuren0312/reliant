@@ -19,13 +19,15 @@
 // Persisting limits and benching accounts is the account-limits recorder's job
 // (a later package), not this one's.
 //
-//forge:not-a-component: built by reliant's hand-wired server and worker once the router is wired into call_llm (research/provider-load-balancing/DESIGN.md P3.4); no composition root builds it yet
+//forge:not-a-component: built by internal/workersetup's account routing (account_routing.go) — never a node of the composition graph
 package accountrouter
 
 import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
@@ -167,6 +169,11 @@ func (e *ErrAllLimited) Error() string {
 	}
 	return fmt.Sprintf("%s is rate-limited on all accounts until %s", name, e.EarliestReset.UTC().Format(time.RFC3339))
 }
+
+// ErrorClass implements svcerr.Classed: every account being rate-limited is the
+// state of the user's subscriptions — the system working correctly — not a
+// server fault. The caller parks the run until EarliestReset.
+func (e *ErrAllLimited) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 
 // LimitWindow is one usage window of an account.
 type LimitWindow struct {

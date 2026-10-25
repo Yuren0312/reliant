@@ -4,7 +4,6 @@ package tools_daemon
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"sync"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -179,7 +179,8 @@ func TestInventory_WakesRefreshWaiter(t *testing.T) {
 	svc.mu.Lock()
 	svc.connections["daemon-1"] = conn
 	svc.mu.Unlock()
-	svc.deps.Repo = nopLocalModelsRepo{}
+	repo := &MockRepository{SetDaemonLocalModelsFunc: func(context.Context, string, string) error { return nil }}
+	svc.deps.Repo = repo
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -206,12 +207,12 @@ func TestInventory_WakesRefreshWaiter(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("refresh waiter was not woken by the inventory")
 	}
+	// ...and is stored on the daemon's row.
+	stored := repo.Calls("SetDaemonLocalModels")
+	require.Len(t, stored, 1)
+	assert.Equal(t, "daemon-1", stored[0].Args[1])
+	assert.Contains(t, stored[0].Args[2], `"ollama"`)
 }
-
-// nopLocalModelsRepo satisfies the one method handleLocalModelInventory calls.
-type nopLocalModelsRepo struct{ db.Repository }
-
-func (nopLocalModelsRepo) SetDaemonLocalModels(context.Context, string, string) error { return nil }
 
 // Chunks are handed to the request's consumer in order, a done chunk retires
 // the registration, and teardown fails in-flight relays with an error chunk.
@@ -309,20 +310,20 @@ func TestDaemonRegistry_RefreshLocalModels(t *testing.T) {
 	assert.Equal(t, "ollama", resp.Msg.GetLocalModels().GetEndpoints()[0].GetId())
 
 	_, err = svc.RefreshLocalModels(userCtx("user-1"), connect.NewRequest(&reliantv1.RefreshLocalModelsRequest{DaemonId: "offline"}))
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "offline daemon => Unavailable")
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "offline daemon => Unavailable")
 
 	_, err = svc.RefreshLocalModels(userCtx("user-1"), connect.NewRequest(&reliantv1.RefreshLocalModelsRequest{DaemonId: "theirs"}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "another user's daemon is indistinguishable from absent")
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "another user's daemon is indistinguishable from absent")
 
 	_, err = svc.RefreshLocalModels(context.Background(), connect.NewRequest(&reliantv1.RefreshLocalModelsRequest{DaemonId: "online"}))
-	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 
 	_, err = svc.RefreshLocalModels(userCtx("user-1"), connect.NewRequest(&reliantv1.RefreshLocalModelsRequest{}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 
 	router.refreshErr = &toolexec.LocalModelDaemonUnavailableError{DaemonID: "online", Reason: "no inventory within 10s"}
 	_, err = svc.RefreshLocalModels(userCtx("user-1"), connect.NewRequest(&reliantv1.RefreshLocalModelsRequest{DaemonId: "online"}))
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "online")
 }
 
@@ -361,8 +362,6 @@ func TestDaemonRegistry_SetLocalModelEndpoints(t *testing.T) {
 	}
 	assert.Equal(t, before, len(router.commands), "no command may reach an offline or foreign daemon")
 
-	var ce *connect.Error
 	_, err = svc.SetLocalModelEndpoints(userCtx("user-1"), connect.NewRequest(&reliantv1.SetLocalModelEndpointsRequest{DaemonId: "offline"}))
-	require.True(t, errors.As(err, &ce))
-	assert.Equal(t, connect.CodeUnavailable, ce.Code())
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 }

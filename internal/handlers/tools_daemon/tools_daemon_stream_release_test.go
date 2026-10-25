@@ -17,6 +17,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 )
@@ -127,7 +128,9 @@ func TestReleaseStreamWaitsForTheSendInFlight(t *testing.T) {
 // parked Receive.
 func TestConnectDaemonRefusesAServerWithoutAbortableBodies(t *testing.T) {
 	svc := newDaemonlessService(t)
-	path, h := reliantv1connect.NewToolsDaemonServiceHandler(svc)
+	// Only the listener's edge is missing: svcerr.Interceptor still ends the
+	// chain, as it does every production one, so the refusal keeps its code.
+	path, h := reliantv1connect.NewToolsDaemonServiceHandler(svc, connect.WithInterceptors(svcerr.Interceptor()))
 	mux := http.NewServeMux()
 	mux.Handle(path, h)
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
@@ -149,5 +152,5 @@ func TestConnectDaemonRefusesAServerWithoutAbortableBodies(t *testing.T) {
 		Register: &reliantv1.DaemonRegister{Hostname: "h", Platform: "linux", DaemonType: "local"},
 	}})
 	_, err := stream.Receive()
-	require.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	require.Equal(t, connect.CodeInternal, svcerr.Code(err))
 }

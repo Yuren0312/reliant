@@ -13,7 +13,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,13 +52,14 @@ func (c *endedRunTemporalClient) DescribeWorkflowExecution(_ context.Context, wo
 	}, nil
 }
 
-func (c *endedRunTemporalClient) QueryWorkflow(_ context.Context, _, _, query string, _ ...interface{}) (converter.EncodedValue, error) {
+func (c *endedRunTemporalClient) QueryWorkflowWithOptions(_ context.Context, req *client.QueryWorkflowWithOptionsRequest) (*client.QueryWorkflowWithOptionsResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if query == "get_workflow_inputs" && c.lastInputs != nil {
-		return jsonEncodedValue{v: c.lastInputs}, nil
+	closed := c.status != enums.WORKFLOW_EXECUTION_STATUS_RUNNING
+	if req.QueryType == "get_workflow_inputs" && c.lastInputs != nil {
+		return fakeQueryResponse(req, closed, jsonEncodedValue{v: c.lastInputs}, nil)
 	}
-	return nil, serviceerror.NewQueryFailed("history no longer replays")
+	return fakeQueryResponse(req, closed, nil, serviceerror.NewQueryFailed("history no longer replays"))
 }
 
 func (c *endedRunTemporalClient) ExecuteWorkflow(_ context.Context, options client.StartWorkflowOptions, _ interface{}, args ...interface{}) (client.WorkflowRun, error) {
@@ -159,6 +159,9 @@ func newContinueFixture(t *testing.T, replays bool) continueFixture {
 			v2.InputKeyLaunchRun: true,
 		},
 	}
+	// The selection is the durable record of what the run ran on; the ended
+	// run itself is never queried (it would be replayed to answer).
+	seedSelection(t, ctx, repo, fx.chatID, "test-user", "builtin://agent", map[string]any{"model": map[string]any{"id": "claude-opus"}})
 	pause := &resetPause{repo: repo, replays: replays}
 	svc := &Service{deps: Deps{Repo: repo, Temporal: temporal}, runs: runs.NewService(repo, temporal, pause)}
 	return continueFixture{ctx: ctx, repo: repo, chatID: fx.chatID, threadID: fx.rootThreadID,
@@ -208,6 +211,8 @@ func (f continueFixture) continueConcurrently(t *testing.T, n int) int {
 // machine is back — by resuming the run that ended, exactly as the user's own
 // next send would — and only once, however many deliverers race for it.
 func TestContinueQueued_MessageQueuedForTheMachineIsDeliveredOnce(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, true)
 	f.queueForMachine(t)
 	require.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, f.activity(t))
@@ -230,6 +235,8 @@ func TestContinueQueued_MessageQueuedForTheMachineIsDeliveredOnce(t *testing.T) 
 // the message is delivered by a fresh run at the checkpoint — with the ended
 // run's own inputs, so the model the user chose survives — once.
 func TestContinueQueued_WedgedRunsUnansweredMessageStartsOneRunAtTheCheckpoint(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, false)
 	now := time.Now().UTC()
 	_, err := f.repo.UpdateThreadStatus(f.ctx, f.threadID, db.ThreadStatusFailed, &now)
@@ -250,7 +257,7 @@ func TestContinueQueued_WedgedRunsUnansweredMessageStartsOneRunAtTheCheckpoint(t
 	assert.Equal(t, f.chatID, run.options.ID)
 	assert.Equal(t, f.threadID, run.input.ExecContext.Thread)
 	assert.NotNil(t, run.input.Resume, "it resumes at the checkpoint, not at graph entry")
-	assert.Equal(t, map[string]interface{}{"id": "claude-opus"}, run.input.Inputs["model"], "the ended run's own inputs")
+	assert.Equal(t, map[string]interface{}{"id": "claude-opus"}, run.input.Inputs["model"], "what the ended run was running on (the chat's selection)")
 	assert.NotContains(t, run.input.Inputs, v2.InputKeyLaunchRun)
 	assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,
 		"the thread is revived before the run starts, so the mailbox sweep cannot take its queued rows")
@@ -263,6 +270,8 @@ func TestContinueQueued_WedgedRunsUnansweredMessageStartsOneRunAtTheCheckpoint(t
 // A message queued in the mailbox (sent while the run was live, never drained)
 // is just as owed as one in history.
 func TestContinueQueued_QueuedMailboxRowIsOwed(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, false)
 	_, err := f.repo.SaveMessageToThread(f.ctx, f.chatID, f.threadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
 		"done", &f.threadID, nil, nil)
@@ -281,6 +290,8 @@ func TestContinueQueued_QueuedMailboxRowIsOwed(t *testing.T) {
 
 // A run that ended after answering, with nothing queued, is owed nothing.
 func TestContinueQueued_NothingOwedStartsNothing(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, false)
 	_, err := f.repo.SaveMessageToThread(f.ctx, f.chatID, f.threadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
 		"all fixed", &f.threadID, nil, nil)
@@ -300,6 +311,8 @@ func TestContinueQueued_NothingOwedStartsNothing(t *testing.T) {
 // A run the user stopped is not resumed behind their back; the stale marker
 // goes.
 func TestContinueQueued_StoppedRunIsNotResumed(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, true)
 	f.queueForMachine(t)
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Cancelled()))
@@ -316,6 +329,8 @@ func TestContinueQueued_StoppedRunIsNotResumed(t *testing.T) {
 // leaves must not answer the same message later: its queued message is dropped
 // and a run still waiting for the machine is told to stop.
 func TestAbandonMachineWait_DropsTheQueueAndEndsTheWait(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, true)
 	f.queueForMachine(t)
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Active()))
@@ -335,6 +350,8 @@ func TestAbandonMachineWait_DropsTheQueueAndEndsTheWait(t *testing.T) {
 // A run doing anything other than waiting for its machine is not stopped by
 // branching away from it.
 func TestAbandonMachineWait_LeavesARunThatIsNotWaiting(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, true)
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Active()))
 	chat, err := f.repo.GetChat(f.ctx, f.chatID)
@@ -350,6 +367,8 @@ func TestAbandonMachineWait_LeavesARunThatIsNotWaiting(t *testing.T) {
 // the run), and the run is asked to check the machine now — the send just
 // woke it — instead of at its next recheck, which can be minutes away.
 func TestSendMessage_WhileTheRunWaitsForItsMachine_KeepsTheWaitAndNudgesIt(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
@@ -380,6 +399,8 @@ func (onlineMachines) IsDaemonOnline(context.Context, string, *toolexec.DaemonSe
 // machine connected. The connect starts the run that delivers the message —
 // no resend — and a second connect (or the sweep) delivers nothing more.
 func TestMachineConnected_DeliversTheMessageQueuedForAFailedMachineOnce(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, true)
 	f.queueForMachine(t)
 	delivery := queueddelivery.New(queueddelivery.Deps{Store: f.repo, Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal})

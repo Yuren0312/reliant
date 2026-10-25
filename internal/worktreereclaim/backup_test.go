@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // both plays the server for an automatic pass and returns the two phases'
@@ -49,6 +51,7 @@ func savedAt(t *testing.T, f *fixture, refs []string, kind, sha string) string {
 // under a ref, then the worktree is removed.
 func TestReconcile_DetachedUnpushedCommitsAreSavedThenRemoved(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "detached unpushed commits saved, then a full reclaim (~62 git processes)")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("det", "feat/det")
@@ -75,6 +78,7 @@ func TestReconcile_DetachedUnpushedCommitsAreSavedThenRemoved(t *testing.T) {
 // A branch with commits on no remote: saved and removed; the branch survives.
 func TestReconcile_UnpushedBranchCommitsAreSavedThenRemoved(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "unpushed branch commits saved, then a full reclaim (~61 git processes)")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("br", "feat/br")
@@ -95,6 +99,7 @@ func TestReconcile_UnpushedBranchCommitsAreSavedThenRemoved(t *testing.T) {
 // before its admin directory, and with it the reflog, goes.
 func TestReconcile_ReflogOnlyCommitsAreSavedThenRemoved(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "reflog-only commits saved, then a full reclaim (~73 git processes)")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("rl", "feat/rl")
@@ -111,6 +116,7 @@ func TestReconcile_ReflogOnlyCommitsAreSavedThenRemoved(t *testing.T) {
 
 // Saving is idempotent: a second pass reuses the refs it made.
 func TestSaveCommits_ReusesItsRefs(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("idem", "feat/idem")
@@ -130,6 +136,7 @@ func TestSaveCommits_ReusesItsRefs(t *testing.T) {
 
 // Uncommitted work still holds: nothing is saved and nothing removed.
 func TestReconcile_DirtyStillHoldsWithUnpushedCommits(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -149,6 +156,7 @@ func TestReconcile_DirtyStillHoldsWithUnpushedCommits(t *testing.T) {
 
 // "Keep everything" removes nothing, so nothing is saved either.
 func TestReconcile_KeepEverythingDoesNotSaveOrRemove(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()

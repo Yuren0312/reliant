@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
@@ -75,13 +76,11 @@ func (s *Service) RunCommand(
 	req *connect.Request[reliantv1.RunPackageCommandRequest],
 ) (*connect.Response[reliantv1.RunPackageCommandResponse], error) {
 	if req.Msg.CommandName == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("command_name is required"))
+		return nil, svcerr.InvalidArgument("command_name is required")
 	}
 
 	if req.Msg.PackageType == reliantv1.PackageType_PACKAGE_TYPE_UNSPECIFIED {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("package_type is required"))
+		return nil, svcerr.InvalidArgument("package_type is required")
 	}
 
 	// Determine working directory and worktree ID
@@ -94,15 +93,13 @@ func (s *Service) RunCommand(
 		// Look up worktree to get its path
 		worktree, err := s.deps.Repo.GetWorktree(ctx, worktreeID)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeNotFound,
-				fmt.Errorf("worktree not found: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 		}
 		rootDir = worktree.Path
 	} else if req.Msg.Path != nil && *req.Msg.Path != "" {
 		rootDir = *req.Msg.Path
 	} else {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("worktree_id or path is required"))
+		return nil, svcerr.InvalidArgument("worktree_id or path is required")
 	}
 
 	// Use explicit working_dir if provided (for subdirectory commands)
@@ -115,8 +112,7 @@ func (s *Service) RunCommand(
 
 	packageType, ok := pkgmgrPackageTypeFromProto(req.Msg.PackageType)
 	if !ok {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("package_type %q is not supported", req.Msg.PackageType.String()))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("package_type %q is not supported", req.Msg.PackageType.String()))
 	}
 
 	// Run the command
@@ -128,8 +124,7 @@ func (s *Service) RunCommand(
 		Env:         req.Msg.Env,
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("failed to run command: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to run command"))
 	}
 
 	return connect.NewResponse(&reliantv1.RunPackageCommandResponse{
@@ -171,12 +166,12 @@ func (s *Service) GetProcess(
 ) (*connect.Response[reliantv1.GetPackageProcessResponse], error) {
 	processID := req.Msg.ProcessId
 	if processID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
+		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 
 	process, err := s.deps.Processes.GetProcess(processID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, svcerr.WithCause(svcerr.NotFound("process"), err)
 	}
 
 	return connect.NewResponse(&reliantv1.GetPackageProcessResponse{
@@ -191,19 +186,19 @@ func (s *Service) GetProcessLogs(
 ) (*connect.Response[reliantv1.GetPackageProcessLogsResponse], error) {
 	processID := req.Msg.ProcessId
 	if processID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
+		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 
 	// Get separate stdout/stderr for backwards compatibility
 	stdout, stderr, err := s.deps.Processes.GetProcessOutput(processID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, svcerr.WithCause(svcerr.NotFound("process"), err)
 	}
 
 	// Get combined interleaved output
 	combinedOutput, err := s.deps.Processes.GetCombinedOutput(processID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, svcerr.WithCause(svcerr.NotFound("process"), err)
 	}
 
 	// Convert to proto format
@@ -229,7 +224,7 @@ func (s *Service) KillProcess(
 ) (*connect.Response[reliantv1.KillPackageProcessResponse], error) {
 	processID := req.Msg.ProcessId
 	if processID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
+		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 
 	err := s.deps.Processes.KillProcess(processID)
@@ -240,8 +235,7 @@ func (s *Service) KillProcess(
 				Message: "Process was already stopped",
 			}), nil
 		}
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("failed to kill process: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to kill process"))
 	}
 
 	return connect.NewResponse(&reliantv1.KillPackageProcessResponse{
@@ -256,27 +250,24 @@ func (s *Service) GetCommandFavorites(
 ) (*connect.Response[reliantv1.GetCommandFavoritesResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	projectID := req.Msg.ProjectId
 	if projectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	// Verify project exists and belongs to user
 	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound,
-			fmt.Errorf("project not found: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Get favorites from database
 	commandKeys, err := s.deps.Repo.ListCommandFavorites(ctx, userID, projectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("failed to list command favorites: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list command favorites"))
 	}
 
 	return connect.NewResponse(&reliantv1.GetCommandFavoritesResponse{
@@ -291,26 +282,23 @@ func (s *Service) SetCommandFavorite(
 ) (*connect.Response[reliantv1.SetCommandFavoriteResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	projectID := req.Msg.ProjectId
 	if projectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	commandKey := req.Msg.CommandKey
 	if commandKey == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("command_key is required"))
+		return nil, svcerr.InvalidArgument("command_key is required")
 	}
 
 	// Verify project exists and belongs to user
 	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound,
-			fmt.Errorf("project not found: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Add or remove favorite based on is_favorite flag
@@ -321,8 +309,7 @@ func (s *Service) SetCommandFavorite(
 	}
 
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("failed to update command favorite: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update command favorite"))
 	}
 
 	return connect.NewResponse(&reliantv1.SetCommandFavoriteResponse{

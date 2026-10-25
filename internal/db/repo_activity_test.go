@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // ---------------------------------------------------------------------------
@@ -124,6 +126,8 @@ func activityValueFromUpdate(t *testing.T, u UserUpdate) int {
 // ---------------------------------------------------------------------------
 
 func TestGetChatActivity_Idle(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -140,6 +144,8 @@ func TestGetChatActivity_Idle(t *testing.T) {
 }
 
 func TestGetChatActivity_Running(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -157,6 +163,9 @@ func TestGetChatActivity_Running(t *testing.T) {
 }
 
 func TestGetChatActivity_RunningWithThreadWorkflow(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -177,6 +186,8 @@ func TestGetChatActivity_RunningWithThreadWorkflow(t *testing.T) {
 }
 
 func TestGetChatActivity_AwaitingInput_PendingApproval(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -194,6 +205,8 @@ func TestGetChatActivity_AwaitingInput_PendingApproval(t *testing.T) {
 }
 
 func TestGetChatActivity_ApprovalTakesPriorityOverRunning(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -214,6 +227,8 @@ func TestGetChatActivity_ApprovalTakesPriorityOverRunning(t *testing.T) {
 }
 
 func TestGetChatActivity_Paused(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -231,6 +246,8 @@ func TestGetChatActivity_Paused(t *testing.T) {
 }
 
 func TestGetChatActivity_RunningTakesPriorityOverPaused(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -252,6 +269,8 @@ func TestGetChatActivity_RunningTakesPriorityOverPaused(t *testing.T) {
 }
 
 func TestEmitChatActivityIfChanged_AlwaysEmits(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -275,6 +294,8 @@ func TestEmitChatActivityIfChanged_AlwaysEmits(t *testing.T) {
 }
 
 func TestEmitChatActivityIfChanged_TransitionRunningToIdle(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -348,6 +369,8 @@ func completeWorkflowNow(t *testing.T, repo *Repo, id string, status WorkflowSta
 }
 
 func TestGetChatActivity_Error_WhenNothingSucceededAfterFailure(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -375,6 +398,8 @@ func TestGetChatActivity_Error_WhenNothingSucceededAfterFailure(t *testing.T) {
 // workflows completed (the last five hours afterwards), and the view still
 // returned 3.
 func TestGetChatActivity_ErrorClearedAfterRecovery(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -402,6 +427,8 @@ func TestGetChatActivity_ErrorClearedAfterRecovery(t *testing.T) {
 // A success that happened BEFORE the failure must not clear it — otherwise any
 // chat with one early success would be permanently immune to showing an error.
 func TestGetChatActivity_ErrorNotClearedByEarlierSuccess(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -426,6 +453,8 @@ func TestGetChatActivity_ErrorNotClearedByEarlierSuccess(t *testing.T) {
 // A live run outranks a past failure: the chat is working again, so it reads
 // RUNNING rather than advertising an error the user can do nothing about.
 func TestGetChatActivity_RunningTakesPriorityOverPastFailure(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -454,6 +483,8 @@ func TestGetChatActivity_RunningTakesPriorityOverPastFailure(t *testing.T) {
 // must be contiguous: another user's traffic cannot create a gap, and a
 // rollback rolls the counter increment back with the update.
 func TestUserUpdateSequencesStrictlyIncrease(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -494,6 +525,8 @@ func TestUserUpdateSequencesStrictlyIncrease(t *testing.T) {
 // retry ladder. TestUserUpdateAllocationWaitsOutAConcurrentCommit pins that
 // mechanism directly, without relying on a race to reach it.
 func TestConcurrentUserUpdatesDoNotSerializationConflict(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -562,6 +595,8 @@ func TestConcurrentUserUpdatesDoNotSerializationConflict(t *testing.T) {
 // COMMITTED the writer waits out each commit in its ONE transaction and takes
 // the number after the last of them.
 func TestUserUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 

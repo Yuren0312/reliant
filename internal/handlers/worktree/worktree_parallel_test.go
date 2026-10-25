@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -153,7 +154,7 @@ func (r *concurrentCreateRouter) workspaceRoot() string {
 
 // seedMultiRepoProject creates a project whose repos sit at the given
 // relative paths.
-func seedMultiRepoProject(t *testing.T, repo db.Repository, userID string, relPaths ...string) string {
+func seedMultiRepoProject(t *testing.T, repo *db.Repo, userID string, relPaths ...string) string {
 	t.Helper()
 	projectID := uuid.New().String()
 	now := time.Now().UTC()
@@ -184,6 +185,9 @@ func createWorkspace(t *testing.T, svc *Service, userID, projectID, name string)
 // The fake daemon holds each create until all three are in flight; a
 // sequential fan-out can never get there, so it reports a peak of 1.
 func TestCreateWorktreeChecksOutSiblingReposConcurrently(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := newConcurrentCreateRouter(t)
 	router.rendezvous = 3
@@ -208,6 +212,9 @@ func TestCreateWorktreeChecksOutSiblingReposConcurrently(t *testing.T) {
 // constraint left: a repo nested inside another lands inside its checkout, so
 // the container must finish first. Unrelated repos still run together.
 func TestCreateWorktreeChecksOutContainerBeforeNestedRepo(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := newConcurrentCreateRouter(t)
 	svc := newWorktreeService(t, repo, router)
@@ -234,6 +241,9 @@ func TestCreateWorktreeChecksOutContainerBeforeNestedRepo(t *testing.T) {
 // waiting — the daemon's git finishes anyway, at a path the server never
 // learns — so both must run to completion and BOTH must be rolled back.
 func TestCreateWorktreeFailureTearsDownEverySiblingCheckout(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := newConcurrentCreateRouter(t)
 	router.rendezvous = 3

@@ -18,7 +18,7 @@
 //
 //	go run ./tools/test-affected changed-tests   # ./pkg<TAB>^(TestA|TestB)$
 //
-// `make test-affected` is the front door. The decision is Classify (plan.go)
+// `task test:affected` is the front door. The decision is Classify (plan.go)
 // over rules.go, the Go package graph (graph.go) and the web import graph
 // (webgraph.go); this file is the I/O. A path no rule and no Go package claims,
 // a dependency or config pin, or a failure to compute the diff makes the
@@ -35,8 +35,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
-	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -62,9 +64,11 @@ func main() {
 			os.Exit(1)
 		}
 		return
+	case "migration-order":
+		os.Exit(runMigrationOrder(args, os.Stdout, os.Stderr))
 	case "plan", "run":
 	default:
-		fmt.Fprintf(os.Stderr, "test-affected: unknown command %q (want plan, run, shard, weights or changed-tests)\n", cmd)
+		fmt.Fprintf(os.Stderr, "test-affected: unknown command %q (want plan, run, migration-order, shard, weights or changed-tests)\n", cmd)
 		os.Exit(2)
 	}
 	fs := newFlagSet(cmd)
@@ -72,11 +76,17 @@ func main() {
 	baseFlag := fs.String("base", "", "base commit-ish (default: the merge-base with origin/main, or $TEST_BASE)")
 	asJSON := fs.Bool("json", false, "print the plan as JSON instead of the table")
 	full := fs.Bool("full", false, "run everything (also TEST_FULL=1)")
-	lanes := fs.String("lanes", "go,web,electron,forge-generate,docs-generate", "comma-separated lanes to consider")
+	lanes := fs.String("lanes", defaultLanes, "comma-separated lanes to consider")
 	files := fs.String("files", "", "comma-separated paths (or @file, one per line) to treat as the change set instead of the git diff (what-if)")
 	dry := fs.Bool("dry-run", false, "with run: print the commands instead of executing them")
 	gotestP := fs.Int("p", 0, "go test -p (default: the machine's parallelism)")
+	jobs := fs.Int("jobs", 2, "maximum concurrent test steps (1 serializes; prerequisites always run first)")
+	reachFlag := fs.String("reach", "", "Go lane fan-out: all (every package whose test binary contains a change; the default, also $TEST_REACH) or direct (changed packages + their direct importers: the merge tier)")
 	if err := fs.Parse(args); err != nil {
+		os.Exit(2)
+	}
+	if *jobs < 1 {
+		fmt.Fprintln(os.Stderr, "test-affected: -jobs must be positive")
 		os.Exit(2)
 	}
 	if *baseFlag == "" {
@@ -85,9 +95,20 @@ func main() {
 	if os.Getenv("TEST_FULL") == "1" {
 		*full = true
 	}
+	if *reachFlag == "" {
+		*reachFlag = os.Getenv("TEST_REACH")
+	}
+	switch *reachFlag {
+	case "", ReachAll:
+		*reachFlag = ReachAll
+	case ReachDirect:
+	default:
+		fmt.Fprintf(os.Stderr, "test-affected: -reach must be %s or %s, not %q\n", ReachAll, ReachDirect, *reachFlag)
+		os.Exit(2)
+	}
 
 	ctx := context.Background()
-	pl, err := plan(ctx, *root, *baseFlag, *full, splitList(*files))
+	pl, err := plan(ctx, *root, *baseFlag, *full, splitList(*files), *reachFlag)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "test-affected:", err)
 		os.Exit(1)
@@ -102,7 +123,7 @@ func main() {
 		os.Exit(1)
 	}
 	if cmd == "run" {
-		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, dbURL: os.Getenv("DATABASE_URL"),
+		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, jobs: *jobs,
 			slot: strings.Fields(os.Getenv("TEST_AFFECTED_SLOT"))}
 		os.Exit(r.run(ctx, pl, enabled))
 	}
@@ -149,7 +170,7 @@ func laneSet(s string) map[lane]bool {
 }
 
 // plan computes the decision for the tree at root.
-func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []string) (*Plan, error) {
+func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []string, reachMode string) (*Plan, error) {
 	root = mustAbs(root)
 	module, err := moduleOf(root)
 	if err != nil {
@@ -178,14 +199,56 @@ func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []s
 	}
 	g.Web = BuildWebGraph(append(append([]string{}, tracked...), untracked...), diskReader(root))
 	g.ElectronText = electronTexts(root)
-	pl := Classify(changes, g)
+	pl := ClassifyReach(changes, g, reachMode)
 	pl.Base, pl.Head = base, head
+	if pl.ForgeGen.HooksOnly {
+		cmds, err := hookCommands(root, pl.ForgeGen.Hooks)
+		if err != nil {
+			// Without the commands nobody can run hooks alone: the whole
+			// forge generate it is, as before.
+			pl.ForgeGen.HooksOnly, pl.ForgeGen.Hooks = false, nil
+		} else {
+			pl.ForgeGen.HookCommands = cmds
+		}
+	}
 	return pl, nil
+}
+
+// hookCommands reads each named hook's command from forge.yaml's
+// generate.hooks.
+func hookCommands(root string, names []string) (map[string][]string, error) {
+	b, err := os.ReadFile(filepath.Join(root, "forge.yaml"))
+	if err != nil {
+		return nil, err
+	}
+	var cfg struct {
+		Generate struct {
+			Hooks []struct {
+				Name    string   `yaml:"name"`
+				Command []string `yaml:"command"`
+			} `yaml:"hooks"`
+		} `yaml:"generate"`
+	}
+	if err := yaml.Unmarshal(b, &cfg); err != nil {
+		return nil, err
+	}
+	out := map[string][]string{}
+	for _, h := range cfg.Generate.Hooks {
+		if slices.Contains(names, h.Name) && len(h.Command) > 0 {
+			out[h.Name] = h.Command
+		}
+	}
+	for _, n := range names {
+		if _, ok := out[n]; !ok {
+			return nil, fmt.Errorf("forge.yaml has no generate hook %q", n)
+		}
+	}
+	return out, nil
 }
 
 func failSafe(base, head, why string) *Plan {
 	lf := LaneFull{Full: true, Reasons: []string{why}}
-	return &Plan{Base: base, Head: head, Go: GoPlan{LaneFull: lf}, Web: WebPlan{LaneFull: lf}, Electron: ElectronPlan{LaneFull: lf}, ForgeGen: ForgeGenPlan{LaneFull: lf}, DocGen: DocGenPlan{LaneFull: lf}}
+	return &Plan{Base: base, Head: head, Go: GoPlan{LaneFull: lf}, Web: WebPlan{LaneFull: lf}, Electron: ElectronPlan{LaneFull: lf}, ForgeGen: ForgeGenPlan{LaneFull: lf}, DocGen: DocGenPlan{LaneFull: lf}, MigOrder: MigOrderPlan{LaneFull: lf}}
 }
 
 func firstLine(s string) string {
@@ -351,6 +414,15 @@ func short(s string) string {
 	return s
 }
 
+// goLine heads the Go lane: a -reach direct plan says how many transitive
+// dependents it left to the full lane.
+func goLine(gp GoPlan) string {
+	if gp.Reach == ReachDirect {
+		return fmt.Sprintf("%d package(s), reach direct (%d transitive dependent(s) left to the full lane)", len(gp.Packages), len(gp.Deferred))
+	}
+	return fmt.Sprintf("%d package(s)", len(gp.Packages))
+}
+
 func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 	p := &printer{w: w}
 	p.f("== test-affected: base %s -> %s (%d changed path(s))\n", short(pl.Base), short(pl.Head), len(pl.Files))
@@ -376,11 +448,12 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 		list []string
 		why  map[string]string
 	}{
-		{laneGo, pl.Go.LaneFull, fmt.Sprintf("%d package(s)", len(pl.Go.Packages)), pl.Go.Packages, pl.Go.Why},
+		{laneGo, pl.Go.LaneFull, goLine(pl.Go), pl.Go.Packages, pl.Go.Why},
 		{laneWeb, pl.Web.LaneFull, fmt.Sprintf("%d vitest file(s)", len(pl.Web.Tests)), pl.Web.Tests, pl.Web.Why},
 		{laneElectron, pl.Electron.LaneFull, "electron tests", nil, nil},
 		{laneForgeGen, pl.ForgeGen.LaneFull, "forge generate", nil, nil},
 		{laneDocGen, pl.DocGen.LaneFull, "docs generators", nil, nil},
+		{laneMigOrder, pl.MigOrder.LaneFull, "migration order", nil, nil},
 	}
 	for _, lp := range lanePlans {
 		if !enabled[lp.l] {
@@ -396,7 +469,7 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 				}
 				p.f("  - %s\n", r)
 			}
-		case len(lp.list) == 0 && (lp.l == laneElectron || lp.l == laneForgeGen || lp.l == laneDocGen):
+		case len(lp.list) == 0 && (lp.l == laneElectron || lp.l == laneForgeGen || lp.l == laneDocGen || lp.l == laneMigOrder):
 			p.f("\n[%s] skip: nothing it reads changed\n", lp.l)
 		case len(lp.list) == 0:
 			p.f("\n[%s] skip: no test reaches a changed file\n", lp.l)
@@ -411,8 +484,10 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 			}
 		}
 	}
-	if len(pl.Go.DBOnly) > 0 && enabled[laneGo] && !pl.Go.Full {
-		p.f("\nDB-only (selected by a migration; need DATABASE_URL): %s\n", strings.Join(pl.Go.DBOnly, " "))
+	for _, lc := range pl.Lockfiles {
+		if slices.ContainsFunc(lc.Lanes, func(l lane) bool { return enabled[l] }) {
+			p.f("\n[npm-lockfile] %s: npm ci --dry-run (%s)\n", lc.Dir, lc.Why)
+		}
 	}
 	return p.err
 }
@@ -420,13 +495,14 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 // ── runner ──────────────────────────────────────────────────────────────────
 
 type runner struct {
-	root   string
-	out    io.Writer
-	errOut io.Writer
-	dry    bool
-	goP    int
-	dbURL  string
-	// slot prefixes a FULL lane's command (the Makefile passes
+	root    string
+	out     io.Writer
+	errOut  io.Writer
+	dry     bool
+	goP     int
+	jobs    int
+	execute func(context.Context, step, io.Writer, io.Writer) error
+	// slot prefixes a FULL lane's command (Taskfile.yml passes
 	// TEST_AFFECTED_SLOT='forge slot run --class heavy --'): a whole-module
 	// run is as heavy as any gate check, and outside a host slot it only steals
 	// CPU from the jobs queued in one. A scoped run stays out of the queue: it
@@ -440,29 +516,51 @@ func (r *runner) heavy(argv []string) []string {
 }
 
 type step struct {
-	name string
-	dir  string
-	env  []string
-	argv []string
+	name         string
+	dir          string
+	env          []string
+	argv         []string
+	prerequisite bool
+	// exclusive tests temporarily rewrite repository inputs used by other lanes.
+	exclusive bool
 }
+
+// lockfileArgv proves a project's lockfile still installs without touching
+// its node_modules: `npm ci` validates package.json against the lockfile
+// before it reifies anything, and --dry-run stops it there (~10s, offline for
+// a lockfile in sync).
+var lockfileArgv = []string{"npm", "ci", "--dry-run", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error"}
 
 func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 	var out []step
+	// First: the cheapest step, and every test after it would otherwise pass
+	// against a node_modules a fresh install can no longer produce.
+	for _, lc := range pl.Lockfiles {
+		if slices.ContainsFunc(lc.Lanes, func(l lane) bool { return enabled[l] }) {
+			out = append(out, step{name: "npm lockfile in sync (" + lc.Dir + ")", dir: filepath.Join(r.root, lc.Dir), argv: lockfileArgv, prerequisite: true})
+		}
+	}
+	// Cheapest of all (a fetch and a directory listing) and the one that
+	// matters most before a merge: a migration below main's newest is never
+	// applied, and no test notices.
+	if enabled[laneMigOrder] && pl.MigOrder.Full {
+		out = append(out, step{name: "migration order is above origin/main's newest", dir: r.root, argv: []string{"go", "run", "./tools/test-affected", "migration-order"}, prerequisite: true})
+	}
 	// First, so the tests below run against what generate leaves behind. It
 	// writes what it regenerates into the tree, naming every file it changed.
 	if enabled[laneForgeGen] && pl.ForgeGen.Full {
-		out = append(out, step{name: "forge generate is a no-op", dir: r.root, argv: []string{"make", "--no-print-directory", "forge-generate-check"}})
+		out = append(out, step{name: "forge generate is a no-op", dir: r.root, argv: []string{"task", "generate:check"}, prerequisite: true})
 	}
 	// Likewise: the docs generators write into the tree (one of them a Go
 	// file). They compile most of the module, so the step takes a heavy slot.
 	if enabled[laneDocGen] && pl.DocGen.Full {
-		out = append(out, step{name: "docs generators are a no-op", dir: r.root, argv: r.heavy([]string{"make", "--no-print-directory", "docs-generate-check"})})
+		out = append(out, step{name: "docs generators are a no-op", dir: r.root, argv: r.heavy([]string{"task", "generate:docs:check"}), prerequisite: true})
 	}
 	if enabled[laneGo] {
 		out = append(out, r.goSteps(pl)...)
 	}
 	if enabled[laneElectron] && pl.Electron.Full {
-		out = append(out, step{name: "electron", dir: filepath.Join(r.root, "electron"), argv: []string{"npm", "test", "--silent"}})
+		out = append(out, step{name: "electron", dir: filepath.Join(r.root, "electron"), argv: []string{"npm", "test", "--silent"}, exclusive: true})
 	}
 	if enabled[laneWeb] {
 		out = append(out, r.webSteps(pl)...)
@@ -471,7 +569,9 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 }
 
 func (r *runner) goSteps(pl *Plan) []step {
-	base := []string{"go", "test", "-buildvcs=false", "-short", "-timeout", "60s"}
+	// -timeout is per package binary and matches task test:short's (5m): the
+	// DB-backed packages run under -short too (sized in Taskfile.yml).
+	base := []string{"go", "test", "-buildvcs=false", "-short", "-timeout", "5m"}
 	if r.goP > 0 {
 		base = append(base, "-p", fmt.Sprint(r.goP))
 	}
@@ -481,31 +581,11 @@ func (r *runner) goSteps(pl *Plan) []step {
 	case len(pl.Go.Packages) == 0:
 		return nil
 	}
-	dbOnly := setOf(pl.Go.DBOnly)
-	var plain, dbPkgs []string
-	for _, p := range pl.Go.Packages {
-		if dbOnly[p] {
-			dbPkgs = append(dbPkgs, p)
-		} else {
-			plain = append(plain, p)
-		}
-	}
-	var out []step
-	if len(plain) > 0 {
-		out = append(out, step{name: "go", dir: r.root, argv: append(append([]string{}, base...), plain...)})
-	}
-	if len(dbPkgs) > 0 && r.dbURL != "" {
-		out = append(out, step{
-			name: "go (DB-backed, a migration changed)", dir: r.root,
-			env:  []string{"REQUIRE_TEST_DB=1"},
-			argv: append(append([]string{}, base...), dbPkgs...),
-		})
-	}
-	return out
+	return []step{{name: "go", dir: r.root, argv: append(append([]string{}, base...), pl.Go.Packages...)}}
 }
 
 func (r *runner) webSteps(pl *Plan) []step {
-	web := filepath.Join(r.root, "web")
+	web := filepath.Join(r.root, "frontends", "web")
 	switch {
 	case pl.Web.Full:
 		return []step{{name: "web (full)", dir: web, argv: r.heavy([]string{"npx", "vitest", "run"})}}
@@ -515,53 +595,13 @@ func (r *runner) webSteps(pl *Plan) []step {
 	return []step{{name: "web", dir: web, argv: append([]string{"npx", "vitest", "run"}, pl.Web.Tests...)}}
 }
 
-func setOf(l []string) map[string]bool {
-	out := map[string]bool{}
-	for _, s := range l {
-		out[s] = true
-	}
-	return out
-}
-
 func (r *runner) run(ctx context.Context, pl *Plan, enabled map[lane]bool) int {
 	steps := r.steps(pl, enabled)
 	if len(steps) == 0 {
 		fmt.Fprintln(r.out, "\ntest-affected: nothing to run.")
-		r.noteSkippedDB(pl)
 		return 0
 	}
-	fmt.Fprintln(r.out)
-	failed := 0
-	for _, s := range steps {
-		fmt.Fprintf(r.out, "==> %s: %s\n", s.name, summarize(s.argv))
-		if r.dry {
-			continue
-		}
-		start := time.Now()
-		c := exec.CommandContext(ctx, s.argv[0], s.argv[1:]...)
-		c.Dir = s.dir
-		c.Env = append(os.Environ(), s.env...)
-		c.Stdout, c.Stderr = r.out, r.errOut
-		err := c.Run()
-		status := "ok"
-		if err != nil {
-			status = "FAILED: " + err.Error()
-			failed++
-		}
-		fmt.Fprintf(r.out, "<== %s: %s (%s)\n", s.name, status, time.Since(start).Round(time.Second))
-	}
-	r.noteSkippedDB(pl)
-	if failed > 0 {
-		return 1
-	}
-	return 0
-}
-
-func (r *runner) noteSkippedDB(pl *Plan) {
-	if len(pl.Go.DBOnly) > 0 && r.dbURL == "" && !pl.Go.Full {
-		fmt.Fprintf(r.out, "note: a migration changed and %d package(s) have DB-backed tests it reaches; set DATABASE_URL to a database of your own to run them: %s\n",
-			len(pl.Go.DBOnly), strings.Join(pl.Go.DBOnly, " "))
-	}
+	return r.runSteps(ctx, steps)
 }
 
 func summarize(argv []string) string {

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
 )
@@ -15,6 +16,8 @@ import (
 // property that lets them interleave: a later writer that omits a field must
 // not blank what an earlier one recorded.
 func TestUpsertToolCallStatusPreservesFieldsAcrossWriters(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -71,6 +74,8 @@ func TestUpsertToolCallStatusPreservesFieldsAcrossWriters(t *testing.T) {
 // A caller that does supply a field overrides the persisted one -- inheritance
 // fills gaps, it does not freeze values.
 func TestUpsertToolCallStatusCallerValuesWin(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -116,6 +121,8 @@ func TestUpsertToolCallStatusCallerValuesWin(t *testing.T) {
 // still thinks it is running must not resurrect it: that is what leaves the UI
 // spinning on a call that already finished.
 func TestUpsertToolCallStatusTerminalIsOneWay(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -190,6 +197,8 @@ func TestUpsertToolCallStatusTerminalIsOneWay(t *testing.T) {
 // interrupted. Neither may rewrite the outcome the first terminal write
 // recorded -- but either may still fill in a column that write did not know.
 func TestUpsertToolCallStatusFirstTerminalWriteWins(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -250,6 +259,9 @@ func TestUpsertToolCallStatusFirstTerminalWriteWins(t *testing.T) {
 // above let it overwrite a COMPLETED row. The tool's real output was then gone
 // from the durable record, and a reload showed a finished tool as cancelled.
 func TestUpsertToolCallStatusCompletedIsNotDowngradedToCancelled(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -288,6 +300,8 @@ func TestUpsertToolCallStatusCompletedIsNotDowngradedToCancelled(t *testing.T) {
 }
 
 func TestUpsertToolCallStatusFirstWriteHasNoExistingRow(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()

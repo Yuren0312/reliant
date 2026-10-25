@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // TestReviveThread is the inverse of TestReapOrphanedThreads, and pins the
@@ -23,6 +25,9 @@ import (
 // completed)". Measured on the live DB at the time of the fix: 3 chats with a
 // RUNNING workflow and a terminal main thread.
 func TestReviveThread(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -81,6 +86,8 @@ func TestReviveThread(t *testing.T) {
 // already stopped; clearing a live thread's bookkeeping would be a silent
 // corruption of a row nothing else revisits.
 func TestReviveThread_LeavesLiveThreadsAlone(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -125,6 +132,8 @@ func TestReviveThread_LeavesLiveThreadsAlone(t *testing.T) {
 // sub-agents legitimately stay finished when the main thread takes a new
 // turn, and reviving them would resurrect agents that are not running.
 func TestReviveThread_OnlyTargetThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -157,6 +166,8 @@ func TestReviveThread_OnlyTargetThread(t *testing.T) {
 // does not exist: a caller on the hot "started" path must get 0 rows and no
 // error, not a failure that retries the whole status notification.
 func TestReviveThread_UnknownThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 

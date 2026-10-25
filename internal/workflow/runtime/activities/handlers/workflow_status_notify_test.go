@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -111,6 +112,9 @@ func finishRun(t *testing.T, kind core.TriggerEventKind, status, outcome string,
 }
 
 func TestWorkflowStatus_FailureUnread(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
+	t.Parallel()
+
 	cases := []struct {
 		name       string
 		kind       core.TriggerEventKind
@@ -136,12 +140,17 @@ func TestWorkflowStatus_FailureUnread(t *testing.T) {
 }
 
 func TestWorkflowStatus_DeclaredFailureOutcomeUsesFailedReason(t *testing.T) {
+	t.Parallel()
+
 	unread, reason := finishRun(t, core.TriggerEventKindSchedule, "completed", model.OutcomeFailure, false)
 	assert.True(t, unread)
 	assert.Equal(t, "workflow_failed", reason)
 }
 
 func TestWorkflowStatus_CompletionUnreadFollowsLaunchKind(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
+	t.Parallel()
+
 	cases := []struct {
 		name       string
 		kind       core.TriggerEventKind
@@ -170,6 +179,8 @@ func TestWorkflowStatus_CompletionUnreadFollowsLaunchKind(t *testing.T) {
 // An automation that needs input must still surface: the approval path marks
 // the chat unread regardless of how the run was launched.
 func TestApprovalCreate_MarksScheduleLaunchedChatUnread(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()

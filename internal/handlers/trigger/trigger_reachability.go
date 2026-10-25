@@ -7,8 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"connectrpc.com/connect"
-
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -115,7 +114,7 @@ func (s *Service) checkReachability(
 		}
 	}
 	if len(refusals) > 0 {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+		return nil, svcerr.FailedPrecondition(fmt.Sprintf(
 			"params: %s with the connected account. Choose values it can see, or reconnect with more access", strings.Join(refusals, "; ")))
 	}
 	return warnings, nil

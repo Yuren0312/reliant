@@ -13,6 +13,8 @@ import (
 )
 
 func TestEnrichMessageUpdate_IncludesFileReferenceAttachments(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -83,7 +85,7 @@ func TestEnrichMessageUpdate_IncludesFileReferenceAttachments(t *testing.T) {
 		UpdatedAt: now,
 	}))
 
-	enriched, err := repo.EnrichMessageUpdate(ctx, ChatUpdate{
+	enriched, err := repo.enrichMessageUpdate(ctx, ChatUpdate{
 		ID:         uuid.New().String(),
 		ChatID:     chatID,
 		UpdateType: reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE,
@@ -108,6 +110,8 @@ func TestEnrichMessageUpdate_IncludesFileReferenceAttachments(t *testing.T) {
 }
 
 func TestEnrichMessageUpdate_UsesCanonicalToolCallInputField(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -170,7 +174,7 @@ func TestEnrichMessageUpdate_UsesCanonicalToolCallInputField(t *testing.T) {
 		UpdatedAt:  now,
 	}))
 
-	enriched, err := repo.EnrichMessageUpdate(ctx, ChatUpdate{
+	enriched, err := repo.enrichMessageUpdate(ctx, ChatUpdate{
 		ID:         uuid.New().String(),
 		ChatID:     chatID,
 		UpdateType: reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE,

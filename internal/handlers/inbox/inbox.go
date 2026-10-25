@@ -13,7 +13,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -55,7 +58,8 @@ const maxInboxDismissBatch = 500
 // ListInbox returns everything waiting on the caller, optionally within one
 // project. Pending rows come from one UNION ALL query; automation health reuses
 // triggers.ComputeHealth over one batched firings query, so the cost does not
-// grow with the number of triggers.
+// grow with the number of triggers. The reads are independent and run
+// together (readInbox); only the dismissal check waits for all of them.
 //
 // Scoping is applied after dismissal so the scoped response can also say how
 // many items wait in the caller's other projects (one read, not two).
@@ -65,51 +69,37 @@ func (s *Service) ListInbox(
 ) (*connect.Response[reliantv1.ListInboxResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 	limit := defaultInboxLimit
 	if req.Msg.Limit != nil {
 		limit = int(*req.Msg.Limit)
 		if limit < 0 {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("limit must not be negative"))
+			return nil, svcerr.InvalidArgument("limit must not be negative")
 		}
 	}
 
 	projectID := strings.TrimSpace(req.Msg.GetProjectId())
 
-	pending, err := s.deps.Repo.ListInboxPending(ctx, userID)
+	read, err := s.sharedRead(ctx, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list inbox", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list inbox"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
-	failing, err := s.failingAutomations(ctx, userID)
-	if err != nil {
-		logging.ErrorContext(ctx, "Failed to compute failing automations for inbox", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list inbox"))
-	}
-
-	items := make([]*reliantv1.InboxItem, 0, len(pending)+len(failing))
-	for _, p := range pending {
+	items := make([]*reliantv1.InboxItem, 0, len(read.pending)+len(read.failing)+len(read.storage)+len(read.needsSetup))
+	for _, p := range read.pending {
 		items = append(items, inboxItemFromPending(p))
 	}
-	items = append(items, failing...)
-	storage, err := s.storageItems(ctx, userID)
-	if err != nil {
-		// Disk state is advisory; a failure here must not blank the whole inbox.
-		logging.WarnContext(ctx, "Failed to compute storage inbox items", "error", err)
+	// The read may be shared with concurrent calls (sharedRead): this
+	// response gets its own copies.
+	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.needsSetup} {
+		for _, it := range shared {
+			items = append(items, proto.CloneOf(it))
+		}
 	}
-	items = append(items, storage...)
-	needsSetup, err := s.needsSetupAutomations(ctx, userID)
-	if err != nil {
-		// Advisory like storage: the badge and the other sections still work.
-		logging.WarnContext(ctx, "Failed to compute needs-setup automations for inbox", "error", err)
-	}
-	items = append(items, needsSetup...)
 
 	items, err = s.dropDismissed(ctx, userID, items)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to filter dismissed inbox items", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list inbox"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
 
 	resp := &reliantv1.ListInboxResponse{}
@@ -137,12 +127,9 @@ func (s *Service) ListInbox(
 	})
 
 	for _, it := range items {
-		switch it.Kind {
-		case reliantv1.InboxItemKind_INBOX_ITEM_KIND_APPROVAL,
-			reliantv1.InboxItemKind_INBOX_ITEM_KIND_QUESTION,
-			reliantv1.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE:
+		if inboxItemBlocks(it) {
 			resp.BlockingCount++
-		default:
+		} else {
 			resp.HasInformational = true
 		}
 	}
@@ -154,6 +141,139 @@ func (s *Service) ListInbox(
 	return connect.NewResponse(resp), nil
 }
 
+// inboxReadConcurrency bounds how many of ONE ListInbox's reads hold a pool
+// connection at a time. Running the independent reads together cuts a request
+// to its longest chain (the triggers, then their firings) instead of the sum
+// of about nine round trips, but a burst of requests multiplies whatever one
+// request holds: at 05:22 on 2026-10-23 one client's ~360 ListInbox calls a
+// minute held all 25 of the api-server's connections. Three keeps one request
+// from taking more than a slice of the pool.
+const inboxReadConcurrency = 3
+
+// inboxReads is what readInbox gathers: everything ListInbox lists, before
+// dismissals and scoping.
+type inboxReads struct {
+	pending    []*core.InboxPending
+	failing    []*reliantv1.InboxItem
+	storage    []*reliantv1.InboxItem
+	needsSetup []*reliantv1.InboxItem
+}
+
+// inboxReadTimeout bounds a shared read (sharedRead), which runs detached
+// from any one caller's cancellation.
+const inboxReadTimeout = 15 * time.Second
+
+// sharedRead is readInbox, shared by every ListInbox of the same user that
+// arrives while one is in flight: the reads are the same whatever the scope
+// or limit (those are applied after), so N concurrent calls — a list and its
+// badge, several tabs, a reconnect replay — cost one set of queries and one
+// slice of the pool, not N. The read runs on a context detached from the
+// first caller's cancellation (so one caller giving up does not fail the
+// others) with its own deadline. Callers only read the result.
+func (s *Service) sharedRead(ctx context.Context, userID string) (*inboxReads, error) {
+	v, err, _ := s.inboxReads.Do(userID, func() (any, error) {
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), inboxReadTimeout)
+		defer cancel()
+		return s.readInbox(rctx, userID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.(*inboxReads), nil
+}
+
+// readLimiter hands out inboxReadConcurrency tokens, one per read holding a
+// connection. A section that holds a token never asks for a second one, so the
+// readers cannot deadlock on each other.
+type readLimiter chan struct{}
+
+func (l readLimiter) do(ctx context.Context, read func() error) error {
+	select {
+	case l <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-l }()
+	return read()
+}
+
+// readInbox runs ListInbox's reads concurrently, at most inboxReadConcurrency
+// at once. The pending rows and automation health are the inbox: either one
+// failing fails the read. Storage and needs-setup are advisory and only warn.
+func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, error) {
+	lim := make(readLimiter, inboxReadConcurrency)
+	var out inboxReads
+	g, gctx := errgroup.WithContext(ctx)
+	// advisory logs an advisory read's failure, unless the read only failed
+	// because a required one already had and cancelled it.
+	advisory := func(msg string, err error) {
+		if err != nil && gctx.Err() == nil {
+			logging.WarnContext(ctx, msg, "error", err)
+		}
+	}
+
+	g.Go(func() error {
+		return lim.do(gctx, func() (err error) {
+			out.pending, err = s.deps.Repo.ListInboxPending(gctx, userID)
+			return err
+		})
+	})
+	g.Go(func() error {
+		// Both automation sections start from the caller's triggers; read
+		// them once.
+		var stored []*core.Trigger
+		if err := lim.do(gctx, func() (err error) {
+			stored, err = s.deps.Repo.ListTriggers(gctx, core.TriggerFilters{UserID: userID})
+			return err
+		}); err != nil {
+			return err
+		}
+		tg, tctx := errgroup.WithContext(gctx)
+		tg.Go(func() (err error) {
+			out.failing, err = s.failingAutomations(tctx, lim, userID, stored)
+			return err
+		})
+		tg.Go(func() error {
+			needsSetup, err := s.needsSetupAutomations(tctx, lim, stored)
+			// Advisory like storage: the badge and the other sections still work.
+			advisory("Failed to compute needs-setup automations for inbox", err)
+			out.needsSetup = needsSetup
+			return nil
+		})
+		return tg.Wait()
+	})
+	g.Go(func() error {
+		err := lim.do(gctx, func() (err error) {
+			out.storage, err = s.storageItems(gctx, userID)
+			return err
+		})
+		// Disk state is advisory; a failure here must not blank the whole inbox.
+		advisory("Failed to compute storage inbox items", err)
+		return nil
+	})
+	// The group's FIRST error is the cause; reads that failed after it only
+	// saw the cancellation it triggered.
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// inboxItemBlocks reports whether an item blocks a live run: an approval, a
+// question a thread is parked on, a run waiting for its machine. An async
+// question waits on the user but blocks nothing — its agent kept working.
+func inboxItemBlocks(it *reliantv1.InboxItem) bool {
+	switch it.Kind {
+	case reliantv1.InboxItemKind_INBOX_ITEM_KIND_APPROVAL,
+		reliantv1.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE:
+		return true
+	case reliantv1.InboxItemKind_INBOX_ITEM_KIND_QUESTION:
+		return !it.GetQuestion().GetAsync()
+	default:
+		return false
+	}
+}
+
 // DismissInboxItem hides items from the caller's inbox. Hiding an approval or
 // a question does not resolve it; the run still waits on it.
 func (s *Service) DismissInboxItem(
@@ -162,14 +282,13 @@ func (s *Service) DismissInboxItem(
 ) (*connect.Response[reliantv1.DismissInboxItemResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 	if err := validateInboxItemIDs(req.Msg.ItemIds); err != nil {
 		return nil, err
 	}
 	if err := s.deps.Repo.DismissInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds), time.Now().UTC()); err != nil {
-		logging.ErrorContext(ctx, "Failed to dismiss inbox items", "error", err, "count", len(req.Msg.ItemIds))
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to dismiss inbox item"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to dismiss inbox item"))
 	}
 	return connect.NewResponse(&reliantv1.DismissInboxItemResponse{}), nil
 }
@@ -181,28 +300,27 @@ func (s *Service) RestoreInboxItem(
 ) (*connect.Response[reliantv1.RestoreInboxItemResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 	if err := validateInboxItemIDs(req.Msg.ItemIds); err != nil {
 		return nil, err
 	}
 	if err := s.deps.Repo.RestoreInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds)); err != nil {
-		logging.ErrorContext(ctx, "Failed to restore inbox items", "error", err, "count", len(req.Msg.ItemIds))
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to restore inbox item"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to restore inbox item"))
 	}
 	return connect.NewResponse(&reliantv1.RestoreInboxItemResponse{}), nil
 }
 
 func validateInboxItemIDs(itemIDs []string) error {
 	if len(itemIDs) == 0 {
-		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("item_ids is required"))
+		return svcerr.InvalidArgument("item_ids is required")
 	}
 	if len(itemIDs) > maxInboxDismissBatch {
-		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("at most %d item ids per call", maxInboxDismissBatch))
+		return svcerr.InvalidArgument(fmt.Sprintf("at most %d item ids per call", maxInboxDismissBatch))
 	}
 	for _, id := range itemIDs {
 		if !isInboxItemID(id) {
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("not an inbox item id: %q", id))
+			return svcerr.InvalidArgument(fmt.Sprintf("not an inbox item id: %q", id))
 		}
 	}
 	return nil
@@ -218,33 +336,46 @@ func isInboxItemID(itemID string) bool {
 }
 
 // failingAutomations returns one item per enabled trigger whose health is
-// FAILING, using the same ComputeHealth as Trigger.health.
-func (s *Service) failingAutomations(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
-	stored, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID})
-	if err != nil {
-		return nil, err
-	}
+// FAILING, using the same ComputeHealth as Trigger.health. Its three reads are
+// independent and run together, each holding one of lim's tokens.
+func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userID string, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {
 	ids := make([]string, 0, len(stored))
 	for _, t := range stored {
 		if t.Enabled {
 			ids = append(ids, t.ID)
 		}
 	}
-	recent, err := s.deps.Repo.RecentTriggerFirings(ctx, userID, ids, triggers.HealthWindow)
-	if err != nil {
-		return nil, err
+	if len(ids) == 0 {
+		return nil, nil
 	}
-
+	var (
+		recent, episodes map[string][]*core.TriggerEventWithRun
+		regs             map[string]*core.TriggerRegistration
+	)
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return lim.do(gctx, func() (err error) {
+			recent, err = s.deps.Repo.RecentTriggerOutcomes(gctx, userID, ids, triggers.HealthWindow)
+			return err
+		})
+	})
 	// The episode is read separately from the health window: a streak longer
 	// than the window must still be one item with an honest count.
-	episodes, err := s.deps.Repo.FiringsSinceLastSuccess(ctx, userID, ids, triggers.EpisodeFirings)
-	if err != nil {
-		return nil, err
-	}
+	g.Go(func() error {
+		return lim.do(gctx, func() (err error) {
+			episodes, err = s.deps.Repo.FiringsSinceLastSuccess(gctx, userID, ids, triggers.EpisodeFirings)
+			return err
+		})
+	})
 	// A polled source that cannot authenticate never fires, so it has no
 	// failed firing to show; its source state is what says it is failing.
-	regs, err := s.deps.Repo.ListTriggerRegistrations(ctx, userID, ids)
-	if err != nil {
+	g.Go(func() error {
+		return lim.do(gctx, func() (err error) {
+			regs, err = s.deps.Repo.ListTriggerRegistrations(gctx, userID, ids)
+			return err
+		})
+	})
+	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 	now := time.Now()
@@ -312,11 +443,19 @@ func (s *Service) failingAutomations(ctx context.Context, userID string) ([]*rel
 // the moment setup is finished, because it is recomputed on every read. A
 // paused automation is the person's choice and not nagged about; an automation
 // whose declaration is broken is BROKEN, not a setup matter.
-func (s *Service) needsSetupAutomations(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
-	stored, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID})
-	if err != nil {
-		return nil, err
-	}
+//
+// Resolving a declaration may read the workflow store, one workflow after
+// another, so the whole loop holds one of lim's tokens.
+func (s *Service) needsSetupAutomations(ctx context.Context, lim readLimiter, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {
+	var out []*reliantv1.InboxItem
+	err := lim.do(ctx, func() error {
+		out = s.needsSetupItems(ctx, stored)
+		return nil
+	})
+	return out, err
+}
+
+func (s *Service) needsSetupItems(ctx context.Context, stored []*core.Trigger) []*reliantv1.InboxItem {
 	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: s.deps.Repo})
 	var out []*reliantv1.InboxItem
 	for _, t := range stored {
@@ -351,7 +490,7 @@ func (s *Service) needsSetupAutomations(ctx context.Context, userID string) ([]*
 			Payload:      &reliantv1.InboxItem_AutomationNeedsSetup{AutomationNeedsSetup: &reliantv1.InboxAutomationNeedsSetup{Issues: wire}},
 		})
 	}
-	return out, nil
+	return out
 }
 
 func (s *Service) dropDismissed(ctx context.Context, userID string, items []*reliantv1.InboxItem) ([]*reliantv1.InboxItem, error) {
@@ -398,7 +537,7 @@ func inboxItemFromPending(p *core.InboxPending) *reliantv1.InboxItem {
 	case core.InboxPendingQuestion:
 		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_QUESTION
 		item.ItemId = inboxQuestionPrefix + p.ItemKey
-		q := &reliantv1.InboxQuestion{QuestionId: p.ItemKey, ThreadId: p.Text1, Prompt: firstQuestionPrompt(p.Text2)}
+		q := &reliantv1.InboxQuestion{QuestionId: p.ItemKey, ThreadId: p.Text1, Prompt: firstQuestionPrompt(p.Text2), Async: p.Int1 == 1}
 		if p.Text2 != "" {
 			meta := p.Text2
 			q.Metadata = &meta
@@ -608,32 +747,34 @@ func (s *Service) CleanupStorage(
 ) (*connect.Response[reliantv1.CleanupStorageResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 	if req.Msg.DaemonId == "" || len(req.Msg.WorktreeIds) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("daemon_id and worktree_ids are required"))
+		return nil, svcerr.InvalidArgument("daemon_id and worktree_ids are required")
 	}
 	if len(req.Msg.WorktreeIds) > maxInboxDismissBatch {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("at most %d worktrees per call", maxInboxDismissBatch))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("at most %d worktrees per call", maxInboxDismissBatch))
 	}
 	if s.deps.Sweeper == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("storage cleanup is not available"))
+		return nil, svcerr.Unavailable("storage cleanup is not available")
 	}
 	// The machine must be the caller's: Cleanup only ever acts on worktrees of
 	// projects the caller owns, but naming a stranger's daemon is rejected
 	// outright rather than quietly doing nothing.
 	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.DaemonId)
+	if err != nil && !svcerr.IsNotFound(err) {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get machine"))
+	}
 	if err != nil || daemon == nil || daemon.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine not found"))
+		return nil, svcerr.NotFound("machine")
 	}
 
 	accepted, skipped, err := s.deps.Sweeper.StartCleanup(ctx, s.deps.Repo, userID, req.Msg.DaemonId, req.Msg.WorktreeIds)
 	if errors.Is(err, worktreesweep.ErrOffline) {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("that machine is offline; reconnect it and try again"))
+		return nil, svcerr.FailedPrecondition("that machine is offline; reconnect it and try again")
 	}
 	if err != nil {
-		logging.ErrorContext(ctx, "Storage cleanup failed to start", "error", err, "daemonID", req.Msg.DaemonId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage cleanup failed"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("storage cleanup failed"))
 	}
 
 	s.storageCache.Delete(userID)

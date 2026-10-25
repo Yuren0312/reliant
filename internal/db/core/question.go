@@ -25,4 +25,12 @@ type Question struct {
 	CreatedAt          time.Time
 	ResolvedAt         *time.Time
 	ToolCallID         *string
+	// Async marks a question asked without waiting (ask_user without blocking: true):
+	// the asking thread carried on, and the answer is delivered to it later
+	// as a message from the user. It is never a gate on the chat, and its
+	// thread ending does not close it (research/ASYNC_ASK_USER.md).
+	Async bool
+	// WithdrawnReason is set when the agent withdrew the question
+	// (withdraw_question) instead of the user answering it.
+	WithdrawnReason *string
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -95,6 +96,9 @@ func newTestTriggerEvent(id, triggerID, userID, dedupeKey string, occurredAt tim
 }
 
 func TestTriggerCRUDRoundTrip(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -196,6 +200,8 @@ func TestTriggerCRUDRoundTrip(t *testing.T) {
 // columns are NOT NULL with a '{}' default, so a JSON `null` would be both a
 // lie about the stored value and a nil-check every consumer has to write.
 func TestCreateTriggerNilMapsReadBackEmpty(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -224,6 +230,8 @@ func TestCreateTriggerNilMapsReadBackEmpty(t *testing.T) {
 }
 
 func TestUpdateTriggerMissingReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 
@@ -234,6 +242,8 @@ func TestUpdateTriggerMissingReturnsNotFound(t *testing.T) {
 }
 
 func TestListTriggersFiltersByUserAndProject(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -284,6 +294,8 @@ func TestListTriggersFiltersByUserAndProject(t *testing.T) {
 }
 
 func TestSetTriggerEnabled(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -324,6 +336,9 @@ func TestSetTriggerEnabled(t *testing.T) {
 // same (kind, dedupe_key) writes nothing and says so, rather than erroring or
 // creating a duplicate firing.
 func TestCreateTriggerEventDedupes(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup, rawDB := setupTriggerTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -377,6 +392,8 @@ func TestCreateTriggerEventDedupes(t *testing.T) {
 }
 
 func TestGetTriggerEventByDedupe(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -421,6 +438,8 @@ func TestGetTriggerEventByDedupe(t *testing.T) {
 }
 
 func TestUpdateTriggerEventOutcome(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -471,6 +490,8 @@ func TestUpdateTriggerEventOutcome(t *testing.T) {
 }
 
 func TestListTriggerEventsOrderAndLimit(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -518,6 +539,8 @@ func TestListTriggerEventsOrderAndLimit(t *testing.T) {
 }
 
 func TestGetLatestTriggerEvent(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -583,6 +606,8 @@ func TestGetLatestTriggerEvent(t *testing.T) {
 // event rows are evidence about chats that still exist, so trigger_id is
 // cleared rather than the rows being cascaded away.
 func TestDeleteTriggerNullsEventTriggerID(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup, rawDB := setupTriggerTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -624,6 +649,8 @@ func TestDeleteTriggerNullsEventTriggerID(t *testing.T) {
 // A trigger whose project is gone can only ever fail to fire, so the project
 // takes its triggers with it.
 func TestDeleteProjectCascadesTriggers(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup, rawDB := setupTriggerTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -648,6 +675,8 @@ func TestDeleteProjectCascadesTriggers(t *testing.T) {
 // transaction leaves no event row, so a failed launch cannot consume its own
 // dedupe key and lock out the retry.
 func TestCreateTriggerEventRollsBackWithTransaction(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -741,6 +770,8 @@ func equalStrings(got, want []string) bool {
 }
 
 func TestLockTriggerRequiresAnExistingRow(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

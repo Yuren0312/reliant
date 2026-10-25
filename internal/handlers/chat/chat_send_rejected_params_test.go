@@ -11,6 +11,8 @@ import (
 	"go.temporal.io/sdk/client"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	llmdrivers "github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -39,6 +41,7 @@ import (
 // status SendMessage routes on is pinned separately, because each branch
 // persists in its own way.
 func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
+	testkit.Slow(t, "a DB-backed chat handler test with many round trips to pgtest's Postgres")
 	cases := []struct {
 		name            string
 		dbStatus        db.WorkflowStatus
@@ -101,7 +104,7 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 
 			_, err := service.SendMessage(ctx, sendWithUnknownModel(t, fx.chatID, "continue"))
 			require.Error(t, err, "a model the registry does not know must be refused")
-			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 			assert.Contains(t, err.Error(), retiredModelID,
 				"the refusal must name the model the user has to change")
 

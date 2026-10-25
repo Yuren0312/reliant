@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -71,6 +72,8 @@ func (r *copyPathsRecordingRouter) SendDaemonCommand(ctx context.Context, userID
 // against that repo's own directory, which is how `reliant/.env` used to
 // silently match nothing.
 func TestCreateWorktreeCopiesPathsOnceFromProjectRoot(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := &copyPathsRecordingRouter{home: t.TempDir()}
 	svc := newWorktreeService(t, repo, router)
@@ -106,6 +109,8 @@ func TestCreateWorktreeCopiesPathsOnceFromProjectRoot(t *testing.T) {
 }
 
 func TestCreateWorktreeWithoutCopyFilesSendsNoCopy(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := &copyPathsRecordingRouter{home: t.TempDir()}
 	svc := newWorktreeService(t, repo, router)
@@ -127,6 +132,8 @@ func TestCreateWorktreeWithoutCopyFilesSendsNoCopy(t *testing.T) {
 // An invalid entry is rejected synchronously — before a row exists — so the
 // caller sees the mistake instead of a workspace missing its .env.
 func TestCreateWorktreeRejectsInvalidCopyPath(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := &copyPathsRecordingRouter{home: t.TempDir()}
 	svc := newWorktreeService(t, repo, router)
@@ -140,7 +147,7 @@ func TestCreateWorktreeRejectsInvalidCopyPath(t *testing.T) {
 			ProjectId: projectID, Name: "bad", Branch: "bad", CopyFiles: []string{bad},
 		}))
 		require.Error(t, err, "copy path %q", bad)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "copy path %q", bad)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "copy path %q", bad)
 	}
 
 	router.mu.Lock()

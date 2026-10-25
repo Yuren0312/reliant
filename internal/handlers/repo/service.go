@@ -1,7 +1,6 @@
 package repo
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,15 +9,12 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the repo service. internal/grpc/server.go
-// constructs it today; forge's composition root takes over in P3c
-// (research/forge-migration/PLAN.md). The rpc methods on *Service are where
-// this service's logic lives; see the forge `api` / `services` skill.
+// Deps holds dependencies for the repo service. The composition graph
+// constructs it (internal/app/compose.go). The rpc methods on *Service are
+// where this service's logic lives; see the forge `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
@@ -32,24 +28,6 @@ type Deps struct {
 	// and listing and removing still work.
 	// forge:optional-dep
 	Router Sender
-}
-
-// Repository is the slice of db.Repository the repo handlers use.
-type Repository interface {
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
-	UpdateProject(ctx context.Context, project *db.Project, userID string) error
-
-	GetRepo(ctx context.Context, id string) (*core.Repo, error)
-	GetRepoByProjectAndPath(ctx context.Context, projectID, relativePath string) (*core.Repo, error)
-	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
-	CreateRepo(ctx context.Context, repo *core.Repo) error
-	DeleteRepo(ctx context.Context, id string) error
-}
-
-// Sender sends one request/response command to a user's daemon.
-// toolexec.DaemonRouter implements it.
-type Sender interface {
-	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

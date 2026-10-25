@@ -2,6 +2,7 @@
 package main
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -75,28 +76,28 @@ func testGraph() *Graph {
 func path0(n string) string { return n[strings.LastIndex(n, "/")+1:] }
 
 var webSrc = map[string]string{
-	"web/src/lib/leaf.ts":                       `export const x = 1`,
-	"web/src/lib/mid.ts":                        `import { x } from "./leaf"; export const y = x`,
-	"web/src/lib/typeonly.ts":                   `import type { T } from "./leaf"; export type U = T`,
-	"web/src/lib/dyn.ts":                        `export const load = () => import("./leaf")`,
-	"web/src/lib/alias.ts":                      `import { y } from "@/lib/mid"; export const z = y`,
-	"web/src/lib/__tests__/leaf.test.ts":        `import { x } from "../leaf"`,
-	"web/src/lib/__tests__/mid.test.ts":         `import { y } from "../mid"`,
-	"web/src/lib/__tests__/alias.test.ts":       `import { z } from "@/lib/alias"`,
-	"web/src/lib/__tests__/typeonly.test.ts":    `import { U } from "../typeonly"`,
-	"web/src/lib/__tests__/mock.test.ts":        `vi.mock("../leaf", () => ({}))`,
-	"web/src/lib/__tests__/unrelated.test.ts":   `import "../unrelated"`,
-	"web/src/lib/unrelated.ts":                  `export {}`,
-	"web/src/lib/__tests__/guard.test.ts":       "readdirSync(path.resolve(__dirname, '..'))",
-	"web/src/lib/__tests__/readscss.test.ts":    "readFileSync(path.resolve(__dirname, '../../index.css'))",
-	"web/src/lib/__tests__/readsgo.test.ts":     "resolve(process.cwd(), '../internal/db/core/trigger.go')",
-	"web/src/index.css":                         ``,
-	"web/src/gen/reliant/v1/chat_pb.ts":         `export {}`,
-	"web/src/lib/__tests__/genclient.test.ts":   `import "../../gen/reliant/v1/chat_pb"`,
-	"web/e2e/observability.spec.ts":             `test("x")`,
-	"web/src/components/index.ts":               `export * from "./Button"`,
-	"web/src/components/Button.tsx":             `export const Button = 1`,
-	"web/src/components/__tests__/btn.test.tsx": `import { Button } from ".."`,
+	"frontends/web/src/lib/leaf.ts":                       `export const x = 1`,
+	"frontends/web/src/lib/mid.ts":                        `import { x } from "./leaf"; export const y = x`,
+	"frontends/web/src/lib/typeonly.ts":                   `import type { T } from "./leaf"; export type U = T`,
+	"frontends/web/src/lib/dyn.ts":                        `export const load = () => import("./leaf")`,
+	"frontends/web/src/lib/alias.ts":                      `import { y } from "@/lib/mid"; export const z = y`,
+	"frontends/web/src/lib/__tests__/leaf.test.ts":        `import { x } from "../leaf"`,
+	"frontends/web/src/lib/__tests__/mid.test.ts":         `import { y } from "../mid"`,
+	"frontends/web/src/lib/__tests__/alias.test.ts":       `import { z } from "@/lib/alias"`,
+	"frontends/web/src/lib/__tests__/typeonly.test.ts":    `import { U } from "../typeonly"`,
+	"frontends/web/src/lib/__tests__/mock.test.ts":        `vi.mock("../leaf", () => ({}))`,
+	"frontends/web/src/lib/__tests__/unrelated.test.ts":   `import "../unrelated"`,
+	"frontends/web/src/lib/unrelated.ts":                  `export {}`,
+	"frontends/web/src/lib/__tests__/guard.test.ts":       "readdirSync(path.resolve(__dirname, '..'))",
+	"frontends/web/src/lib/__tests__/readscss.test.ts":    "readFileSync(path.resolve(__dirname, '../../index.css'))",
+	"frontends/web/src/lib/__tests__/readsgo.test.ts":     "resolve(process.cwd(), '../../internal/db/core/trigger.go')",
+	"frontends/web/src/index.css":                         ``,
+	"frontends/web/src/gen/reliant/v1/chat_pb.ts":         `export {}`,
+	"frontends/web/src/lib/__tests__/genclient.test.ts":   `import "../../gen/reliant/v1/chat_pb"`,
+	"frontends/web/e2e/observability.spec.ts":             `test("x")`,
+	"frontends/web/src/components/index.ts":               `export * from "./Button"`,
+	"frontends/web/src/components/Button.tsx":             `export const Button = 1`,
+	"frontends/web/src/components/__tests__/btn.test.tsx": `import { Button } from ".."`,
 }
 
 func webFiles() []string {
@@ -188,9 +189,6 @@ func TestMigrationReachesOnlyDBBackedTests(t *testing.T) {
 	if got, want := goPkgs(pl), []string{"./internal/db"}; !slices.Equal(got, want) {
 		t.Fatalf("a migration selects %v, want %v", got, want)
 	}
-	if !slices.Equal(pl.Go.DBOnly, []string{"./internal/db"}) {
-		t.Fatalf("db-only = %v: the runner needs it to run under REQUIRE_TEST_DB", pl.Go.DBOnly)
-	}
 	if pl.Go.Full {
 		t.Fatalf("a migration must not force the full run: %v", pl.Go.Reasons)
 	}
@@ -205,13 +203,15 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 		// documents forge's command tree).
 		{"go.mod", []lane{laneGo, laneForgeGen, laneDocGen}},
 		{"go.sum", []lane{laneGo, laneForgeGen, laneDocGen}},
-		{"Makefile", allLanes},
+		// The codegen lanes run through the Taskfile; the test lanes do not.
+		{"Taskfile.yml", []lane{laneForgeGen, laneDocGen}},
+		{"Makefile", []lane{laneForgeGen, laneDocGen}},
 		// The forge pin and forge's own config reach Go and codegen, never a
 		// vitest file or electron: a forge bump must not run the whole web lane.
 		{"forge.yaml", []lane{laneGo, laneForgeGen}},
-		{"web/package.json", []lane{laneWeb}},
-		{"web/vite.config.ts", []lane{laneWeb}},
-		{"web/src/test/setup.ts", []lane{laneWeb}},
+		{"frontends/web/package.json", []lane{laneWeb}},
+		{"frontends/web/vite.config.ts", []lane{laneWeb}},
+		{"frontends/web/src/test/setup.ts", []lane{laneWeb}},
 		{"package-lock.json", []lane{laneWeb, laneElectron}},
 		{"proto/buf.yaml", []lane{laneGo, laneWeb, laneForgeGen}},
 	}
@@ -273,7 +273,7 @@ func TestForgeInputsRunForgeGenerate(t *testing.T) {
 			t.Errorf("%s: the reason must name the path: %v", p, pl.ForgeGen.Reasons)
 		}
 	}
-	for _, p := range []string{"internal/leaf/leaf.go", "web/src/lib/leaf.ts", "electron/src/menu-shortcuts.js", "docs/x.md", ".github/workflows/pr-ci.yml"} {
+	for _, p := range []string{"internal/leaf/leaf.go", "frontends/web/src/lib/leaf.ts", "electron/src/menu-shortcuts.js", "docs/x.md", ".github/workflows/pr-ci.yml"} {
 		if pl := classify(p); pl.ForgeGen.Full {
 			t.Errorf("%s is not a forge input: forge-generate must not run (%v)", p, pl.ForgeGen.Reasons)
 		}
@@ -306,7 +306,7 @@ func TestHandEditedSkillMDRunsTheDocsCheck(t *testing.T) {
 }
 
 func TestUnrelatedWebChangeSkipsTheDocsCheck(t *testing.T) {
-	for _, p := range []string{"web/src/lib/leaf.ts", "web/src/lib/__tests__/leaf.test.ts", "web/e2e/observability.spec.ts"} {
+	for _, p := range []string{"frontends/web/src/lib/leaf.ts", "frontends/web/src/lib/__tests__/leaf.test.ts", "frontends/web/e2e/observability.spec.ts"} {
 		if pl := classify(p); pl.DocGen.Full {
 			t.Errorf("%s reaches no docs generator: docs-generate must not run (%v)", p, pl.DocGen.Reasons)
 		}
@@ -321,7 +321,7 @@ func TestDocGenInputsRunTheDocsCheck(t *testing.T) {
 		{"docs/changelog.mdx", "a docs generator reads or writes it"},
 		{"docs/data/releases/v1.yaml", "a docs generator reads or writes it"},
 		{"config/shortcuts.yaml", "a docs generator reads or writes it"},
-		{"web/src/store/shortcutsData.generated.ts", "a docs generator reads or writes it"},
+		{"frontends/web/src/store/shortcutsData.generated.ts", "a docs generator reads or writes it"},
 		{"scripts/generate-mintlify-reference.py", "a docs generator reads or writes it"},
 		// Compiled into a generator, directly or transitively, or embedded by
 		// a package that is.
@@ -368,7 +368,7 @@ func TestElectronTestNamingAWorkflowRunsWhenItChanges(t *testing.T) {
 }
 
 func TestWebSelectsImportersTransitively(t *testing.T) {
-	pl := classify("web/src/lib/leaf.ts")
+	pl := classify("frontends/web/src/lib/leaf.ts")
 	want := []string{
 		"src/lib/__tests__/alias.test.ts", "src/lib/__tests__/leaf.test.ts", "src/lib/__tests__/mid.test.ts", "src/lib/__tests__/mock.test.ts",
 	}
@@ -388,35 +388,35 @@ func TestWebSelectsImportersTransitively(t *testing.T) {
 
 func TestWebDynamicImportIsAnEdge(t *testing.T) {
 	g := testGraph()
-	g.Web = BuildWebGraph(append(webFiles(), "web/src/lib/__tests__/dyn.test.ts"), func(p string) (string, bool) {
-		if p == "web/src/lib/__tests__/dyn.test.ts" {
+	g.Web = BuildWebGraph(append(webFiles(), "frontends/web/src/lib/__tests__/dyn.test.ts"), func(p string) (string, bool) {
+		if p == "frontends/web/src/lib/__tests__/dyn.test.ts" {
 			return `import { load } from "../dyn"`, true
 		}
 		s, ok := webSrc[p]
 		return s, ok
 	})
-	pl := Classify([]Change{{Path: "web/src/lib/leaf.ts"}}, g)
+	pl := Classify([]Change{{Path: "frontends/web/src/lib/leaf.ts"}}, g)
 	if !slices.Contains(pl.Web.Tests, "src/lib/__tests__/dyn.test.ts") {
 		t.Fatalf("import() must be followed: %v", pl.Web.Tests)
 	}
 }
 
 func TestWebDirectoryIndexResolves(t *testing.T) {
-	pl := classify("web/src/components/Button.tsx")
+	pl := classify("frontends/web/src/components/Button.tsx")
 	if !slices.Contains(pl.Web.Tests, "src/components/__tests__/btn.test.tsx") {
 		t.Fatalf("an import of a directory must resolve to its index: %v", pl.Web.Tests)
 	}
 }
 
 func TestWebTestFileSelectsItself(t *testing.T) {
-	pl := classify("web/src/lib/__tests__/unrelated.test.ts")
+	pl := classify("frontends/web/src/lib/__tests__/unrelated.test.ts")
 	if got, want := pl.Web.Tests, []string{"src/lib/__tests__/unrelated.test.ts"}; !slices.Equal(got, want) {
 		t.Fatalf("a changed test selects itself: %v want %v", got, want)
 	}
 }
 
 func TestWebFileReadingTestsFollowTheirInput(t *testing.T) {
-	pl := classify("web/src/index.css")
+	pl := classify("frontends/web/src/index.css")
 	if !slices.Contains(pl.Web.Tests, "src/lib/__tests__/readscss.test.ts") {
 		t.Fatalf("a test that reads index.css must run when it changes: %v", pl.Web.Tests)
 	}
@@ -427,25 +427,25 @@ func TestWebFileReadingTestsFollowTheirInput(t *testing.T) {
 }
 
 func TestWebTreeWalkersRunOnAnySourceChange(t *testing.T) {
-	pl := classify("web/src/lib/unrelated.ts")
+	pl := classify("frontends/web/src/lib/unrelated.ts")
 	if !slices.Contains(pl.Web.Tests, "src/lib/__tests__/guard.test.ts") {
 		t.Fatalf("a test that reads whole directories must run on any web source change: %v", pl.Web.Tests)
 	}
 }
 
 func TestWebDeletedModuleForcesFullWeb(t *testing.T) {
-	pl := Classify([]Change{{Path: "web/src/lib/leaf.ts", Deleted: true}}, testGraph())
+	pl := Classify([]Change{{Path: "frontends/web/src/lib/leaf.ts", Deleted: true}}, testGraph())
 	if !pl.Web.Full {
 		t.Fatal("a deleted module has no graph position left: run every web test")
 	}
-	pl = Classify([]Change{{Path: "web/src/lib/__tests__/leaf.test.ts", Deleted: true}}, testGraph())
+	pl = Classify([]Change{{Path: "frontends/web/src/lib/__tests__/leaf.test.ts", Deleted: true}}, testGraph())
 	if pl.Web.Full {
 		t.Fatal("a deleted TEST file selects nothing and must not force the full lane")
 	}
 }
 
 func TestPlaywrightSpecsRunNoVitest(t *testing.T) {
-	pl := classify("web/e2e/observability.spec.ts")
+	pl := classify("frontends/web/e2e/observability.spec.ts")
 	if pl.Web.Full || len(pl.Web.Tests) != 0 {
 		t.Fatalf("a Playwright spec is not a vitest input: full=%v tests=%v", pl.Web.Full, pl.Web.Tests)
 	}
@@ -495,8 +495,8 @@ func TestMatchGlob(t *testing.T) {
 		{"proto/**/*.proto", "proto/a.proto", true},
 		{"**/*.md", "a/b/c.md", true},
 		{"**/*.md", "c.md", true},
-		{"web/tsconfig*.json", "web/tsconfig.app.json", true},
-		{"web/tsconfig*.json", "web/src/tsconfig.json", false},
+		{"frontends/web/tsconfig*.json", "frontends/web/tsconfig.app.json", true},
+		{"frontends/web/tsconfig*.json", "frontends/web/src/tsconfig.json", false},
 		{"go.mod", "sub/go.mod", false},
 		{".air*.toml", ".air.api.toml", true},
 	}
@@ -523,26 +523,32 @@ func TestEveryRuleIdIsUnique(t *testing.T) {
 	}
 }
 
-func TestRunnerStepsUseExplicitFilesAndScopeDBTests(t *testing.T) {
-	pl := classify("internal/leaf/leaf.go", "db/migrations/20261101000000_x.up.sql", "web/src/lib/leaf.ts")
-	r := &runner{root: "/repo", dbURL: ""}
+// DB-backed tests run under -short (each gets its own copy of a migrated
+// template on pgtest's server), so a package a migration selects runs in the
+// one go step with every other, with no database configuration in its env.
+func TestRunnerStepsUseExplicitFilesAndRunDBTestsInline(t *testing.T) {
+	pl := classify("internal/leaf/leaf.go", "db/migrations/20261101000000_x.up.sql", "frontends/web/src/lib/leaf.ts")
+	r := &runner{root: "/repo"}
 	steps := r.steps(pl, laneSet("go,web,electron"))
 	var names []string
 	for _, s := range steps {
 		names = append(names, s.name)
 	}
-	if !slices.Contains(names, "go") || !slices.Contains(names, "web") {
-		t.Fatalf("steps = %v", names)
+	if !slices.Equal(names, []string{"go", "web"}) {
+		t.Fatalf("steps = %v, want [go web]", names)
 	}
 	for _, s := range steps {
 		joined := strings.Join(s.argv, " ")
 		switch s.name {
 		case "go":
-			if strings.Contains(joined, "./internal/db") {
-				t.Errorf("a DB-only package must not run in the plain step (its tests skip under -short): %s", joined)
+			if !slices.Contains(s.argv, "./internal/db") || !slices.Contains(s.argv, "./internal/leaf") {
+				t.Errorf("the go step must run the migration's DB package beside the code change's: %s", joined)
 			}
 			if !strings.Contains(joined, "-short") || strings.Contains(joined, "./...") {
 				t.Errorf("go step = %s", joined)
+			}
+			if len(s.env) != 0 {
+				t.Errorf("the go step needs no environment of its own; got %v", s.env)
 			}
 		case "web":
 			if !strings.HasPrefix(joined, "npx vitest run ") || !strings.Contains(joined, " src/lib/__tests__/leaf.test.ts") {
@@ -550,27 +556,84 @@ func TestRunnerStepsUseExplicitFilesAndScopeDBTests(t *testing.T) {
 			}
 		}
 	}
-	r.dbURL = "postgres://x"
-	var db *step
-	for _, s := range r.steps(pl, laneSet("go")) {
-		if strings.Contains(s.name, "DB-backed") {
-			db = &s
-		}
-	}
-	if db == nil || !slices.Contains(db.env, "REQUIRE_TEST_DB=1") || !slices.Contains(db.argv, "./internal/db") {
-		t.Fatalf("with DATABASE_URL set the DB packages run under REQUIRE_TEST_DB=1: %+v", db)
-	}
 }
 
 func TestRunnerFullLanesRunEverything(t *testing.T) {
-	pl := classify("go.mod", "web/package.json")
+	pl := classify("go.mod", "frontends/web/package.json")
 	steps := (&runner{root: "/repo"}).steps(pl, laneSet("go,web"))
 	var got []string
 	for _, s := range steps {
 		got = append(got, strings.Join(s.argv, " "))
 	}
-	if len(got) != 2 || !strings.HasSuffix(got[0], "./...") || got[1] != "npx vitest run" {
+	if len(got) != 3 || !strings.HasPrefix(got[0], "npm ci --dry-run") ||
+		!strings.HasSuffix(got[1], "./...") || got[2] != "npx vitest run" {
 		t.Fatalf("full lanes = %v", got)
+	}
+}
+
+// A changed manifest or lockfile proves `npm ci` still accepts it, before any
+// test runs against the node_modules already on disk (reliant #1343 shipped a
+// lockfile every fresh install rejected, with every local test green).
+func TestLockfileChangeChecksTheInstallFirst(t *testing.T) {
+	r := &runner{root: "/repo"}
+	for _, tc := range []struct {
+		path, lanes, dir string
+	}{
+		{"frontends/web/package.json", "web", "/repo/frontends/web"},
+		{"frontends/web/package-lock.json", "web", "/repo/frontends/web"},
+		{"electron/package-lock.json", "electron", "/repo/electron"},
+		{"package-lock.json", "electron", "/repo"},
+		{"tools/protoc-gen-es/package.json", "forge-generate", "/repo/tools/protoc-gen-es"},
+	} {
+		steps := r.steps(classify(tc.path), laneSet(tc.lanes))
+		if len(steps) == 0 || strings.Join(steps[0].argv, " ") != strings.Join(lockfileArgv, " ") || steps[0].dir != tc.dir {
+			t.Errorf("%s: the first step must be the lockfile check in %s: %+v", tc.path, tc.dir, steps)
+		}
+	}
+	// The check belongs to the lanes that install from that project.
+	for _, s := range r.steps(classify("frontends/web/package-lock.json"), laneSet("go,electron")) {
+		if strings.HasPrefix(s.name, "npm lockfile") {
+			t.Errorf("-lanes without web must not check the web lockfile: %+v", s)
+		}
+	}
+	// Both files of one project are one check.
+	pl := classify("frontends/web/package.json", "frontends/web/package-lock.json")
+	if len(pl.Lockfiles) != 1 || pl.Lockfiles[0].Why != "changed: package.json, package-lock.json" {
+		t.Errorf("one project, one check: %+v", pl.Lockfiles)
+	}
+	// A package.json that is not an npm project (a fixture, a vendored package) is not one.
+	if pl := classify("frontends/web/src/test/fixtures/package.json"); len(pl.Lockfiles) != 0 {
+		t.Errorf("not an npm project: %+v", pl.Lockfiles)
+	}
+}
+
+// npmProjects must name every committed lockfile, or a project's drift goes
+// unchecked; and every entry must still be a project. Globbing (rather than
+// `git ls-files`) keeps the test cache-sound: the test process reads the
+// directories itself.
+func TestNPMProjectsNameEveryLockfile(t *testing.T) {
+	found := map[string]bool{}
+	for _, pat := range []string{"package-lock.json", "*/package-lock.json", "*/*/package-lock.json"} {
+		ms, err := filepath.Glob(filepath.Join(repoRoot, pat))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range ms {
+			rel, _ := filepath.Rel(repoRoot, filepath.Dir(m))
+			if !strings.Contains(rel, "node_modules") {
+				found[filepath.ToSlash(rel)] = true
+			}
+		}
+	}
+	for dir := range found {
+		if _, ok := npmProjects[dir]; !ok {
+			t.Errorf("%s/package-lock.json is in no npmProjects entry: add it with the lanes that install from it", dir)
+		}
+	}
+	for dir := range npmProjects {
+		if !found[dir] {
+			t.Errorf("npmProjects names %s, which has no package-lock.json", dir)
+		}
 	}
 }
 
@@ -578,12 +641,15 @@ func TestRunnerFullLanesRunEverything(t *testing.T) {
 // run is the inner loop and never does.
 func TestRunnerRunsOnlyFullLanesInAHeavySlot(t *testing.T) {
 	r := &runner{root: "/repo", slot: []string{"forge", "slot", "run", "--class", "heavy", "--"}}
-	for _, s := range r.steps(classify("go.mod", "web/package.json"), laneSet("go,web")) {
+	for _, s := range r.steps(classify("go.mod", "frontends/web/package.json"), laneSet("go,web")) {
+		if strings.HasPrefix(s.name, "npm lockfile") {
+			continue // a ~10s check, not a lane
+		}
 		if joined := strings.Join(s.argv, " "); !strings.HasPrefix(joined, "forge slot run --class heavy -- ") {
 			t.Errorf("full step %q runs outside a heavy slot: %s", s.name, joined)
 		}
 	}
-	for _, s := range r.steps(classify("internal/leaf/leaf.go", "web/src/lib/leaf.ts"), laneSet("go,web")) {
+	for _, s := range r.steps(classify("internal/leaf/leaf.go", "frontends/web/src/lib/leaf.ts"), laneSet("go,web")) {
 		if s.argv[0] == "forge" {
 			t.Errorf("scoped step %q queues for a heavy slot: %s", s.name, strings.Join(s.argv, " "))
 		}
@@ -593,11 +659,11 @@ func TestRunnerRunsOnlyFullLanesInAHeavySlot(t *testing.T) {
 func TestRunnerRunsTheForgeGenerateCheckFirst(t *testing.T) {
 	pl := classify("internal/vault/contract.go")
 	steps := (&runner{root: "/repo"}).steps(pl, laneSet("go,web,electron,forge-generate"))
-	if len(steps) == 0 || strings.Join(steps[0].argv, " ") != "make --no-print-directory forge-generate-check" || steps[0].dir != "/repo" {
+	if len(steps) == 0 || strings.Join(steps[0].argv, " ") != "task generate:check" || steps[0].dir != "/repo" {
 		t.Fatalf("the forge-generate check must run first, from the repo root: %+v", steps)
 	}
 	for _, s := range (&runner{root: "/repo"}).steps(pl, laneSet("go")) {
-		if strings.Contains(strings.Join(s.argv, " "), "forge-generate-check") {
+		if strings.Contains(strings.Join(s.argv, " "), "generate:check") {
 			t.Fatal("-lanes go must not run the forge-generate check")
 		}
 	}
@@ -610,12 +676,12 @@ func TestRunnerRunsTheDocsCheckAfterForgeAndBeforeTests(t *testing.T) {
 	for _, s := range r.steps(pl, laneSet("go,web,electron,forge-generate,docs-generate")) {
 		got = append(got, strings.Join(s.argv, " "))
 	}
-	if len(got) < 3 || got[0] != "make --no-print-directory forge-generate-check" ||
-		got[1] != "forge slot run --class heavy -- make --no-print-directory docs-generate-check" {
+	if len(got) < 3 || got[0] != "task generate:check" ||
+		got[1] != "forge slot run --class heavy -- task generate:docs:check" {
 		t.Fatalf("the docs check runs second (after forge, before the tests), in a heavy slot: %v", got)
 	}
 	for _, s := range r.steps(pl, laneSet("go,forge-generate")) {
-		if strings.Contains(strings.Join(s.argv, " "), "docs-generate-check") {
+		if strings.Contains(strings.Join(s.argv, " "), "generate:docs:check") {
 			t.Fatal("-lanes without docs-generate must not run the docs check")
 		}
 	}
@@ -625,5 +691,33 @@ func TestNothingToRunRunsNothing(t *testing.T) {
 	pl := classify("docs/x.md")
 	if steps := (&runner{root: "/repo"}).steps(pl, laneSet("go,web,electron,forge-generate,docs-generate")); len(steps) != 0 {
 		t.Fatalf("an inert diff runs nothing, got %v", steps)
+	}
+}
+
+// TestReachDirect pins the merge tier's fan-out: a changed package runs its
+// own tests and those of the packages importing it by name; deeper dependents
+// are Deferred to the full lane, which ReachAll (the default) still runs.
+func TestReachDirect(t *testing.T) {
+	pkg := func(n string) string { return mod + "/" + n }
+	g := testGraph()
+	g.DirectImports = map[string]map[string]bool{
+		pkg("internal/mid"): {pkg("internal/leaf"): true},
+		pkg("cmd/app"):      {pkg("internal/mid"): true},
+	}
+	direct := ClassifyReach([]Change{{Path: "internal/leaf/leaf.go"}}, g, ReachDirect)
+	if want := []string{"./internal/guard", "./internal/leaf", "./internal/mid"}; !slices.Equal(direct.Go.Packages, want) {
+		t.Errorf("direct: packages %v, want %v", direct.Go.Packages, want)
+	}
+	if want := []string{"./cmd/app"}; !slices.Equal(direct.Go.Deferred, want) || direct.Go.Reach != ReachDirect {
+		t.Errorf("direct: reach %q deferred %v, want direct %v", direct.Go.Reach, direct.Go.Deferred, want)
+	}
+	all := classifyIn(g, "internal/leaf/leaf.go")
+	if want := []string{"./cmd/app", "./internal/guard", "./internal/leaf", "./internal/mid"}; !slices.Equal(all.Go.Packages, want) || len(all.Go.Deferred) != 0 || all.Go.Reach != ReachAll {
+		t.Errorf("all: packages %v deferred %v reach %q, want %v", all.Go.Packages, all.Go.Deferred, all.Go.Reach, want)
+	}
+	// A migration still reaches every DB-backed package, however far.
+	mig := ClassifyReach([]Change{{Path: "db/migrations/20260101000000_x.up.sql"}}, g, ReachDirect)
+	if !slices.Contains(mig.Go.Packages, "./internal/db") {
+		t.Errorf("direct: a migration must still select the DB-backed packages, got %v", mig.Go.Packages)
 	}
 }

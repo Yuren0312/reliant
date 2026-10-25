@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"sort"
 	"strings"
@@ -21,12 +22,12 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow/lifecycle"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -105,6 +106,10 @@ func classifyError(err error) error {
 		return nil
 	}
 
+	var app *temporal.ApplicationError
+	if errors.As(err, &app) && app.Type() == "ProviderSwitchHold" {
+		return err
+	}
 	// Check if already classified as TerminalError
 	var terminalErr *TerminalError
 	if errors.As(err, &terminalErr) {
@@ -787,28 +792,19 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	defer func() {
 		// Recover from panics
 		if r := recover(); r != nil {
-			logging.ErrorContext(ctx, "[ActivityWrapper] Activity panicked",
-				"activityType", activityType,
-				"activityID", activityID,
-				"panic", r)
+			// An ERROR record located at the panicking frame, with its stack
+			// and type: the issues worker groups it by where it panicked.
+			observe.LogPanic(ctx, slog.Default(), "[ActivityWrapper] Activity panicked", r,
+				slog.String("activityType", activityType),
+				slog.String("activityID", activityID),
+				slog.String("workflowID", workflowID),
+				slog.String("chatID", chatID),
+				slog.String("stepID", stepID),
+				slog.Int("attemptNumber", attemptNumber))
 
 			// Best-effort: Write error event to chat_updates on panic
 			panicErr := fmt.Errorf("panic: %v", r)
 			w.writeErrorEvent(ctx, input, activityType, activityID, attemptNumber, workflowID, panicErr, maxAttempts)
-
-			// Report panic to telemetry with context (non-blocking)
-			go func() {
-				telemetry.CaptureExceptionWithContext(panicErr, map[string]string{
-					"activity_type": activityType,
-					"activity_id":   activityID,
-					"workflow_id":   workflowID,
-					"chat_id":       chatID,
-					"step_id":       stepID,
-					"error_type":    "panic",
-				}, map[string]interface{}{
-					"attempt_number": attemptNumber,
-				})
-			}()
 
 			// Emit node execution "failed" event
 			endTime := time.Now()
@@ -916,41 +912,54 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	}
 
 	if execErr != nil {
-		// Use Warn for non-terminal errors (e.g. YAML validation failures,
-		// missing API keys) so they don't trigger Sentry via the sentry log
-		// handler. Terminal errors stay at Error level.
-		logFn := logging.Warn
-		if isTerminal(execErr) {
-			logFn = logging.Error
+		// The activity's own context ended first — its start-to-close or
+		// heartbeat timeout fired, or it was cancelled — and execErr is how the
+		// work unwound: whatever DB call or RPC it was in failed with
+		// "context deadline exceeded". That is a cancellation, not a fault of
+		// the operation, so it is one WARN naming the activity and the
+		// operation that was cut off (the DB layer logs it at DEBUG). A
+		// starved worker made every activity fail this way on 2026-10-23,
+		// and the ERRORs pointed at Postgres, which was idle.
+		ctxEnded := ctx.Err() != nil
+		switch {
+		case ctxEnded:
+			logging.WarnContext(ctx, "[ActivityWrapper] Activity context ended before it finished",
+				"activityType", activityType,
+				"activityID", activityID,
+				// The operation that was cut off is what the error names
+				// ("allocate chat update sequence: context deadline exceeded").
+				// A plain cancel (a user's pause) classifies as canceled and
+				// the logger lowers it; a deadline stays WARN.
+				"error", execErr,
+				"ctxErr", ctx.Err(),
+				"cause", context.Cause(ctx),
+				"attemptNumber", attemptNumber,
+				"durationMs", durationMs)
+		case isTerminal(execErr):
+			// Terminal errors stay at Error level: each is an issue.
+			logging.ErrorContext(ctx, "[ActivityWrapper] Activity execution failed",
+				"activityType", activityType,
+				"activityID", activityID,
+				"workflowID", workflowID,
+				"chatID", chatID,
+				"stepID", stepID,
+				"error", execErr,
+				"errorCategory", categorizeError(execErr),
+				"attemptNumber", attemptNumber,
+				"durationMs", durationMs)
+		default:
+			// Warn for non-terminal errors (e.g. YAML validation failures,
+			// missing API keys) so they don't become issues.
+			logging.WarnContext(ctx, "[ActivityWrapper] Activity execution failed",
+				"activityType", activityType,
+				"activityID", activityID,
+				"error", execErr,
+				"attemptNumber", attemptNumber,
+				"durationMs", durationMs)
 		}
-		logFn("[ActivityWrapper] Activity execution failed",
-			"activityType", activityType,
-			"activityID", activityID,
-			"error", execErr,
-			"attemptNumber", attemptNumber,
-			"durationMs", durationMs)
 
 		// Best-effort: Write error event to chat_updates
 		w.writeErrorEvent(ctx, input, activityType, activityID, attemptNumber, workflowID, execErr, maxAttempts)
-
-		// Report error to telemetry with context (non-blocking)
-		// Only report terminal errors to avoid noise from transient failures
-		if isTerminal(execErr) {
-			go func() {
-				telemetry.CaptureExceptionWithContext(execErr, map[string]string{
-					"activity_type":  activityType,
-					"activity_id":    activityID,
-					"workflow_id":    workflowID,
-					"chat_id":        chatID,
-					"step_id":        stepID,
-					"error_type":     "terminal",
-					"error_category": categorizeError(execErr),
-				}, map[string]interface{}{
-					"attempt_number": attemptNumber,
-					"duration_ms":    durationMs,
-				})
-			}()
-		}
 
 		// Best-effort: Write step execution record for history tracking
 		recordAttempt(nil, execErr)
@@ -1193,13 +1202,16 @@ func resolveMaxAttempts(info activity.Info) int32 {
 	return 0
 }
 
+// errorEventWriteTimeout bounds writeErrorEvent's detached write.
+const errorEventWriteTimeout = 5 * time.Second
+
 // writeErrorEvent writes an error event to chat_updates when an activity fails.
 // This is a best-effort write - it will not fail the activity if the write fails.
 // Only writes errors if chat_id can be extracted from the input.
 //
-// IMPORTANT: This function uses a background context with a timeout because the
-// activity context may already be cancelled or about to be cancelled when an error
-// occurs. Using the activity context could cause the error write to fail silently.
+// IMPORTANT: The write runs on a context detached from the activity's, with its
+// own errorEventWriteTimeout, because the activity context may already have
+// ended — often that IS the failure. Using it would fail the write too.
 func (w *ActivityWrapper[I, O]) writeErrorEvent(
 	ctx context.Context,
 	input I,
@@ -1220,9 +1232,16 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 	}
 
 	errorID := activityErrorEventID(workflowID, activityID)
+	if isProviderSwitchHold(err) {
+		// The workflow's visible hold card and every held retry are the
+		// same event, not one wrapper card plus another workflow card.
+		if thread := extractThread(input); thread != "" {
+			errorID = "provider-switch-hold/" + chatID + "/" + thread
+		}
+	}
 
 	// Build error data matching the ErrorUpdate interface expected by frontend
-	// See web/src/types/streaming.ts ErrorUpdate interface
+	// See frontends/web/src/types/streaming.ts ErrorUpdate interface
 	isRetrying := activityIsRetrying(attemptNumber, maxAttempts, err)
 	errorData := map[string]interface{}{
 		"update_type":    "error",
@@ -1268,25 +1287,22 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 		return
 	}
 
-	// Use a background context with timeout for the DB write.
-	// The activity context may be cancelled or about to be cancelled when an error occurs,
-	// which could cause the error write to fail. Using a fresh context ensures the error
-	// event is written even if the activity is being terminated.
-	writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// The write gets its own short deadline, detached from the activity's:
+	// the activity context is often the very thing that ended (that is the
+	// failure being reported), and the UI only learns of the failure through
+	// this row. WithoutCancel keeps the trace and log attributes.
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), errorEventWriteTimeout)
 	defer cancel()
-
-	// Check if the original context was already cancelled (for logging purposes)
-	if ctx.Err() != nil {
-		logging.WarnContext(ctx, "[ActivityWrapper] Original context was cancelled, using background context for error write",
-			"activityType", activityType,
-			"activityID", activityID,
-			"chatID", chatID,
-			"ctxErr", ctx.Err().Error())
-	}
 
 	// Best-effort write to chat_updates
 	if writeErr := w.repo.CreateChatUpdate(writeCtx, chatID, db.UpdateTypeError, errorID, string(errorDataJSON)); writeErr != nil {
-		logging.ErrorContext(ctx, "[ActivityWrapper] Failed to write error event to chat_updates",
+		// Running out of its own deadline is the same starvation that failed
+		// the activity, already reported: WARN. Anything else is a fault.
+		logFn := logging.ErrorContext
+		if errors.Is(writeErr, context.DeadlineExceeded) {
+			logFn = logging.WarnContext
+		}
+		logFn(ctx, "[ActivityWrapper] Failed to write error event to chat_updates",
 			"activityType", activityType,
 			"activityID", activityID,
 			"chatID", chatID,
@@ -1466,7 +1482,7 @@ func extractChatID(input interface{}) string {
 // them, writeErrorEvent bailed out with "no chat_id in input", and NOT ONE
 // activity error ever reached the chat. Measured over a day of worker logs: 26
 // error events attempted, 26 skipped, 0 written — while
-// web/src/components/Chat/WorkflowErrorMessage.tsx sat fully built, retry
+// frontends/web/src/components/Chat/WorkflowErrorMessage.tsx sat fully built, retry
 // states and all, and never rendered once.
 //
 // That is how a chat can stop dead with nothing on screen: the failure is real,
@@ -2019,10 +2035,16 @@ func wrapActivity[TInput any, TOutput any](
 			terminal := isTerminal(classified)
 
 			// Use Warn for non-terminal errors so they don't trigger Sentry.
-			if terminal {
+			// An activity whose own context ended was already reported, once,
+			// by ActivityWrapper.Execute as a cancellation.
+			switch {
+			case ctx.Err() != nil:
+				logger.Debug("[Workflow Runtime Registry] Activity failed",
+					"activity", name, "error", err, "category", category, "is_terminal", terminal)
+			case terminal:
 				logger.Error("[Workflow Runtime Registry] Activity failed",
 					"activity", name, "error", err, "category", category, "is_terminal", terminal)
-			} else {
+			default:
 				logger.Warn("[Workflow Runtime Registry] Activity failed",
 					"activity", name, "error", err, "category", category, "is_terminal", terminal)
 			}

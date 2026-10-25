@@ -7,7 +7,7 @@
 // (research/forge-migration/05-p3a-handler-map.md). Only _test.go files
 // import it.
 //
-//forge:exclude-contract: a test double of the workflow-listing reads on db.Repository, imported only by tests; nothing to fake behind it
+//forge:exclude-contract: a test double of the workflow-listing reads on *db.Repo, imported only by tests; nothing to fake behind it
 package workflowlisttest
 
 import (
@@ -28,10 +28,13 @@ import (
 
 // Repo is the repository ListWorkflows runs against, in memory and
 // counting every read workflow listing makes. Methods it does not implement
-// fall through to the nil embedded Repository and panic, so a listing that
-// grows a new read fails here until the fake learns it.
+// fall through to the nil embedded *db.Repo and panic, so a listing that
+// grows a new read fails here until the fake learns it. The nil *db.Repo,
+// rather than any one consumer's role, is what lets it fill the Repo of every
+// handler that lists workflows (handlers/workflow, handlers/preset), whatever
+// each one declares.
 type Repo struct {
-	db.Repository
+	*db.Repo
 
 	Project          *db.Project
 	projectWorkflows *string

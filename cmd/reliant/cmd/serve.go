@@ -42,7 +42,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/runenv"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -159,18 +158,16 @@ func runRoot(ctx context.Context, deps Deps, root rootSpec) error {
 }
 
 // flushTelemetry is the root's last step, after every node has stopped: the
-// pending Sentry events (a no-op where no reporter is installed), then the
 // OTel providers. Product events need no flush: each is written to the log as
 // it happens.
 func flushTelemetry(obs *observability.Provider) func(context.Context) error {
 	return func(context.Context) error {
-		telemetry.Flush(5)
 		return obs.Shutdown()
 	}
 }
 
-// migrateSchema applies every migration this binary embeds (db.ApplyOnBoot,
-// through the goose bridge), on a connection of its own to the session-capable
+// migrateSchema applies every migration this binary embeds (db.ApplyOnBoot),
+// on a connection of its own to the session-capable
 // DATABASE_DIRECT_URL when one is set (db.DatabaseConfig.MigrationURL), never
 // the serving pool. The connect retries within DB_CONNECT_TIMEOUT — a database
 // that comes up seconds after the api-server is a wait, with the database
@@ -214,9 +211,6 @@ func serverkitConfig(cfg *config.Config, configs rootConfigs) (serverkit.Config,
 		skCfg.DBConnectTimeout = c.GetDbConnectTimeout().AsDuration()
 	}
 	if c := configs.GatewayConfig; c != nil {
-		if err := app.CheckPorts(app.Port{Name: "HEALTH_PORT (--health-port)", Port: c.GetHealthPort()}); err != nil {
-			return serverkit.Config{}, err
-		}
 		skCfg.Addr = fmt.Sprintf("%s:%d", c.GetBindAddress(), c.GetHealthPort())
 		skCfg.PprofAddr = c.GetPprofAddr()
 		skCfg.Probes.Live = serverkit.ProbePathList(c.GetLivenessPaths())
@@ -227,9 +221,6 @@ func serverkitConfig(cfg *config.Config, configs rootConfigs) (serverkit.Config,
 		skCfg.ShutdownTimeout = c.GetShutdownTimeout().AsDuration()
 	}
 	if c := configs.ApiServerConfig; c != nil {
-		if err := app.CheckPorts(app.Port{Name: "HEALTH_PORT (--health-port)", Port: c.GetHealthPort()}); err != nil {
-			return serverkit.Config{}, err
-		}
 		skCfg.Addr = fmt.Sprintf("%s:%d", c.GetBindAddress(), c.GetHealthPort())
 		skCfg.Probes.Live = serverkit.ProbePathList(c.GetLivenessPaths())
 		skCfg.Probes.Ready = serverkit.ProbePathList(c.GetReadinessPaths())
@@ -241,9 +232,6 @@ func serverkitConfig(cfg *config.Config, configs rootConfigs) (serverkit.Config,
 		skCfg.ShutdownTimeout = c.GetShutdownTimeout().AsDuration()
 	}
 	if c := configs.WorkerConfig; c != nil {
-		if err := app.CheckPorts(app.Port{Name: "HEALTH_PORT (--health-port)", Port: c.GetHealthPort()}); err != nil {
-			return serverkit.Config{}, err
-		}
 		skCfg.Addr = fmt.Sprintf(":%d", c.GetHealthPort())
 		skCfg.Probes.Live = serverkit.ProbePathList(c.GetLivenessPaths())
 		skCfg.Probes.Ready = serverkit.ProbePathList(c.GetReadinessPaths())

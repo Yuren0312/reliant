@@ -3,11 +3,11 @@ package chat
 
 import (
 	"context"
-	"fmt"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -48,15 +48,12 @@ func (s *Service) resumePausedRun(
 	sent map[string]*structpb.Value,
 ) (runs.ResumeOutcome, error) {
 	workflowID := chat.MainThreadID()
-	runID := ""
-	if chat.RunID != nil {
-		runID = *chat.RunID
-	}
 
-	runInputs := s.runInputsForSend(ctx, workflowID, runID)
+	runInputs := s.runInputsForSend(ctx, workflowID)
 	inputUpdate, modelNotices, modelMoves := s.resumeInputUpdate(ctx, userID, chat.ID, chat.ProjectID, workflowName, workflowID,
 		s.underSelection(ctx, chat.ID, workflowName, stateUpdate), runInputs)
 	inputUpdate = s.withProviderPolicy(ctx, userID, chat, runInputs, inputUpdate)
+	inputUpdate = s.refreshLiveChatProvider(ctx, userID, chat, workflowName, inputUpdate)
 
 	// Only add "params changed" message if params actually changed from current workflow state
 	if len(inputUpdate) > 0 && (runInputs == nil || inputsDiffer(runInputs, inputUpdate)) {
@@ -73,6 +70,11 @@ func (s *Service) resumePausedRun(
 	outcome, err := s.runs.Resume(ctx, chat.ID, inputUpdate)
 	if err != nil || outcome.Kind != runs.OutcomeResumed {
 		return outcome, err
+	}
+	// A message that resumes the chat resumes all of it: every sub-agent a
+	// provider stopped goes on too, without a message of its own.
+	if err := s.resumeWholeChat(ctx, chat); err != nil {
+		logging.WarnContext(ctx, "Could not wake every unfinished thread after a message resumed the chat", "chatID", chat.ID, "error", err)
 	}
 
 	// Told only now: the run that has the moved models is awake. A fresh run
@@ -129,9 +131,7 @@ func (s *Service) resumePausedRunForMessage(ctx context.Context, userID string, 
 
 	outcome, err := s.resumePausedRun(ctx, userID, chat, root.WorkflowName, threadID, nil, nil)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to resume a paused chat for a message queued to it",
-			"error", err, "chatID", chat.ID, "threadID", threadID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resume paused chat: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resume paused chat"))
 	}
 	if outcome.Kind != runs.OutcomeResumed {
 		logging.WarnContext(ctx, "A paused chat could not be resumed in place for a queued message; withdrawing it",

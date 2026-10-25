@@ -10746,6 +10746,10 @@
             "kind": "message",
             "type_name": "reliant.v1.TriggerSender",
             "optional": true
+          },
+          {
+            "name": "fire_workflow_id",
+            "kind": "string"
           }
         ],
         "reliant.v1.TriggerEventRun": [
@@ -14216,6 +14220,22 @@
           {
             "name": "moves_on_drain",
             "kind": "bool"
+          },
+          {
+            "name": "version",
+            "kind": "string"
+          },
+          {
+            "name": "commit",
+            "kind": "string"
+          },
+          {
+            "name": "commit_time_unix",
+            "kind": "int64"
+          },
+          {
+            "name": "forge_version",
+            "kind": "string"
           }
         ],
         "reliant.v1.DiscoveredProject": [
@@ -15727,6 +15747,22 @@
             "name": "disk",
             "kind": "message",
             "type_name": "reliant.v1.DiskReport"
+          },
+          {
+            "name": "version",
+            "kind": "string"
+          },
+          {
+            "name": "commit",
+            "kind": "string"
+          },
+          {
+            "name": "commit_time_unix",
+            "kind": "int64"
+          },
+          {
+            "name": "forge_version",
+            "kind": "string"
           }
         ],
         "reliant.v1.DiscoveredProject": [
@@ -19140,6 +19176,10 @@
             "name": "metadata",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "async",
+            "kind": "bool"
           }
         ],
         "reliant.v1.InboxRunFinished": [],
@@ -26570,16 +26610,47 @@
           "Activity": {
             "Mutating": false
           }
+        },
+        {
+          "Name": "ListAsyncQuestions",
+          "InputType": "ListAsyncQuestionsRequest",
+          "OutputType": "ListAsyncQuestionsResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.ListAsyncQuestionsRequest",
+          "OutputTypeFQ": "reliant.v1.ListAsyncQuestionsResponse",
+          "InputProtoFile": "reliant/v1/question.proto",
+          "OutputProtoFile": "reliant/v1/question.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/question.proto",
       "ModulePath": "",
       "Messages": {
-        "ListPendingQuestionsRequest": [
+        "ListAsyncQuestionsRequest": [
           {
             "Name": "chat_id",
             "ProtoType": "string",
             "IsOptional": false
+          }
+        ],
+        "ListAsyncQuestionsResponse": [
+          {
+            "Name": "questions",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.QuestionInfo"
+          }
+        ],
+        "ListPendingQuestionsRequest": [
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "ListPendingQuestionsResponse": [
@@ -26617,10 +26688,28 @@
       },
       "Audience": "user",
       "Schemas": {
+        "reliant.v1.ListAsyncQuestionsRequest": [
+          {
+            "name": "chat_id",
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
+          }
+        ],
+        "reliant.v1.ListAsyncQuestionsResponse": [
+          {
+            "name": "questions",
+            "kind": "message",
+            "type_name": "reliant.v1.QuestionInfo",
+            "repeated": true
+          }
+        ],
         "reliant.v1.ListPendingQuestionsRequest": [
           {
             "name": "chat_id",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ListPendingQuestionsResponse": [
@@ -26664,6 +26753,24 @@
           {
             "name": "thread_id",
             "kind": "string"
+          },
+          {
+            "name": "async",
+            "kind": "bool"
+          },
+          {
+            "name": "tool_call_id",
+            "kind": "string"
+          },
+          {
+            "name": "response_data",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "withdrawn_reason",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ResolveQuestionRequest": [
@@ -26689,6 +26796,8 @@
         ]
       },
       "SchemaFiles": {
+        "reliant.v1.ListAsyncQuestionsRequest": "reliant/v1/question.proto",
+        "reliant.v1.ListAsyncQuestionsResponse": "reliant/v1/question.proto",
         "reliant.v1.ListPendingQuestionsRequest": "reliant/v1/question.proto",
         "reliant.v1.ListPendingQuestionsResponse": "reliant/v1/question.proto",
         "reliant.v1.QuestionInfo": "reliant/v1/question.proto",
@@ -32120,12 +32229,13 @@
           "ServerStreaming": false,
           "AuthRequired": false,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.HealthRequest",
           "OutputTypeFQ": "reliant.v1.HealthResponse",
           "InputProtoFile": "reliant/v1/system.proto",
           "OutputProtoFile": "reliant/v1/system.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -32136,12 +32246,13 @@
           "ServerStreaming": false,
           "AuthRequired": false,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.ReadyRequest",
           "OutputTypeFQ": "reliant.v1.ReadyResponse",
           "InputProtoFile": "reliant/v1/system.proto",
           "OutputProtoFile": "reliant/v1/system.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -32152,12 +32263,13 @@
           "ServerStreaming": false,
           "AuthRequired": false,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.InfoRequest",
           "OutputTypeFQ": "reliant.v1.InfoResponse",
           "InputProtoFile": "reliant/v1/system.proto",
           "OutputProtoFile": "reliant/v1/system.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -32168,12 +32280,13 @@
           "ServerStreaming": false,
           "AuthRequired": false,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.VersionRequest",
           "OutputTypeFQ": "reliant.v1.VersionResponse",
           "InputProtoFile": "reliant/v1/system.proto",
           "OutputProtoFile": "reliant/v1/system.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -34315,6 +34428,11 @@
           },
           {
             "name": "connection",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "hosted_use",
             "kind": "message",
             "type_name": "reliant.v1.CelString"
           }
@@ -37129,11 +37247,12 @@
           "Description": "Record no product analytics events",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/analytics_config.proto"
+          "ProtoFile": "reliant/config/v1/analytics_config.proto"
         }
       ],
-      "ProtoFile": "config/v1/analytics_config.proto",
-      "Line": 14
+      "ProtoFile": "reliant/config/v1/analytics_config.proto",
+      "Line": 14,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "ApiServerConfig",
@@ -37150,7 +37269,7 @@
           "Description": "JWT public key PEM for token validation",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "jwt_public_key_file",
@@ -37164,7 +37283,7 @@
           "Description": "Path to JWT public key PEM file",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "jwks_url",
@@ -37178,7 +37297,7 @@
           "Description": "JWKS endpoint URL for JWT validation (alternative to PEM key)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "allowed_email_domains",
@@ -37192,7 +37311,7 @@
           "Description": "Comma-separated email domains allowed to sign in (none allows all)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "disable_forge_api",
@@ -37206,7 +37325,7 @@
           "Description": "Turn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "grpc_port",
@@ -37220,7 +37339,7 @@
           "Description": "gRPC/ConnectRPC listen port",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "health_port",
@@ -37234,7 +37353,7 @@
           "Description": "Health/readiness HTTP endpoint port",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "pprof_port",
@@ -37248,7 +37367,7 @@
           "Description": "pprof debug server port",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "bind_address",
@@ -37262,7 +37381,7 @@
           "Description": "Network address to bind to",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "cors_allowed_origins",
@@ -37276,7 +37395,7 @@
           "Description": "Comma-separated CORS allowed origins, or * for all",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "auth_mode",
@@ -37290,7 +37409,7 @@
           "Description": "Auth mode: supabase (JWTs) or apikey (one shared bearer key)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto",
+          "ProtoFile": "reliant/config/v1/api_server_config.proto",
           "AllowedValues": [
             "supabase",
             "apikey"
@@ -37309,7 +37428,7 @@
           "Sensitive": true,
           "Category": "",
           "Optional": true,
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "require_email_verified_claim",
@@ -37323,7 +37442,7 @@
           "Description": "A JWT without an email_verified claim carries no email",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "authorization_server",
@@ -37337,7 +37456,7 @@
           "Description": "Public URL of the control plane that issues this deployment's tokens",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "mcp_oauth_issuers",
@@ -37351,7 +37470,7 @@
           "Description": "Comma-separated OAuth issuers whose tokens the connector endpoint accepts",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "max_upload_size",
@@ -37365,7 +37484,7 @@
           "Description": "Largest attachment accepted, in bytes",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "worktree_auto_archive",
@@ -37379,7 +37498,7 @@
           "Description": "Worktree auto-archive: dry-run, on or off",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto",
+          "ProtoFile": "reliant/config/v1/api_server_config.proto",
           "AllowedValues": [
             "dry-run",
             "on",
@@ -37398,7 +37517,7 @@
           "Description": "OAuth provider origin for the desktop sign-in",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "auth_provider_key",
@@ -37412,7 +37531,7 @@
           "Description": "OAuth provider publishable (public) key for the desktop sign-in",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "payload_blob_gc_horizon",
@@ -37426,7 +37545,7 @@
           "Description": "How long an unreferenced Temporal payload blob is kept",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "pre_stop_delay",
@@ -37440,7 +37559,7 @@
           "Description": "How long to keep serving after readiness flips at shutdown (negative: no pause)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "shutdown_timeout",
@@ -37454,7 +37573,7 @@
           "Description": "Budget for graceful shutdown after the pre-stop pause",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "liveness_paths",
@@ -37468,7 +37587,7 @@
           "Description": "Liveness probe paths on the health port (comma-separated)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         },
         {
           "Name": "readiness_paths",
@@ -37482,7 +37601,7 @@
           "Description": "Readiness probe paths on the health port (comma-separated)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
+          "ProtoFile": "reliant/config/v1/api_server_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -37490,8 +37609,9 @@
         "server",
         "api"
       ],
-      "ProtoFile": "config/v1/api_server_config.proto",
-      "Line": 15
+      "ProtoFile": "reliant/config/v1/api_server_config.proto",
+      "Line": 16,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "CLIConfig",
@@ -37509,7 +37629,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "CLIConnectionConfig",
-          "ProtoFile": "config/v1/cli_config.proto"
+          "ProtoFile": "reliant/config/v1/cli_config.proto"
         },
         {
           "Name": "web",
@@ -37524,7 +37644,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "CLIWebConfig",
-          "ProtoFile": "config/v1/cli_config.proto"
+          "ProtoFile": "reliant/config/v1/cli_config.proto"
         },
         {
           "Name": "machine",
@@ -37539,7 +37659,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "CLIMachineConfig",
-          "ProtoFile": "config/v1/cli_config.proto"
+          "ProtoFile": "reliant/config/v1/cli_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -37560,8 +37680,9 @@
           "workflow"
         ]
       ],
-      "ProtoFile": "config/v1/cli_config.proto",
-      "Line": 21
+      "ProtoFile": "reliant/config/v1/cli_config.proto",
+      "Line": 21,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "CLIConnectionConfig",
@@ -37578,7 +37699,7 @@
           "Description": "Reliant API server URL",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/cli_config.proto"
+          "ProtoFile": "reliant/config/v1/cli_config.proto"
         },
         {
           "Name": "gateway_url",
@@ -37592,7 +37713,7 @@
           "Description": "Daemon gateway URL (a non-default server derives its own gateway unless this is set)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/cli_config.proto"
+          "ProtoFile": "reliant/config/v1/cli_config.proto"
         },
         {
           "Name": "token",
@@ -37607,7 +37728,7 @@
           "Sensitive": true,
           "Category": "",
           "Optional": true,
-          "ProtoFile": "config/v1/cli_config.proto"
+          "ProtoFile": "reliant/config/v1/cli_config.proto"
         },
         {
           "Name": "skip_tls_verify",
@@ -37621,11 +37742,12 @@
           "Description": "Skip TLS certificate verification (development only)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/cli_config.proto"
+          "ProtoFile": "reliant/config/v1/cli_config.proto"
         }
       ],
-      "ProtoFile": "config/v1/cli_config.proto",
-      "Line": 39
+      "ProtoFile": "reliant/config/v1/cli_config.proto",
+      "Line": 39,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "CLIWebConfig",
@@ -37642,7 +37764,7 @@
           "Description": "Comma-separated web origins the localhost OAuth helper accepts",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/cli_config.proto"
+          "ProtoFile": "reliant/config/v1/cli_config.proto"
         },
         {
           "Name": "frontend_port",
@@ -37656,11 +37778,12 @@
           "Description": "Dev web server port whose loopback origins the localhost OAuth helper accepts",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/cli_config.proto"
+          "ProtoFile": "reliant/config/v1/cli_config.proto"
         }
       ],
-      "ProtoFile": "config/v1/cli_config.proto",
-      "Line": 87
+      "ProtoFile": "reliant/config/v1/cli_config.proto",
+      "Line": 87,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "CLIMachineConfig",
@@ -37677,7 +37800,7 @@
           "Description": "Pinned machine instance id (default: the one persisted in ~/.reliant)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/cli_config.proto"
+          "ProtoFile": "reliant/config/v1/cli_config.proto"
         },
         {
           "Name": "user_config_dir",
@@ -37691,7 +37814,7 @@
           "Description": "User configuration directory (default: ~/.reliant)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/cli_config.proto"
+          "ProtoFile": "reliant/config/v1/cli_config.proto"
         },
         {
           "Name": "app_data_dir",
@@ -37705,11 +37828,12 @@
           "Description": "Internal app data directory (default: platform-specific)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/cli_config.proto"
+          "ProtoFile": "reliant/config/v1/cli_config.proto"
         }
       ],
-      "ProtoFile": "config/v1/cli_config.proto",
-      "Line": 103
+      "ProtoFile": "reliant/config/v1/cli_config.proto",
+      "Line": 103,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "ReliantConfig",
@@ -37727,7 +37851,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "LogConfig",
-          "ProtoFile": "config/v1/config.proto"
+          "ProtoFile": "reliant/config/v1/config.proto"
         },
         {
           "Name": "runtime",
@@ -37742,7 +37866,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "RuntimeConfig",
-          "ProtoFile": "config/v1/config.proto"
+          "ProtoFile": "reliant/config/v1/config.proto"
         },
         {
           "Name": "storage_reaper",
@@ -37757,12 +37881,13 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "StorageReaperConfig",
-          "ProtoFile": "config/v1/config.proto"
+          "ProtoFile": "reliant/config/v1/config.proto"
         }
       ],
       "Binary": "reliant",
-      "ProtoFile": "config/v1/config.proto",
-      "Line": 60
+      "ProtoFile": "reliant/config/v1/config.proto",
+      "Line": 70,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "RuntimeConfig",
@@ -37779,7 +37904,7 @@
           "Description": "Environment tier: dev, test or prod (unset or unrecognised is prod)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/config.proto",
+          "ProtoFile": "reliant/config/v1/config.proto",
           "EnvVarAliases": [
             {
               "Name": "NODE_ENV"
@@ -37787,8 +37912,9 @@
           ]
         }
       ],
-      "ProtoFile": "config/v1/config.proto",
-      "Line": 69
+      "ProtoFile": "reliant/config/v1/config.proto",
+      "Line": 79,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "LogConfig",
@@ -37805,7 +37931,7 @@
           "Description": "Log level: debug, info, warn or error (default info)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/config.proto"
+          "ProtoFile": "reliant/config/v1/config.proto"
         },
         {
           "Name": "format",
@@ -37819,11 +37945,12 @@
           "Description": "Log line format: text or json (default text; json for a hosted daemon)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/config.proto"
+          "ProtoFile": "reliant/config/v1/config.proto"
         }
       ],
-      "ProtoFile": "config/v1/config.proto",
-      "Line": 87
+      "ProtoFile": "reliant/config/v1/config.proto",
+      "Line": 97,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "StorageReaperConfig",
@@ -37840,7 +37967,7 @@
           "Description": "Run forge's storage reaper on a schedule: auto (managed daemons only), on, or off",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/config.proto",
+          "ProtoFile": "reliant/config/v1/config.proto",
           "AllowedValues": [
             "auto",
             "on",
@@ -37859,7 +37986,7 @@
           "Description": "Interval of the scheduled storage reaper pass (Go duration, minimum 5m)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/config.proto"
+          "ProtoFile": "reliant/config/v1/config.proto"
         },
         {
           "Name": "pressure_interval",
@@ -37873,7 +38000,7 @@
           "Description": "Minimum gap between storage reaper passes while a volume is under pressure (Go duration, minimum 1m)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/config.proto"
+          "ProtoFile": "reliant/config/v1/config.proto"
         },
         {
           "Name": "policy_path",
@@ -37887,11 +38014,26 @@
           "Description": "Forge machine storage policy file (default: \u003cuser config dir\u003e/forge/storage.json)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/config.proto"
+          "ProtoFile": "reliant/config/v1/config.proto"
+        },
+        {
+          "Name": "gocache_interval",
+          "GoName": "GocacheInterval",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL",
+          "Flag": "",
+          "DefaultValue": "10m",
+          "Required": false,
+          "Description": "Interval of the Go-cache trim between full storage reaper passes (Go duration, minimum 2m; off disables)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/config.proto"
         }
       ],
-      "ProtoFile": "config/v1/config.proto",
-      "Line": 112
+      "ProtoFile": "reliant/config/v1/config.proto",
+      "Line": 122,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "ControlPlaneConfig",
@@ -37908,7 +38050,7 @@
           "Description": "Control-plane base URL; unset means self-hosted",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/control_plane_config.proto",
+          "ProtoFile": "reliant/config/v1/control_plane_config.proto",
           "EnvVarAliases": [
             {
               "Name": "CONTROL_PLANE_API_URL",
@@ -37933,11 +38075,12 @@
           "Sensitive": true,
           "Category": "",
           "Optional": true,
-          "ProtoFile": "config/v1/control_plane_config.proto"
+          "ProtoFile": "reliant/config/v1/control_plane_config.proto"
         }
       ],
-      "ProtoFile": "config/v1/control_plane_config.proto",
-      "Line": 18
+      "ProtoFile": "reliant/config/v1/control_plane_config.proto",
+      "Line": 18,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "DaemonInstanceConfig",
@@ -37954,7 +38097,7 @@
           "Description": "Data directory (default: this instance's directory under ~/.reliant/instances)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "account",
@@ -37968,7 +38111,7 @@
           "Description": "Account (user id) this daemon runs as; selects among several accounts on one server",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "workspace",
@@ -37982,11 +38125,12 @@
           "Description": "Workspace this daemon serves (defaults to the git worktree root of the current directory)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         }
       ],
-      "ProtoFile": "config/v1/daemon_config.proto",
-      "Line": 28
+      "ProtoFile": "reliant/config/v1/daemon_config.proto",
+      "Line": 29,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "DaemonConfig",
@@ -38004,7 +38148,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "DaemonInstanceConfig",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "gateway_url",
@@ -38018,7 +38162,7 @@
           "Description": "Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "gateway_port",
@@ -38032,7 +38176,7 @@
           "Description": "Port of the local daemon gateway, dialled when no gateway URL is known",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "tls_mode",
@@ -38046,7 +38190,7 @@
           "Description": "TLS mode for the gateway connection: tls, insecure_tls_skip_verify, h2c or disabled",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto",
+          "ProtoFile": "reliant/config/v1/daemon_config.proto",
           "AllowedValues": [
             "tls",
             "insecure_tls_skip_verify",
@@ -38066,7 +38210,7 @@
           "Description": "TLS certificate file path",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "tls_key_file",
@@ -38080,7 +38224,7 @@
           "Description": "TLS key file path",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "server_mode",
@@ -38094,7 +38238,7 @@
           "Description": "Listen for incoming gateway connections instead of dialing out",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "listen_port",
@@ -38108,7 +38252,7 @@
           "Description": "Port to listen on in server mode",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "non_interactive",
@@ -38122,7 +38266,7 @@
           "Description": "Never open a browser or run interactive login; idle and wait for credentials to appear on disk instead",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "daemon_type",
@@ -38136,7 +38280,7 @@
           "Description": "Daemon type the platform declares: managed (an operator-created workspace pod) or self_hosted",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto",
+          "ProtoFile": "reliant/config/v1/daemon_config.proto",
           "AllowedValues": [
             "managed",
             "self_hosted"
@@ -38154,7 +38298,7 @@
           "Description": "Working directory the daemon serves (default: the process's working directory)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "runtime_type",
@@ -38168,7 +38312,7 @@
           "Description": "Container runtime the daemon runs under (reported to the server)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "frontend_port",
@@ -38182,7 +38326,7 @@
           "Description": "Preview forwarder port; setting it starts the forwarder (default 9191 in server mode)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "project_path",
@@ -38196,7 +38340,7 @@
           "Description": "Project directory announced to the server at connect (default: the working directory)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "child_priority",
@@ -38210,7 +38354,7 @@
           "Description": "Priority of agent-started commands: low or normal",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto",
+          "ProtoFile": "reliant/config/v1/daemon_config.proto",
           "AllowedValues": [
             "low",
             "normal"
@@ -38228,7 +38372,7 @@
           "Description": "Directory new worktrees are created in (default: ~/.reliant/worktrees)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "chrome_browser_url",
@@ -38242,7 +38386,7 @@
           "Description": "DevTools URL of an already-running browser for the chrome-devtools MCP",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "disk_reclaim_at",
@@ -38256,7 +38400,7 @@
           "Description": "Disk use (percent, or off) past which the daemon reclaims space (default 90)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "disk_refuse_at",
@@ -38270,7 +38414,7 @@
           "Description": "Disk use (percent, or off) past which the daemon refuses heavy commands (default 95)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         },
         {
           "Name": "heavy_commands",
@@ -38284,7 +38428,77 @@
           "Description": "Comma-separated commands queued behind the machine's heavy slots",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
+        },
+        {
+          "Name": "fetch_allow_private_network",
+          "GoName": "FetchAllowPrivateNetwork",
+          "GoType": "bool",
+          "ProtoType": "bool",
+          "EnvVar": "RELIANT_FETCH_ALLOW_PRIVATE_NETWORK",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
+        },
+        {
+          "Name": "egress_user_per_minute",
+          "GoName": "EgressUserPerMinute",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_DAEMON_EGRESS_USER_PER_MINUTE",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Egress tool calls per minute this daemon may make (0: default 600; managed daemons: 60, fixed)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
+        },
+        {
+          "Name": "egress_user_burst",
+          "GoName": "EgressUserBurst",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_DAEMON_EGRESS_USER_BURST",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Egress burst this daemon may make at once (0: default 100; managed daemons: 20, fixed)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
+        },
+        {
+          "Name": "egress_user_max_concurrent",
+          "GoName": "EgressUserMaxConcurrent",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_DAEMON_EGRESS_USER_MAX_CONCURRENT",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Egress calls this daemon may have in flight (0: default 32; managed daemons: 6, fixed)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
+        },
+        {
+          "Name": "egress_host_max_concurrent",
+          "GoName": "EgressHostMaxConcurrent",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Egress calls this daemon may have in flight to one destination host (0: default 32; managed daemons: 16, fixed)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -38292,8 +38506,9 @@
         "daemon",
         "start"
       ],
-      "ProtoFile": "config/v1/daemon_config.proto",
-      "Line": 59
+      "ProtoFile": "reliant/config/v1/daemon_config.proto",
+      "Line": 60,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "DaemonStatusConfig",
@@ -38311,7 +38526,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "DaemonInstanceConfig",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -38319,8 +38534,9 @@
         "daemon",
         "status"
       ],
-      "ProtoFile": "config/v1/daemon_config.proto",
-      "Line": 225
+      "ProtoFile": "reliant/config/v1/daemon_config.proto",
+      "Line": 278,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "DaemonStopConfig",
@@ -38338,7 +38554,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "DaemonInstanceConfig",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -38346,8 +38562,9 @@
         "daemon",
         "stop"
       ],
-      "ProtoFile": "config/v1/daemon_config.proto",
-      "Line": 235
+      "ProtoFile": "reliant/config/v1/daemon_config.proto",
+      "Line": 288,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "DaemonLogsConfig",
@@ -38365,7 +38582,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "DaemonInstanceConfig",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -38373,8 +38590,9 @@
         "daemon",
         "logs"
       ],
-      "ProtoFile": "config/v1/daemon_config.proto",
-      "Line": 245
+      "ProtoFile": "reliant/config/v1/daemon_config.proto",
+      "Line": 298,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "DaemonRegisterConfig",
@@ -38391,7 +38609,7 @@
           "Description": "Account (user id) to register; separate accounts on one server keep separate credentials",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/daemon_config.proto"
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -38399,8 +38617,9 @@
         "daemon",
         "register"
       ],
-      "ProtoFile": "config/v1/daemon_config.proto",
-      "Line": 255
+      "ProtoFile": "reliant/config/v1/daemon_config.proto",
+      "Line": 308,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "DatabaseConfig",
@@ -38417,7 +38636,7 @@
           "Description": "Postgres connection URL",
           "Sensitive": true,
           "Category": "",
-          "ProtoFile": "config/v1/db_config.proto"
+          "ProtoFile": "reliant/config/v1/db_config.proto"
         },
         {
           "Name": "database_direct_url",
@@ -38432,7 +38651,7 @@
           "Sensitive": true,
           "Category": "",
           "Optional": true,
-          "ProtoFile": "config/v1/db_config.proto"
+          "ProtoFile": "reliant/config/v1/db_config.proto"
         },
         {
           "Name": "database_driver",
@@ -38446,7 +38665,7 @@
           "Description": "Database driver (postgres)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/db_config.proto",
+          "ProtoFile": "reliant/config/v1/db_config.proto",
           "AllowedValues": [
             "postgres"
           ]
@@ -38463,7 +38682,7 @@
           "Description": "Most open database connections",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/db_config.proto"
+          "ProtoFile": "reliant/config/v1/db_config.proto"
         },
         {
           "Name": "db_max_idle_conns",
@@ -38477,7 +38696,7 @@
           "Description": "Most idle database connections kept open",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/db_config.proto"
+          "ProtoFile": "reliant/config/v1/db_config.proto"
         },
         {
           "Name": "db_connect_timeout",
@@ -38491,7 +38710,7 @@
           "Description": "How long the startup ping retries a database that is not up yet",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/db_config.proto"
+          "ProtoFile": "reliant/config/v1/db_config.proto"
         },
         {
           "Name": "db_schema_wait_seconds",
@@ -38505,7 +38724,7 @@
           "Description": "Seconds to wait for the schema to be migrated",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/db_config.proto"
+          "ProtoFile": "reliant/config/v1/db_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -38516,10 +38735,15 @@
         [
           "db",
           "migrate"
+        ],
+        [
+          "db",
+          "vault"
         ]
       ],
-      "ProtoFile": "config/v1/db_config.proto",
-      "Line": 23
+      "ProtoFile": "reliant/config/v1/db_config.proto",
+      "Line": 24,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "GatewayConfig",
@@ -38536,7 +38760,7 @@
           "Description": "Daemon bidi-streaming gRPC listen port",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/gateway_config.proto"
+          "ProtoFile": "reliant/config/v1/gateway_config.proto"
         },
         {
           "Name": "health_port",
@@ -38550,7 +38774,7 @@
           "Description": "Health/readiness HTTP endpoint port",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/gateway_config.proto"
+          "ProtoFile": "reliant/config/v1/gateway_config.proto"
         },
         {
           "Name": "bind_address",
@@ -38564,7 +38788,7 @@
           "Description": "Network address to bind to",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/gateway_config.proto"
+          "ProtoFile": "reliant/config/v1/gateway_config.proto"
         },
         {
           "Name": "pprof_addr",
@@ -38578,7 +38802,7 @@
           "Description": "pprof debug server address host:port (unset: no pprof server)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/gateway_config.proto"
+          "ProtoFile": "reliant/config/v1/gateway_config.proto"
         },
         {
           "Name": "pre_stop_delay",
@@ -38592,7 +38816,7 @@
           "Description": "How long to keep serving after readiness flips at shutdown (negative: no pause)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/gateway_config.proto"
+          "ProtoFile": "reliant/config/v1/gateway_config.proto"
         },
         {
           "Name": "shutdown_timeout",
@@ -38606,7 +38830,7 @@
           "Description": "Budget for graceful shutdown after the pre-stop pause",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/gateway_config.proto"
+          "ProtoFile": "reliant/config/v1/gateway_config.proto"
         },
         {
           "Name": "liveness_paths",
@@ -38620,7 +38844,7 @@
           "Description": "Liveness probe paths on the health port (comma-separated)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/gateway_config.proto"
+          "ProtoFile": "reliant/config/v1/gateway_config.proto"
         },
         {
           "Name": "readiness_paths",
@@ -38634,7 +38858,7 @@
           "Description": "Readiness probe paths on the health port (comma-separated)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/gateway_config.proto"
+          "ProtoFile": "reliant/config/v1/gateway_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -38642,8 +38866,9 @@
         "server",
         "gateway"
       ],
-      "ProtoFile": "config/v1/gateway_config.proto",
-      "Line": 15
+      "ProtoFile": "reliant/config/v1/gateway_config.proto",
+      "Line": 16,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "IntegrationsConfig",
@@ -38660,7 +38885,7 @@
           "Description": "Externally reachable base URL of this deployment",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/integrations_config.proto"
+          "ProtoFile": "reliant/config/v1/integrations_config.proto"
         },
         {
           "Name": "vault_key",
@@ -38675,7 +38900,7 @@
           "Sensitive": true,
           "Category": "",
           "Optional": true,
-          "ProtoFile": "config/v1/integrations_config.proto"
+          "ProtoFile": "reliant/config/v1/integrations_config.proto"
         },
         {
           "Name": "slack_signing_secret",
@@ -38690,7 +38915,7 @@
           "Sensitive": true,
           "Category": "",
           "Optional": true,
-          "ProtoFile": "config/v1/integrations_config.proto"
+          "ProtoFile": "reliant/config/v1/integrations_config.proto"
         },
         {
           "Name": "github_webhook_secret",
@@ -38705,7 +38930,7 @@
           "Sensitive": true,
           "Category": "",
           "Optional": true,
-          "ProtoFile": "config/v1/integrations_config.proto"
+          "ProtoFile": "reliant/config/v1/integrations_config.proto"
         },
         {
           "Name": "github_app_slug",
@@ -38719,7 +38944,7 @@
           "Description": "GitHub App slug",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/integrations_config.proto"
+          "ProtoFile": "reliant/config/v1/integrations_config.proto"
         },
         {
           "Name": "github_bot_user_id",
@@ -38733,7 +38958,7 @@
           "Description": "GitHub App bot's numeric user id (default: the production App's)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/integrations_config.proto"
+          "ProtoFile": "reliant/config/v1/integrations_config.proto"
         },
         {
           "Name": "github_bot_login",
@@ -38747,7 +38972,7 @@
           "Description": "GitHub App bot's login, used when no user id is set",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/integrations_config.proto"
+          "ProtoFile": "reliant/config/v1/integrations_config.proto"
         },
         {
           "Name": "test_integration_secret",
@@ -38762,7 +38987,7 @@
           "Sensitive": true,
           "Category": "",
           "Optional": true,
-          "ProtoFile": "config/v1/integrations_config.proto"
+          "ProtoFile": "reliant/config/v1/integrations_config.proto"
         },
         {
           "Name": "oauth_client_ids",
@@ -38776,7 +39001,7 @@
           "Description": "Integration OAuth client ids, RELIANT_OAUTH_\u003cID\u003e_CLIENT_ID",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/integrations_config.proto",
+          "ProtoFile": "reliant/config/v1/integrations_config.proto",
           "EnvPrefix": "RELIANT_OAUTH_",
           "EnvSuffix": "_CLIENT_ID",
           "MapValueType": "string"
@@ -38793,14 +39018,16 @@
           "Description": "Integration OAuth client secrets, RELIANT_OAUTH_\u003cID\u003e_CLIENT_SECRET",
           "Sensitive": true,
           "Category": "",
-          "ProtoFile": "config/v1/integrations_config.proto",
+          "Optional": true,
+          "ProtoFile": "reliant/config/v1/integrations_config.proto",
           "EnvPrefix": "RELIANT_OAUTH_",
           "EnvSuffix": "_CLIENT_SECRET",
           "MapValueType": "string"
         }
       ],
-      "ProtoFile": "config/v1/integrations_config.proto",
-      "Line": 16
+      "ProtoFile": "reliant/config/v1/integrations_config.proto",
+      "Line": 17,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "LLMConfig",
@@ -38817,7 +39044,7 @@
           "Description": "Reliant LLM gateway base URL",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
+          "ProtoFile": "reliant/config/v1/llm_config.proto"
         },
         {
           "Name": "vertexai_project",
@@ -38831,7 +39058,7 @@
           "Description": "Vertex AI project (required to call Vertex AI models)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
+          "ProtoFile": "reliant/config/v1/llm_config.proto"
         },
         {
           "Name": "vertexai_location",
@@ -38845,7 +39072,7 @@
           "Description": "Vertex AI region",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
+          "ProtoFile": "reliant/config/v1/llm_config.proto"
         },
         {
           "Name": "stream_idle_timeout",
@@ -38859,7 +39086,7 @@
           "Description": "Cut a stream that sends no bytes for this long",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
+          "ProtoFile": "reliant/config/v1/llm_config.proto"
         },
         {
           "Name": "stream_content_stall_timeout",
@@ -38873,7 +39100,7 @@
           "Description": "Cut a stream that sends only keepalives before any content for this long",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
+          "ProtoFile": "reliant/config/v1/llm_config.proto"
         },
         {
           "Name": "stream_progress_timeout",
@@ -38887,7 +39114,7 @@
           "Description": "Cut a stream that produces no driver event for this long",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
+          "ProtoFile": "reliant/config/v1/llm_config.proto"
         },
         {
           "Name": "stream_mid_block_stall_timeout",
@@ -38901,7 +39128,7 @@
           "Description": "Pin how long a content block may stay open on keepalives (default: derived from the output budget)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
+          "ProtoFile": "reliant/config/v1/llm_config.proto"
         },
         {
           "Name": "debug_openai_responses_input",
@@ -38915,7 +39142,7 @@
           "Description": "Log each OpenAI Responses input item",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
+          "ProtoFile": "reliant/config/v1/llm_config.proto"
         },
         {
           "Name": "debug_openai_tool_schemas",
@@ -38929,11 +39156,12 @@
           "Description": "Log each OpenAI function tool schema as sent",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
+          "ProtoFile": "reliant/config/v1/llm_config.proto"
         }
       ],
-      "ProtoFile": "config/v1/llm_config.proto",
-      "Line": 14
+      "ProtoFile": "reliant/config/v1/llm_config.proto",
+      "Line": 15,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "ObservabilityConfig",
@@ -38950,7 +39178,7 @@
           "Description": "OTLP collector base URL (export is on whenever it is set)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/observability_config.proto"
+          "ProtoFile": "reliant/config/v1/observability_config.proto"
         },
         {
           "Name": "otel_enabled",
@@ -38964,7 +39192,7 @@
           "Description": "Require an OTLP collector endpoint (OTEL_EXPORTER_OTLP_ENDPOINT)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/observability_config.proto"
+          "ProtoFile": "reliant/config/v1/observability_config.proto"
         },
         {
           "Name": "prometheus_enabled",
@@ -38978,80 +39206,26 @@
           "Description": "Serve Reliant's Prometheus metrics",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/observability_config.proto"
+          "ProtoFile": "reliant/config/v1/observability_config.proto"
         },
         {
           "Name": "environment",
           "GoName": "Environment",
           "GoType": "string",
           "ProtoType": "string",
-          "EnvVar": "SENTRY_ENVIRONMENT",
+          "EnvVar": "ENVIRONMENT",
           "Flag": "",
           "DefaultValue": "",
           "Required": false,
           "Description": "Deployment environment telemetry is filed under",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/observability_config.proto",
-          "EnvVarAliases": [
-            {
-              "Name": "ENVIRONMENT"
-            }
-          ]
+          "ProtoFile": "reliant/config/v1/observability_config.proto"
         }
       ],
-      "ProtoFile": "config/v1/observability_config.proto",
-      "Line": 14
-    },
-    {
-      "Name": "SentryConfig",
-      "Fields": [
-        {
-          "Name": "enabled",
-          "GoName": "Enabled",
-          "GoType": "bool",
-          "ProtoType": "bool",
-          "EnvVar": "SENTRY_ENABLED",
-          "Flag": "",
-          "DefaultValue": "true",
-          "Required": false,
-          "Description": "Report errors to Sentry (when SENTRY_DSN is set and the tier is prod)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/observability_config.proto"
-        },
-        {
-          "Name": "dsn",
-          "GoName": "Dsn",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "SENTRY_DSN",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Sentry DSN",
-          "Sensitive": true,
-          "Category": "",
-          "Optional": true,
-          "ProtoFile": "config/v1/observability_config.proto"
-        },
-        {
-          "Name": "traces_sample_rate",
-          "GoName": "TracesSampleRate",
-          "GoType": "float64",
-          "ProtoType": "double",
-          "EnvVar": "SENTRY_TRACES_SAMPLE_RATE",
-          "Flag": "",
-          "DefaultValue": "0",
-          "Required": false,
-          "Description": "Share of transactions Sentry traces, 0 to 1",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/observability_config.proto"
-        }
-      ],
-      "ProtoFile": "config/v1/observability_config.proto",
-      "Line": 48
+      "ProtoFile": "reliant/config/v1/observability_config.proto",
+      "Line": 14,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "PreviewConfig",
@@ -39068,7 +39242,7 @@
           "Description": "Workspace proxy host for path-based preview URLs",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/preview_config.proto"
+          "ProtoFile": "reliant/config/v1/preview_config.proto"
         },
         {
           "Name": "workspace_base_domain",
@@ -39082,7 +39256,7 @@
           "Description": "Base domain of subdomain-routed preview URLs",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/preview_config.proto"
+          "ProtoFile": "reliant/config/v1/preview_config.proto"
         },
         {
           "Name": "workspace_url_scheme",
@@ -39096,7 +39270,7 @@
           "Description": "Scheme of subdomain-routed preview URLs",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/preview_config.proto",
+          "ProtoFile": "reliant/config/v1/preview_config.proto",
           "AllowedValues": [
             "http",
             "https"
@@ -39114,11 +39288,12 @@
           "Description": "Port of subdomain-routed preview URLs, when not the scheme's default",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/preview_config.proto"
+          "ProtoFile": "reliant/config/v1/preview_config.proto"
         }
       ],
-      "ProtoFile": "config/v1/preview_config.proto",
-      "Line": 15
+      "ProtoFile": "reliant/config/v1/preview_config.proto",
+      "Line": 16,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "PreviewURLConfig",
@@ -39135,15 +39310,16 @@
           "Description": "Preview URL template with a {port} placeholder (set on workspace pods)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/preview_url_config.proto"
+          "ProtoFile": "reliant/config/v1/preview_url_config.proto"
         }
       ],
       "Binary": "reliant",
       "Command": [
         "preview-url"
       ],
-      "ProtoFile": "config/v1/preview_url_config.proto",
-      "Line": 13
+      "ProtoFile": "reliant/config/v1/preview_url_config.proto",
+      "Line": 13,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "ServerProcessConfig",
@@ -39161,7 +39337,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "ControlPlaneConfig",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "nats",
@@ -39176,7 +39352,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "NatsConfig",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "temporal",
@@ -39191,7 +39367,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "TemporalConfig",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "tls",
@@ -39206,7 +39382,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "ServerTLSConfig",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "data_dir",
@@ -39220,7 +39396,7 @@
           "Description": "Data directory for logs and certs",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "streaming_driver",
@@ -39234,7 +39410,7 @@
           "Description": "Streaming driver (nats)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/server_config.proto",
+          "ProtoFile": "reliant/config/v1/server_config.proto",
           "AllowedValues": [
             "nats"
           ]
@@ -39252,7 +39428,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "IntegrationsConfig",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "observability",
@@ -39267,22 +39443,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "ObservabilityConfig",
-          "ProtoFile": "config/v1/server_config.proto"
-        },
-        {
-          "Name": "sentry",
-          "GoName": "Sentry",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "SentryConfig",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "analytics",
@@ -39297,7 +39458,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "AnalyticsConfig",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "llm",
@@ -39312,7 +39473,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "LLMConfig",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "preview",
@@ -39327,7 +39488,22 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "PreviewConfig",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
+        },
+        {
+          "Name": "network",
+          "GoName": "Network",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "NetworkConfig",
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -39336,8 +39512,31 @@
           "server"
         ]
       ],
-      "ProtoFile": "config/v1/server_config.proto",
-      "Line": 31
+      "ProtoFile": "reliant/config/v1/server_config.proto",
+      "Line": 32,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+    },
+    {
+      "Name": "NetworkConfig",
+      "Fields": [
+        {
+          "Name": "allow_private_egress",
+          "GoName": "AllowPrivateEgress",
+          "GoType": "bool",
+          "ProtoType": "bool",
+          "EnvVar": "RELIANT_ALLOW_PRIVATE_EGRESS",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Let user-steered server-side requests (fetch, websearch, model endpoints) reach private, loopback and link-local addresses; self-hosted deployments only",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/server_config.proto"
+        }
+      ],
+      "ProtoFile": "reliant/config/v1/server_config.proto",
+      "Line": 73,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "NatsConfig",
@@ -39354,7 +39553,7 @@
           "Description": "NATS server URL",
           "Sensitive": true,
           "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "user",
@@ -39368,7 +39567,7 @@
           "Description": "NATS user name (used with NATS_PASSWORD)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "password",
@@ -39383,11 +39582,12 @@
           "Sensitive": true,
           "Category": "",
           "Optional": true,
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         }
       ],
-      "ProtoFile": "config/v1/server_config.proto",
-      "Line": 68
+      "ProtoFile": "reliant/config/v1/server_config.proto",
+      "Line": 89,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "TemporalConfig",
@@ -39404,7 +39604,7 @@
           "Description": "Temporal server host",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "port",
@@ -39418,7 +39618,7 @@
           "Description": "Temporal server port",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "namespace",
@@ -39432,11 +39632,12 @@
           "Description": "Temporal namespace",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         }
       ],
-      "ProtoFile": "config/v1/server_config.proto",
-      "Line": 92
+      "ProtoFile": "reliant/config/v1/server_config.proto",
+      "Line": 113,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "ServerTLSConfig",
@@ -39453,7 +39654,7 @@
           "Description": "TLS certificate file path",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "key_file",
@@ -39467,7 +39668,7 @@
           "Description": "TLS key file path",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         },
         {
           "Name": "disable",
@@ -39481,15 +39682,419 @@
           "Description": "Disable TLS (use plaintext HTTP)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         }
       ],
-      "ProtoFile": "config/v1/server_config.proto",
-      "Line": 119
+      "ProtoFile": "reliant/config/v1/server_config.proto",
+      "Line": 143,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+    },
+    {
+      "Name": "VaultMaintenanceConfig",
+      "Fields": [
+        {
+          "Name": "vault_key",
+          "GoName": "VaultKey",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_VAULT_KEY",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": true,
+          "Description": "Credential vault keyring (id:\u003cbase64\u003e[,id:\u003cbase64\u003e...], first entry primary)",
+          "Sensitive": true,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/vault_config.proto"
+        }
+      ],
+      "Binary": "reliant",
+      "Subtrees": [
+        [
+          "db",
+          "vault"
+        ]
+      ],
+      "ProtoFile": "reliant/config/v1/vault_config.proto",
+      "Line": 15,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+    },
+    {
+      "Name": "ReliantWebConfig",
+      "Fields": [
+        {
+          "Name": "api_url",
+          "GoName": "ApiUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "API_URL",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto",
+          "RequiredWhen": [
+            {
+              "Field": "auth_mode",
+              "Equals": "cloud"
+            }
+          ]
+        },
+        {
+          "Name": "control_plane_api_url",
+          "GoName": "ControlPlaneApiUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "CONTROL_PLANE_API_URL",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Origin of the control plane's admin-server. Set: the cloud features (billing, managed daemons, coupons, Forge cloud envs) are wired up. Unset: the self-hosted implementations (src/services/controlPlane/config.ts).",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto",
+          "RequiredWhen": [
+            {
+              "Field": "auth_mode",
+              "Equals": "cloud"
+            }
+          ]
+        },
+        {
+          "Name": "gateway_url",
+          "GoName": "GatewayUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "GATEWAY_URL",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Origin of the daemon gateway (ToolsDaemonService). The browser never dials it; the onboarding renders it into the `reliant daemon start` command, which cannot derive it for a loopback server.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "app_url",
+          "GoName": "AppUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "APP_URL",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "This app's own public origin: the base of every URL that leaves the process and comes back (the OAuth redirectTo). Unset: the document origin in a browser; in the desktop app, whose origin no system browser can reach, the hosted default.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "disable_tls",
+          "GoName": "DisableTls",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "DISABLE_TLS",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "\"true\": build loopback and WebSocket URLs with http/ws instead of https/wss (a plain-http local stack). The desktop app takes this from its main process instead.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "auth_mode",
+          "GoName": "AuthMode",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "AUTH_MODE",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. Unset: self-hosted or local dev.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto",
+          "AllowedValues": [
+            "cloud"
+          ]
+        },
+        {
+          "Name": "supabase_url",
+          "GoName": "SupabaseUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "SUPABASE_URL",
+          "Flag": "",
+          "DefaultValue": "http://127.0.0.1:54321",
+          "Required": false,
+          "Description": "The Supabase project the browser signs in against. Default: a local `supabase start`.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto",
+          "RequiredWhen": [
+            {
+              "Field": "auth_mode",
+              "Equals": "cloud"
+            }
+          ]
+        },
+        {
+          "Name": "supabase_anon_key",
+          "GoName": "SupabaseAnonKey",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "SUPABASE_ANON_KEY",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "The Supabase project's PUBLISHABLE (anon) key. Public by design. Unset: Supabase sign-in is unavailable and the app says so.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto",
+          "RequiredWhen": [
+            {
+              "Field": "auth_mode",
+              "Equals": "cloud"
+            }
+          ]
+        },
+        {
+          "Name": "auto_anon_sign_in",
+          "GoName": "AutoAnonSignIn",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "AUTO_ANON_SIGN_IN",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "\"true\": sign a visitor in anonymously instead of showing the sign-in screen (local demos). Never set it for a deployed environment.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "stripe_publishable_key",
+          "GoName": "StripePublishableKey",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "STRIPE_PUBLISHABLE_KEY",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "The Stripe account's PUBLISHABLE key (pk_live_/pk_test_), paired with the control plane's secret key of the same account and mode. Unset: embedded checkout reports itself unavailable rather than mounting a form that cannot work.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "sentry_dsn",
+          "GoName": "SentryDsn",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "SENTRY_DSN",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Sentry DSN for this surface (the hosted SPA and the desktop app report to different projects). Browser-public by design. Unset: no Sentry.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "sentry_enabled",
+          "GoName": "SentryEnabled",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "SENTRY_ENABLED",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "\"false\" turns Sentry off even with a DSN. Anything else leaves it to SENTRY_DSN, TELEMETRY_SINKS and the user's privacy setting.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "sentry_traces_sample_rate",
+          "GoName": "SentryTracesSampleRate",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "SENTRY_TRACES_SAMPLE_RATE",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Sentry trace sample rate, 0-1. Unset or 0: 1.0 for a prerelease desktop build, else 0.1.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "sentry_replays_session_sample_rate",
+          "GoName": "SentryReplaysSessionSampleRate",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "SENTRY_REPLAYS_SESSION_SAMPLE_RATE",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Sentry session-replay sample rate, 0-1, overriding the new-user funnel policy. Unset: the policy (1.0 for a new user's first sessions, then 0.1).",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "sentry_replays_error_sample_rate",
+          "GoName": "SentryReplaysErrorSampleRate",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "SENTRY_REPLAYS_ERROR_SAMPLE_RATE",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Sentry on-error replay sample rate, 0-1. Unset or 0: 1.0.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "otel_endpoint",
+          "GoName": "OtelEndpoint",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "OTEL_ENDPOINT",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Browser telemetry (ClickStack) ingest base, normally the same-origin `/_otel`. Empty or `off`: none. forge's generated otel_gen.ts reads the same key.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "telemetry_sinks",
+          "GoName": "TelemetrySinks",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "TELEMETRY_SINKS",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Comma-separated sinks: `sentry`, `clickstack`. Unset or unrecognised: Sentry, plus ClickStack when OTEL_ENDPOINT is set (src/lib/telemetrySinks.ts).",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "otel_replay",
+          "GoName": "OtelReplay",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "OTEL_REPLAY",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "\"true\": record masked session replay to ClickStack. Unset: off.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "otel_replay_sample_policy",
+          "GoName": "OtelReplaySamplePolicy",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "OTEL_REPLAY_SAMPLE_POLICY",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "ClickStack replay sampling policy: `new-user-funnel` records a new user's first sessions in full. Unset: the default rate.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "otel_replay_sample_rate",
+          "GoName": "OtelReplaySampleRate",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "OTEL_REPLAY_SAMPLE_RATE",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "ClickStack replay sample rate, 0-1, overriding the policy.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "download_base_url",
+          "GoName": "DownloadBaseUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "DOWNLOAD_BASE_URL",
+          "Flag": "",
+          "DefaultValue": "https://downloads.reliantlabs.io",
+          "Required": false,
+          "Description": "Where the desktop and CLI downloads the UI links to are published.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        },
+        {
+          "Name": "cli_defaults_baked",
+          "GoName": "CliDefaultsBaked",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "CLI_DEFAULTS_BAKED",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "\"true\": the `reliant` binary released beside this deployment has its server, gateway and auth defaults compiled in, so the copy-paste CLI commands render bare instead of behind RELIANT_*= overrides. Only the release knows this; set it where that release is the one users download.",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/web_config.proto"
+        }
+      ],
+      "Frontend": "web",
+      "ProtoFile": "reliant/config/v1/web_config.proto",
+      "Line": 45,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
       "Name": "WorkerConfig",
       "Fields": [
+        {
+          "Name": "hosted_actions_url",
+          "GoName": "HostedActionsUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_WORKER_HOSTED_ACTIONS_URL",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Private HTTPS workspace-controller endpoint for fixed hosted actions",
+          "Sensitive": false,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "hosted_actions_ca_file",
+          "GoName": "HostedActionsCaFile",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "PEM trust bundle for the private hosted-action controller; reloaded for each connection",
+          "Sensitive": false,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
         {
           "Name": "health_port",
           "GoName": "HealthPort",
@@ -39502,7 +40107,7 @@
           "Description": "Health check endpoint port",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/worker_config.proto"
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
         },
         {
           "Name": "pprof_port",
@@ -39516,7 +40121,7 @@
           "Description": "pprof debug server port (binds 127.0.0.1 only)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/worker_config.proto"
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
         },
         {
           "Name": "pre_stop_delay",
@@ -39530,7 +40135,7 @@
           "Description": "How long to keep serving after readiness flips at shutdown (negative: no pause)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/worker_config.proto"
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
         },
         {
           "Name": "shutdown_timeout",
@@ -39544,7 +40149,7 @@
           "Description": "Budget for graceful shutdown after the pre-stop pause",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/worker_config.proto"
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
         },
         {
           "Name": "liveness_paths",
@@ -39558,7 +40163,7 @@
           "Description": "Liveness probe paths on the health port (comma-separated)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/worker_config.proto"
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
         },
         {
           "Name": "readiness_paths",
@@ -39572,7 +40177,119 @@
           "Description": "Readiness probe paths on the health port (comma-separated)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/worker_config.proto"
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "max_concurrent_workflow_tasks",
+          "GoName": "MaxConcurrentWorkflowTasks",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Workflow tasks (replays included) run at once; 0 derives max(2, GOMAXPROCS-1)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "workflow_task_pollers",
+          "GoName": "WorkflowTaskPollers",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_WORKFLOW_TASK_POLLERS",
+          "Flag": "",
+          "DefaultValue": "5",
+          "Required": false,
+          "Description": "Workflow-task pollers",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "egress_replicas",
+          "GoName": "EgressReplicas",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_EGRESS_REPLICAS",
+          "Flag": "",
+          "DefaultValue": "1",
+          "Required": false,
+          "Description": "Worker replicas sharing the egress rate budgets (0: 1)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "egress_user_per_minute",
+          "GoName": "EgressUserPerMinute",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_EGRESS_USER_PER_MINUTE",
+          "Flag": "",
+          "DefaultValue": "60",
+          "Required": false,
+          "Description": "Egress tool calls per minute per user, fleet-wide",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "egress_user_burst",
+          "GoName": "EgressUserBurst",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_EGRESS_USER_BURST",
+          "Flag": "",
+          "DefaultValue": "20",
+          "Required": false,
+          "Description": "Egress burst per user, fleet-wide",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "egress_user_max_concurrent",
+          "GoName": "EgressUserMaxConcurrent",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT",
+          "Flag": "",
+          "DefaultValue": "6",
+          "Required": false,
+          "Description": "Egress calls in flight per user, per replica",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "egress_host_max_concurrent",
+          "GoName": "EgressHostMaxConcurrent",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT",
+          "Flag": "",
+          "DefaultValue": "16",
+          "Required": false,
+          "Description": "Egress calls in flight to one destination host, per replica",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "egress_turn_max_parallel",
+          "GoName": "EgressTurnMaxParallel",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL",
+          "Flag": "",
+          "DefaultValue": "4",
+          "Required": false,
+          "Description": "Egress calls of one conversation turn run at once, per replica (the rest wait)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -39580,26 +40297,29 @@
         "server",
         "worker"
       ],
-      "ProtoFile": "config/v1/worker_config.proto",
-      "Line": 15
+      "ProtoFile": "reliant/config/v1/worker_config.proto",
+      "Line": 29,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     }
   ],
   "sources": {
-    "config/v1/analytics_config.proto": "2093382e19e6c0a59f28913b76fae435017337a229b93f167599e3198207fc94",
-    "config/v1/api_server_config.proto": "b42c317661471efc240cf0ecb2c02bafc9ef93130f20e9290d150215e077b322",
-    "config/v1/cli_config.proto": "5acd17311a1d616f1f6e54ee6d9c30a9ddf6c78474fd0308e80f2db99d71a55e",
-    "config/v1/config.proto": "470b5ebfc2dba63d9364338197ba52766a00f2bd2e43f63529c5f977351decdd",
-    "config/v1/control_plane_config.proto": "baedb9e18f40a3711bad8e7c0572ff37257dddff3f3ff46d7e4e4f57b0c1454a",
-    "config/v1/daemon_config.proto": "f50c66d5ee9c77735c670ce26b18216923002fee9f455a5db8ee013a4e0cb545",
-    "config/v1/db_config.proto": "566e7ebb67f0eaac98cccfac4a9baf948f319c1a928ea8cf0b7f837d214d1bd0",
-    "config/v1/gateway_config.proto": "c91125b938b40acad4037a936119ff1208d8fadc3ff59c0cf26cf0ed4aa3084f",
-    "config/v1/integrations_config.proto": "3f051e70d4f454b353726dfc7a381921afe61fa021acb318ccf0ce592670faac",
-    "config/v1/llm_config.proto": "4c697b1803e3b0f06470ac2538193be961dbf71d5be61c8712ab97d7488e257d",
-    "config/v1/observability_config.proto": "d5e01af322359c3358ebcd3bc16bf03fbf4be4bad2b03b52e75a9d320193001b",
-    "config/v1/preview_config.proto": "a8620fb35910b249c3b1bc0767fb615bdf699624526d7a237c62cb490fb9c425",
-    "config/v1/preview_url_config.proto": "fa0cc5f673ae266457eaa39150abaf020bfdda8d7395f54c47fef893a8653d4d",
-    "config/v1/server_config.proto": "ccf8db8ce398db64bf8f74386ad35612bf7fb9419ee55ade9e8acf86dbd46235",
-    "config/v1/worker_config.proto": "996b513dffbdddd6fde8289e20d7f8524a0a94f09305341294e83ccf19884b09",
+    "reliant/config/v1/analytics_config.proto": "aee736b02a56e865ba9da6e827efb0ce56267256b44e37f5fd3e703ea7e461b9",
+    "reliant/config/v1/api_server_config.proto": "db6320103f36deedcdac6129b5f050b26ee1891d2d8a22e392cfa6c4375889e1",
+    "reliant/config/v1/cli_config.proto": "8322a3c3d237061fd60e217ec3056224b68449c6b3104510dc00fec5d5bb0b8e",
+    "reliant/config/v1/config.proto": "c360c049f5c3342e9862a95e05d8e54f2f16c2379a37e5390bb1d99c5a93dc9f",
+    "reliant/config/v1/control_plane_config.proto": "5c26daf1c213883e634d445dd4305044d2d2c8f21e6366c73cb2707bf6ee46f7",
+    "reliant/config/v1/daemon_config.proto": "fbc8b5bedf7491cb111cc6f92c4e496673907a04548f0b64da6e3405f8e0919c",
+    "reliant/config/v1/db_config.proto": "dd8fd3b93c7988133b62480f364c94abf6545d002e24b7f8e8e3177d17357f02",
+    "reliant/config/v1/gateway_config.proto": "040bb180fa87e028678bdec8b6205b7b60ecf5066f3f564914940bc062352ac2",
+    "reliant/config/v1/integrations_config.proto": "653b9dea3f7ebd21eb6807f8f8c978eca88d85c38313fde86ddb855247377e06",
+    "reliant/config/v1/llm_config.proto": "73e6ea5332b67d3a3ff346a18bfe6513ec8e2c3fa0fa6b3a84a3b681ac5fa6c7",
+    "reliant/config/v1/observability_config.proto": "24706afec922fccc2157b46ca74c13986ddce2175e4097cc7776a8ec65308b50",
+    "reliant/config/v1/preview_config.proto": "ffbf20088c49cac7e5cd913d17d2f2d30e992df459998d706e6b96f0f5a2ab73",
+    "reliant/config/v1/preview_url_config.proto": "e9ff64e47a61c04e8f2a63311bfd4e41acb28ef0811581d527b88fbff20e3306",
+    "reliant/config/v1/server_config.proto": "dbb2a79cb172226c5ec4c48b07950e0446ff6e7f04e1b1057d4c85306d49e86c",
+    "reliant/config/v1/vault_config.proto": "e0c1e732880cc444791cb314c802fb5af73ee007c6a37c6333f6f4367a45d192",
+    "reliant/config/v1/web_config.proto": "a265cf8fa479b2018e0b05bc50e492b3dcf26855c581a66890a88a25a7790aeb",
+    "reliant/config/v1/worker_config.proto": "630ac749dd4f3e91502a5a5c77ea16f25fa30d2f7cf16f9198aa15a5cbde59ab",
     "reliant/v1/account.proto": "d7e5ce0de4321d271532eb749a53e2001e692bdf208a4b7b71d4816673eebf35",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
     "reliant/v1/approval.proto": "4ebbca862a2a5f88bb7f603d52d09933c296cbdc89e55d2abd1f58b76ecad6ce",
@@ -39611,10 +40331,10 @@
     "reliant/v1/connection.proto": "31ef55ce12e0a3862f02156e159049a5f84142b7f9978f2c5c939afa52a50b64",
     "reliant/v1/connector.proto": "604b069c652292d84d3c220ad54815a01b9d28670accd4fc75b042ffae8efcfe",
     "reliant/v1/daemon.proto": "81f841647a83dc20c756913fe6c358b77b00a2c686acdb05252818b415e8e8a1",
-    "reliant/v1/daemon_registry.proto": "3907ab3737af202ca408a7449f4b08d66be5137e99316f2fc226e991f1dbc699",
+    "reliant/v1/daemon_registry.proto": "409712b58dea048c4ccb419cf8af241d8f78a1313d95351c9a36d506126be93a",
     "reliant/v1/filesystem.proto": "140d121cbc7cebc799860129abf98389a867d0b128fbe36b0d6c000bf9b92a6d",
     "reliant/v1/forge.proto": "a065ade3885e8671952b6908f2986727eb1b4b478304dfe7772bc62be4078a00",
-    "reliant/v1/inbox.proto": "27964969ffaeafe7621bb6739018d03d83b67dc6e60e19be1b264c06227b34ea",
+    "reliant/v1/inbox.proto": "3674d17a4999e2cbdece60fcf227f1a52068616f22a28efff18b9c34f70608d3",
     "reliant/v1/integration.proto": "767cea1a652eb5c4ff2101c1f220e5e915566dd8ebda98567b4edfb26e420e0a",
     "reliant/v1/mcp.proto": "d27eec630292113ac64b4b2e3468e72516d1f5c211dbfe536c2730e43ed2efd1",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",
@@ -39624,21 +40344,21 @@
     "reliant/v1/preset.proto": "27acb3ba272869868343c82279adc59b24a15bdc22f500ea36e5aa73a709dae8",
     "reliant/v1/project.proto": "9cd193101501187b898646fa617f711dd1bbbd93fe63879871bac58c38226929",
     "reliant/v1/provider_account.proto": "50649efde02dd84bad1d334053b066859d0e8627b88b202e98447d6654f375e4",
-    "reliant/v1/question.proto": "566fff038348ec73c999cdad6a26291dcf82e42713de20dbb99b0d7f124d99c3",
+    "reliant/v1/question.proto": "b7bed3249ce684a4191444c9bb404bcee80fc346093493b91a4430173205c87c",
     "reliant/v1/repo.proto": "5ea880bc3bb10123c803298ab7fe6c6a3c57dde359b2f5b339e774ab880864a0",
     "reliant/v1/run.proto": "b0304388de799c989705f8ce41e8ec8ed725f2ecdae83c8be02ae284e461ca37",
     "reliant/v1/scenario.proto": "5be8a10f590bf6a518a4963e7ea5e9a2f847fa5d8f55a50ea07ee55e940e0a1b",
     "reliant/v1/settings.proto": "8e3021e862f33d2c381f0a96d89124d946eeea71563d5d9cb3218e5b805645c4",
     "reliant/v1/streaming.proto": "d2cd468dc58d6482db006c4c49c80c11302cc79f02f375461fd3c850d60cd3fa",
-    "reliant/v1/system.proto": "3d29b58d13060c34785bf626914244519786b34cf50e1871607c01f1b40e9599",
+    "reliant/v1/system.proto": "7a9eb1bc4d6a322cbb907ec1843f74815c9a10d01b3d2ee305aa945b4c48d666",
     "reliant/v1/task.proto": "9f4ad68ce4b0959f5f0028e98402bb86695b3a2c61cba037c478586d1c0aef5a",
     "reliant/v1/terminal.proto": "877157ed3b8127ca00b1e49597143a8fdf73d100ebf7867118541c95c809a43f",
     "reliant/v1/token.proto": "df7f634505ef8d0da2882feb4fe31865d541b2593df0c069159f2b6440e5f63e",
     "reliant/v1/tool_call.proto": "b5861a934a2b119031b609eb10cf77e6ba8ccce474d1bb0edbf5cd9fed56cc95",
-    "reliant/v1/tools_daemon.proto": "619e7af630046ea39abad05dfb538dfaafc7cfcacbe5a413489b2b05260a15d2",
-    "reliant/v1/trigger.proto": "0f2d477e782a056081d09805e1d3972fe7ac430604cb6252d743e51aa1ec2674",
+    "reliant/v1/tools_daemon.proto": "093e70e06ec18f1a4db9ef4416590b721dc8085192cba21ca9f2993d8b01b8c0",
+    "reliant/v1/trigger.proto": "de46d93ebb237117c5fdd274d2875abb96eaf13f8a53f732cae0bba7b9d18c67",
     "reliant/v1/workflow.proto": "bd8fa927bf1b9842617fda4c7d56e346ff6ee6d89247178752fb10b9c4f18c86",
-    "reliant/v1/workflow_v2.proto": "ab25a4ea3cdfdc1ab731f8eefde4fe45325da51d03e2f93ec1c1023b5e36eaf7",
+    "reliant/v1/workflow_v2.proto": "bfd48242abaed06a26e9a2b6aecd003493d423b96dc2671d2aac61cf39107d6a",
     "reliant/v1/worktree.proto": "ce353c761192377e35feb5ab9aa68f2b52981f0982b746f7597e51b7648fa24b"
   }
 }

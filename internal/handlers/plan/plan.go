@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -26,23 +27,26 @@ func (s *Service) getChatIDForPlan(ctx context.Context, plan *db.Plan) (string, 
 
 // planBelongsToUser checks if a plan belongs to a user via the thread's chat
 func (s *Service) planBelongsToUser(ctx context.Context, planID string, userID string) error {
+	if planID == "" {
+		return svcerr.InvalidArgument("plan_id is required")
+	}
 	plan, err := s.deps.Repo.GetPlan(ctx, planID)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, fmt.Errorf("plan not found"))
+		return svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
 
 	chatID, err := s.getChatIDForPlan(ctx, plan)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
-		return connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	if chat.UserID != userID {
-		return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("access denied"))
+		return svcerr.PermissionDenied("access denied")
 	}
 
 	return nil
@@ -55,21 +59,21 @@ func (s *Service) CreatePlan(
 ) (*connect.Response[reliantv1.CreatePlanResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
+	if req.Msg.ChatId == "" {
+		return nil, svcerr.InvalidArgument("chat_id is required")
+	}
+
 	// Verify user owns the chat
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("access denied"))
+		return nil, svcerr.PermissionDenied("access denied")
 	}
 
-	// Validate
-	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
-	}
 	if req.Msg.Title == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("title is required"))
+		return nil, svcerr.InvalidArgument("title is required")
 	}
 
 	statusVal := int32(req.Msg.Status)
@@ -87,8 +91,7 @@ func (s *Service) CreatePlan(
 	}
 
 	if err := s.deps.Repo.CreatePlan(ctx, plan); err != nil {
-		logging.ErrorContext(ctx, "Failed to create plan", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create plan"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create plan"))
 	}
 
 	if err := s.deps.Repo.EmitChatRefetch(ctx, req.Msg.ChatId, db.RefetchPlanTasks); err != nil {
@@ -128,7 +131,7 @@ func (s *Service) GetPlan(
 
 	plan, err := s.deps.Repo.GetPlan(ctx, req.Msg.PlanId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("plan not found"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
 
 	chatID, _ := s.getChatIDForPlan(ctx, plan)
@@ -160,20 +163,24 @@ func (s *Service) GetPlanByChatId(
 ) (*connect.Response[reliantv1.GetPlanByChatIdResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
+	if req.Msg.ChatId == "" {
+		return nil, svcerr.InvalidArgument("chat_id is required")
+	}
+
 	// Verify the chat belongs to the user
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	if chat.UserID != userID {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("access denied"))
+		return nil, svcerr.PermissionDenied("access denied")
 	}
 
 	// Get plans for this chat (via thread join)
 	plans, err := s.deps.Repo.ListPlansByChatID(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get plan: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
 
 	// If no plans found, return empty response
@@ -216,7 +223,7 @@ func (s *Service) UpdatePlan(
 
 	plan, err := s.deps.Repo.GetPlan(ctx, req.Msg.PlanId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("plan not found"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
 
 	chatID, _ := s.getChatIDForPlan(ctx, plan)
@@ -236,8 +243,7 @@ func (s *Service) UpdatePlan(
 	}
 
 	if err := s.deps.Repo.UpdatePlan(ctx, plan); err != nil {
-		logging.ErrorContext(ctx, "Failed to update plan", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update plan"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update plan"))
 	}
 
 	if err := s.deps.Repo.EmitChatRefetch(ctx, chatID, db.RefetchPlanTasks); err != nil {
@@ -278,14 +284,13 @@ func (s *Service) DeletePlan(
 	// Get chatID before deleting
 	plan, err := s.deps.Repo.GetPlan(ctx, req.Msg.PlanId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("plan not found"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
 
 	chatID, _ := s.getChatIDForPlan(ctx, plan)
 
 	if err := s.deps.Repo.DeletePlan(ctx, req.Msg.PlanId); err != nil {
-		logging.ErrorContext(ctx, "Failed to delete plan", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete plan"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete plan"))
 	}
 
 	if err := s.deps.Repo.EmitChatRefetch(ctx, chatID, db.RefetchPlanTasks); err != nil {
@@ -308,8 +313,7 @@ func (s *Service) ListPlanTasks(
 
 	tasks, err := s.deps.Repo.ListTasksByPlan(ctx, req.Msg.PlanId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list tasks", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list tasks"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list tasks"))
 	}
 
 	protoTasks := make([]*reliantv1.Task, len(tasks))

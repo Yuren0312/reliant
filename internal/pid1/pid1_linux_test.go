@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // The tests run this test binary as the process under test. roleEnv picks
@@ -34,11 +36,35 @@ const (
 	// ttyEnv makes the program the terminal one: read a line from stdin,
 	// then count the SIGINTs a single ^C delivers.
 	ttyEnv = "RELIANT_PID1_TEST_TTY"
+	// roundsEnv is how many rounds of "a child exits while its orphan dies at
+	// the init" the program runs before reporting ready; unset means
+	// fullRounds. Each round is three execs, and a loaded machine sustains
+	// only a few execs a second across all its processes, so the rounds are
+	// what decides whether ready arrives inside the package's -short budget.
+	roundsEnv = "RELIANT_PID1_TEST_ROUNDS"
 
 	// termExitCode is what the program exits with on SIGTERM. Seeing it as
 	// the init's status proves the signal was forwarded AND the code passed
 	// back.
 	termExitCode = 42
+	// fullRounds is the program's round count in full mode; shortRounds under
+	// -short, where five orphans plus these rounds already exercise the init's
+	// reaping alongside the program's own Waits.
+	fullRounds  = 30
+	shortRounds = 4
+
+	// settle bounds every wait on the machine below: each step of the
+	// program on its way to ready, orphans landing on the init, zombies
+	// being reaped, the init exiting. A deadline is paid only by a run that
+	// is already failing, so it is set for a starved machine (a few execs a
+	// second), not a quiet one. Ready is bounded per step, not as a whole:
+	// the program's ~95 execs took 12s on an idle 32-core box under -race
+	// and over 30s inside the release gate's full -race run, so one deadline
+	// for all of them measured the machine's load, not a hang.
+	settle = 30 * time.Second
+	// progressLine is what the program prints after each step on its way to
+	// ready; awaitReady restarts its stall clock on every line.
+	progressLine = "progress"
 	// liveOrphans is how many orphans the program leaves running when it
 	// reports ready, so the test can see they were reparented to the init.
 	liveOrphans = 5
@@ -87,7 +113,11 @@ func runProgram() {
 	// Each shell exits 7 while its background sleep lives on, reparented to
 	// the init and dying there moments later, so the init is reaping while
 	// these Waits run. Every Wait must still get its own child's status.
-	for i := 0; i < 30; i++ {
+	rounds := fullRounds
+	if v, err := strconv.Atoi(os.Getenv(roundsEnv)); err == nil {
+		rounds = v
+	}
+	for i := 0; i < rounds; i++ {
 		err := exec.Command("sh", "-c", "sleep 0.01 & exit 7").Run()
 		var exitErr *exec.ExitError
 		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 7 {
@@ -98,6 +128,7 @@ func runProgram() {
 			fmt.Fprintf(os.Stderr, "exec.Cmd.Wait for true returned %v, want nil\n", err)
 			os.Exit(3)
 		}
+		fmt.Println(progressLine)
 	}
 	if os.Getenv(dieEnv) == "1" {
 		// No live orphans: nothing would kill them once the init is gone.
@@ -109,6 +140,7 @@ func runProgram() {
 			fmt.Fprintf(os.Stderr, "orphaning sleep: %v\n", err)
 			os.Exit(3)
 		}
+		fmt.Println(progressLine)
 	}
 	fmt.Println("ready")
 	<-sigs
@@ -209,6 +241,7 @@ func openPTY(t *testing.T) (master, slave *os.File) {
 // container runtime; where they are disabled the test skips and the
 // subreaper test below still covers the init loop.
 func TestInit_AsPID1ReapsOrphansAndPassesSignalsAndStatus(t *testing.T) {
+	testkit.Slow(t, "forks real processes to reap and signal")
 	t.Parallel()
 	cmd, lines := helper(t, "pid1")
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -226,6 +259,7 @@ func TestInit_AsPID1ReapsOrphansAndPassesSignalsAndStatus(t *testing.T) {
 // TestSupervise_AsSubreaperReapsOrphansAndPassesSignalsAndStatus runs the
 // same init loop without namespaces, adopting orphans as a subreaper.
 func TestSupervise_AsSubreaperReapsOrphansAndPassesSignalsAndStatus(t *testing.T) {
+	testkit.Slow(t, "forks real processes to reap and signal")
 	t.Parallel()
 	cmd, lines := helper(t, "subreaper")
 	if err := cmd.Start(); err != nil {
@@ -238,7 +272,8 @@ func TestSupervise_AsSubreaperReapsOrphansAndPassesSignalsAndStatus(t *testing.T
 func TestSupervise_ReportsDeathBySignalAs128PlusSignal(t *testing.T) {
 	t.Parallel()
 	cmd, lines := helper(t, "subreaper")
-	cmd.Env = append(cmd.Env, dieEnv+"=1")
+	// Only the exit status is under test; the rounds would just delay ready.
+	cmd.Env = append(cmd.Env, dieEnv+"=1", roundsEnv+"=0")
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -282,7 +317,7 @@ func assertSupervises(t *testing.T, cmd *exec.Cmd, lines <-chan string) {
 	// one is. They live until killed below, so none can exit, be reaped and
 	// go uncounted. Matched by command line: a short-lived sleep from the
 	// program's earlier rounds may still be about.
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(settle)
 	for {
 		n := countChildren(t, initPid, isLiveOrphan)
 		if n >= liveOrphans {
@@ -297,7 +332,7 @@ func assertSupervises(t *testing.T, cmd *exec.Cmd, lines <-chan string) {
 	// End them. Whatever is left after that is a zombie nobody will ever
 	// wait for.
 	killChildren(t, initPid, isLiveOrphan)
-	deadline = time.Now().Add(5 * time.Second)
+	deadline = time.Now().Add(settle)
 	for {
 		zombies := countChildren(t, initPid, func(p proc) bool { return p.state == "Z" })
 		alive := countChildren(t, initPid, func(p proc) bool { return p.comm == "sleep" && p.state != "Z" })
@@ -339,7 +374,7 @@ func helper(t *testing.T, role string) (*exec.Cmd, <-chan string) {
 	// -test.run=^$ makes a helper that somehow misses its role run no tests
 	// rather than recursing into these ones.
 	cmd := exec.Command(os.Args[0], "-test.run=^$")
-	cmd.Env = withRole(os.Environ(), role)
+	cmd.Env = append(withRole(os.Environ(), role), roundsEnv+"="+strconv.Itoa(testRounds()))
 	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
 	t.Cleanup(func() {
@@ -352,6 +387,13 @@ func helper(t *testing.T, role string) (*exec.Cmd, <-chan string) {
 		_, _ = cmd.Process.Wait()
 	})
 	return cmd, lines
+}
+
+func testRounds() int {
+	if testing.Short() {
+		return shortRounds
+	}
+	return fullRounds
 }
 
 // withRole sets roleEnv in env. It replaces any inherited value rather than
@@ -367,17 +409,23 @@ func withRole(env []string, role string) []string {
 	return append(out, roleEnv+"="+role)
 }
 
+// awaitReady waits for the program's "ready", allowing settle between any two
+// lines it prints: a program still making progress is slow, not stuck.
 func awaitReady(t *testing.T, lines <-chan string) {
 	t.Helper()
-	timeout := time.After(30 * time.Second)
+	steps := 0
+	stall := time.NewTimer(settle)
+	defer stall.Stop()
 	for {
 		select {
 		case line := <-lines:
 			if line == "ready" {
 				return
 			}
-		case <-timeout:
-			t.Fatal("the program never reported ready")
+			steps++
+			stall.Reset(settle)
+		case <-stall.C:
+			t.Fatalf("the program never reported ready: no progress for %s after %d steps", settle, steps)
 		}
 	}
 }
@@ -393,7 +441,7 @@ func waitExit(t *testing.T, cmd *exec.Cmd) int {
 			t.Fatalf("the init itself died of %v; it should exit with its program's status", ws.Signal())
 		}
 		return ws.ExitStatus()
-	case <-time.After(15 * time.Second):
+	case <-time.After(settle):
 		t.Fatal("the init did not exit")
 		return -1
 	}

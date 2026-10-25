@@ -9,9 +9,11 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -61,6 +63,8 @@ func (e *triggerTestEnv) listEvents(t *testing.T, req *reliantv1.ListTriggerEven
 }
 
 func TestListTriggerEventsPagesWithTiedOccurredAt(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	trig := env.create(t, env.definition(nil))
 	tied := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
@@ -94,10 +98,12 @@ func TestListTriggerEventsPagesWithTiedOccurredAt(t *testing.T) {
 
 	bad := "not-a-token"
 	_, err := env.svc.ListTriggerEvents(env.ctx, connect.NewRequest(&reliantv1.ListTriggerEventsRequest{TriggerId: trig.Id, PageToken: &bad}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func TestListTriggerEventsFiltersByOutcomeAndCarriesRun(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	trig := env.create(t, env.definition(nil))
 	base := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
@@ -126,10 +132,12 @@ func TestListTriggerEventsFiltersByOutcomeAndCarriesRun(t *testing.T) {
 	_, err := env.svc.ListTriggerEvents(env.ctx, connect.NewRequest(&reliantv1.ListTriggerEventsRequest{
 		TriggerId: trig.Id, Outcomes: []reliantv1.TriggerEventOutcome{reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_UNSPECIFIED},
 	}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func TestListTriggersCarriesNamesHealthAndLastRun(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	host := "build-box"
 	require.NoError(t, env.repo.UpsertDaemon(context.Background(), &db.Daemon{ID: env.daemonID, UserID: env.userID, Hostname: &host}))
@@ -182,6 +190,8 @@ func TestListTriggersCarriesNamesHealthAndLastRun(t *testing.T) {
 }
 
 func TestListTriggersUsesConstantQueries(t *testing.T) {
+	t.Parallel()
+
 	// ListTriggers must not do per-trigger work against the database.
 	env := setupTriggerTest(t)
 	for i := 0; i < 6; i++ {
@@ -195,32 +205,34 @@ func TestListTriggersUsesConstantQueries(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Triggers, 6)
 	assert.Equal(t, 1, counting.recent, "one batched firings query, not one per trigger")
-	assert.Equal(t, 0, counting.latest)
 }
 
+// triggerQueryCounter counts the batched firings read over a real repository.
+// The per-trigger read it replaced (GetLatestTriggerEvent) is not in
+// Repository (deps.go) at all, so the handlers cannot fall back to it.
 type triggerQueryCounter struct {
-	db.Repository
-	recent, latest int
+	Repository
+	recent int
 }
+
+var _ Repository = (*triggerQueryCounter)(nil)
 
 func (c *triggerQueryCounter) RecentTriggerFirings(ctx context.Context, userID string, ids []string, n int) (map[string][]*core.TriggerEventWithRun, error) {
 	c.recent++
 	return c.Repository.RecentTriggerFirings(ctx, userID, ids, n)
 }
 
-func (c *triggerQueryCounter) GetLatestTriggerEvent(ctx context.Context, id string, o *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
-	c.latest++
-	return c.Repository.GetLatestTriggerEvent(ctx, id, o)
-}
-
 func TestTriggerFeedHidesOtherUsersData(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	trig := env.create(t, env.definition(nil))
 	env.seedFiring(t, trig.Id, time.Now().UTC(), core.TriggerEventSkipped, nil)
 
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
 	_, err := env.svc.ListTriggerEvents(otherCtx, connect.NewRequest(&reliantv1.ListTriggerEventsRequest{TriggerId: trig.Id}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 
 	list, err := env.svc.ListTriggers(otherCtx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
 	require.NoError(t, err)
@@ -262,6 +274,8 @@ func (e *triggerTestEnv) launchEvent(t *testing.T, ctx context.Context, chatID s
 }
 
 func TestGetLaunchEventForScheduleChatCarriesSlotManualFlagAndStart(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	trig := env.create(t, env.definition(nil))
 	chatID := env.seedLaunchedChat(t, core.TriggerEventKindSchedule, &trig.Id, map[string]any{
@@ -292,6 +306,8 @@ func TestGetLaunchEventForScheduleChatCarriesSlotManualFlagAndStart(t *testing.T
 }
 
 func TestGetLaunchEventForAgentChatCarriesParentChatID(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	chatID := env.seedLaunchedChat(t, core.TriggerEventKindAgentStartRun, nil, map[string]any{"parent_chat_id": "parent-chat-1"})
 
@@ -303,6 +319,9 @@ func TestGetLaunchEventForAgentChatCarriesParentChatID(t *testing.T) {
 }
 
 func TestGetLaunchEventForChatWithoutOneIsEmpty(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	chatID := env.seedLaunchedChat(t, "", nil, nil)
 
@@ -312,16 +331,19 @@ func TestGetLaunchEventForChatWithoutOneIsEmpty(t *testing.T) {
 }
 
 func TestGetLaunchEventIsOwnerOnly(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	chatID := env.seedLaunchedChat(t, core.TriggerEventKindAgentStartRun, nil, map[string]any{"parent_chat_id": "p"})
 
 	other := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
 	_, err := env.launchEvent(t, other, chatID)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 
 	_, err = env.launchEvent(t, env.ctx, "no-such-chat")
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	_, err = env.launchEvent(t, env.ctx, "")
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }

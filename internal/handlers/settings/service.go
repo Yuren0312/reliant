@@ -11,7 +11,6 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/controlplane"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
@@ -28,18 +27,16 @@ type LLMKeyMinter interface {
 	MintLLMKey(ctx context.Context, jwt, deviceName string) (controlplane.LLMKey, error)
 }
 
-// Deps holds dependencies for the settings service. internal/grpc/server.go
-// constructs it today; forge's composition root takes over in P3c
-// (research/forge-migration/PLAN.md). The rpc methods on *Service are where
-// this service's logic lives; see the forge `api` / `services` skill.
+// Deps holds dependencies for the settings service. The composition graph
+// constructs it (internal/app/compose.go). The rpc methods on *Service are
+// where this service's logic lives; see the forge `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// Repo stores settings, provider credentials and privacy choices. It is
-	// the whole db.Repository: the handlers call over 25 of its methods and
-	// hand it to drivers.HasStaleReliantKey, which takes the whole thing.
-	Repo db.Repository
+	// Repo stores settings, provider credentials and privacy choices
+	// (deps.go).
+	Repo Repository
 	// ControlPlane mints the Reliant provider's LLM key (SyncReliantProvider).
 	// server.go passes the deployment's controlplane adapter.
 	ControlPlane LLMKeyMinter
@@ -62,6 +59,12 @@ type Deps struct {
 	// unlabelled, and signing in again replaces it instead of adding another.
 	// forge:optional-dep
 	GitHubIdentity func(ctx context.Context, accessToken string) (GitHubUser, error)
+	// ChatWaker sends a capacity wake to the user's chats blocked on a
+	// provider once a sign-in adds or re-auths an account, or the Reliant key
+	// is synced, so each goes on as a whole (chat.Service.WakeUserChats). Nil
+	// leaves them to their own resets.
+	// forge:optional-dep
+	ChatWaker ChatWaker
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

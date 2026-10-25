@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/http2/h2c"
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -131,7 +132,7 @@ func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
 // leaseRecordingRepo parks state-message writes (a FileSystemChanged's project
 // lookup) until released, and records lease renewals as they happen.
 type leaseRecordingRepo struct {
-	db.Repository
+	Repository
 
 	stateEntered chan struct{}
 	release      chan struct{}
@@ -139,6 +140,8 @@ type leaseRecordingRepo struct {
 	mu       sync.Mutex
 	renewals []*db.DaemonAttachment
 }
+
+var _ Repository = (*leaseRecordingRepo)(nil)
 
 func (r *leaseRecordingRepo) GetProjectByPathAndUser(context.Context, string, string) (*db.Project, error) {
 	r.stateEntered <- struct{}{}
@@ -198,26 +201,14 @@ func TestLeaseRenewalIsNotQueuedBehindStatePersistence(t *testing.T) {
 		renewal.AttachedAt, conn.attachedAt)
 }
 
-// releaseRecordingRepo satisfies teardown's lease release without a database.
-type releaseRecordingRepo struct {
-	db.Repository
-	mu       sync.Mutex
-	released []string
-}
-
-func (r *releaseRecordingRepo) ReleaseDaemonAttachment(_ context.Context, daemonID string, _ time.Time) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.released = append(r.released, daemonID)
-	return nil
-}
-
 // A stream the gateway has read nothing from for longer than the threshold is
 // dead, however recently the gateway itself wrote to it. The gateway's 15s
 // heartbeat send succeeds into a buffer whether or not the daemon's side is
 // moving, so liveness keyed on it never runs out.
 func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.T) {
-	repo := &releaseRecordingRepo{}
+	// Teardown's lease release, without a database; the recorder keeps what
+	// was released.
+	repo := &MockRepository{ReleaseDaemonAttachmentFunc: func(context.Context, string, time.Time) error { return nil }}
 	svc := newTestService(repo)
 	t.Cleanup(svc.Close)
 
@@ -254,9 +245,13 @@ func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.
 	default:
 		t.Fatal("reaping must close the connection so its stream handler ends and the daemon redials")
 	}
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(silent.closedReason()),
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(silent.closedReason()),
 		"the stream must end with a status the daemon treats as retryable, not a bare EOF")
-	require.Equal(t, []string{silent.daemonID}, repo.released)
+	var released []string
+	for _, call := range repo.Calls("ReleaseDaemonAttachment") {
+		released = append(released, call.Args[1].(string))
+	}
+	require.Equal(t, []string{silent.daemonID}, released)
 	require.True(t, svc.HasConnectedDaemonsForUser(reading.userID),
 		"a stream read from 10s ago is alive and must not be reaped")
 }
@@ -292,6 +287,12 @@ func TestServerHeartbeatAcknowledgesTheNewestDaemonHeartbeatRead(t *testing.T) {
 // The stream stays open until the test closes it or ends.
 func dialDaemon(t *testing.T, svc *Service, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
+	return dialDaemonAs(t, svc, userID, &reliantv1.DaemonRegister{DaemonId: daemonID, Hostname: "ws-" + daemonID[:8], Platform: "linux", DaemonType: "local"})
+}
+
+// dialDaemonAs is dialDaemon with the registration the test chooses.
+func dialDaemonAs(t *testing.T, svc *Service, userID string, reg *reliantv1.DaemonRegister) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+	t.Helper()
 	routes := http.NewServeMux()
 	svc.Register(routes) // the production mount
 	// Streams.Install is the listener's edge: the abortable request body
@@ -318,7 +319,7 @@ func dialDaemon(t *testing.T, svc *Service, userID, daemonID string) *connect.Bi
 	stream.RequestHeader().Set("X-Test-User", userID)
 	t.Cleanup(func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() })
 	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
-		Register: &reliantv1.DaemonRegister{DaemonId: daemonID, Hostname: "ws-" + daemonID[:8], Platform: "linux", DaemonType: "local"},
+		Register: reg,
 	}}))
 	msg, err := stream.Receive()
 	require.NoError(t, err)
@@ -417,9 +418,11 @@ func TestHeartbeatRestoresAMissingLeaseAndDisconnectIsStillPrompt(t *testing.T) 
 
 // livenessDownRepo lists the user's daemon but cannot read the lease table.
 type livenessDownRepo struct {
-	db.Repository
+	daemon_registry.Repository
 	daemon *db.Daemon
 }
+
+var _ daemon_registry.Repository = livenessDownRepo{}
 
 func (r livenessDownRepo) ListDaemonsByUserID(context.Context, string) ([]*db.Daemon, error) {
 	return []*db.Daemon{r.daemon}, nil
@@ -451,8 +454,8 @@ func TestRegistryReportsUnavailableRatherThanDisconnectedWhenLivenessCannotBeRea
 	if err == nil {
 		t.Fatalf("ListDaemons answered %v for a daemon whose liveness it could not read", resp.Msg.GetDaemons()[0].GetStatus())
 	}
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 
 	_, err = registry.GetDaemon(ctx, connect.NewRequest(&reliantv1.GetDaemonRequest{DaemonId: daemon.ID}))
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 }

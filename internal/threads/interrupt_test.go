@@ -8,8 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -169,6 +172,9 @@ func insertInterruptToolCall(t *testing.T, repo *db.Repo, id, chatID, threadID, 
 }
 
 func TestInterruptThread_CancelsExecutingToolCallsOnThread(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -203,6 +209,9 @@ func TestInterruptThread_CancelsExecutingToolCallsOnThread(t *testing.T) {
 }
 
 func TestInterruptThread_LeavesOtherThreadsAlone(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -228,6 +237,9 @@ func TestInterruptThread_LeavesOtherThreadsAlone(t *testing.T) {
 }
 
 func TestInterruptThread_IgnoresAlreadyFinishedToolCalls(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -264,6 +276,8 @@ func TestInterruptThread_IgnoresAlreadyFinishedToolCalls(t *testing.T) {
 // the EXECUTING write there is a real window, and an interrupt landing inside it
 // has to count -- otherwise the user's stop silently does nothing.
 func TestInterruptThread_CancelsPendingToolCallsOnThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -286,6 +300,9 @@ func TestInterruptThread_CancelsPendingToolCallsOnThread(t *testing.T) {
 }
 
 func TestInterruptThread_NothingExecutingSucceeds(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -308,6 +325,9 @@ func TestInterruptThread_NothingExecutingSucceeds(t *testing.T) {
 }
 
 func TestInterruptThread_ReportsUndeliverableCancels(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -333,6 +353,9 @@ func TestInterruptThread_ReportsUndeliverableCancels(t *testing.T) {
 }
 
 func TestInterruptThread_LeavesQueuedMailboxForDelivery(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -372,6 +395,8 @@ func TestInterruptThread_LeavesQueuedMailboxForDelivery(t *testing.T) {
 }
 
 func TestInterruptThread_RejectsWrongOwnerAndCrossChat(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -383,15 +408,17 @@ func TestInterruptThread_RejectsWrongOwnerAndCrossChat(t *testing.T) {
 	_, err := svc.InterruptThread(ctx, InterruptThreadOpts{
 		UserID: "other-user", ChatID: fx.chatID, ThreadID: fx.rootThreadID,
 	})
-	require.ErrorIs(t, err, ErrNotFound)
+	require.ErrorIs(t, err, svcerr.ErrNotFound)
 
 	_, err = svc.InterruptThread(ctx, InterruptThreadOpts{
 		UserID: fx.userID, ChatID: fx.chatID, ThreadID: otherFx.rootThreadID,
 	})
-	require.ErrorIs(t, err, ErrNotFound)
+	require.ErrorIs(t, err, svcerr.ErrNotFound)
 }
 
 func TestInterruptThread_RequiresChatThreadAndUser(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -403,19 +430,19 @@ func TestInterruptThread_RequiresChatThreadAndUser(t *testing.T) {
 		UserID:   fx.userID,
 		ThreadID: fx.rootThreadID,
 	})
-	require.ErrorIs(t, err, ErrInvalidArgument)
+	require.ErrorIs(t, err, svcerr.ErrInvalidArgument)
 
 	_, err = svc.InterruptThread(ctx, InterruptThreadOpts{
 		UserID: fx.userID,
 		ChatID: fx.chatID,
 	})
-	require.ErrorIs(t, err, ErrInvalidArgument)
+	require.ErrorIs(t, err, svcerr.ErrInvalidArgument)
 
 	_, err = svc.InterruptThread(ctx, InterruptThreadOpts{
 		ChatID:   fx.chatID,
 		ThreadID: fx.rootThreadID,
 	})
-	require.ErrorIs(t, err, ErrInvalidArgument)
+	require.ErrorIs(t, err, svcerr.ErrInvalidArgument)
 }
 
 // orderRecordingCanceler and orderRecordingSignaler write into one shared,
@@ -452,6 +479,8 @@ func (s orderRecordingSignaler) SignalWorkflow(_ context.Context, _, _, _ string
 // tools are not idempotent, so a re-entered call is a correctness bug. This
 // test fails if the signal is ever moved back in front of the cancel push.
 func TestInterruptThread_CancelsToolsBeforeSignalingWorkflow(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -481,6 +510,8 @@ func TestInterruptThread_CancelsToolsBeforeSignalingWorkflow(t *testing.T) {
 }
 
 func TestInterruptThread_ReportsUndeliverableWorkflowSignal(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -508,6 +539,8 @@ func TestInterruptThread_ReportsUndeliverableWorkflowSignal(t *testing.T) {
 // tool_call_id returns the recorded cancellation instead of running the tool
 // again (an interrupted spawn_status(wait) otherwise restarts its whole wait).
 func TestInterruptThread_RecordsCancellationDurablyImmediately(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -544,6 +577,8 @@ func TestInterruptThread_RecordsCancellationDurablyImmediately(t *testing.T) {
 // A tool call that already FINISHED keeps its real outcome. Interrupt cancels
 // what is in flight; it must not rewrite history for work the user already has.
 func TestInterruptThread_DoesNotRewriteAlreadyFinishedCalls(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -572,6 +607,8 @@ func TestInterruptThread_DoesNotRewriteAlreadyFinishedCalls(t *testing.T) {
 // A spawned sub-agent runs alongside the root, and stopping the root is not
 // a request to stop the child.
 func TestInterruptThread_DurableCancelIsScopedToTheThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

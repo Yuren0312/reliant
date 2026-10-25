@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -21,7 +22,7 @@ import (
 
 type testEnv struct {
 	t       *testing.T
-	repo    db.Repository
+	repo    *db.Repo
 	service *Service
 	ctx     context.Context
 }
@@ -262,6 +263,9 @@ func (e *testEnv) verifyMessages(msgs []*db.Message, expectedOrdinals []int64, e
 
 // TestBranchingScenarios tests various message resolution scenarios with branching
 func TestBranchingScenarios(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
+	t.Parallel()
+
 	t.Run("simple_branch_inherits_parent_messages", func(t *testing.T) {
 		env := newTestEnv(t)
 

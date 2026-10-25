@@ -2,9 +2,10 @@ package project_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -63,20 +64,20 @@ func ownedProject() *db.Project {
 // ownedProjectRepo is a store holding only ownedProject, with no nested
 // repos. Every other project is not found, as GetProject and
 // GetProjectWithUserCheck answer.
-func ownedProjectRepo(t *testing.T) *project.StubRepo {
+func ownedProjectRepo(t *testing.T) *project.MockRepository {
 	t.Helper()
-	return &project.StubRepo{
+	return &project.MockRepository{
 		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
 			if id == "p-1" && userID == "test-user" {
 				return ownedProject(), nil
 			}
-			return nil, errors.New("project not found")
+			return nil, core.ErrProjectNotFound
 		},
 		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
 			if id == "p-1" {
 				return ownedProject(), nil
 			}
-			return nil, errors.New("project not found")
+			return nil, svcerr.NotFound("project")
 		},
 		ListReposByProjectFunc: func(context.Context, string) ([]*core.Repo, error) { return nil, nil },
 	}
@@ -91,7 +92,7 @@ func newService(t *testing.T, store project.Repository, router project.Router) *
 
 // onDaemon is a store where ownedProject is cloned at /clone on daemon d-1,
 // on its default branch.
-func onDaemon(t *testing.T) *project.StubRepo {
+func onDaemon(t *testing.T) *project.MockRepository {
 	t.Helper()
 	store := ownedProjectRepo(t)
 	store.ListProjectDaemonsForProjectFunc = func(_ context.Context, projectID string) ([]*core.ProjectDaemon, error) {

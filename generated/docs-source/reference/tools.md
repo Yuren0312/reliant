@@ -42,9 +42,9 @@ Tools are organized by tags for filtering:
 - [Planning & Task Management](#planning--task-management) (10 tools)
 - [File Operations](#file-operations) (8 tools)
 - [Information Retrieval](#information-retrieval) (6 tools)
-- [Workflow Management](#workflow-management) (20 tools)
+- [Workflow Management](#workflow-management) (22 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (67 tools)
+- [Other Tools](#other-tools) (69 tools)
 
 ---
 
@@ -982,24 +982,26 @@ WHEN TO USE THIS TOOL:
 HOW TO USE:
 - Provide the URL to fetch content from
 - Specify the desired output format (text, markdown, or html)
-- Optionally set a timeout for the request
+- Optionally set a timeout for the request (default 30s, hard cap 60s)
 
 FEATURES:
 - Automatic content extraction using Mozilla Readability (strips nav, ads, footers)
 - Supports three output formats: text, markdown, and html
-- Automatically handles HTTP redirects
+- Follows up to 5 HTTP redirects, http/https only
 - Detects likely JavaScript-rendered pages and warns you
 - Sets reasonable timeouts to prevent hanging
 
 PARAMETERS:
-- max_size: Maximum bytes to fetch (default: 16000, ~16KB)
-  Prevents downloading huge files that could overwhelm context
+- max_size: Maximum bytes to read from the response (default: 16000, ~16KB; hard cap: 1048576, 1 MiB).
+  Values above the cap are lowered to it. When the response is longer than the limit it is
+  cut off and a "[Content truncated ...]" note is appended; the call still succeeds. The limit
+  applies to the decompressed body.
 
 IMPORTANT LIMITATIONS:
 - Cannot render JavaScript. Single-page apps (SPAs) will return little or no content.
   The response metadata will include possible_js_rendered=true when this is detected.
   For JS-heavy sites, consider using browser tools instead.
-- Default maximum response size is 16KB (use max_size to adjust)
+- Default maximum response size is 16KB (use max_size to raise it, up to 1 MiB)
 - Only supports HTTP and HTTPS protocols
 - Cannot handle authentication or cookies
 - Some websites may block automated requests
@@ -1011,7 +1013,8 @@ TIPS FOR BETTER RESULTS:
 - Use text or markdown format for documentation (html returns raw markup with all chrome)
 - If the response says possible_js_rendered=true, the page needs JavaScript to render.
   Try finding an alternative URL, a raw content source, or use browser tools.
-- Adjust max_size for larger documents (but consider context limits)
+- Adjust max_size for larger documents, up to the 1 MiB cap (but consider context limits)
+- Pages larger than 1 MiB are always truncated; look for a smaller raw/API URL instead
 
 RESPONSE METADATA:
 - content_length: Size of the extracted content
@@ -1336,6 +1339,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`delete_scenario`](#delete_scenario) | workflow | Delete a test scenario. |
 | [`edit_scenario`](#edit_scenario) | workflow | Make precise text replacements in a scenario's YAML definition. |
 | [`edit_workflow`](#edit_workflow) | workflow | Make precise text replacements in the workflow YAML. |
+| [`fire_trigger`](#fire_trigger) | workflow, runs | Run an existing trigger once now, using its saved workflow, inputs, machine and connections. Neve... |
 | [`get_cel_reference`](#get_cel_reference) | workflow, readonly | Gets the CEL expression reference for workflow development. |
 | [`get_integration_schema`](#get_integration_schema) | workflow, readonly | Get the full schema of one integration action (or trigger type) by ref. |
 | [`get_preset`](#get_preset) | workflow, readonly | Gets the full configuration of a preset. |
@@ -1344,6 +1348,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`get_workflow_suggestions`](#get_workflow_suggestions) | workflow, readonly | Returns static design suggestions for building workflows. |
 | [`list_presets`](#list_presets) | workflow, readonly | Lists available presets for agent nodes. |
 | [`list_scenarios`](#list_scenarios) | workflow, readonly | List all test scenarios for the current workflow. |
+| [`list_trigger_events`](#list_trigger_events) | workflow, readonly | Inspect an existing trigger's firing history, newest first: event id, time, outcome, detail, laun... |
 | [`list_triggers`](#list_triggers) | workflow, readonly | List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integra... |
 | [`list_workflows`](#list_workflows) | workflow, readonly | Lists all available workflows (builtin, project, and user-created). |
 | [`run_scenario`](#run_scenario) | workflow | Run an existing test scenario by name. |
@@ -1480,6 +1485,18 @@ every current error and warning.
   "old_string": "  - id: agent\n    type: call_llm",
   "new_string": "  - id: agent\n    type: call_llm\n    model: \"{{inputs.model}}\""
 }
+
+---
+
+### fire_trigger
+
+**Tags:** `workflow`, `runs`
+
+Run an existing trigger once now, using its saved workflow, inputs, machine and connections. Never creates, enables or changes a trigger.
+
+This is a manual fire: it bypasses enabled and overlap checks, so even a paused trigger may run once without being enabled. It can start real work with the trigger's saved privileges. Use only when the user asks to run or test that activation.
+
+Returns fire_workflow_id: the asynchronous firing was accepted, NOT proof that a run launched or succeeded. Do not retry just because the run is not visible yet: each call starts another fire. Inspect list_trigger_events for this trigger, then get_run with the resulting chat_id.
 
 ---
 
@@ -1646,6 +1663,16 @@ Use this to see what scenarios exist and their current state.
 
 Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.
+
+---
+
+### list_trigger_events
+
+**Tags:** `workflow`, `readonly`
+
+Inspect an existing trigger's firing history, newest first: event id, time, outcome, detail, launched chat_id and current run state. Read-only; never fires or changes a trigger. Raw event payloads are not returned.
+
+Use after fire_trigger to see whether a firing launched, skipped or failed; acceptance of a manual fire is not a successful run. Recording is asynchronous, so an empty page may mean the firing has not been recorded yet. Use get_run with a launched chat_id for details. Concurrent fires can appear: do not assume the newest event necessarily belongs to your call. Match fire_workflow_id from fire_trigger to the event with that exact ID, then use its chat_id; do not guess from ordering. Continue with next_page_token when present.
 
 ---
 
@@ -2048,7 +2075,7 @@ _Miscellaneous tools and utilities._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`ask_user`](#ask_user) | - | Ask the user one or more questions and wait for their responses. Use this when you need to: |
+| [`ask_user`](#ask_user) | coding:default, coding:plan | Ask the user one or more questions. By default the question is posted to the user (in the chat an... |
 | [`component_library`](#component_library) | readonly, coding:plan | Component library with 61 production-ready React/TypeScript components for building UIs, dashboar... |
 | [`control_run`](#control_run) | runs | Pause, resume or cancel another top-level run the user owns. |
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
@@ -2086,6 +2113,7 @@ _Miscellaneous tools and utilities._
 | [`gmail__message_list`](#gmail__message_list) | integration | List message ids in the mailbox, newest first, matching q (Gmail's search box syntax: "from:ann i... |
 | [`gmail__message_send`](#gmail__message_send) | integration | Send an email as the connected Google account. Give to (and optionally cc and bcc) as addresses, ... |
 | [`http__request`](#http__request) | integration | Send an HTTP request to a public http(s) URL and return the status, headers and body. Private, lo... |
+| [`list_pending_questions`](#list_pending_questions) | readonly | List the questions you and your sub-agents have asked the user (ask_user) that are still unanswered. |
 | [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
@@ -2114,15 +2142,24 @@ _Miscellaneous tools and utilities._
 | [`twilio__message_send`](#twilio__message_send) | integration | Send a message from one of your Twilio senders. For SMS give E.164 numbers (+15551234567); for Wh... |
 | [`twilio__phone_number_list`](#twilio__phone_number_list) | integration | List the phone numbers the account owns, with what each can do (sms, mms, voice) and where its in... |
 | [`wait_for_machine`](#wait_for_machine) | readonly, coding:plan, coding:default | Wait for this run's machine to reconnect, then return so you can retry. |
+| [`withdraw_question`](#withdraw_question) | - | Withdraw an async question (an ask_user call without blocking: true) that you or one of your sub-... |
 | [`worktree`](#worktree) | - | Create and manage worktrees: isolated workspaces for working on a separate branch. |
 
 ### ask_user
 
-Ask the user one or more questions and wait for their responses. Use this when you need to:
+**Tags:** `coding:default`, `coding:plan`
+
+Ask the user one or more questions. By default the question is posted to the user (in the chat and their inbox) and the tool returns at once: you keep working. Use this when you want to:
 1. Clarify ambiguous instructions
 2. Get user preferences or decisions
 3. Offer choices about implementation direction
 4. Confirm before taking significant actions
+
+Default (async) — the norm: proceed on a sensible default, usually the option you recommend, and say in the question which one you are going with. If the user answers, the answer arrives later as a message from the user; adjust your work then if it changes anything. Do not wait for it and do not ask the same question again. If your work makes a question moot before it is answered, withdraw it (withdraw_question) so it leaves the user's inbox.
+
+blocking: true — the exception: stop and wait for the answer. Use it only when you truly cannot make progress without it — every reasonable default would be wrong or wasted work, or the next action is significant or hard to undo and needs the user's go-ahead first.
+
+Before asking, call list_pending_questions if you may have asked already: do not ask a question that is still pending. Before finishing, withdraw questions your default made moot.
 
 Usage notes:
 - The user will always have an option to provide freetext input in addition to any predefined options.
@@ -2543,6 +2580,22 @@ Send an HTTP request to a public http(s) URL and return the status, headers and 
 
 ---
 
+### list_pending_questions
+
+**Tags:** `readonly`
+
+List the questions you and your sub-agents have asked the user (ask_user) that are still unanswered.
+
+Shows your own thread's questions and those of every sub-agent below you, recursively — never a sibling's. For each: question_id, who asked (you, or the sub-agent's agent_id and title), whether it is async (asked without waiting — nobody is blocked on it) or blocking (that agent is parked until the user answers), the question and its options, and how long it has been waiting.
+
+When to call it:
+- Before you finish a task: check for async questions still unanswered. If you went ahead on a default and the answer no longer matters, withdraw it with withdraw_question so it leaves the user's inbox. If it still matters, say so in your final answer.
+- Before asking the user something: avoid asking a question that is already pending.
+
+Answers to async questions arrive as messages from the user that name the question_id, so you can match an answer to the question it came from.
+
+---
+
 ### list_runs
 
 **Tags:** `runs`, `readonly`
@@ -2924,6 +2977,16 @@ If a message arrives for you while you wait — from the user, your parent, or a
 RETURNS:
 - connected: true once the machine is attached — retry the call that failed
 - otherwise its last known state (disconnected, starting, suspended, failed, removed) with what to do about it
+
+---
+
+### withdraw_question
+
+Withdraw an async question (an ask_user call without blocking: true) that you or one of your sub-agents asked and that no longer needs an answer — typically because you proceeded on a default and the outcome is settled.
+
+Withdrawing closes the question: it leaves the user's inbox and its card in the chat shows "Withdrawn: <reason>". The reason is shown to the user, so make it a short, plain sentence (e.g. "Went with Postgres; the schema is already migrated").
+
+Only async questions can be withdrawn, and only those in your own thread or a sub-agent's below you. A blocking question cannot be: its agent is waiting on the user's answer, and only the user (or that agent finishing) can close it. Find question ids with list_pending_questions.
 
 ---
 

@@ -3,21 +3,20 @@ package trigger
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // SenderDirectory looks people up on one integration for a trigger's "Only
 // from", with the caller's own credential for it: handles (GitHub logins) to
 // the ids trigger.sender.id carries, and ids to the person's current name.
-// Satisfied by ghusers.Service via an adapter in serverapi.
+// Satisfied by ghusers.Service via an adapter in internal/app (providers_api.go).
 type SenderDirectory interface {
 	Resolve(ctx context.Context, userID string, handles, ids []string) ([]ResolvedSender, error)
 	// IsPermanent reports whether a Resolve error needs the user to act
@@ -47,27 +46,23 @@ func (s *Service) ResolveTriggerSenders(
 	userID := auth.MustGetUserID(ctx)
 	integration := strings.TrimSpace(req.Msg.Integration)
 	if integration != "github" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("looking people up is only available for GitHub, not %q", integration))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("looking people up is only available for GitHub, not %q", integration))
 	}
 	dir := s.deps.Senders[integration]
 	if dir == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			errors.New("GitHub triggers are not set up on this server, so GitHub people cannot be looked up"))
+		return nil, svcerr.Unavailable("GitHub triggers are not set up on this server, so GitHub people cannot be looked up")
 	}
 	found, err := dir.Resolve(ctx, userID, req.Msg.Handles, req.Msg.SenderIds)
 	switch {
 	case err == nil:
 	case dir.IsInvalid(err):
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, svcerr.InvalidArgument(err.Error())
 	case dir.IsPermanent(err):
 		// The caller's own problem to fix, and the only message they need:
 		// the cause can name internals.
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("connect GitHub (or reconnect it) in Settings to look people up by their GitHub login"))
+		return nil, svcerr.FailedPrecondition("connect GitHub (or reconnect it) in Settings to look people up by their GitHub login")
 	default:
-		logging.WarnContext(ctx, "looking GitHub people up failed", "user_id", userID, "error", err)
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("GitHub could not be reached to look people up; try again"))
+		return nil, svcerr.WrapOr(err, svcerr.Unavailable("GitHub could not be reached to look people up; try again"))
 	}
 	out := make([]*reliantv1.ResolvedTriggerSender, 0, len(found))
 	for _, f := range found {

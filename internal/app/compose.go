@@ -29,6 +29,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
@@ -103,6 +105,14 @@ func (g *Graph) newDBRepo() (*DBRepo, error) {
 	})
 }
 
+// newDatabase is the value every persistence role below is filled with
+// (TestPersistenceRolesAreTheDatabase); DBRepo is its lifecycle.
+func (g *Graph) newDatabase() (*db.Repo, error) {
+	return NewDatabase(DatabaseDeps{
+		Pool: g.DBRepo(),
+	})
+}
+
 func (g *Graph) newNATSConn() (*NATSConn, error) {
 	return NewNATSConn(NATSConnDeps{
 		Ctx:  g.Ctx,
@@ -125,7 +135,7 @@ func (g *Graph) newUserUpdateHub() (*UserUpdateHub, error) {
 func (g *Graph) newTokenAuthority() (tokenauthority.Authority, error) {
 	return NewTokenAuthority(TokenAuthorityDeps{
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		Repo:         g.DBRepo(),
+		DB:           g.Database(),
 	})
 }
 
@@ -147,7 +157,7 @@ func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 	return tools_daemon.New(tools_daemon.Deps{
 		Logger:          g.Log,
 		Config:          g.Cfg,
-		Repo:            g.DBRepo().Repo,
+		Repo:            g.Database(),
 		UserUpdateHub:   g.UserUpdateHub(),
 		StatePublisher:  g.DaemonStatePublisher(),
 		ResultPublisher: g.ToolResultPublisher(),
@@ -198,8 +208,8 @@ func (g *Graph) newToolsDaemonSweeper() (*ToolsDaemonSweeper, error) {
 func (g *Graph) newStateDerivation() (*StateDerivation, error) {
 	return NewStateDerivation(StateDerivationDeps{
 		NATS:        g.NATSConn(),
-		Repo:        g.DBRepo(),
 		ToolsDaemon: g.ToolsDaemon(),
+		DB:          g.Database(),
 	})
 }
 
@@ -253,8 +263,8 @@ func (g *Graph) newManagedReconciler() (*ManagedReconciler, error) {
 // /health and /ready.
 func (g *Graph) newFlowHealth() (*FlowHealth, error) {
 	fh, err := NewFlowHealth(FlowHealthDeps{
-		Repo:        g.DBRepo(),
 		ToolsDaemon: g.ToolsDaemon(),
+		DB:          g.Database(),
 	})
 	if err != nil {
 		return nil, err
@@ -273,8 +283,8 @@ func (g *Graph) newCatalog() (*catalog.Service, error) {
 		Logger:             g.Log,
 		Config:             g.Cfg,
 		Tools:              g.APIToolsFactory(),
-		TagPrefs:           g.DBRepo().Repo,
-		LocalModels:        local.NewRepoDirectory(g.DBRepo().Repo),
+		TagPrefs:           g.Database(),
+		LocalModels:        local.NewRepoDirectory(g.Database()),
 		Search:             g.APICatalogSearch(),
 		InputOptions:       g.InputOptions(),
 		IntegrationMethods: catalog.IntegrationMethodsFrom(g.APIConnections().Service),
@@ -295,7 +305,7 @@ func (g *Graph) newSystem() (*system.Service, error) {
 	return system.New(system.Deps{
 		Logger:        g.Log,
 		Config:        g.Cfg,
-		Repo:          g.DBRepo().Repo,
+		Repo:          g.Database(),
 		Temporal:      g.TemporalClient().Client,
 		NATSConnected: g.NATSConn().Conn.IsConnected,
 		StreamingHub:  g.StreamingHub().Hub,
@@ -326,18 +336,17 @@ func (g *Graph) newProcessSettings() (*ProcessSettings, error) {
 
 func (g *Graph) newProcessRuntime() (*ProcessRuntime, error) {
 	return NewProcessRuntime(ProcessRuntimeDeps{
-		Settings:      g.ProcessSettings(),
-		Repo:          g.DBRepo(),
-		ControlPlane:  g.ServerProcessConfig.GetControlPlane(),
-		Analytics:     g.ServerProcessConfig.GetAnalytics(),
-		Sentry:        g.ServerProcessConfig.GetSentry(),
-		Observability: g.ServerProcessConfig.GetObservability(),
+		Settings:     g.ProcessSettings(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		Network:      g.ServerProcessConfig.GetNetwork(),
+		Analytics:    g.ServerProcessConfig.GetAnalytics(),
+		DB:           g.Database(),
 	})
 }
 
 func (g *Graph) newPayloadStore() (*claimcheck.PostgresStore, error) {
 	return NewPayloadStore(PayloadStoreDeps{
-		Repo: g.DBRepo(),
+		DB: g.Database(),
 	})
 }
 
@@ -365,26 +374,26 @@ func (g *Graph) newChatUpdateHub() (*ChatUpdateHub, error) {
 
 func (g *Graph) newRepoUpdateFeed() (*RepoUpdateFeed, error) {
 	return NewRepoUpdateFeed(RepoUpdateFeedDeps{
-		Repo:  g.DBRepo(),
 		Users: g.UserUpdateHub(),
 		Chats: g.ChatUpdateHub(),
+		DB:    g.Database(),
 	})
 }
 
 func (g *Graph) newVault() (vault.Service, error) {
 	return NewVault(VaultDeps{
 		Ctx:          g.Ctx,
-		Repo:         g.DBRepo(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		DataDir:      g.ServerProcessConfig.GetDataDir(),
 		Integrations: g.IntegrationSettings(),
+		DB:           g.Database(),
 	})
 }
 
 func (g *Graph) newPauseService() (*v2workflow.PauseService, error) {
 	return NewPauseService(PauseServiceDeps{
 		Temporal: g.TemporalClient(),
-		Repo:     g.DBRepo(),
+		DB:       g.Database(),
 	})
 }
 
@@ -397,52 +406,52 @@ func (g *Graph) newTriggerPollers() (*webhook.Registry, error) {
 func (g *Graph) newWorkerDaemonRouter() (*WorkerDaemonRouter, error) {
 	return NewWorkerDaemonRouter(WorkerDaemonRouterDeps{
 		NATS:         g.NATSConn(),
-		Repo:         g.DBRepo(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		DB:           g.Database(),
 	})
 }
 
 func (g *Graph) newWorkerIntegrationCredentials() (*WorkerIntegrationCredentials, error) {
 	return NewWorkerIntegrationCredentials(WorkerIntegrationCredentialsDeps{
-		Repo:         g.DBRepo(),
 		Vault:        g.Vault(),
 		Integrations: g.IntegrationSettings(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		DB:           g.Database(),
 	})
 }
 
 func (g *Graph) newWorkerCatalogSearch() (*WorkerCatalogSearch, error) {
 	return NewWorkerCatalogSearch(WorkerCatalogSearchDeps{
-		Repo:        g.DBRepo(),
 		Credentials: g.WorkerIntegrationCredentials(),
+		DB:          g.Database(),
 	})
 }
 
 func (g *Graph) newWriteLedger() (writeledger.Service, error) {
 	return NewWriteLedger(WriteLedgerDeps{
-		Repo: g.DBRepo(),
+		DB: g.Database(),
 	})
 }
 
 func (g *Graph) newStoredConfigProvider() (*reliantconfig.StoredConfigProvider, error) {
 	return NewStoredConfigProvider(StoredConfigProviderDeps{
-		Repo: g.DBRepo(),
+		DB: g.Database(),
 	})
 }
 
 func (g *Graph) newRunLifecycle() (*runs.Service, error) {
 	return NewRunLifecycle(RunLifecycleDeps{
-		Repo:     g.DBRepo(),
 		Temporal: g.TemporalClient(),
 		Pause:    g.PauseService(),
+		DB:       g.Database(),
 	})
 }
 
 func (g *Graph) newRunLauncher() (*launch.Launcher, error) {
 	return NewRunLauncher(RunLauncherDeps{
-		Repo:     g.DBRepo(),
 		Temporal: g.TemporalClient(),
 		Runs:     g.RunLifecycle(),
+		DB:       g.Database(),
 	})
 }
 
@@ -450,10 +459,10 @@ func (g *Graph) newWorkerChat() (*WorkerChat, error) {
 	return NewWorkerChat(WorkerChatDeps{
 		Logger:   g.Log,
 		Config:   g.Cfg,
-		Repo:     g.DBRepo(),
 		Temporal: g.TemporalClient(),
 		Pause:    g.PauseService(),
 		Router:   g.WorkerDaemonRouter(),
+		DB:       g.Database(),
 	})
 }
 
@@ -461,8 +470,8 @@ func (g *Graph) newWorkerRun() (*WorkerRun, error) {
 	return NewWorkerRun(WorkerRunDeps{
 		Logger: g.Log,
 		Config: g.Cfg,
-		Repo:   g.DBRepo(),
 		Chats:  g.WorkerChat(),
+		DB:     g.Database(),
 	})
 }
 
@@ -477,18 +486,17 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 	return NewWorkerTrigger(WorkerTriggerDeps{
 		Logger:       g.Log,
 		Config:       g.Cfg,
-		Repo:         g.DBRepo(),
 		Temporal:     g.TemporalClient(),
 		Vault:        g.Vault(),
 		Pollers:      g.TriggerPollers(),
 		Integrations: g.IntegrationSettings(),
+		DB:           g.Database(),
 	})
 }
 
 func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 	return NewWorkerToolsFactory(WorkerToolsFactoryDeps{
-		Repo:          g.DBRepo(),
-		ControlPlane:  g.ServerProcessConfig.GetControlPlane(),
+		Network:       g.ServerProcessConfig.GetNetwork(),
 		Temporal:      g.TemporalClient(),
 		AgentRuns:     g.AgentRuns(),
 		Triggers:      g.WorkerTrigger(),
@@ -496,6 +504,7 @@ func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 		WriteLedger:   g.WriteLedger(),
 		CatalogSearch: g.WorkerCatalogSearch(),
 		Router:        g.WorkerDaemonRouter(),
+		DB:            g.Database(),
 	})
 }
 
@@ -503,18 +512,27 @@ func (g *Graph) newRemoteExecutor() (*toolexec.RemoteExecutor, error) {
 	return NewRemoteExecutor(RemoteExecutorDeps{
 		Router: g.WorkerDaemonRouter(),
 		Tools:  g.WorkerToolsFactory(),
+		// Read here, not in the provider, so the worker root's config reach
+		// names them (pkg/config Roots).
+		Egress: egresslimit.Limits{
+			Replicas:          int(g.WorkerConfig.GetEgressReplicas()),
+			UserPerMinute:     int(g.WorkerConfig.GetEgressUserPerMinute()),
+			UserBurst:         int(g.WorkerConfig.GetEgressUserBurst()),
+			UserMaxConcurrent: int(g.WorkerConfig.GetEgressUserMaxConcurrent()),
+			HostMaxConcurrent: int(g.WorkerConfig.GetEgressHostMaxConcurrent()),
+			TurnMaxParallel:   int(g.WorkerConfig.GetEgressTurnMaxParallel()),
+		},
 	})
 }
 
 func (g *Graph) newAccountRecorder() (*AccountRecorder, error) {
 	return NewAccountRecorder(AccountRecorderDeps{
-		Repo: g.DBRepo(),
+		DB: g.Database(),
 	})
 }
 
 func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 	return NewTemporalWorker(TemporalWorkerDeps{
-		Repo:           g.DBRepo(),
 		Temporal:       g.TemporalClient(),
 		Streaming:      g.StreamingHub(),
 		Tools:          g.WorkerToolsFactory(),
@@ -526,27 +544,36 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		WriteLedger:    g.WriteLedger(),
 		Pollers:        g.TriggerPollers(),
 		ControlPlane:   g.ServerProcessConfig.GetControlPlane(),
+		Network:        g.ServerProcessConfig.GetNetwork(),
 		Recorder:       g.AccountRecorder(),
+		DB:             g.Database(),
+		// Read here, not in workersetup, so the worker root's config reach
+		// names them (pkg/config Roots).
+		WorkflowTaskSlots:   g.WorkerConfig.GetMaxConcurrentWorkflowTasks(),
+		WorkflowTaskPollers: g.WorkerConfig.GetWorkflowTaskPollers(),
+		HostedActionsURL:    g.WorkerConfig.GetHostedActionsUrl(),
+		HostedActionsCAFile: g.WorkerConfig.GetHostedActionsCaFile(),
 	})
 }
 
 func (g *Graph) newWorkflowEventRelay() (*workflowevent.Relay, error) {
 	return NewWorkflowEventRelay(WorkflowEventRelayDeps{
-		Repo:     g.DBRepo(),
 		Temporal: g.TemporalClient(),
+		DB:       g.Database(),
 	})
 }
 
 func (g *Graph) newAccountUsagePoller() (*accountlimits.Poller, error) {
 	return NewAccountUsagePoller(AccountUsagePollerDeps{
-		Repo: g.DBRepo(),
+		DB:       g.Database(),
+		Temporal: g.TemporalClient(),
 	})
 }
 
 func (g *Graph) newWriteLedgerPrune() (*WriteLedgerPrune, error) {
 	return NewWriteLedgerPrune(WriteLedgerPruneDeps{
 		Ledger: g.WriteLedger(),
-		Repo:   g.DBRepo(),
+		DB:     g.Database(),
 	})
 }
 
@@ -589,7 +616,6 @@ func (g *Graph) newHTTPRoutes() (*grpcserver.APIHTTPRoutes, error) {
 	return NewHTTPRoutes(HTTPRoutesDeps{
 		Settings:     g.APISettings(),
 		Auth:         g.UserAuth(),
-		Repo:         g.DBRepo(),
 		Router:       g.APIDaemonRouter(),
 		Connections:  g.APIConnections(),
 		Inbound:      g.TriggerInbound(),
@@ -598,6 +624,7 @@ func (g *Graph) newHTTPRoutes() (*grpcserver.APIHTTPRoutes, error) {
 		Integrations: g.IntegrationSettings(),
 		OAuthIssuers: g.ApiServerConfig.GetMcpOauthIssuers(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		DB:           g.Database(),
 	})
 }
 
@@ -621,65 +648,65 @@ func (g *Graph) newAPIDebugServer() (*APIDebugServer, error) {
 func (g *Graph) newAPIDaemonRouter() (*APIDaemonRouter, error) {
 	return NewAPIDaemonRouter(APIDaemonRouterDeps{
 		NATS:         g.NATSConn(),
-		Repo:         g.DBRepo(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		DB:           g.Database(),
 	})
 }
 
 func (g *Graph) newAPIToolsFactory() (*tools.ToolsFactory, error) {
 	return NewAPIToolsFactory(APIToolsFactoryDeps{
-		Repo:         g.DBRepo(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		Temporal:     g.TemporalClient(),
+		Network:  g.ServerProcessConfig.GetNetwork(),
+		Temporal: g.TemporalClient(),
+		DB:       g.Database(),
 	})
 }
 
 func (g *Graph) newAPIConnections() (*APIConnections, error) {
 	return NewAPIConnections(APIConnectionsDeps{
-		Repo:         g.DBRepo(),
 		Vault:        g.Vault(),
 		Integrations: g.IntegrationSettings(),
 		AppOrigins:   g.ApiServerConfig.GetCorsAllowedOrigins(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		DB:           g.Database(),
 	})
 }
 
 func (g *Graph) newAPICatalogSearch() (*APICatalogSearch, error) {
 	return NewAPICatalogSearch(APICatalogSearchDeps{
-		Repo:         g.DBRepo(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		DB:           g.Database(),
 	})
 }
 
 func (g *Graph) newInputOptions() (inputoptions.Service, error) {
 	return NewInputOptions(InputOptionsDeps{
-		Repo:         g.DBRepo(),
 		Connections:  g.APIConnections(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		DB:           g.Database(),
 	})
 }
 
 func (g *Graph) newConnectorGrants() (connectorgrant.Store, error) {
 	return NewConnectorGrants(ConnectorGrantsDeps{
-		Repo: g.DBRepo(),
+		DB: g.Database(),
 	})
 }
 
 func (g *Graph) newGitHubAccess() (*ghaccess.Refresher, error) {
 	return NewGitHubAccess(GitHubAccessDeps{
-		Repo:         g.DBRepo(),
 		Vault:        g.Vault(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		Integrations: g.IntegrationSettings(),
+		DB:           g.Database(),
 	})
 }
 
 func (g *Graph) newTriggerSenders() (TriggerSenders, error) {
 	return NewTriggerSenders(TriggerSendersDeps{
-		Repo:         g.DBRepo(),
 		Vault:        g.Vault(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		Integrations: g.IntegrationSettings(),
+		DB:           g.Database(),
 	})
 }
 
@@ -691,21 +718,21 @@ func (g *Graph) newGitHubAccessLoop() (*GitHubAccessLoop, error) {
 
 func (g *Graph) newTriggerAlerting() (*triggers.Alerting, error) {
 	return NewTriggerAlerting(TriggerAlertingDeps{
-		Repo:         g.DBRepo(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		Integrations: g.IntegrationSettings(),
+		DB:           g.Database(),
 	})
 }
 
 func (g *Graph) newTriggerInbound() (*webhook.Inbound, error) {
 	return NewTriggerInbound(TriggerInboundDeps{
-		Repo:         g.DBRepo(),
 		Temporal:     g.TemporalClient(),
 		Pollers:      g.TriggerPollers(),
 		Vault:        g.Vault(),
 		Integrations: g.IntegrationSettings(),
 		Connections:  g.APIConnections(),
 		GitHubAccess: g.GitHubAccess(),
+		DB:           g.Database(),
 	})
 }
 
@@ -717,10 +744,10 @@ func (g *Graph) newResetGuard() (*v2workflow.ResetAttemptGuard, error) {
 
 func (g *Graph) newQueuedDeliverer() (queueddelivery.Service, error) {
 	return NewQueuedDeliverer(QueuedDelivererDeps{
-		Repo:     g.DBRepo(),
 		Router:   g.APIDaemonRouter(),
 		Chat:     g.Chat(),
 		Temporal: g.TemporalClient(),
+		DB:       g.Database(),
 	})
 }
 
@@ -740,9 +767,9 @@ func (g *Graph) newDaemonEventsConsumer() (*DaemonEventsConsumer, error) {
 
 func (g *Graph) newWorktreeSweep() (*worktreesweep.Sweeper, error) {
 	return NewWorktreeSweep(WorktreeSweepDeps{
-		Repo:     g.DBRepo(),
 		Router:   g.APIDaemonRouter(),
 		Settings: g.APISettings(),
+		DB:       g.Database(),
 	})
 }
 
@@ -755,8 +782,8 @@ func (g *Graph) newWorktreeSweeper() (*WorktreeSweeper, error) {
 func (g *Graph) newScheduleSyncer() (*triggers.Syncer, error) {
 	return NewScheduleSyncer(ScheduleSyncerDeps{
 		Temporal: g.TemporalClient(),
-		Repo:     g.DBRepo(),
 		Pollers:  g.TriggerPollers(),
+		DB:       g.Database(),
 	})
 }
 
@@ -768,27 +795,27 @@ func (g *Graph) newTriggerScheduleSync() (*TriggerScheduleSync, error) {
 
 func (g *Graph) newTriggerReconciler() (*TriggerReconciler, error) {
 	return NewTriggerReconciler(TriggerReconcilerDeps{
-		Repo:     g.DBRepo(),
 		Syncer:   g.ScheduleSyncer(),
 		Alerting: g.TriggerAlerting(),
+		DB:       g.Database(),
 	})
 }
 
 func (g *Graph) newTriggerRedriver() (*TriggerRedriver, error) {
 	return NewTriggerRedriver(TriggerRedriverDeps{
-		Repo:     g.DBRepo(),
 		Temporal: g.TemporalClient(),
+		DB:       g.Database(),
 	})
 }
 
 func (g *Graph) newWorkflowReconciler() (*WorkflowReconciler, error) {
 	return NewWorkflowReconciler(WorkflowReconcilerDeps{
-		Repo:       g.DBRepo(),
 		Temporal:   g.TemporalClient(),
 		Namespace:  g.ServerProcessConfig.GetTemporal().GetNamespace(),
 		ResetGuard: g.ResetGuard(),
 		Queued:     g.QueuedDeliverer(),
 		Router:     g.APIDaemonRouter(),
+		DB:         g.Database(),
 	})
 }
 
@@ -858,7 +885,7 @@ func (g *Graph) newAccount() (*account.Service, error) {
 	return account.New(account.Deps{
 		Logger:       g.Log,
 		Config:       g.Cfg,
-		SQL:          g.DBRepo().Repo.DB.SQLDB(),
+		SQL:          g.Database().DB.SQLDB(),
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 	})
 }
@@ -868,7 +895,7 @@ func (g *Graph) newApproval() (*approval.Service, error) {
 	return approval.New(approval.Deps{
 		Logger:  g.Log,
 		Config:  g.Cfg,
-		Repo:    g.DBRepo().Repo,
+		Repo:    g.Database(),
 		Signals: g.PauseService(),
 	})
 }
@@ -878,7 +905,7 @@ func (g *Graph) newAttachment() (*attachment.Service, error) {
 	return attachment.New(attachment.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Repo:        g.DBRepo().Repo,
+		Repo:        g.Database(),
 		MaxFileSize: g.APISettings().MaxUploadSize,
 	})
 }
@@ -908,7 +935,7 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 	return worktree.New(worktree.Deps{
 		Logger:   g.Log,
 		Config:   g.Cfg,
-		Repo:     g.DBRepo().Repo,
+		Repo:     g.Database(),
 		Router:   g.APIDaemonRouter().NATSDaemonRouter,
 		Temporal: g.TemporalClient().Client,
 		Settler:  g.WorktreeSweep(),
@@ -918,13 +945,14 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 // newChat constructs the chat handler (internal/handlers/chat).
 func (g *Graph) newChat() (*chat.Service, error) {
 	return chat.New(chat.Deps{
-		Logger:    g.Log,
-		Config:    g.Cfg,
-		Repo:      g.DBRepo().Repo,
-		Temporal:  g.TemporalClient().Client,
-		Pause:     g.PauseService(),
-		TaskQueue: v2workflow.SharedTaskQueue,
-		Router:    g.APIDaemonRouter().NATSDaemonRouter,
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Repo:        g.Database(),
+		Temporal:    g.TemporalClient().Client,
+		Pause:       g.PauseService(),
+		TaskQueue:   v2workflow.SharedTaskQueue,
+		Router:      g.APIDaemonRouter().NATSDaemonRouter,
+		LocalModels: local.NewRepoDirectory(g.Database()),
 	})
 }
 
@@ -935,7 +963,7 @@ func (g *Graph) newRun() (*run.Service, error) {
 	return run.New(run.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
-		Repo:   g.DBRepo().Repo,
+		Repo:   g.Database(),
 		Chats:  g.Chat(),
 	})
 }
@@ -947,11 +975,11 @@ func (g *Graph) newRun() (*run.Service, error) {
 // inbound receivers.
 func (g *Graph) newTrigger() (*trigger.Service, error) {
 	in := g.TriggerInbound()
-	syncer, fires := trigger.TemporalBackend(g.TemporalClient().Client, g.DBRepo().Repo, v2workflow.SharedTaskQueue, in.Registry.IsPolled)
+	syncer, fires := trigger.TemporalBackend(g.TemporalClient().Client, g.Database(), v2workflow.SharedTaskQueue, in.Registry.IsPolled)
 	return trigger.New(trigger.Deps{
 		Logger:       g.Log,
 		Config:       g.Cfg,
-		Repo:         g.DBRepo().Repo,
+		Repo:         g.Database(),
 		Syncer:       syncer,
 		Fires:        fires,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
@@ -986,7 +1014,7 @@ func (g *Graph) newDaemonRegistry() (*daemon_registry.Service, error) {
 	return daemon_registry.New(daemon_registry.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
-		Repo:   g.DBRepo().Repo,
+		Repo:   g.Database(),
 		Router: g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
@@ -999,7 +1027,7 @@ func (g *Graph) newFileSystem() (*file_system.Service, error) {
 		Logger: g.Log,
 		Config: g.Cfg,
 		Router: g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:   g.DBRepo().Repo,
+		Repo:   g.Database(),
 	})
 }
 
@@ -1012,7 +1040,7 @@ func (g *Graph) newForge() (*forge.Service, error) {
 		Logger: g.Log,
 		Config: g.Cfg,
 		Router: g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:   g.DBRepo().Repo,
+		Repo:   g.Database(),
 	})
 }
 
@@ -1021,7 +1049,7 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 	return inbox.New(inbox.Deps{
 		Logger:  g.Log,
 		Config:  g.Cfg,
-		Repo:    g.DBRepo().Repo,
+		Repo:    g.Database(),
 		Sweeper: g.WorktreeSweep(),
 	})
 }
@@ -1031,7 +1059,7 @@ func (g *Graph) newMCP() (*mcp.Service, error) {
 	return mcp.New(mcp.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
-		Repo:   g.DBRepo().Repo,
+		Repo:   g.Database(),
 		Router: g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
@@ -1041,7 +1069,7 @@ func (g *Graph) newMessage() (*message.Service, error) {
 	return message.New(message.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
-		Repo:   g.DBRepo().Repo,
+		Repo:   g.Database(),
 	})
 }
 
@@ -1052,12 +1080,12 @@ func (g *Graph) newMessage() (*message.Service, error) {
 // answers ErrCredentialStoreUnavailable.
 func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 	return model_endpoint.New(model_endpoint.Deps{
-		Logger:       g.Log,
-		Config:       g.Cfg,
-		Repo:         g.DBRepo().Repo,
-		Router:       g.APIDaemonRouter().NATSDaemonRouter,
-		Credentials:  nil,
-		ControlPlane: modelEndpointControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Repo:        g.Database(),
+		Router:      g.APIDaemonRouter().NATSDaemonRouter,
+		Credentials: nil,
+		Network:     g.ServerProcessConfig.GetNetwork(),
 	})
 }
 
@@ -1070,7 +1098,7 @@ func (g *Graph) newPackageCommands() (*package_commands.Service, error) {
 		Logger:    g.Log,
 		Config:    g.Cfg,
 		Router:    g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:      g.DBRepo().Repo,
+		Repo:      g.Database(),
 		Processes: pkgmgr.NewService(),
 	})
 }
@@ -1080,7 +1108,7 @@ func (g *Graph) newTask() (*task.Service, error) {
 	return task.New(task.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
-		Repo:   g.DBRepo().Repo,
+		Repo:   g.Database(),
 	})
 }
 
@@ -1089,7 +1117,7 @@ func (g *Graph) newPlan() (*plan.Service, error) {
 	return plan.New(plan.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
-		Repo:   g.DBRepo().Repo,
+		Repo:   g.Database(),
 	})
 }
 
@@ -1098,7 +1126,7 @@ func (g *Graph) newPreset() (*preset.Service, error) {
 	return preset.New(preset.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
-		Repo:   g.DBRepo().Repo,
+		Repo:   g.Database(),
 	})
 }
 
@@ -1109,7 +1137,7 @@ func (g *Graph) newProject() (*project.Service, error) {
 	return project.New(project.Deps{
 		Logger:       g.Log,
 		Config:       g.Cfg,
-		Repo:         g.DBRepo().Repo,
+		Repo:         g.Database(),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 	})
@@ -1120,23 +1148,31 @@ func (g *Graph) newProject() (*project.Service, error) {
 // refreshing token source the worker's poller uses, so a refresh never races
 // a live request.
 func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
-	repo := g.DBRepo().Repo
 	return provider_account.New(provider_account.Deps{
-		Logger:         g.Log,
-		Config:         g.Cfg,
-		Store:          repo,
-		ValidateKey:    keyvalidate.Validate,
-		UsageRefresher: &accountlimits.Fetcher{Store: repo, Tokens: drivers.RefreshingTokens{Store: repo}},
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Store:       g.Database(),
+		ValidateKey: keyvalidate.Validate,
+		UsageRefresher: &accountlimits.Fetcher{
+			Store:  g.Database(),
+			Tokens: drivers.RefreshingTokens{Store: g.Database()},
+			// A refresh that lifts a bench wakes the user's blocked chats.
+			OnCapacity: func(ctx context.Context, userID, _ string) {
+				g.Chat().WakeUserChats(ctx, userID, "a usage refresh found a limited account serving again")
+			},
+		},
+		ChatWaker: g.Chat(),
 	})
 }
 
 // newQuestion constructs the question handler (internal/handlers/question).
 func (g *Graph) newQuestion() (*question.Service, error) {
 	return question.New(question.Deps{
-		Logger:  g.Log,
-		Config:  g.Cfg,
-		Repo:    g.DBRepo().Repo,
-		Signals: g.PauseService(),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Repo:     g.Database(),
+		Signals:  g.PauseService(),
+		Messages: g.Chat(),
 	})
 }
 
@@ -1145,7 +1181,7 @@ func (g *Graph) newRepo() (*repo.Service, error) {
 	return repo.New(repo.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
-		Repo:   g.DBRepo().Repo,
+		Repo:   g.Database(),
 		Router: g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
@@ -1155,7 +1191,7 @@ func (g *Graph) newScenario() (*scenario.Service, error) {
 	return scenario.New(scenario.Deps{
 		Logger: g.Log,
 		Config: g.Cfg,
-		Repo:   g.DBRepo().Repo,
+		Repo:   g.Database(),
 		Router: g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
@@ -1165,7 +1201,7 @@ func (g *Graph) newSettings() (*settings.Service, error) {
 	return settings.New(settings.Deps{
 		Logger:                  g.Log,
 		Config:                  g.Cfg,
-		Repo:                    g.DBRepo().Repo,
+		Repo:                    g.Database(),
 		ControlPlane:            controlPlaneClient(g.ServerProcessConfig.GetControlPlane()),
 		ExchangeClaudeCode:      claude.ExchangeClaudeAuthorizationCode,
 		ExchangeCodexCode:       codex.ExchangeCodexAuthorizationCode,
@@ -1176,6 +1212,7 @@ func (g *Graph) newSettings() (*settings.Service, error) {
 			return providerusage.ClaudeProfile(ctx, nil, accessToken)
 		},
 		GitHubIdentity: settings.FetchGitHubUser,
+		ChatWaker:      g.Chat(),
 	})
 }
 
@@ -1184,7 +1221,7 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 	return streaminghandler.New(streaminghandler.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Repo:        g.DBRepo().Repo,
+		Repo:        g.Database(),
 		Deltas:      g.StreamingHub().Hub,
 		UserUpdates: g.UserUpdateHub(),
 		ChatUpdates: g.ChatUpdateHub(),
@@ -1227,7 +1264,7 @@ func (g *Graph) newToolCall() (*tool_call.Service, error) {
 	return tool_call.New(tool_call.Deps{
 		Logger:   g.Log,
 		Config:   g.Cfg,
-		Repo:     g.DBRepo().Repo,
+		Repo:     g.Database(),
 		Temporal: g.TemporalClient().Client,
 		Router:   g.APIDaemonRouter().NATSDaemonRouter,
 	})
@@ -1240,7 +1277,7 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 	return workflowhandler.New(workflowhandler.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Repo:        g.DBRepo().Repo,
+		Repo:        g.Database(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Automations: g.Trigger(),
 	})

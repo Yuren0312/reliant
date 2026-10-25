@@ -18,6 +18,7 @@ package worktreesweep
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -28,6 +29,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
@@ -132,13 +135,9 @@ func ParseAutoArchiveMode(v string) AutoArchiveMode {
 
 // AutoArchiveStore is what archiving a finished worktree needs.
 type AutoArchiveStore interface {
-	ListChats(ctx context.Context, filters core.ChatFilters) ([]*core.Chat, error)
+	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
 	ArchiveWorktree(ctx context.Context, id string) error
 }
-
-// liveChatScan bounds the chats read to see whether any still uses a
-// worktree. A project at the bound is unknown, and unknown is not archived.
-const liveChatScan = 1000
 
 type autoArchive struct {
 	mode   AutoArchiveMode
@@ -153,18 +152,33 @@ type Sweeper struct {
 	keep   KeepFilesSetting
 	auto   *autoArchive
 	// candidates and archived count this pass's finished active worktrees.
-	candidates atomic.Int64
-	archived   atomic.Int64
-	now        func() time.Time
-	slots      chan struct{}
+	idleDone      atomic.Int64
+	blockedByChat atomic.Int64
+	archiveErrors atomic.Int64
+	candidates    atomic.Int64
+	archived      atomic.Int64
+	now           func() time.Time
+	slots         chan struct{}
+	// inflight is the rows with a request out to a daemon.
+	inflight leases
 	// owner names this process in a clean-up's metadata, so a flag left by a
 	// process that died is recognizable as not ours and expires on its own.
 	owner string
+	// cleanups counts the clean-ups StartCleanup runs detached (WaitCleanups).
+	cleanups sync.WaitGroup
 }
 
 // New returns a Sweeper.
 func New(store Store, sender Sender) *Sweeper {
 	return &Sweeper{store: store, sender: sender, now: time.Now, slots: make(chan struct{}, settleSlots), owner: uuid.NewString()}
+}
+
+// WaitCleanups returns once every clean-up StartCleanup has started so far
+// has finished, its result recorded: for a process draining before exit, and
+// for a test that asserts on the outcome instead of guessing how long a real
+// git snapshot takes on a loaded machine.
+func (s *Sweeper) WaitCleanups() {
+	s.cleanups.Wait()
 }
 
 // WithKeepFiles makes the sweep honor the user's "Keep everything" setting.
@@ -233,6 +247,9 @@ type target struct{ userID, daemonID string }
 // Sweep reconciles every reclaim candidate against the daemon that owns it,
 // with at most sweepWorkers daemons in flight.
 func (s *Sweeper) Sweep(ctx context.Context) error {
+	s.idleDone.Store(0)
+	s.blockedByChat.Store(0)
+	s.archiveErrors.Store(0)
 	s.candidates.Store(0)
 	s.archived.Store(0)
 	cands, err := s.store.ListWorktreesForReclaim(ctx)
@@ -311,7 +328,7 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 	}
 	wg.Wait()
 	if s.auto != nil {
-		logging.InfoContext(ctx, "[WorktreeSweep] auto-archive", "mode", string(s.auto.mode), "finished", s.candidates.Load(), "archived", s.archived.Load())
+		logging.InfoContext(ctx, "[WorktreeSweep] auto-archive", "mode", string(s.auto.mode), "idle_done", s.idleDone.Load(), "blocked_by_chat", s.blockedByChat.Load(), "errors", s.archiveErrors.Load(), "finished", s.candidates.Load(), "archived", s.archived.Load())
 	}
 	return nil
 }
@@ -392,8 +409,14 @@ func (s *Sweeper) reconcileGroup(ctx context.Context, t target, group []*core.Re
 	// asking this daemon this pass.
 	var run func(batch []*core.ReclaimCandidate) bool
 	run = func(batch []*core.ReclaimCandidate) bool {
-		if s.settleBatch(ctx, t, batch, live, keep) {
+		switch s.settleBatch(ctx, t, batch, live, keep) {
+		case batchDone:
 			return true
+		case batchStalled:
+			// The daemon did not answer in time and may still be working on
+			// these rows. They are leased and recorded as failed; sending
+			// them again, whole or in halves, would only stack more work.
+			return false
 		}
 		failedSends++
 		if ctx.Err() != nil || failedSends >= maxFailedSends {
@@ -444,16 +467,66 @@ func (s *Sweeper) recordTransient(ctx context.Context, seen *core.Worktree, kind
 	})
 }
 
-// settleBatch runs the two phases for one batch. It reports false when the
-// daemon could not be reached, so the caller stops asking it this pass.
-func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.ReclaimCandidate, live []core.WorktreePath, keep bool) bool {
+// batchResult is how asking the daemon about one batch ended.
+type batchResult int
+
+const (
+	// batchDone: every row that could be asked was asked and answered.
+	batchDone batchResult = iota
+	// batchFailed: the request failed outright (the connection dropped, the
+	// daemon refused it). Splitting the batch and asking again is safe.
+	batchFailed
+	// batchStalled: the request ran out of time. The daemon may still be
+	// working on its rows, so they are neither split nor sent again.
+	batchStalled
+)
+
+// stalled reports whether err is a deadline: the daemon was reached and did not
+// answer, as opposed to an error that says it was not working on the request.
+func stalled(err error) bool {
+	return svcerr.IsDeadlineExceeded(err) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// settleBatch runs the two phases for one batch. A row already out to this
+// daemon (a request that timed out and may still be running, a settle in
+// progress) is skipped: the next pass asks about it once the lease is free.
+func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.ReclaimCandidate, live []core.WorktreePath, keep bool) (result batchResult) {
+	keys := make([]leaseKey, len(batch))
+	for i, c := range batch {
+		keys[i] = leaseKey{t.daemonID, c.Worktree.ID}
+	}
+	got := s.inflight.acquire(s.now(), keys)
+	if len(got) == 0 {
+		return batchDone
+	}
+	if len(got) < len(batch) {
+		free := map[string]bool{}
+		for _, k := range got {
+			free[k.worktreeID] = true
+		}
+		kept := batch[:0:0]
+		for _, c := range batch {
+			if free[c.Worktree.ID] {
+				kept = append(kept, c)
+			}
+		}
+		batch = kept
+	}
+	defer func() {
+		if result == batchStalled {
+			s.inflight.holdUntil(got, s.now().Add(inFlightHold))
+			return
+		}
+		s.inflight.release(got)
+	}()
+
 	byID := map[string]*core.ReclaimCandidate{}
 	req, shared := s.describe(ctx, batch, live, keep)
 	for _, h := range shared {
 		s.recordHold(ctx, h.cand.Worktree, worktreereclaim.ReasonSharedWithLive, h.detail, 0, nil)
 	}
 	if len(req.Worktrees) == 0 {
-		return true
+		return batchDone
 	}
 	for _, c := range batch {
 		byID[c.Worktree.ID] = c
@@ -461,7 +534,15 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 	resp, err := s.send(ctx, t, cmdReconcile, reconcileTimeoutMs, req)
 	if err != nil {
 		logging.WarnContext(ctx, "[WorktreeSweep] reconcile failed", "daemonID", t.daemonID, "error", err)
-		return false
+		if stalled(err) {
+			for _, w := range req.Worktrees {
+				if c := byID[w.ID]; c != nil {
+					s.recordFailure(ctx, c.Worktree, "the machine did not answer in time")
+				}
+			}
+			return batchStalled
+		}
+		return batchFailed
 	}
 
 	var second []worktreereclaim.Worktree
@@ -493,19 +574,22 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 		s.apply(ctx, t.userID, t.daemonID, c.Worktree, c.ProjectPath, r, false)
 	}
 	if len(second) == 0 {
-		return true
+		return batchDone
 	}
 	resp2, err := s.send(ctx, t, cmdReconcile, reconcileTimeoutMs, worktreereclaim.Request{Worktrees: second})
 	if err != nil {
 		logging.WarnContext(ctx, "[WorktreeSweep] removal request failed", "daemonID", t.daemonID, "error", err)
-		return false
+		if stalled(err) {
+			return batchStalled
+		}
+		return batchFailed
 	}
 	for _, r := range resp2.Results {
 		if c := byID[r.ID]; c != nil {
 			s.apply(ctx, t.userID, t.daemonID, c.Worktree, c.ProjectPath, r, false)
 		}
 	}
-	return true
+	return batchDone
 }
 
 func fenceOf(req worktreereclaim.Request, id string) string {
@@ -737,6 +821,13 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 		}
 	}
 	if wt.DeletedAt == nil {
+		if r.Outcome == worktreereclaim.OutcomeProbeInconclusive {
+			// Locked, but whether it is finished is unknown. LockedAt is not
+			// stamped (that is a 24h silence) and the row is not marked
+			// checked-and-found-busy: it waits the short transient back-off.
+			s.recordTransient(ctx, wt, "probe_inconclusive", nil)
+			return
+		}
 		if r.Outcome == worktreereclaim.OutcomeLocked || r.Outcome == worktreereclaim.OutcomeIdleDone {
 			s.mergeMeta(ctx, wt, func(m *core.CleanupMetadata) {
 				now := s.now().UTC()
@@ -806,18 +897,33 @@ func (s *Sweeper) recordHold(ctx context.Context, wt *core.Worktree, reason work
 // it. The daemon has already checked the files; the server checks that no
 // chat still uses it. In dry-run mode it only counts and logs.
 func (s *Sweeper) archiveFinished(ctx context.Context, userID string, wt *core.Worktree) {
+	s.idleDone.Add(1)
 	a := s.auto
-	if a == nil || wt.IsMain || wt.DeletedAt != nil || (s.keep != nil && s.keep.KeepFiles(ctx, userID)) {
+	reason := ""
+	switch {
+	case a == nil:
+		reason = "auto-archive disabled"
+	case wt.IsMain:
+		reason = "main checkout"
+	case wt.DeletedAt != nil:
+		reason = "already archived"
+	case s.keep != nil && s.keep.KeepFiles(ctx, userID):
+		reason = "keep files enabled"
+	}
+	if reason != "" {
+		logging.DebugContext(ctx, "[WorktreeSweep] skipped auto-archive", "worktreeID", wt.ID, "reason", reason)
 		return
 	}
-	chats, err := a.store.ListChats(ctx, core.ChatFilters{UserID: userID, ProjectID: &wt.ProjectID, ExcludeArchived: true, Limit: liveChatScan})
-	if err != nil || len(chats) >= liveChatScan {
+	chatID, err := a.store.GetLiveChatIDForWorktree(ctx, wt.ID)
+	if err != nil {
+		s.archiveErrors.Add(1)
+		logging.WarnContext(ctx, "[WorktreeSweep] could not check bound chat", "worktreeID", wt.ID, "error", err)
 		return
 	}
-	for _, c := range chats {
-		if c.WorktreeID != nil && *c.WorktreeID == wt.ID {
-			return
-		}
+	if chatID != "" {
+		s.blockedByChat.Add(1)
+		logging.DebugContext(ctx, "[WorktreeSweep] skipped auto-archive", "worktreeID", wt.ID, "reason", "bound to live chat", "chatID", chatID)
+		return
 	}
 	s.candidates.Add(1)
 	if a.mode != AutoArchiveOn {
@@ -825,6 +931,7 @@ func (s *Sweeper) archiveFinished(ctx context.Context, userID string, wt *core.W
 		return
 	}
 	if err := a.store.ArchiveWorktree(ctx, wt.ID); err != nil {
+		s.archiveErrors.Add(1)
 		logging.WarnContext(ctx, "[WorktreeSweep] could not auto-archive worktree", "worktreeID", wt.ID, "error", err)
 		return
 	}

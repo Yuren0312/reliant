@@ -9,9 +9,11 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -274,6 +276,7 @@ func (f *inboxFixture) launchedAs(t *testing.T, kind core.TriggerEventKind, even
 }
 
 func TestListInbox_FailingItemIDIsStableAcrossAStreakAndNewForANewOne(t *testing.T) {
+	testkit.Slow(t, "DB-backed: seeds many inbox rows in pgtest's Postgres")
 	f := newInboxFixture(t)
 	f.trigger(t, "trg-s")
 	base := time.Now().UTC().Add(-6 * time.Hour)
@@ -414,7 +417,7 @@ func TestDismissInboxItem_RejectsIDsThatNameNoItem(t *testing.T) {
 	for _, id := range []string{"appr-1", "q-1", "", "automation_failing:", "approval:"} {
 		_, err := f.inbox.DismissInboxItem(f.ctx, connect.NewRequest(&reliantv1.DismissInboxItemRequest{ItemIds: []string{id}}))
 		require.Error(t, err, id)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), id)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), id)
 	}
 }
 

@@ -8,9 +8,11 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -73,6 +75,9 @@ func (e *triggerTestEnv) enableOncall(t *testing.T) *reliantv1.EnableWorkflowRes
 
 // One click: Enable provisions the receiver and returns no token to show.
 func TestEnableAlertingWorkflowProvisionsAndShowsNoToken(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, fa := setupAlertingTest(t)
 	resp := env.enableOncall(t)
 	require.True(t, resp.Enabled, "%v", resp.Results)
@@ -85,8 +90,12 @@ func TestEnableAlertingWorkflowProvisionsAndShowsNoToken(t *testing.T) {
 
 // The control plane refusing (no org) refuses the enable and leaves nothing.
 func TestEnableAlertingWorkflowIsRefusedWhenAlertsCannotBeConnected(t *testing.T) {
+	t.Parallel()
+
 	env, fa := setupAlertingTest(t)
-	fa.err = &controlplane.AutopilotError{Code: "failed_precondition", Reason: controlplane.ReasonAutopilotNoOrg}
+	// What triggers.Alerting.Provision returns for an org-less owner.
+	fa.err = svcerr.WithCause(svcerr.FailedPrecondition("on-call receives your organization's alerts, and your account belongs to no organization yet"),
+		&controlplane.AutopilotError{Code: "failed_precondition", Reason: controlplane.ReasonAutopilotNoOrg})
 	resp := env.enableOncall(t)
 	require.False(t, resp.Enabled)
 	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED, resp.Results[0].Outcome)
@@ -95,6 +104,8 @@ func TestEnableAlertingWorkflowIsRefusedWhenAlertsCannotBeConnected(t *testing.T
 }
 
 func TestPauseResumeDeleteFollowTheReceiver(t *testing.T) {
+	t.Parallel()
+
 	env, fa := setupAlertingTest(t)
 	id := env.enableOncall(t).Results[0].Activation.GetId()
 
@@ -107,11 +118,11 @@ func TestPauseResumeDeleteFollowTheReceiver(t *testing.T) {
 	assert.Equal(t, []string{id, id}, fa.provisioned, "resuming re-provisions with a fresh token")
 
 	// A resume that cannot connect is refused and the row put back.
-	fa.err = errors.New("control plane down")
+	fa.err = svcerr.WithCause(svcerr.Unavailable("could not connect your organization's alerts right now; try again"), errors.New("control plane down"))
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
 	require.NoError(t, err)
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: true}))
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "%v", err)
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "%v", err)
 	stored, err := env.repo.GetTrigger(context.Background(), id)
 	require.NoError(t, err)
 	assert.False(t, stored.Enabled, "an enabled trigger nothing delivers to looks working and is not")
@@ -124,6 +135,8 @@ func TestPauseResumeDeleteFollowTheReceiver(t *testing.T) {
 
 // Rotating a managed webhook re-provisions; the new token is not returned.
 func TestRotateManagedWebhookReprovisionsWithoutShowingTheToken(t *testing.T) {
+	t.Parallel()
+
 	env, fa := setupAlertingTest(t)
 	id := env.enableOncall(t).Results[0].Activation.GetId()
 	before, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
@@ -149,6 +162,8 @@ func TestRotateManagedWebhookReprovisionsWithoutShowingTheToken(t *testing.T) {
 // Without a control plane (no Alerting dep) the same declaration is a plain
 // webhook: the token is shown once, as for any webhook.
 func TestAlertingWebhookIsAPlainWebhookWithoutAControlPlane(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "oncall", alertTriageYAML)
 	resp := env.enableOncall(t)
@@ -160,11 +175,13 @@ func TestAlertingWebhookIsAPlainWebhookWithoutAControlPlane(t *testing.T) {
 // An ad hoc webhook trigger cannot name a source: only declared triggers are
 // reconciled against the control plane.
 func TestAdHocWebhookCannotNameASource(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupAlertingTest(t)
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: webhookDefinition(env, func(d *reliantv1.TriggerDefinition) {
 			d.Source = &reliantv1.TriggerDefinition_Webhook{Webhook: &reliantv1.WebhookSource{Source: "alerting"}}
 		}),
 	}))
-	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "%v", err)
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "%v", err)
 }

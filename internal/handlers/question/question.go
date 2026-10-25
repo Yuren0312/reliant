@@ -4,12 +4,12 @@ package question
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -22,16 +22,19 @@ func (s *Service) ResolveQuestion(
 	req *connect.Request[reliantv1.ResolveQuestionRequest],
 ) (*connect.Response[reliantv1.ResolveQuestionResponse], error) {
 	if req.Msg.QuestionId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("question_id is required"))
+		return nil, svcerr.InvalidArgument("question_id is required")
 	}
 	if req.Msg.Action == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("action is required"))
+		return nil, svcerr.InvalidArgument("action is required")
 	}
 
 	// Look up the question
 	question, err := s.deps.Repo.GetQuestionByID(ctx, req.Msg.QuestionId)
-	if err != nil || question == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("question not found"))
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get question"))
+	}
+	if question == nil {
+		return nil, svcerr.NotFound("question")
 	}
 
 	// Ownership is transitive through the chat: resolving a question signals
@@ -40,15 +43,24 @@ func (s *Service) ResolveQuestion(
 	// existence oracle.
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 	chat, err := s.deps.Repo.GetChat(ctx, question.ChatID)
-	if err != nil || chat == nil || chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("question not found"))
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get question"))
+	}
+	if chat == nil || chat.UserID != userID {
+		return nil, svcerr.NotFound("question")
 	}
 
 	if question.Status != db.QuestionStatusPending {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("question already resolved"))
+		return nil, svcerr.FailedPrecondition("question already resolved")
+	}
+
+	// Nothing waits on an async question: its answer is a message to the
+	// thread that asked.
+	if question.Async {
+		return s.resolveAsyncQuestion(ctx, chat, question, req.Msg.GetResponseData())
 	}
 
 	// Resolve the question in the database
@@ -58,8 +70,7 @@ func (s *Service) ResolveQuestion(
 	}
 
 	if err := s.deps.Repo.ResolveQuestion(ctx, question.ID, responseData); err != nil {
-		logging.ErrorContext(ctx, "Failed to resolve question", "error", err, "questionID", question.ID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve question"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve question"))
 	}
 
 	// Emit question update (resolved)
@@ -94,6 +105,8 @@ func (s *Service) ResolveQuestion(
 }
 
 // ListPendingQuestions returns every pending question in a chat, oldest first,
+// or, with chat_id unset, in every chat the caller owns (set is a filter,
+// unset is none; an empty chat_id is rejected rather than read as unset),
 // each carrying the thread that asked it. A question whose asking run
 // completed or was cancelled is left out: nothing can answer it, and shown in
 // its thread's composer it would replace the input the user needs to message
@@ -105,7 +118,7 @@ func (s *Service) ResolveQuestion(
 // question, and the user's reply to that thread went to its mailbox — which a
 // thread parked on a question never drains.
 //
-// The chat is verified to exist and be the caller's BEFORE the question lookup,
+// A set chat is verified to exist and be the caller's BEFORE the question lookup,
 // which is the difference between "there is no gate" and "that is not a chat".
 // Without the check both collapse into an empty-but-successful response, and
 // the CLI renders it as "No open questions." with exit 0 — a clean-looking
@@ -118,18 +131,28 @@ func (s *Service) ListPendingQuestions(
 ) (*connect.Response[reliantv1.ListPendingQuestionsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+	var (
+		questions []*db.Question
+		err       error
+	)
+	if req.Msg.ChatId == nil {
+		questions, err = s.deps.Repo.ListAnswerablePendingQuestionsByUser(ctx, userID)
+	} else {
+		chatID := req.Msg.GetChatId()
+		if chatID == "" {
+			return nil, svcerr.InvalidArgument("chat_id, when set, must not be empty")
+		}
+		chat, getErr := s.deps.Repo.GetChat(ctx, chatID)
+		if getErr != nil {
+			return nil, svcerr.WrapOr(getErr, svcerr.Internal("failed to get chat"))
+		}
+		if chat == nil || chat.UserID != userID {
+			return nil, svcerr.NotFound("chat")
+		}
+		questions, err = s.deps.Repo.ListAnswerablePendingQuestionsByChat(ctx, chatID)
 	}
-
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
-	if err != nil || chat == nil || chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
-	}
-
-	questions, err := s.deps.Repo.ListAnswerablePendingQuestionsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list pending questions: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list pending questions"))
 	}
 
 	resp := &reliantv1.ListPendingQuestionsResponse{
@@ -158,6 +181,16 @@ func questionToProto(q *db.Question) *reliantv1.QuestionInfo {
 	}
 	if q.Metadata != nil {
 		info.Metadata = q.Metadata
+	}
+	info.Async = q.Async
+	if q.ToolCallID != nil {
+		info.ToolCallId = *q.ToolCallID
+	}
+	if q.ResponseData != nil {
+		info.ResponseData = q.ResponseData
+	}
+	if q.WithdrawnReason != nil {
+		info.WithdrawnReason = q.WithdrawnReason
 	}
 	return info
 }

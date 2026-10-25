@@ -141,6 +141,8 @@ func (r *greenfieldRun) text(t *testing.T, messageID string) string {
 // guidance before the model first reads it — hidden from the transcript,
 // visible to the model, and after the user's ask.
 func TestGreenfieldProbeSeedsGuidanceWhenTheDirectoryHasNoCode(t *testing.T) {
+	t.Parallel()
+
 	run := newGreenfieldRun(t, false)
 	daemon := &codePresenceDaemon{configFiles: []string{".gitignore"}}
 
@@ -167,6 +169,8 @@ func TestGreenfieldProbeSeedsGuidanceWhenTheDirectoryHasNoCode(t *testing.T) {
 // Replaying the run from before the probe (a reset) runs the activity again.
 // The thread is seeded once, and the daemon is not asked twice.
 func TestGreenfieldProbeSeedsAThreadOnlyOnce(t *testing.T) {
+	t.Parallel()
+
 	run := newGreenfieldRun(t, false)
 	daemon := &codePresenceDaemon{}
 	probe := NewGreenfieldProbeActivity(run.repo, daemon)
@@ -185,6 +189,8 @@ func TestGreenfieldProbeSeedsAThreadOnlyOnce(t *testing.T) {
 // A project that already holds code is not a stack question. Nudging there is
 // the expensive misfire: it reads as a pitch to someone who already chose.
 func TestGreenfieldProbeSeedsNothingWhenTheDirectoryHasCode(t *testing.T) {
+	t.Parallel()
+
 	run := newGreenfieldRun(t, false)
 
 	out, err := NewGreenfieldProbeActivity(run.repo, &codePresenceDaemon{hasCode: true}).Execute(run.ctx, run.input)
@@ -196,6 +202,8 @@ func TestGreenfieldProbeSeedsNothingWhenTheDirectoryHasCode(t *testing.T) {
 // An unreachable or failing daemon is the common case during onboarding, not an
 // anomaly. It costs the run the guidance and nothing else: no error, no message.
 func TestGreenfieldProbeSeedsNothingWhenTheDaemonFails(t *testing.T) {
+	t.Parallel()
+
 	for name, daemon := range map[string]*codePresenceDaemon{
 		"daemon unreachable": {failWith: errors.New("no daemon connected")},
 		"scan failed":        {scanError: "permission denied"},
@@ -214,6 +222,8 @@ func TestGreenfieldProbeSeedsNothingWhenTheDaemonFails(t *testing.T) {
 // A daemon that never answers is bounded by the probe's own timeout, not by the
 // caller's patience.
 func TestGreenfieldProbeGivesUpOnASilentDaemon(t *testing.T) {
+	t.Parallel()
+
 	run := newGreenfieldRun(t, false)
 	silent := &silentDaemon{}
 
@@ -239,6 +249,8 @@ func (s silentDaemon) SendDaemonCommandToDaemon(ctx context.Context, userID stri
 
 // A run with no machine never reaches one, not even to ask a question.
 func TestGreenfieldProbeNeverAsksForANoMachineChat(t *testing.T) {
+	t.Parallel()
+
 	run := newGreenfieldRun(t, true)
 	daemon := &codePresenceDaemon{}
 
@@ -252,6 +264,8 @@ func TestGreenfieldProbeNeverAsksForANoMachineChat(t *testing.T) {
 // The probe asks the machine the run's tools execute on when the run has
 // pinned one, and the user's default daemon otherwise.
 func TestGreenfieldProbeAsksTheRunsDaemon(t *testing.T) {
+	t.Parallel()
+
 	run := newGreenfieldRun(t, false)
 	daemon := &codePresenceDaemon{hasCode: true}
 	input := run.input
@@ -264,6 +278,8 @@ func TestGreenfieldProbeAsksTheRunsDaemon(t *testing.T) {
 
 // A worker with no daemon router has no filesystem to ask.
 func TestGreenfieldProbeSkipsWithoutADaemonRouter(t *testing.T) {
+	t.Parallel()
+
 	run := newGreenfieldRun(t, false)
 
 	out, err := NewGreenfieldProbeActivity(run.repo, nil).Execute(run.ctx, run.input)
@@ -276,17 +292,21 @@ func TestGreenfieldProbeSkipsWithoutADaemonRouter(t *testing.T) {
 // .vscode settings file pinning a Python interpreter is a stack declaration,
 // and the model is told to read them before recommending anything.
 func TestGreenfieldGuidanceNamesStackDeclaringConfig(t *testing.T) {
+	t.Parallel()
+
 	content := BuildGreenfieldGuidance([]string{".gitignore", ".vscode/settings.json"})
 
 	assert.Contains(t, content, ".gitignore")
 	assert.Contains(t, content, ".vscode/settings.json")
 }
 
-// The message must leave the decision with the model and be explicit about the
-// cases where forge is the wrong answer. Without the negative space this
+// The message proposes rather than imposes, and is explicit about the cases
+// where forge is the wrong answer. Without the negative space this
 // becomes a standing preference that fires on every empty directory, which is
 // the failure mode that makes a suggestion feel like an ad.
 func TestGreenfieldGuidanceContent(t *testing.T) {
+	t.Parallel()
+
 	content := BuildGreenfieldGuidance(nil)
 
 	assert.Contains(t, content, "When this chat started",
@@ -317,6 +337,8 @@ func TestGreenfieldGuidanceContent(t *testing.T) {
 // away from a case forge actually serves. A roofing app whose crews work off phones
 // is the example that surfaced it.
 func TestGreenfieldGuidanceDoesNotExcludeMobile(t *testing.T) {
+	t.Parallel()
+
 	content := BuildGreenfieldGuidance(nil)
 
 	_, negative, found := strings.Cut(content, "Do NOT suggest forge when")
@@ -332,6 +354,8 @@ func TestGreenfieldGuidanceDoesNotExcludeMobile(t *testing.T) {
 // to many services, several frontends and non-k3d deploy targets. A model that thinks
 // forge is a starter kit will propose it and then migrate off it.
 func TestGreenfieldGuidanceStatesTheCeiling(t *testing.T) {
+	t.Parallel()
+
 	content := BuildGreenfieldGuidance(nil)
 
 	assert.Contains(t, content, "scales the whole way up",
@@ -349,6 +373,8 @@ func TestGreenfieldGuidanceStatesTheCeiling(t *testing.T) {
 // workload to Fly, Cloud Run, ECS or Lambda. Naming them made the model promise
 // a deploy target forge cannot reach (tracked in reliant-labs/forge#400).
 func TestGreenfieldGuidanceDoesNotPromiseRemovedDeployTargets(t *testing.T) {
+	t.Parallel()
+
 	content := BuildGreenfieldGuidance(nil)
 
 	// The automations paragraph names Lambda only as outside infrastructure not
@@ -363,23 +389,25 @@ func TestGreenfieldGuidanceDoesNotPromiseRemovedDeployTargets(t *testing.T) {
 }
 
 // Static sites are a forge case, not an exclusion. A landing page or marketing
-// site gets hosted static hosting, envs and promotion from the same project that
-// later grows its API. Without saying so, the model treats "no backend" as "not
+// site gets hosted static hosting, envs and promotion, and an API beside it
+// when it needs one. Without saying so, the model treats "no backend" as "not
 // forge" and hands the user a page with no deploy story.
 func TestGreenfieldGuidanceOffersForgeForStaticSites(t *testing.T) {
+	t.Parallel()
+
 	content := BuildGreenfieldGuidance(nil)
 
 	positive, negative, found := strings.Cut(content, "Do NOT suggest forge when")
 	require.True(t, found)
 
-	for _, want := range []string{"landing page", "marketing", "static"} {
+	for _, want := range []string{"landing page", "marketing", "static", "SPA", "PWA"} {
 		assert.Contains(t, positive, want,
 			"the guidance must name %q as a case forge serves", want)
 	}
 	assert.Contains(t, positive, "deploy/static-site",
 		"the model needs the skill to load for the static path, not the service sequence")
 
-	for _, excluded := range []string{"landing", "static", "marketing"} {
+	for _, excluded := range []string{"landing", "static", "marketing", "SPA", "PWA"} {
 		assert.NotContains(t, negative, excluded,
 			"%q must not be listed as a reason to steer away from forge", excluded)
 	}
@@ -393,6 +421,8 @@ func TestGreenfieldGuidanceOffersForgeForStaticSites(t *testing.T) {
 // example, nests the app one directory down, and the chat then never becomes a
 // forge chat. So the guidance must ask for --in-place, and say why.
 func TestGreenfieldGuidanceScaffoldsAtTheProjectRoot(t *testing.T) {
+	t.Parallel()
+
 	content := BuildGreenfieldGuidance(nil)
 
 	positive, _, found := strings.Cut(content, "Do NOT suggest forge when")
@@ -411,6 +441,8 @@ func TestGreenfieldGuidanceScaffoldsAtTheProjectRoot(t *testing.T) {
 // see, with no name to look up. The instruction to announce it and link the
 // repo is the only thing closing that gap.
 func TestGreenfieldGuidanceRequiresDisclosure(t *testing.T) {
+	t.Parallel()
+
 	content := BuildGreenfieldGuidance(nil)
 
 	assert.Contains(t, content, forgeRepoURL,
@@ -428,6 +460,8 @@ func TestGreenfieldGuidanceRequiresDisclosure(t *testing.T) {
 // platform it runs on does scheduled agents. Unattended work must route to a
 // workflow with a trigger, via the skill that knows how to build one.
 func TestGreenfieldGuidanceRoutesUnattendedWorkToWorkflows(t *testing.T) {
+	t.Parallel()
+
 	content := BuildGreenfieldGuidance(nil)
 
 	automations, forgeSection, found := strings.Cut(content, "If the user has NOT named a stack")
@@ -455,6 +489,8 @@ func TestGreenfieldGuidanceRoutesUnattendedWorkToWorkflows(t *testing.T) {
 // "SaaS-shaped" made workers, crons, operators and static sites read as out of
 // scope.
 func TestGreenfieldGuidanceDoesNotScopeForgeToSaaS(t *testing.T) {
+	t.Parallel()
+
 	content := BuildGreenfieldGuidance(nil)
 
 	assert.NotContains(t, content, "SaaS")
@@ -470,6 +506,8 @@ func TestGreenfieldGuidanceDoesNotScopeForgeToSaaS(t *testing.T) {
 // A schedule-driven script is an automation, so "script" cannot be a blanket
 // reason to stay away from the platform: only a one-off one is.
 func TestGreenfieldGuidanceDoesNotExcludeScheduledScripts(t *testing.T) {
+	t.Parallel()
+
 	content := BuildGreenfieldGuidance(nil)
 
 	_, negative, found := strings.Cut(content, "Do NOT suggest forge when")
@@ -485,9 +523,52 @@ func TestGreenfieldGuidanceDoesNotExcludeScheduledScripts(t *testing.T) {
 // Hosting refuses some workload kinds; promising them would send the user into
 // a failed deploy.
 func TestGreenfieldGuidanceStatesWhatHostingRefuses(t *testing.T) {
+	t.Parallel()
+
 	content := BuildGreenfieldGuidance(nil)
 
 	assert.Contains(t, content, "Reliant hosting runs services, workers and jobs")
 	assert.Contains(t, content, "a cron-kind workload or an operator needs a cluster they operate")
 	assert.Contains(t, content, "a worker that runs its own schedule is fine hosted")
+}
+
+// "Consider proposing forge", with static sites in a later paragraph phrased as
+// "a forge case too, not an exception", still read as: forge is a backend
+// framework that tolerates static sites. Models then handed landing pages to
+// other hosts with no environments and no deploy story. Frontend-only work is a
+// reason to use forge in its own right: named in the opening sentence, given its
+// own paragraph ahead of the app details, and proposed by default.
+func TestGreenfieldGuidanceProposesForgeByDefaultForFrontendOnly(t *testing.T) {
+	content := BuildGreenfieldGuidance(nil)
+
+	_, forgeSection, found := strings.Cut(content, "If the user has NOT named a stack")
+	require.True(t, found)
+	opening, _, found := strings.Cut(forgeSection, "\n\n")
+	require.True(t, found)
+
+	assert.Contains(t, opening, "propose forge (`reliant forge`) by default")
+	assert.NotContains(t, content, "consider proposing forge", "proposing forge is the default, not an option")
+	for _, want := range []string{"a frontend with no backend", "landing page", "SPA", "PWA"} {
+		assert.Contains(t, opening, want, "the opening forge sentence must name %q", want)
+	}
+
+	// The frontend-only paragraph precedes the app internals, and is not
+	// phrased as an exception to them.
+	frontend := strings.Index(content, "For a frontend alone")
+	app := strings.Index(content, "SQL migrations are the schema truth")
+	require.GreaterOrEqual(t, frontend, 0)
+	require.GreaterOrEqual(t, app, 0)
+	assert.Less(t, frontend, app, "the frontend-only path comes before the app details")
+	assert.NotContains(t, content, "exception")
+	assert.NotContains(t, content, "a forge case too")
+
+	// What a frontend alone concretely gets, and honesty about PWAs.
+	for _, want := range []string{
+		"`reliant forge env up dev`", "static hosting", "custom domains",
+		"`frontend/design`", ".forge/logs", "room to add an API",
+		"the service worker and manifest are yours to write",
+		"A static site alone has a free tier",
+	} {
+		assert.Contains(t, content, want)
+	}
 }

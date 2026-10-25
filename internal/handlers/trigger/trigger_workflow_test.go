@@ -8,10 +8,12 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -74,6 +76,8 @@ func (e *triggerTestEnv) storedTriggers(t *testing.T) []*core.Trigger {
 }
 
 func TestEnableWorkflowEnablesEveryDeclaredTrigger(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", enableWorkflowYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -111,6 +115,9 @@ func TestEnableWorkflowEnablesEveryDeclaredTrigger(t *testing.T) {
 // One trigger with no connection refuses the lot, names the cause, and writes
 // nothing: no row, no schedule, no webhook token.
 func TestEnableWorkflowIsAllOrNothingWhenAConnectionIsMissing(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", enableWorkflowYAML)
 
@@ -135,6 +142,8 @@ func TestEnableWorkflowIsAllOrNothingWhenAConnectionIsMissing(t *testing.T) {
 // A failure while writing (here the schedule backend) undoes what was already
 // written, and every result says so.
 func TestEnableWorkflowUndoesWhatItWroteWhenAWriteFails(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", `name: triage
 triggers:
@@ -165,6 +174,9 @@ nodes:
 }
 
 func TestEnableWorkflowResumesAPausedActivationAndKeepsItsSettings(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", enableWorkflowYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -204,6 +216,8 @@ func TestEnableWorkflowResumesAPausedActivationAndKeepsItsSettings(t *testing.T)
 // activation is brought to the request, keeps its name and id, and stays one
 // row per trigger.
 func TestEnableWorkflowUpdatesTheSettingsOfAnEnabledAutomation(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", enableWorkflowYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -249,6 +263,9 @@ func TestEnableWorkflowUpdatesTheSettingsOfAnEnabledAutomation(t *testing.T) {
 // Finish setup is the same call on a paused automation: it takes the new
 // settings and resumes.
 func TestEnableWorkflowResumesAPausedAutomationWithNewSettings(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", enableWorkflowYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -276,6 +293,8 @@ func TestEnableWorkflowResumesAPausedAutomationWithNewSettings(t *testing.T) {
 // An existing activation's new settings are validated like a new one's, and a
 // refusal changes nothing anywhere.
 func TestEnableWorkflowRevalidatesAnExistingAutomationAndRefusesWithoutWriting(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", enableWorkflowYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -301,6 +320,8 @@ func TestEnableWorkflowRevalidatesAnExistingAutomationAndRefusesWithoutWriting(t
 // A write that fails after another activation was already changed puts that
 // one's previous settings back.
 func TestEnableWorkflowPutsBackAnUpdatedAutomationWhenALaterWriteFails(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", `name: triage
 inputs:
@@ -341,6 +362,8 @@ nodes:
 // A request that names no connection keeps the one an activation listens
 // through instead of moving it to the default.
 func TestEnableWorkflowKeepsAnUnnamedConnection(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", enableWorkflowYAML)
 	env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -360,6 +383,8 @@ func TestEnableWorkflowKeepsAnUnnamedConnection(t *testing.T) {
 // The shared prompt fills in for a declaration that has none and never
 // overrides one that does.
 func TestEnableWorkflowSharedPromptOnlyFillsDeclarationsWithoutOne(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", `name: triage
 triggers:
@@ -390,6 +415,8 @@ nodes:
 // names no input or has the wrong type is refused for every trigger, and
 // nothing is written.
 func TestEnableWorkflowRefusesBadParamsWithoutWriting(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", enableWorkflowYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -414,6 +441,9 @@ func resultFor(resp *reliantv1.EnableWorkflowResponse, trigger string) *reliantv
 }
 
 func TestEnableWorkflowOverridesOneTrigger(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", enableWorkflowYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -439,7 +469,7 @@ func TestEnableWorkflowOverridesOneTrigger(t *testing.T) {
 		r.Overrides = []*reliantv1.WorkflowTriggerOverride{{Trigger: "nope"}}
 	})))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func withUser(ctx context.Context, userID string) context.Context {
@@ -447,24 +477,29 @@ func withUser(ctx context.Context, userID string) context.Context {
 }
 
 func TestEnableWorkflowRefusals(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "plain", "name: plain\nentry: [a]\nnodes:\n  - id: a\n    type: approval\n    args: {title: ok}\n")
 
 	_, err := env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.Workflow = "plain" })))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "a workflow with no triggers has nothing to enable")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "a workflow with no triggers has nothing to enable")
 
 	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.Workflow = "missing" })))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 
 	_, err = env.svc.EnableWorkflow(env.ctx, connect.NewRequest(env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.ProjectId = "" })))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 // A machine the project cannot run on refuses the lot, like any activation.
 func TestEnableWorkflowRefusesAnUnknownMachineWithoutWriting(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", enableWorkflowYAML)
 	resp := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) { r.DaemonId = "no-such-daemon" }))
@@ -473,6 +508,9 @@ func TestEnableWorkflowRefusesAnUnknownMachineWithoutWriting(t *testing.T) {
 }
 
 func TestDisableWorkflowPausesOnlyThatWorkflowsActivations(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", enableWorkflowYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -490,6 +528,8 @@ func TestDisableWorkflowPausesOnlyThatWorkflowsActivations(t *testing.T) {
 
 // A pause that fails does not stop the others, and is reported.
 func TestDisableWorkflowReportsAFailureAndPausesTheRest(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", enableWorkflowYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -503,7 +543,9 @@ func TestDisableWorkflowReportsAFailureAndPausesTheRest(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Failed, 2)
 	for _, f := range resp.Msg.Failed {
-		assert.Contains(t, f.Message, "temporal")
+		// The schedule backend's own text is server-side: the person reads
+		// what failed, and the log reads why.
+		assert.Equal(t, "the schedule backend is unavailable", f.Message)
 		assert.NotEmpty(t, f.TriggerId)
 	}
 	require.Len(t, resp.Msg.Paused, 1, "the webhook pauses though the others could not")
@@ -512,6 +554,9 @@ func TestDisableWorkflowReportsAFailureAndPausesTheRest(t *testing.T) {
 
 // One user cannot enable, resume or pause another's activations.
 func TestWorkflowEnableAndDisableAreScopedToTheCaller(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", enableWorkflowYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -561,6 +606,8 @@ func (e *triggerTestEnv) storedNames(t *testing.T) []string {
 // A paused automation whose workflow was deleted is debris: it must not block
 // enabling a workflow that would take the same default name.
 func TestEnableWorkflowIsNotBlockedByABrokenLeftoverOfADeletedWorkflow(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", hookOnlyYAML)
 	env.leftover(t, "triage · hook", "no-such-workflow")
@@ -576,6 +623,8 @@ func TestEnableWorkflowIsNotBlockedByABrokenLeftoverOfADeletedWorkflow(t *testin
 // A live automation of another workflow holding the default name no longer
 // asks the user to invent a prefix: the new names are qualified by source.
 func TestEnableWorkflowNamesApartFromALiveAutomationOfAnotherWorkflow(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", hookOnlyYAML)
 	env.saveWorkflow(t, "other", hookOnlyYAML)
@@ -588,6 +637,8 @@ func TestEnableWorkflowNamesApartFromALiveAutomationOfAnotherWorkflow(t *testing
 }
 
 func TestActivationPrefixIsQualifiedBySourceThenNumbered(t *testing.T) {
+	t.Parallel()
+
 	svc := &Service{}
 	declared := []*reliantv1.WorkflowTrigger{{Name: "a"}, {Name: "b"}}
 	pick := func(workflow, prefix string, taken ...string) string {
@@ -607,6 +658,8 @@ func TestActivationPrefixIsQualifiedBySourceThenNumbered(t *testing.T) {
 }
 
 func TestActivationPrefixLeavesAResumedActivationAndAChosenNameAlone(t *testing.T) {
+	t.Parallel()
+
 	svc := &Service{}
 	declared := []*reliantv1.WorkflowTrigger{{Name: "a"}, {Name: "b"}}
 	chosen := "My own name"
@@ -622,6 +675,8 @@ func TestActivationPrefixLeavesAResumedActivationAndAChosenNameAlone(t *testing.
 
 // A name the caller chose for one trigger is theirs: if it is taken, say so.
 func TestEnableWorkflowStillRefusesAChosenNameThatIsTaken(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", hookOnlyYAML)
 	env.leftover(t, "mine", "no-such-workflow")
@@ -637,6 +692,8 @@ func TestEnableWorkflowStillRefusesAChosenNameThatIsTaken(t *testing.T) {
 }
 
 func TestRetireDeletedTriggersDeletesTheirSchedules(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.svc.RetireDeletedTriggers(env.ctx, []*core.Trigger{
 		{ID: "s1", UserID: env.userID, Kind: core.TriggerKindSchedule},

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -29,7 +30,7 @@ import (
 
 // realDaemonRouter sends every command to the daemon's real handler (the same
 // registry the daemon dispatches from), against real git repositories. The
-// worktree root is redirected to a temp HOME.
+// worktree root is the test binary's private HOME (TestMain).
 type realDaemonRouter struct {
 	toolexectest.Stub
 	calls []string
@@ -64,24 +65,35 @@ type reclaimEnv struct {
 	ctx     context.Context
 	project *db.Project
 	root    string
+	// dir is this test's directory under root: the tests share the binary's
+	// HOME, and so the daemon's worktree root.
+	dir string
 }
 
 func newReclaimEnv(t *testing.T) *reclaimEnv {
 	t.Helper()
+	if testing.Short() {
+		// Real git worktrees driven through the daemon's reclaim handlers end
+		// to end: seconds each, and 10-25s on a loaded machine.
+		t.Skip("-short: drives real git worktrees through the reclaim handlers (seconds each); runs in task test")
+	}
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	// The daemon's worktree root is <home>/.reliant/worktrees; the shared
-	// reclaimer reads it once, so this test process must use one HOME. Skip the
-	// sharing by pointing the registered handlers at the same root.
+	// The daemon's worktree root is <HOME>/.reliant/worktrees, and HOME is the
+	// binary's own (TestMain), so every test shares the root and its one
+	// Reclaimer, and keeps to a directory of its own under it, in parallel. A
+	// t.Setenv'd HOME each made them serial: nineteen in a row ran the
+	// package past its 300s budget under -race in the release gate.
+	t.Parallel()
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
 	root := filepath.Join(home, ".reliant", "worktrees")
 	require.NoError(t, os.MkdirAll(root, 0o755))
 
 	repo := db.NewTestRepo(t)
 	userID := uuid.NewString()
-	e := &reclaimEnv{repo: repo, userID: userID, daemon: "d-" + uuid.NewString(), root: root,
+	e := &reclaimEnv{repo: repo, userID: userID, daemon: "d-" + uuid.NewString(), root: root, dir: "p-" + userID[:8],
 		ctx: context.WithValue(context.Background(), auth.UserIDContextKey, userID), router: &realDaemonRouter{}}
 
 	projectPath := filepath.Join(t.TempDir(), "project")
@@ -105,7 +117,7 @@ func newReclaimEnv(t *testing.T) *reclaimEnv {
 func (e *reclaimEnv) worktree(t *testing.T, name string) (*db.Worktree, string) {
 	t.Helper()
 	id := uuid.NewString()
-	path := filepath.Join(e.root, "proj", name)
+	path := filepath.Join(e.root, e.dir, name)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	gitIn(t, e.project.Path, "worktree", "add", "-q", "-b", "feat/"+name, path, "main")
 	require.NoError(t, worktreereclaim.LockCheckout(e.ctx, path, id))
@@ -116,18 +128,54 @@ func (e *reclaimEnv) worktree(t *testing.T, name string) (*db.Worktree, string) 
 	return wt, path
 }
 
-// age makes a worktree look untouched for two days: its directory, and the
-// index, HEAD and reflog of its git admin directory.
+// age makes a worktree look untouched for two days: its directory, the index
+// and HEAD of its git admin directory, and its reflog. The reclaimer reads the
+// reflog's EVENT times, not its mtime (gc and `reflog expire` rewrite the file
+// without any user activity), so every entry is re-dated as well.
 func age(t *testing.T, path string) {
 	t.Helper()
 	old := time.Now().Add(-48 * time.Hour)
 	_ = os.Chtimes(path, old, old)
 	if b, err := os.ReadFile(filepath.Join(path, ".git")); err == nil {
 		dir := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(b)), "gitdir:"))
+		redateReflog(t, filepath.Join(dir, "logs", "HEAD"), old)
 		for _, n := range []string{"index", "HEAD", "logs/HEAD", "."} {
 			_ = os.Chtimes(filepath.Join(dir, n), old, old)
 		}
 	}
+}
+
+// redateReflog rewrites every entry of the reflog at path to have happened at
+// at. An entry is "<old> <new> <name> <<email>> <unix> <tz>[\t<message>]": the
+// first entry of a linked worktree (git worktree add) has no message.
+func redateReflog(t *testing.T, path string, at time.Time) {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return
+	}
+	require.NoError(t, err)
+	lines := strings.SplitAfter(string(b), "\n")
+	for i, line := range lines {
+		if line == "" {
+			continue
+		}
+		entry, nl := strings.CutSuffix(line, "\n")
+		head, msg, hasMsg := strings.Cut(entry, "\t")
+		end := strings.LastIndex(head, "> ")
+		require.GreaterOrEqual(t, end, 0, "reflog entry %q", entry)
+		when := strings.Fields(head[end+2:])
+		require.Len(t, when, 2, "reflog entry %q", entry)
+		entry = head[:end+2] + strconv.FormatInt(at.Unix(), 10) + " " + when[1]
+		if hasMsg {
+			entry += "\t" + msg
+		}
+		if nl {
+			entry += "\n"
+		}
+		lines[i] = entry
+	}
+	require.NoError(t, os.WriteFile(path, []byte(strings.Join(lines, "")), 0o644))
 }
 
 func exists(p string) bool { _, err := os.Lstat(p); return err == nil }
@@ -183,7 +231,7 @@ func TestRecreate_AppliesTheSavedSnapshotAndKeepsRefsUntilThen(t *testing.T) {
 	// Plain unarchive cannot work: there is no directory.
 	_, err = e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 
 	_, err = e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
 	require.NoError(t, err)
@@ -207,7 +255,7 @@ func TestPermanentDelete_RefusesWhileTheDirectoryIsStillOnDisk(t *testing.T) {
 	age(t, path)
 	_, err := e.svc.DeleteWorktree(e.ctx, connect.NewRequest(&reliantv1.DeleteWorktreeRequest{WorktreeId: wt.ID}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	_, getErr := e.repo.GetWorktree(e.ctx, wt.ID)
 	assert.NoError(t, getErr, "the row must survive so the directory can still be found")
 	assert.True(t, exists(path))
@@ -230,7 +278,7 @@ func TestImportWorktree_RejectsAnArchivedRowsPath(t *testing.T) {
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	_, err := e.svc.ImportWorktree(e.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{ProjectId: e.project.ID, Path: path}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "an archived row's path is excluded from discovery, so it cannot be imported")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an archived row's path is excluded from discovery, so it cannot be imported")
 }
 
 // NIT: storeCleanupMetadata merges instead of wiping held state.
@@ -271,7 +319,7 @@ func newMultiRepoEnv(t *testing.T) (*reclaimEnv, []string) {
 // back each one's saved work.
 func TestRecreate_RestoresEveryRepoOfAMultiRepoWorkspace(t *testing.T) {
 	e, repoPaths := newMultiRepoEnv(t)
-	ws := filepath.Join(e.root, "multi", "ws")
+	ws := filepath.Join(e.root, e.dir, "ws")
 	for i, name := range []string{"api", "web"} {
 		gitIn(t, repoPaths[i], "worktree", "add", "-q", "-b", "feat/ws", filepath.Join(ws, name), "main")
 		require.NoError(t, worktreereclaim.LockCheckout(e.ctx, filepath.Join(ws, name), "wsid"))
@@ -310,7 +358,7 @@ func TestRecreate_RestoresEveryRepoOfAMultiRepoWorkspace(t *testing.T) {
 // R-S4: a missing branch in ANY repo creates nothing.
 func TestRecreate_AMissingBranchInOneRepoCreatesNothing(t *testing.T) {
 	e, repoPaths := newMultiRepoEnv(t)
-	ws := filepath.Join(e.root, "multi", "half")
+	ws := filepath.Join(e.root, e.dir, "half")
 	gitIn(t, repoPaths[0], "branch", "feat/half")
 	now := time.Now().UTC()
 	wt := &db.Worktree{ID: "half", Name: "half", Path: ws, Branch: "feat/half", BaseBranch: "main", ProjectID: e.project.ID,
@@ -396,7 +444,7 @@ func TestUnarchive_RefusedWhenTheMachineSaysGone(t *testing.T) {
 	require.False(t, exists(path))
 	_, err := e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	got, _ := e.repo.GetWorktree(e.ctx, wt.ID)
 	assert.NotNil(t, got.DeletedAt, "the row must NOT flip to active over a missing directory")
 	assert.True(t, got.CleanupMetadata.DirectoryDeleted, "and it now records that the files are gone")
@@ -433,7 +481,7 @@ func TestUnarchive_OfAParkedRow(t *testing.T) {
 		claim := worktreereclaim.ArchivedLockReason(wt.ID, strconv.FormatInt(row.DeletedAt.UnixNano(), 10))
 		// The daemon's reclaimer already exists (its start-up recovery has run).
 		_, _ = e.router.SendDaemonCommand(context.Background(), e.userID, "worktree.reconcile",
-			[]byte(fmt.Sprintf(`{"worktrees":[{"id":"warm","path":%q,"state":"active"}]}`, filepath.Join(e.root, "proj", "nothing"))), 0)
+			[]byte(fmt.Sprintf(`{"worktrees":[{"id":"warm","path":%q,"state":"active"}]}`, filepath.Join(e.root, e.dir, "nothing"))), 0)
 		gitIn(t, e.project.Path, "worktree", "unlock", path)
 		q = filepath.Join(e.root, ".reclaim", wt.ID, fmt.Sprintf("root-%d-cafef00d", time.Now().UnixNano()))
 		require.NoError(t, os.MkdirAll(filepath.Dir(q), 0o755))

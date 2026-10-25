@@ -33,9 +33,12 @@ type listPkg struct {
 	XTestEmbedFiles []string
 	EmbedPatterns   []string
 	Deps            []string
+	Imports         []string
+	TestImports     []string
+	XTestImports    []string
 }
 
-const listFields = "ImportPath,Dir,ForTest,GoFiles,TestGoFiles,XTestGoFiles,IgnoredGoFiles,EmbedFiles,TestEmbedFiles,XTestEmbedFiles,EmbedPatterns,Deps"
+const listFields = "ImportPath,Dir,ForTest,GoFiles,TestGoFiles,XTestGoFiles,IgnoredGoFiles,EmbedFiles,TestEmbedFiles,XTestEmbedFiles,EmbedPatterns,Deps,Imports,TestImports,XTestImports"
 
 func goList(ctx context.Context, root string) ([]listPkg, error) {
 	args := []string{"list", "-e", "-test", "-json=" + listFields, "./..."}
@@ -118,13 +121,17 @@ type Graph struct {
 	// BuildDeps[P] is the same for P itself, for every package (tests or not):
 	// the packages `go build` of P compiles.
 	BuildDeps map[string]map[string]bool
+	// DirectImports[P] is the module packages P's own files, test files and
+	// external test files import by name: one hop, not the closure. The
+	// merge tier's -reach direct selects by it.
+	DirectImports map[string]map[string]bool
 	// Readers[P] is the repo paths P's Go sources name: what its tests may read.
 	Readers map[string][]string
 	// Walkers read every Go file of the module (a tree-wide guard test).
 	Walkers map[string]bool
 	// DBTests are the packages whose test files use the DB test helpers.
 	DBTests map[string]bool
-	// Web is the import graph of web/ (nil when web/ is absent).
+	// Web is the import graph of frontends/web/ (nil when frontends/web/ is absent).
 	Web *WebGraph
 	// ElectronText holds the source of electron tests that name files outside
 	// electron/src (repo-relative path -> text).
@@ -132,7 +139,7 @@ type Graph struct {
 }
 
 // LoadGraph reads the module's package graph with `go list` (default tags: what
-// `make test-short` builds) and scans the sources for what their tests read.
+// `task test:short` builds) and scans the sources for what their tests read.
 func LoadGraph(ctx context.Context, root, module string, tracked []string) (*Graph, error) {
 	list, err := goList(ctx, root)
 	if err != nil {
@@ -152,12 +159,23 @@ func buildGraph(root, module string, tracked []string, list []listPkg) *Graph {
 		Readers:   map[string][]string{},
 		Walkers:   map[string]bool{},
 		DBTests:   map[string]bool{},
+
+		DirectImports: map[string]map[string]bool{},
 	}
 	ix := &indexer{g: g, root: root, module: module, pkgDirs: map[string]string{}}
 	ix.index(list)
 	for _, p := range list {
 		if ix.ownPackage(p) {
 			g.BuildDeps[p.ImportPath] = depSet(p, module)
+			imp := map[string]bool{}
+			for _, list := range [][]string{p.Imports, p.TestImports, p.XTestImports} {
+				for _, i := range list {
+					if b := base(i); strings.HasPrefix(b, module) && b != p.ImportPath {
+						imp[b] = true
+					}
+				}
+			}
+			g.DirectImports[p.ImportPath] = imp
 			continue
 		}
 		if p.ForTest == "" && strings.HasSuffix(p.ImportPath, ".test") {
@@ -248,8 +266,9 @@ func (ix *indexer) index(list []listPkg) {
 // ── what a package's tests read ─────────────────────────────────────────────
 
 // dbHelpers are the identifiers that make a test DB-backed: the helpers in
-// internal/db/testutil.go and the environment variable they read.
-var dbHelpers = []string{"SetupTestDB", "NewTestRepo", "resolveTestDSN", "DATABASE_URL", "SetupTestDBWithRawDB"}
+// internal/db/testutil.go (SetupTestDB also prefixes SetupTestDBWithRawDB)
+// and internal/store/storetest.
+var dbHelpers = []string{"SetupTestDB", "NewTestRepo", "NewTestDatabase", "storetest.New(", "cloneTestTemplate"}
 
 // scanSources finds, per package: the tracked repo paths its Go sources name as
 // string literals (alone, or joined as consecutive arguments of one call, the
@@ -430,15 +449,15 @@ func readPackageSources(dir, rel string) pkgSources {
 // directory the literals after it are relative to:
 //
 //   - literals from the first argument on are relative to the package
-//     directory, where go test runs: filepath.Join("..", "..", "web", "src")
-//     in internal/grpc names web/src;
+//     directory, where go test runs: filepath.Join("..", "..", "frontends", "web", "src")
+//     in internal/grpc names frontends/web/src;
 //   - literals joined onto the repo root (rootFacts.locates) name that path
 //     under the root: filepath.Join(repoRoot(t), "scripts", name) names
 //     scripts;
 //   - literals joined onto anything else (t.TempDir(), a fixture's checkout,
 //     a workspace) name a path under that directory, not in this repo, and
 //     are no read at all: filepath.Join(ws, "web") is a fixture's web
-//     checkout, not web/.
+//     checkout, not frontends/web/.
 //
 // Every other literal is judged alone, as it always was: a multi-segment
 // literal that matches a tracked path is a read wherever it is anchored, and a

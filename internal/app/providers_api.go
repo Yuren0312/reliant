@@ -16,7 +16,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
-	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
@@ -72,8 +72,8 @@ import (
 // variant, nor start a loop that runs only here.
 
 // APISettings is the api-server's own config (ApiServerConfig) in the shapes
-// its nodes take, read and validated once. The api root lists it as its LAST
-// field, so a value it refuses stops the process before anything is dialled.
+// its nodes take, read once. The api root lists it as its LAST field, so the
+// JWT key file it reads is read before anything is dialled.
 type APISettings struct {
 	// Auth is how callers authenticate: the auth mode, the shared API key or
 	// the JWT key (PEM — given directly or read from its file — else JWKS
@@ -102,15 +102,13 @@ type APISettingsDeps struct {
 	API *config.ApiServerConfig
 }
 
-// NewAPISettings reads and validates the api-server's config, refusing what
-// it cannot serve with rather than failing when the first request arrives.
+// NewAPISettings reads the api-server's config. A value it cannot serve with
+// never gets here: api_server_config.proto's rules refuse it as the config
+// loads, before the process binds a port or applies a migration.
 //
 //forge:root-only api
 func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 	api := d.API
-	if err := CheckAPIServerConfig(api); err != nil {
-		return nil, err
-	}
 	// JWT public key: explicit value > file.
 	jwtPublicKey := api.GetJwtPublicKey()
 	if file := api.GetJwtPublicKeyFile(); jwtPublicKey == "" && file != "" {
@@ -139,29 +137,6 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 		"auth_mode", s.Auth.ModeName(),
 	)
 	return s, nil
-}
-
-// CheckAPIServerConfig refuses an ApiServerConfig the api-server cannot serve
-// with: a port that is not one, an auth mode without its credential, an
-// upload limit or a payload horizon that is not positive. (HEALTH_PORT is the
-// process policy's to check; the JWT key file is read by NewAPISettings.)
-func CheckAPIServerConfig(api *config.ApiServerConfig) error {
-	if err := CheckPorts(Port{Name: "GRPC_PORT (--grpc-port)", Port: api.GetGrpcPort()}); err != nil {
-		return err
-	}
-	if err := CheckPprofPort(api.GetPprofPort()); err != nil {
-		return err
-	}
-	if api.GetAuthMode() == auth.ModeAPIKey && api.GetAuthApiKey() == "" {
-		return fmt.Errorf("config: AUTH_MODE=apikey requires AUTH_API_KEY")
-	}
-	if n := api.GetMaxUploadSize(); n <= 0 {
-		return fmt.Errorf("config: MAX_UPLOAD_SIZE = %d is not a positive byte count", n)
-	}
-	if h := api.GetPayloadBlobGcHorizon().AsDuration(); h <= 0 {
-		return fmt.Errorf("config: RELIANT_PAYLOAD_BLOB_GC_HORIZON = %s is not a positive duration", h)
-	}
-	return nil
 }
 
 // UserAuthDeps is how callers authenticate, and the authority `rlat_` access
@@ -209,7 +184,7 @@ func NewUserChain(d UserChainDeps) (*grpcserver.UserChain, error) {
 type HTTPRoutesDeps struct {
 	Settings     *APISettings
 	Auth         *grpcserver.UserAuth
-	Repo         *DBRepo
+	DB           *db.Repo
 	Router       *APIDaemonRouter
 	Connections  *APIConnections
 	Inbound      *webhook.Inbound
@@ -229,9 +204,10 @@ type HTTPRoutesDeps struct {
 //
 //forge:root-only api
 func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
+	cp := ControlPlaneEndpoint(d.ControlPlane)
 	return grpcserver.NewAPIHTTPRoutes(grpcserver.APIHTTPRoutesDeps{
 		Auth:                d.Auth,
-		Repo:                d.Repo.Repo,
+		Repo:                d.DB,
 		Router:              d.Router.NATSDaemonRouter,
 		OAuth:               d.Connections.OAuth,
 		Inbound:             d.Inbound,
@@ -240,7 +216,8 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		PublicURL:           d.Integrations.PublicURL,
 		OAuthIssuers:        d.OAuthIssuers,
 		AuthorizationServer: d.Settings.AuthorizationServer,
-		ControlPlaneURL:     ControlPlaneEndpoint(d.ControlPlane).URL,
+		ControlPlaneURL:     cp.URL,
+		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
 	})
 }
 
@@ -309,7 +286,7 @@ type APIDaemonRouter struct{ *toolexec.NATSDaemonRouter }
 // daemon records come from, and the control plane that wakes machines.
 type APIDaemonRouterDeps struct {
 	NATS         *NATSConn
-	Repo         *DBRepo
+	DB           *db.Repo
 	ControlPlane *configv1.ControlPlaneConfig
 }
 
@@ -317,7 +294,7 @@ type APIDaemonRouterDeps struct {
 //
 //forge:root-only api
 func NewAPIDaemonRouter(d APIDaemonRouterDeps) (*APIDaemonRouter, error) {
-	router := toolexec.NewNATSDaemonRouter(d.NATS.Conn, daemonRouterOptions(d.Repo.Repo, ControlPlaneEndpoint(d.ControlPlane).URL)...)
+	router := toolexec.NewNATSDaemonRouter(d.NATS.Conn, daemonRouterOptions(d.DB, ControlPlaneEndpoint(d.ControlPlane).URL)...)
 	logging.Info("Using NATS daemon router — daemon services run in separate daemon-gateway process")
 	return &APIDaemonRouter{router}, nil
 }
@@ -338,7 +315,7 @@ func (r *APIDaemonRouter) Close(context.Context) error { return r.NATSDaemonRout
 // suspended managed machine, via controlplane.v1.DaemonService/ResumeDaemon,
 // authenticated as the signed-in user. cpURL is empty when no control plane is
 // configured, and then a suspended daemon is reported pending, never woken.
-func daemonRouterOptions(repo db.Repository, cpURL string) []toolexec.NATSRouterOption {
+func daemonRouterOptions(repo toolexec.DaemonRecords, cpURL string) []toolexec.NATSRouterOption {
 	opts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
 	if cpURL != "" {
 		opts = append(opts, toolexec.WithDaemonResumer(controlplane.NewInstrumented(controlplane.Deps{BaseURL: cpURL})))
@@ -348,9 +325,9 @@ func daemonRouterOptions(repo db.Repository, cpURL string) []toolexec.NATSRouter
 
 // APIToolsFactoryDeps is what the catalog's tool metadata reads.
 type APIToolsFactoryDeps struct {
-	Repo         *DBRepo
-	ControlPlane *configv1.ControlPlaneConfig
-	Temporal     *TemporalClient
+	DB       *db.Repo
+	Network  *configv1.NetworkConfig
+	Temporal *TemporalClient
 }
 
 // NewAPIToolsFactory is the tools factory CatalogService lists tools from:
@@ -358,10 +335,10 @@ type APIToolsFactoryDeps struct {
 //
 //forge:root-only api
 func NewAPIToolsFactory(d APIToolsFactoryDeps) (*tools.ToolsFactory, error) {
-	repo, temporalClient := d.Repo.Repo, d.Temporal.Client
+	repo, temporalClient := d.DB, d.Temporal.Client
 	return tools.NewToolsFactory(&tools.ToolsOptions{
-		Repo:            repo,
-		ControlPlaneURL: ControlPlaneEndpoint(d.ControlPlane).URL,
+		Repo:               repo,
+		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
 		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
@@ -400,7 +377,7 @@ type APIConnections struct {
 // OAuth clients this deployment has, and the origins a browser OAuth flow is
 // relayed back to.
 type APIConnectionsDeps struct {
-	Repo         *DBRepo
+	DB           *db.Repo
 	Vault        vault.Service
 	Integrations *IntegrationSettings
 	AppOrigins   []string
@@ -421,7 +398,7 @@ func NewAPIConnections(d APIConnectionsDeps) (*APIConnections, error) {
 	if err != nil {
 		return nil, fmt.Errorf("connections: %w", err)
 	}
-	store := d.Repo.Repo.Connections()
+	store := d.DB.Connections()
 	tokens := connections.NewTokenSource(store, d.Vault, providers, nil)
 	broker := connections.NewBroker(store, d.Vault, providers, nil, d.Integrations.PublicURL).WithAppOrigins(d.AppOrigins)
 	svc := connections.NewService(store, d.Vault, providers, tokens, broker, nil).
@@ -443,7 +420,7 @@ type APICatalogSearch struct{ *catalogindex.Service }
 // APICatalogSearchDeps is the connections it reports on, and whether a
 // control plane hosts this deployment.
 type APICatalogSearchDeps struct {
-	Repo         *DBRepo
+	DB           *db.Repo
 	ControlPlane *configv1.ControlPlaneConfig
 }
 
@@ -458,7 +435,7 @@ func NewAPICatalogSearch(d APICatalogSearchDeps) (*APICatalogSearch, error) {
 		return nil, fmt.Errorf("integration catalog index: %w", err)
 	}
 	delegated := delegatedAvailable(ControlPlaneEndpoint(d.ControlPlane).Hosted())
-	return &APICatalogSearch{catalogindex.NewService(idx, d.Repo.Repo.Connections(), catalogindex.DelegatedAvailable(delegated))}, nil
+	return &APICatalogSearch{catalogindex.NewService(idx, d.DB.Connections(), catalogindex.DelegatedAvailable(delegated))}, nil
 }
 
 // delegatedAvailable reports which delegated brokers the worker registers.
@@ -481,7 +458,7 @@ func delegatedAvailable(hosted bool) connections.DelegatedAvailable {
 // connection is opened with, and the control plane credentials are delegated
 // to.
 type InputOptionsDeps struct {
-	Repo         *DBRepo
+	DB           *db.Repo
 	Connections  *APIConnections
 	ControlPlane *configv1.ControlPlaneConfig
 }
@@ -501,7 +478,7 @@ func NewInputOptions(d InputOptionsDeps) (inputoptions.Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("input options: %w", err)
 	}
-	repo := d.Repo.Repo
+	repo := d.DB
 	creds, err := credwire.New(connections.NewResolver(repo, repo.Connections(), d.Connections.Tokens), ControlPlaneEndpoint(d.ControlPlane))
 	if err != nil {
 		return nil, err
@@ -554,7 +531,7 @@ func (c optionsChecker) CheckValues(ctx context.Context, check trigger.ValueChec
 
 // ConnectorGrantsDeps is the database connector grants live in.
 type ConnectorGrantsDeps struct {
-	Repo *DBRepo
+	DB *db.Repo
 }
 
 // NewConnectorGrants stores connector grants, their audit log and the OAuth
@@ -563,13 +540,13 @@ type ConnectorGrantsDeps struct {
 //
 //forge:root-only api
 func NewConnectorGrants(d ConnectorGrantsDeps) (connectorgrant.Store, error) {
-	return connectorgrant.NewSQLStore(connectorgrant.Deps{DB: d.Repo.Repo.ORM()}), nil
+	return connectorgrant.NewSQLStore(connectorgrant.Deps{DB: d.DB.ORM()}), nil
 }
 
 // GitHubAccessDeps is where an owner's GitHub token comes from: the control
 // plane when hosted, the owner's saved connection otherwise.
 type GitHubAccessDeps struct {
-	Repo         *DBRepo
+	DB           *db.Repo
 	Vault        vault.Service
 	ControlPlane *configv1.ControlPlaneConfig
 	Integrations *IntegrationSettings
@@ -589,7 +566,7 @@ type GitHubAccessDeps struct {
 //
 //forge:root-only api
 func NewGitHubAccess(d GitHubAccessDeps) (*ghaccess.Refresher, error) {
-	return wireGitHubAccess(d.Repo.Repo, d.Vault, ControlPlaneEndpoint(d.ControlPlane), d.Integrations.Webhooks)
+	return wireGitHubAccess(d.DB, d.Vault, ControlPlaneEndpoint(d.ControlPlane), d.Integrations.Webhooks)
 }
 
 // gitHubAccess adapts *ghaccess.Refresher to trigger.IntegrationAccess.
@@ -604,7 +581,7 @@ type TriggerSenders map[string]trigger.SenderDirectory
 // TriggerSendersDeps is where a caller's GitHub token comes from, as for
 // GitHubAccessDeps.
 type TriggerSendersDeps struct {
-	Repo         *DBRepo
+	DB           *db.Repo
 	Vault        vault.Service
 	ControlPlane *configv1.ControlPlaneConfig
 	Integrations *IntegrationSettings
@@ -616,7 +593,7 @@ type TriggerSendersDeps struct {
 //
 //forge:root-only api
 func NewTriggerSenders(d TriggerSendersDeps) (TriggerSenders, error) {
-	return wireGitHubSenders(d.Repo.Repo, d.Vault, ControlPlaneEndpoint(d.ControlPlane), d.Integrations.Webhooks)
+	return wireGitHubSenders(d.DB, d.Vault, ControlPlaneEndpoint(d.ControlPlane), d.Integrations.Webhooks)
 }
 
 // gitHubSenders adapts ghusers.Service to trigger.SenderDirectory. It
@@ -724,7 +701,7 @@ func (l *GitHubAccessLoop) Run(ctx context.Context) error {
 // TriggerAlertingDeps is the control plane that provisions alert receivers,
 // and the URL its Alertmanager delivers to.
 type TriggerAlertingDeps struct {
-	Repo         *DBRepo
+	DB           *db.Repo
 	ControlPlane *configv1.ControlPlaneConfig
 	Integrations *IntegrationSettings
 }
@@ -739,7 +716,7 @@ type TriggerAlertingDeps struct {
 //
 //forge:root-only api
 func NewTriggerAlerting(d TriggerAlertingDeps) (*triggers.Alerting, error) {
-	return wireTriggerAlerting(d.Repo.Repo, ControlPlaneEndpoint(d.ControlPlane), d.Integrations.PublicURL), nil
+	return wireTriggerAlerting(d.DB, ControlPlaneEndpoint(d.ControlPlane), d.Integrations.PublicURL), nil
 }
 
 // wireTriggerAlerting is NewTriggerAlerting over its parts.
@@ -749,13 +726,13 @@ func wireTriggerAlerting(repo *db.Repo, cp controlplane.Endpoint, publicURL stri
 	}
 	secret := cp.InternalServiceSecret
 	if secret == "" {
-		logging.Warn("alert-triage automations are plain webhooks here: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not")
+		logging.Warn("on-call automations are plain webhooks here: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not")
 		return nil
 	}
 	if strings.TrimSpace(publicURL) == "" {
 		// The control plane's Alertmanager needs an absolute URL to post to;
 		// a bare /hooks path would be refused at every enable.
-		logging.Warn("alert-triage automations are plain webhooks here: PUBLIC_URL is not set, so Alertmanager has no URL to deliver to")
+		logging.Warn("on-call automations are plain webhooks here: PUBLIC_URL is not set, so Alertmanager has no URL to deliver to")
 		return nil
 	}
 	receivers := controlplane.NewInstrumented(controlplane.Deps{
@@ -768,7 +745,7 @@ func wireTriggerAlerting(repo *db.Repo, cp controlplane.Endpoint, publicURL stri
 // TriggerInboundDeps is what the inbound receivers record events in, start
 // fires through, and verify deliveries with.
 type TriggerInboundDeps struct {
-	Repo         *DBRepo
+	DB           *db.Repo
 	Temporal     *TemporalClient
 	Pollers      *webhook.Registry
 	Vault        vault.Service
@@ -788,7 +765,7 @@ type TriggerInboundDeps struct {
 //
 //forge:root-only api
 func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
-	repo := d.Repo.Repo
+	repo := d.DB
 	in := webhook.NewInbound(repo,
 		triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
@@ -823,7 +800,7 @@ func NewResetGuard(d ResetGuardDeps) (*v2workflow.ResetAttemptGuard, error) {
 // QueuedDelivererDeps is where queued messages are kept, the machines they
 // wait for, and what delivers and wakes them.
 type QueuedDelivererDeps struct {
-	Repo     *DBRepo
+	DB       *db.Repo
 	Router   *APIDaemonRouter
 	Chat     *chat.Service
 	Temporal *TemporalClient
@@ -837,7 +814,7 @@ type QueuedDelivererDeps struct {
 //forge:root-only api
 func NewQueuedDeliverer(d QueuedDelivererDeps) (queueddelivery.Service, error) {
 	return queueddelivery.NewInstrumented(queueddelivery.Deps{
-		Store:     d.Repo.Repo,
+		Store:     d.DB,
 		Machines:  d.Router.NATSDaemonRouter,
 		Deliverer: d.Chat,
 		Signaler:  d.Temporal.Client,
@@ -906,7 +883,7 @@ func (c *DaemonEventsConsumer) Run(ctx context.Context) error {
 // WorktreeSweepDeps is the database, the router the daemons are asked
 // through, and what the sweep does with finished worktrees.
 type WorktreeSweepDeps struct {
-	Repo     *DBRepo
+	DB       *db.Repo
 	Router   *APIDaemonRouter
 	Settings *APISettings
 }
@@ -923,7 +900,7 @@ type WorktreeSweepDeps struct {
 //
 //forge:root-only api
 func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
-	database := d.Repo.Repo
+	database := d.DB
 	return worktreesweep.New(database, d.Router.NATSDaemonRouter).
 		WithKeepFiles(worktreesweep.KeepSetting{R: database}).
 		WithAutoArchive(d.Settings.WorktreeAutoArchive, database,
@@ -967,7 +944,7 @@ func (w *WorktreeSweeper) Run(ctx context.Context) error {
 // integrations polled on a schedule.
 type ScheduleSyncerDeps struct {
 	Temporal *TemporalClient
-	Repo     *DBRepo
+	DB       *db.Repo
 	Pollers  *webhook.Registry
 }
 
@@ -975,7 +952,7 @@ type ScheduleSyncerDeps struct {
 //
 //forge:root-only api
 func NewScheduleSyncer(d ScheduleSyncerDeps) (*triggers.Syncer, error) {
-	return triggers.NewSyncer(d.Temporal.Client.ScheduleClient(), d.Repo.Repo, v2workflow.SharedTaskQueue).
+	return triggers.NewSyncer(d.Temporal.Client.ScheduleClient(), d.DB, v2workflow.SharedTaskQueue).
 		WithPolledIntegrations(d.Pollers.IsPolled), nil
 }
 
@@ -1015,7 +992,7 @@ type TriggerReconciler struct{ reconciler *triggers.Reconciler }
 // TriggerReconcilerDeps is the triggers table, the syncer, and the alert
 // receivers it sweeps.
 type TriggerReconcilerDeps struct {
-	Repo   *DBRepo
+	DB     *db.Repo
 	Syncer *triggers.Syncer
 	// nil without a control plane.
 	// forge:optional-dep
@@ -1026,7 +1003,7 @@ type TriggerReconcilerDeps struct {
 //
 //forge:root-only api
 func NewTriggerReconciler(d TriggerReconcilerDeps) (*TriggerReconciler, error) {
-	repo := d.Repo.Repo
+	repo := d.DB
 	return &TriggerReconciler{triggers.NewReconciler(repo, triggers.LaunchWorkflows{Repo: repo}, d.Syncer).WithAlerting(d.Alerting)}, nil
 }
 
@@ -1044,7 +1021,7 @@ type TriggerRedriver struct{ redriver *triggers.Redriver }
 // TriggerRedriverDeps is the events table and the Temporal client fires
 // start on.
 type TriggerRedriverDeps struct {
-	Repo     *DBRepo
+	DB       *db.Repo
 	Temporal *TemporalClient
 }
 
@@ -1052,7 +1029,7 @@ type TriggerRedriverDeps struct {
 //
 //forge:root-only api
 func NewTriggerRedriver(d TriggerRedriverDeps) (*TriggerRedriver, error) {
-	return &TriggerRedriver{triggers.NewRedriver(d.Repo.Repo, d.Temporal.Client, v2workflow.SharedTaskQueue)}, nil
+	return &TriggerRedriver{triggers.NewRedriver(d.DB, d.Temporal.Client, v2workflow.SharedTaskQueue)}, nil
 }
 
 // Run redrives until ctx ends.
@@ -1072,7 +1049,12 @@ const backgroundProcessLeaseWindow = 90 * time.Second
 // connected from the attachment leases the gateway renews on every heartbeat.
 type backgroundProcessDaemons struct {
 	router toolexec.DaemonRouter
-	repo   db.Repository
+	repo   attachedDaemons
+}
+
+// attachedDaemons is the attachment-lease read backgroundProcessDaemons makes.
+type attachedDaemons interface {
+	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
 }
 
 func (d backgroundProcessDaemons) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
@@ -1089,7 +1071,7 @@ type WorkflowReconciler struct{ reconciler *reconciliation.Reconciler }
 
 // WorkflowReconcilerDeps is everything a pass reads and repairs through.
 type WorkflowReconcilerDeps struct {
-	Repo       *DBRepo
+	DB         *db.Repo
 	Temporal   *TemporalClient
 	Namespace  string
 	ResetGuard *v2workflow.ResetAttemptGuard
@@ -1107,10 +1089,10 @@ type WorkflowReconcilerDeps struct {
 func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error) {
 	cfg := reconciliation.DefaultConfig()
 	cfg.Namespace = d.Namespace
-	r := reconciliation.NewReconciler(d.Repo.Repo, d.Temporal.Client, cfg)
+	r := reconciliation.NewReconciler(d.DB, d.Temporal.Client, cfg)
 	r.SetResetGuard(d.ResetGuard)
 	r.SetQueuedDelivery(d.Queued)
-	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: d.Repo.Repo})
+	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: d.DB})
 	return &WorkflowReconciler{r}, nil
 }
 
@@ -1219,14 +1201,6 @@ func alertingProvisioner(a *triggers.Alerting) trigger.AlertingProvisioner {
 		return nil
 	}
 	return a
-}
-
-// modelEndpointControlPlane is the control-plane block in its config shape,
-// trimmed as ControlPlaneEndpoint trims it: its URL picks the dial policy for
-// user-supplied model endpoints.
-func modelEndpointControlPlane(cfg *configv1.ControlPlaneConfig) *configv1.ControlPlaneConfig {
-	cp := ControlPlaneEndpoint(cfg)
-	return &configv1.ControlPlaneConfig{Url: cp.URL, InternalServiceSecret: cp.InternalServiceSecret}
 }
 
 // hostedControlPlane is the control-plane client of a deployment a control

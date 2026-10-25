@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -16,6 +17,8 @@ import (
 )
 
 func TestWithWaitForMachine(t *testing.T) {
+	t.Parallel()
+
 	t.Run("empty access is unchanged", func(t *testing.T) {
 		assert.Equal(t, tools.ToolAccess{}, withWaitForMachine(tools.ToolAccess{}))
 	})
@@ -56,6 +59,8 @@ func (fakeMachineObserver) MachineStatus(context.Context, string) (tools.Machine
 // Only a remote machine can drop mid-turn, so only a factory that observes one
 // offers wait_for_machine.
 func TestCallLLM_WaitForMachineIsOfferedOnlyWhereTheMachineIsRemote(t *testing.T) {
+	t.Parallel()
+
 	preloaded := []string{tools.ShellToolName}
 
 	local := setupNoMachineFixture(t, false)
@@ -79,6 +84,9 @@ const offlineContent = "Failed to execute tool on daemon: unavailable: no daemon
 // A daemon-offline error gets the wait_for_machine hint appended — in what the
 // model reads and in the durable row — only when the turn was offered the tool.
 func TestExecuteTools_OfflineResultGetsWaitHintOnlyWhenOffered(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
+	t.Parallel()
+
 	offered := &reliantv1.ToolCapabilities{Offered: []string{tools.ShellToolName, tools.ToolWaitForMachine}, Permission: "mutating"}
 	notOffered := &reliantv1.ToolCapabilities{Offered: []string{tools.ShellToolName}, Permission: "mutating"}
 

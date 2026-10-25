@@ -25,6 +25,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/golang-jwt/jwt/v5"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -66,8 +67,8 @@ type fakeControlPlane struct {
 	secret     string
 	store      *tokenauthority.Memory
 	introspect atomic.Int64
-	// grants is each user's org permissions, which UpdateForUser clips an
-	// edited scope set to (control-plane's org_member_grants). nil: no clip.
+	// grants is each user's org permissions: MintForUser clips to them;
+	// UpdateForUser refuses any excess (control-plane's org_member_grants).
 	grants map[string]fat.Set
 }
 
@@ -137,8 +138,13 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.Unmarshal(raw, &in)
 		scopes := make([]fat.Scope, 0, len(in.Scopes))
-		for _, s := range in.Scopes {
-			scopes = append(scopes, fat.Scope(s))
+		requested, serr := fat.NewSet(in.Scopes)
+		if serr != nil {
+			writeConnectError(w, http.StatusBadRequest, "invalid_argument", serr.Error())
+			return
+		}
+		for s := range cp.clipToGrants(in.UserID, requested) {
+			scopes = append(scopes, s)
 		}
 		m, merr := cp.store.MintForUser(ctx, tokenauthority.MintRequest{UserID: in.UserID, Name: in.Name, Scopes: scopes,
 			Resource: in.Resource.resource(), Ephemeral: in.Ephemeral, ExpiresAt: in.ExpiresAt, Rotate: in.Rotate})
@@ -147,7 +153,7 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out = map[string]any{"tokenId": m.TokenID, "secret": m.Plaintext, "displayPrefix": m.DisplayPrefix,
-			"expiresAt": m.ExpiresAt, "rotated": m.Rotated}
+			"expiresAt": m.ExpiresAt, "rotated": m.Rotated, "scopes": m.Scopes}
 	case "ListForUser":
 		var in struct {
 			UserID string `json:"userId"`
@@ -180,7 +186,11 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				writeConnectError(w, http.StatusBadRequest, "invalid_argument", serr.Error())
 				return
 			}
-			scopes = cp.clipToGrants(in.UserID, set)
+			if !cp.clipToGrants(in.UserID, set).Covers(set) {
+				writeConnectError(w, http.StatusForbidden, "permission_denied", "scope exceeds current org grants")
+				return
+			}
+			scopes = set
 		}
 		info, uerr := cp.store.UpdateForUser(ctx, in.UserID, in.TokenID, in.Name, scopes)
 		if uerr != nil {
@@ -215,7 +225,7 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// clipToGrants is control-plane's UpdateForUser rule: an org-administration
+// clipToGrants is control-plane's MintForUser rule: an org-administration
 // scope survives only if the user holds it as a grant; session scopes pass.
 // A nil grants map grants everything (no clipping configured).
 func (cp *fakeControlPlane) clipToGrants(userID string, requested fat.Set) fat.Set {
@@ -284,8 +294,8 @@ func (s *sessionSigner) sign(t *testing.T, userID string) string {
 }
 
 // serveTokenService mounts reliant's TokenService behind the REAL API auth
-// interceptor, with the authority's introspector wired exactly as NewAPI
-// wires it (cached) and the same public procedures (ExchangeToken and
+// interceptor, with the authority's introspector wired exactly as the api
+// root's user chain wires it (cached, NewUserChain) and the same public procedures (ExchangeToken and
 // GetGitToken among them).
 func serveTokenService(t *testing.T, authority tokenauthority.Authority, jwtPubPEM string, cp token.TokenControlPlane) string {
 	t.Helper()
@@ -300,8 +310,10 @@ func serveTokenService(t *testing.T, authority tokenauthority.Authority, jwtPubP
 	})
 	require.NoError(t, err)
 	mux := http.NewServeMux()
+	// svcerr.Interceptor innermost, as serverkit.NewChain installs it in
+	// production: it gives the handler's svcerr errors their Connect code.
 	path, handler := reliantv1connect.NewTokenServiceHandler(tokenService,
-		connect.WithInterceptors(authInterceptor))
+		connect.WithInterceptors(authInterceptor, svcerr.Interceptor()))
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -390,7 +402,7 @@ func TestDaemonCredential_HostedEndToEnd(t *testing.T) {
 
 	// A daemon credential is not an API credential: the API refuses it.
 	_, err = tokens(daemonToken).ListTokens(context.Background(), connect.NewRequest(&reliantv1.ListTokensRequest{}))
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "daemon:connect must not authenticate the API: %v", err)
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "daemon:connect must not authenticate the API: %v", err)
 
 	// 3. The user revokes it through the same facade.
 	_, err = tokens(session).RevokeToken(context.Background(), connect.NewRequest(&reliantv1.RevokeTokenRequest{
@@ -401,7 +413,7 @@ func TestDaemonCredential_HostedEndToEnd(t *testing.T) {
 	// 4. The very next connect is refused — no cache window at the gateway.
 	_, err = connectDaemon(t, gatewayURL, daemonToken)
 	require.Error(t, err, "a revoked daemon credential must not connect")
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "revocation is a credential rejection: %v", err)
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "revocation is a credential rejection: %v", err)
 }
 
 // TestDaemonCredential_HostedRefusesWhenControlPlaneIsDown pins "never fall
@@ -421,7 +433,7 @@ func TestDaemonCredential_HostedRefusesWhenControlPlaneIsDown(t *testing.T) {
 	minted, err := fat.Mint()
 	require.NoError(t, err)
 	_, err = connectDaemon(t, serveGateway(t, authority), minted.Plaintext)
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "an unreachable control-plane must refuse loudly: %v", err)
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "an unreachable control-plane must refuse loudly: %v", err)
 }
 
 // TestDaemonCredential_SelfHostedEndToEnd is the self-hosted twin: no
@@ -469,7 +481,7 @@ func TestDaemonCredential_SelfHostedEndToEnd(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	_, err = connectDaemon(t, gatewayURL, daemonToken)
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "revoked: %v", err)
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "revoked: %v", err)
 }
 
 type bearerTransport string

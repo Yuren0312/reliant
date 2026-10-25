@@ -123,15 +123,15 @@ func LockChatForRunEvent(ctx context.Context, db orm.Context, chatID string) err
 	return nil
 }
 
-// otherPendingBlockersSQL counts the chat's pending approvals and questions
-// other than the one being created. Zero means that one is what blocks the
-// run.
+// otherPendingBlockersSQL counts the chat's pending approvals and blocking
+// questions other than the one being created. Zero means that one is what
+// blocks the run. An async question blocks nothing.
 const otherPendingBlockersSQL = `
 SELECT (
     (SELECT count(*) FROM approvals a
      WHERE a.chat_id = ?0 AND a.status = 1 AND a.id <> ?1)
   + (SELECT count(*) FROM questions q
-     WHERE q.chat_id = ?0 AND q.status = 1 AND q.id <> ?1)
+     WHERE q.chat_id = ?0 AND q.status = 1 AND NOT q.async AND q.id <> ?1)
 )::integer AS pending`
 
 // CountOtherPendingBlockers counts the chat's pending approvals and
@@ -168,7 +168,7 @@ func ClaimRunEvents(ctx context.Context, db orm.Context, now, leaseUntil time.Ti
 		Model((*RunEvent)(nil)).
 		Set("claimed_until = ?", leaseUntil).
 		Where("id IN (?)", claimable).
-		Returning("*").
+		Returning("?TableColumns").
 		Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to claim run events: %w", err)

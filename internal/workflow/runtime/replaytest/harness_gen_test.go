@@ -92,16 +92,8 @@ func setupQuietLogging() {
 func TestMain(m *testing.M) {
 	setupQuietLogging()
 
-	// Fixture generation is a deliberate act (make replay-fixtures), not part
-	// of the normal test suite — fail loudly instead of skipping.
-	if os.Getenv("DATABASE_URL") == "" {
-		fmt.Fprintln(os.Stderr, "replaytest generator: DATABASE_URL is required.")
-		fmt.Fprintln(os.Stderr, "Set it to a Postgres database of your own, or run `make replay-fixtures`, which uses")
-		fmt.Fprintln(os.Stderr, "DATABASE_URL when set and otherwise brings up the repo's docker compose Postgres (localhost:5433).")
-		fmt.Fprintln(os.Stderr, "See internal/workflow/runtime/replaytest/fixtures/README.md.")
-		os.Exit(1)
-	}
-
+	// Fixture generation (task replay-fixtures) needs no database
+	// configuration: its database is internal/db's test database.
 	if err := startTemporalDevServer(); err != nil {
 		fmt.Fprintf(os.Stderr, "replaytest generator: failed to start Temporal dev server: %v\n", err)
 		os.Exit(1)
@@ -361,10 +353,11 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
-		Logger:  slog.Default(),
-		Config:  &typedconfig.Config{},
-		Repo:    s.Repo,
-		Signals: pause,
+		Logger:   slog.Default(),
+		Config:   &typedconfig.Config{},
+		Repo:     s.Repo,
+		Signals:  pause,
+		Messages: chatSvc,
 	})
 	require.NoError(t, err, "question service")
 

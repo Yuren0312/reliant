@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -149,6 +150,8 @@ func (c *liveGateChat) expect(wantActivity, wantWorking int) {
 }
 
 func TestChatActivity_QuestionOnRunningThreadWhileOthersRun(t *testing.T) {
+	t.Parallel()
+
 	c := newLiveGateChat(t, "chat-gate-running")
 	c.spawn("sa-1", Active())
 	c.spawn("sa-2", Active())
@@ -168,6 +171,9 @@ func TestChatActivity_QuestionOnRunningThreadWhileOthersRun(t *testing.T) {
 // A question left pending by a run that ended cannot be answered, whichever
 // way the run ended, and must not hold the chat.
 func TestChatActivity_QuestionOnTerminalThreadDoesNotCount(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	for name, status := range map[string]WorkflowStatus{
 		"completed": Completed(),
 		"failed":    Failed(),
@@ -187,6 +193,8 @@ func TestChatActivity_QuestionOnTerminalThreadDoesNotCount(t *testing.T) {
 
 // A paused run resumes into the same wait, so its question still counts.
 func TestChatActivity_QuestionOnPausedThreadStillCounts(t *testing.T) {
+	t.Parallel()
+
 	c := newLiveGateChat(t, "chat-gate-paused")
 	c.spawn("sa-1", Active())
 	c.spawn("sa-3", Active())
@@ -206,6 +214,8 @@ func TestChatActivity_QuestionOnPausedThreadStillCounts(t *testing.T) {
 // The parent of a sub-agent blocked on the user is waiting, not working: with
 // nothing else running, "needs you" must not also claim work is going on.
 func TestChatActivity_ParentWaitingOnBlockedSubAgentIsNotWorking(t *testing.T) {
+	t.Parallel()
+
 	c := newLiveGateChat(t, "chat-gate-only-blocked")
 	c.spawn("sa-1", Active())
 	c.ask("q-1", "sa-1", "sa-1")
@@ -221,6 +231,8 @@ func TestChatActivity_ParentWaitingOnBlockedSubAgentIsNotWorking(t *testing.T) {
 // and the agent resumed on a new row, the old question is dead even though
 // its thread is live again.
 func TestChatActivity_QuestionOfSupersededRunDoesNotCount(t *testing.T) {
+	t.Parallel()
+
 	c := newLiveGateChat(t, "chat-gate-resumed")
 	c.spawn("sa-1", Active())
 	c.ask("q-1", "sa-1", "sa-1")
@@ -232,6 +244,8 @@ func TestChatActivity_QuestionOfSupersededRunDoesNotCount(t *testing.T) {
 // Approvals carry only a thread: the thread's newest run decides. One with no
 // thread cannot be placed and stays live.
 func TestChatActivity_ApprovalFollowsItsThreadsRun(t *testing.T) {
+	t.Parallel()
+
 	c := newLiveGateChat(t, "chat-gate-approval")
 	c.spawn("sa-1", Active())
 	c.spawn("sa-2", Active())
@@ -249,6 +263,8 @@ func TestChatActivity_ApprovalFollowsItsThreadsRun(t *testing.T) {
 // cancelled, not only one whose root did: nobody can answer it. A failed run's
 // items stay listed (resumable, the inbox's own rule).
 func TestInboxPending_DropsGatesOfFinishedAskingRuns(t *testing.T) {
+	t.Parallel()
+
 	c := newLiveGateChat(t, "chat-gate-inbox")
 	c.spawn("sa-live", Active())
 	c.spawn("sa-done", Active())
@@ -282,6 +298,8 @@ func TestInboxPending_DropsGatesOfFinishedAskingRuns(t *testing.T) {
 // resumes into the same wait and keeps its question. Every live thread's
 // question is listed, oldest first — not only the chat's newest.
 func TestListAnswerablePendingQuestionsByChat(t *testing.T) {
+	t.Parallel()
+
 	c := newLiveGateChat(t, "chat-answerable-questions")
 	c.spawn("spawn-live", Active())
 	c.spawn("spawn-done", Active())

@@ -10,9 +10,11 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -36,7 +38,9 @@ type fakeTriggerBackend struct {
 	nextFire  *time.Time
 
 	// repo is what the real syncer re-reads the row from.
-	repo db.Repository
+	repo interface {
+		GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+	}
 }
 
 func (b *fakeTriggerBackend) Sync(ctx context.Context, triggerID string) error {
@@ -166,6 +170,8 @@ func (e *triggerTestEnv) create(t *testing.T, def *reliantv1.TriggerDefinition) 
 }
 
 func TestCreateTriggerStoresAndSyncs(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 
 	fire := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
@@ -199,6 +205,8 @@ func TestCreateTriggerStoresAndSyncs(t *testing.T) {
 }
 
 func TestCreateTriggerRespectsExplicitDisabled(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	disabled := false
 	got := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) { d.Enabled = &disabled }))
@@ -208,13 +216,16 @@ func TestCreateTriggerRespectsExplicitDisabled(t *testing.T) {
 // A create whose schedule cannot be made is rolled back. Reporting success
 // would leave a trigger the owner cannot distinguish from a working one.
 func TestCreateTriggerRollsBackWhenSyncFails(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.backend.syncErr = errors.New("temporal unreachable")
 
 	_, err := env.svc.CreateTrigger(env.ctx,
 		connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 
 	stored, err := env.repo.ListTriggers(context.Background(), core.TriggerFilters{UserID: env.userID})
 	require.NoError(t, err)
@@ -225,6 +236,9 @@ func TestCreateTriggerRollsBackWhenSyncFails(t *testing.T) {
 // rollback removes the schedule as well as the row; otherwise it would keep
 // firing for a trigger that no longer exists until the next SyncAll.
 func TestCreateTriggerRollbackAlsoDeletesTheHalfCreatedSchedule(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.backend.syncErr = errors.New("temporal unreachable")
 
@@ -241,6 +255,8 @@ func TestCreateTriggerRollbackAlsoDeletesTheHalfCreatedSchedule(t *testing.T) {
 // concurrent write that lands between this call's commit and its Sync cannot
 // leave Temporal on the older definition.
 func TestSetTriggerEnabledSyncsFromTheStoredRow(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -256,6 +272,8 @@ func TestSetTriggerEnabledSyncsFromTheStoredRow(t *testing.T) {
 }
 
 func TestCreateTriggerValidates(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 
 	tests := []struct {
@@ -289,32 +307,37 @@ func TestCreateTriggerValidates(t *testing.T) {
 			_, err := env.svc.CreateTrigger(env.ctx,
 				connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: tc.def}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 			assert.Zero(t, env.backend.syncCount(), "a rejected definition must not touch the schedule backend")
 		})
 	}
 }
 
 func TestCreateTriggerRejectsAnotherUsersProject(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
 	_, err := env.svc.CreateTrigger(otherCtx,
 		connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 // Without a schedule backend there is nothing to make a trigger fire, so a
 // create must fail rather than store one that silently never runs.
 func TestCreateTriggerWithoutABackendIsUnavailable(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: env.repo}))
 
 	_, err := svc.CreateTrigger(env.ctx,
 		connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 }
 
 // A deployment without Temporal leaves Syncer and Fires nil, as nil
@@ -324,6 +347,9 @@ func TestCreateTriggerWithoutABackendIsUnavailable(t *testing.T) {
 // or deleting a stored schedule trigger skips the backend rather than
 // panicking on it.
 func TestServiceWithoutTemporal(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	syncer, fires := TemporalBackend(nil, env.repo, "", nil)
 	require.Nil(t, syncer, "TemporalBackend without a client must return a nil interface")
@@ -341,12 +367,12 @@ func TestServiceWithoutTemporal(t *testing.T) {
 			_, err := svc.CreateTrigger(env.ctx,
 				connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "create a schedule trigger")
+			assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "create a schedule trigger")
 
 			_, err = svc.FireTrigger(env.ctx,
 				connect.NewRequest(&reliantv1.FireTriggerRequest{Id: stored.GetId()}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "fire a schedule trigger")
+			assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "fire a schedule trigger")
 
 			got, err := svc.GetTrigger(env.ctx,
 				connect.NewRequest(&reliantv1.GetTriggerRequest{Id: stored.GetId()}))
@@ -365,6 +391,8 @@ func TestServiceWithoutTemporal(t *testing.T) {
 }
 
 func TestGetTriggerHidesOtherUsersTriggers(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -374,10 +402,12 @@ func TestGetTriggerHidesOtherUsersTriggers(t *testing.T) {
 	require.Error(t, err)
 	// NotFound, not PermissionDenied: telling a caller an id exists but is not
 	// theirs leaks other users' triggers for nothing.
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 func TestListTriggersIsScopedToTheCaller(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.create(t, env.definition(nil))
 	env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "second" }))
@@ -393,6 +423,9 @@ func TestListTriggersIsScopedToTheCaller(t *testing.T) {
 }
 
 func TestUpdateTriggerReplacesAndReconverges(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -419,6 +452,9 @@ func TestUpdateTriggerReplacesAndReconverges(t *testing.T) {
 
 // An update that does not mention enabled must not resume a paused trigger.
 func TestUpdateTriggerLeavesEnabledAloneWhenUnset(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -436,6 +472,8 @@ func TestUpdateTriggerLeavesEnabledAloneWhenUnset(t *testing.T) {
 }
 
 func TestUpdateTriggerAppliesExplicitEnabled(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -449,6 +487,8 @@ func TestUpdateTriggerAppliesExplicitEnabled(t *testing.T) {
 }
 
 func TestSetTriggerEnabledPersistsAndReconverges(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -472,6 +512,8 @@ func TestSetTriggerEnabledPersistsAndReconverges(t *testing.T) {
 // The schedule is dropped BEFORE the row. A schedule outliving its row keeps
 // firing for a trigger nobody can see or stop.
 func TestDeleteTriggerRemovesTheScheduleFirst(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -488,6 +530,8 @@ func TestDeleteTriggerRemovesTheScheduleFirst(t *testing.T) {
 }
 
 func TestDeleteTriggerKeepsTheRowWhenTheScheduleCannotBeRemoved(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 	env.backend.deleteErr = errors.New("temporal unreachable")
@@ -495,7 +539,7 @@ func TestDeleteTriggerKeepsTheRowWhenTheScheduleCannotBeRemoved(t *testing.T) {
 	_, err := env.svc.DeleteTrigger(env.ctx,
 		connect.NewRequest(&reliantv1.DeleteTriggerRequest{Id: created.GetId()}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 
 	// The row must survive: deleting it while the schedule lives on would
 	// create exactly the orphan this ordering exists to prevent.
@@ -504,6 +548,8 @@ func TestDeleteTriggerKeepsTheRowWhenTheScheduleCannotBeRemoved(t *testing.T) {
 }
 
 func TestFireTriggerStartsAManualFire(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -519,6 +565,8 @@ func TestFireTriggerStartsAManualFire(t *testing.T) {
 }
 
 func TestFireTriggerHidesOtherUsersTriggers(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -526,7 +574,7 @@ func TestFireTriggerHidesOtherUsersTriggers(t *testing.T) {
 	_, err := env.svc.FireTrigger(otherCtx,
 		connect.NewRequest(&reliantv1.FireTriggerRequest{Id: created.GetId()}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 
 	env.backend.mu.Lock()
 	assert.Empty(t, env.backend.fires, "a trigger the caller does not own must not fire")
@@ -534,6 +582,9 @@ func TestFireTriggerHidesOtherUsersTriggers(t *testing.T) {
 }
 
 func TestListTriggerEventsReturnsFiringsNewestFirst(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -568,6 +619,9 @@ func TestListTriggerEventsReturnsFiringsNewestFirst(t *testing.T) {
 }
 
 func TestListTriggerEventsHidesOtherUsersTriggers(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -575,12 +629,14 @@ func TestListTriggerEventsHidesOtherUsersTriggers(t *testing.T) {
 	_, err := env.svc.ListTriggerEvents(otherCtx,
 		connect.NewRequest(&reliantv1.ListTriggerEventsRequest{TriggerId: created.GetId()}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 // A limit of zero is "the server default", not "no rows", and an unbounded
 // request is capped rather than honored.
 func TestListTriggerEventsBoundsTheLimit(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -612,6 +668,9 @@ func TestListTriggerEventsBoundsTheLimit(t *testing.T) {
 // The handler's rendered trigger must round-trip through the same parser the
 // syncer uses, or the API would accept configs the backend then rejects.
 func TestRenderedScheduleRoundTripsThroughTheParser(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	every := "45m"
 	created := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) {
@@ -632,6 +691,8 @@ func TestRenderedScheduleRoundTripsThroughTheParser(t *testing.T) {
 }
 
 func TestLastEventIsProjectedOntoTheTrigger(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -659,6 +720,8 @@ func TestLastEventIsProjectedOntoTheTrigger(t *testing.T) {
 }
 
 func TestCreateTriggerPersistsAndRoundTripsTheDaemon(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 
 	created := env.create(t, env.definition(nil))
@@ -676,6 +739,8 @@ func TestCreateTriggerPersistsAndRoundTripsTheDaemon(t *testing.T) {
 // Another user's daemon and a nonexistent one must be indistinguishable, or
 // the error becomes a way to probe which daemon ids exist.
 func TestCreateTriggerRejectsUnownedOrMissingDaemons(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	foreign := uuid.NewString()
 	require.NoError(t, env.repo.UpsertDaemon(context.Background(), &db.Daemon{ID: foreign, UserID: uuid.NewString()}))
@@ -686,7 +751,7 @@ func TestCreateTriggerRejectsUnownedOrMissingDaemons(t *testing.T) {
 				Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.DaemonId = daemonID }),
 			}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 			assert.ErrorContains(t, err, "daemon not found")
 			assert.Zero(t, env.backend.syncCount())
 		})
@@ -694,6 +759,9 @@ func TestCreateTriggerRejectsUnownedOrMissingDaemons(t *testing.T) {
 }
 
 func TestCreateTriggerRequiresTheProjectInstalledOnTheDaemon(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	ctx := context.Background()
 
@@ -709,7 +777,7 @@ func TestCreateTriggerRequiresTheProjectInstalledOnTheDaemon(t *testing.T) {
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "elsewhere" }),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.ErrorContains(t, err, "project is not installed on that daemon")
 
 	created := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) {
@@ -720,6 +788,8 @@ func TestCreateTriggerRequiresTheProjectInstalledOnTheDaemon(t *testing.T) {
 }
 
 func TestUpdateTriggerReplacesAndValidatesTheDaemon(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -736,5 +806,5 @@ func TestUpdateTriggerReplacesAndValidatesTheDaemon(t *testing.T) {
 		Id:      created.GetId(),
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.DaemonId = uuid.NewString() }),
 	}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }

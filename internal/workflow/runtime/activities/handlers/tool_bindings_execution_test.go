@@ -109,7 +109,7 @@ func (r *daemonRunningRouter) received(toolCallID string) (string, bool) {
 
 // workerExecutor is the worker's executor as the worker root wires it (internal/app NewRemoteExecutor): daemon
 // tools go to the router, server tools run in-process on the worker's factory.
-func workerExecutor(router toolexec.DaemonRouter, repo db.Repository) toolexec.ToolExecutor {
+func workerExecutor(router toolexec.DaemonRouter, repo *db.Repo) toolexec.ToolExecutor {
 	executor := toolexec.NewRemoteExecutor(router)
 	executor.SetServerExecutor(toolexec.NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo})))
 	return executor
@@ -151,7 +151,7 @@ func (e *pinnedEndpoint) served() []*http.Request {
 	return append([]*http.Request(nil), e.requests...)
 }
 
-func requireFailedRow(t *testing.T, repo db.Repository, toolCallID string) {
+func requireFailedRow(t *testing.T, repo *db.Repo, toolCallID string) {
 	t.Helper()
 	row, err := repo.GetToolCall(context.Background(), toolCallID)
 	require.NoError(t, err)
@@ -164,6 +164,8 @@ func requireFailedRow(t *testing.T, repo db.Repository, toolCallID string) {
 // bound value must cross the wire with the call, and the daemon must accept
 // it — whatever version of the daemon it is, so nothing new is asked of it.
 func TestBoundParameters_TakeEffectOnTheDaemonPath(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, false)
 	cfg := toolsConfig(tools.PermissionMutating, []string{tools.ShellToolName}, nil, nil)
 	cfg.Tools = map[string]*structpb.Struct{tools.ShellToolName: structOf(t, map[string]any{"timeout": 30000})}
@@ -284,6 +286,8 @@ func TestGlobalBoundParameters_AreReadAtExecutionNotCarriedInHistory(t *testing.
 
 // A tool nobody bound runs exactly as the model called it.
 func TestUnboundTool_RunsWithTheModelsInputUnchanged(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, false)
 	cfg := toolsConfig(tools.PermissionMutating, []string{tools.ShellToolName}, nil, nil)
 	recorded := throughHistory(t, f.turn(t, cfg, nil).GetCapabilities())

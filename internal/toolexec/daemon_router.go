@@ -7,6 +7,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/errreason"
 )
 
 // ErrDaemonPending means a daemon record exists for this user (it was
@@ -31,7 +32,14 @@ import (
 // asleep or suspended, and the system is behaving correctly by saying so. It
 // logs at INFO and never reaches Sentry — even under the Unavailable code
 // callers give it — while errors.Is(err, ErrDaemonPending) is unchanged.
-var ErrDaemonPending = svcerr.WithClass(errors.New("no daemon connected: daemon record exists but has not registered yet (still starting)"), svcerr.ClassUser)
+//
+// Its kind is Unavailable — retryable, what the web's daemon-wait machinery
+// expects — so a handler's bare svcerr.Wrap answers CodeUnavailable with the
+// marker in the message, never Internal "internal server error".
+//
+// Its reason is errreason.DaemonStarting (x-forge-error-reason), which the web
+// routes on; the marker text stays for clients from before the reason.
+var ErrDaemonPending = svcerr.WithReason(svcerr.WithClass(svcerr.Unavailable("no daemon connected: daemon record exists but has not registered yet (still starting)"), svcerr.ClassUser), errreason.DaemonStarting)
 
 // IsDaemonPending reports whether err indicates a daemon exists for the user
 // but has not connected yet (still provisioning) — as opposed to no daemon
@@ -55,19 +63,14 @@ func IsDaemonPending(err error) bool {
 //
 // The text keeps the "no daemon connected" marker (daemonoffline.ErrorSubstring)
 // and the word "suspended", which together are what the web's machine-wait
-// classification keys on (web/src/lib/daemon-errors.ts), even where a surface
+// classification keys on (frontends/web/src/lib/daemon-errors.ts), even where a surface
 // shows this sentinel without the router's wrapping.
-var ErrDaemonSuspended error = &pendingMachineError{msg: "no daemon connected: the machine is asleep (suspended)", cause: ErrDaemonPending}
-
-// pendingMachineError is a more specific ErrDaemonPending: its own text, and
-// ErrDaemonPending (with its ClassUser) on its chain.
-type pendingMachineError struct {
-	msg   string
-	cause error
-}
-
-func (e *pendingMachineError) Error() string { return e.msg }
-func (e *pendingMachineError) Unwrap() error { return e.cause }
+//
+// It is ErrDaemonPending under its own message (svcerr.WithMessage), so the
+// text a client reads through svcerr is this one, not the pending sentinel's.
+// Its reason, errreason.DaemonSuspended, is the nearest on its chain, so it
+// wins over the pending sentinel's.
+var ErrDaemonSuspended = svcerr.WithReason(svcerr.WithMessage(ErrDaemonPending, "no daemon connected: the machine is asleep (suspended)"), errreason.DaemonSuspended)
 
 // IsDaemonSuspended reports whether err says the machine is suspended, as
 // opposed to still starting. Both are IsDaemonPending.
@@ -80,14 +83,32 @@ func IsDaemonSuspended(err error) bool {
 // ErrDaemonPending there is nothing to wait for, so a surface shows "no
 // machine" rather than a spinner. Its text deliberately lacks
 // daemonoffline.ErrorSubstring ("no daemon connected"): it is not a machine
-// that went offline. A USER error (svcerr.ClassUser), like ErrDaemonPending.
-var ErrNoDaemon = svcerr.WithClass(errors.New("no daemon available"), svcerr.ClassUser)
+// that went offline. A USER error (svcerr.ClassUser), like ErrDaemonPending,
+// of kind FailedPrecondition: waiting cannot produce a machine the user has not
+// connected.
+// Its reason is errreason.NoDaemon.
+var ErrNoDaemon = svcerr.WithReason(svcerr.WithClass(svcerr.FailedPrecondition("no daemon available"), svcerr.ClassUser), errreason.NoDaemon)
 
 // errDaemonNotConnected is the cause daemonRequestError reports when NATS had
 // no responder for the daemon's subject: the daemon is not connected. A USER
 // error — the machine is closed or restarting — whose text carries
 // daemonoffline.ErrorSubstring, the marker every surface keys on.
-var errDaemonNotConnected = svcerr.WithClass(errors.New("no daemon connected for user"), svcerr.ClassUser)
+// Its reason is errreason.DaemonNotConnected.
+var errDaemonNotConnected = svcerr.WithReason(svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser), errreason.DaemonNotConnected)
+
+// machineState puts sentence, the router's account of a machine state, in
+// front of state's own text as the message a client reads through svcerr —
+// which publishes the nearest message on the chain, never an outer
+// fmt.Errorf. Error() reads the same, and errors.Is(err, state) holds.
+func machineState(sentence string, state error) error {
+	return svcerr.WithMessage(state, sentence+": "+state.Error())
+}
+
+// noMachine is ErrNoDaemon followed by sentence, as machineState does it for
+// a state whose marker leads.
+func noMachine(sentence string) error {
+	return svcerr.WithMessage(ErrNoDaemon, ErrNoDaemon.Error()+": "+sentence)
+}
 
 // IsNoDaemon reports whether err is ErrNoDaemon: the user has no machine for
 // this request.
@@ -138,7 +159,7 @@ type ProcessOutputEvent struct {
 
 // Transport-failure error codes. These say the request did not complete a
 // round trip to a daemon, so no result of the tool's came back. They are
-// emitted only by the transport itself:
+// emitted by the transport itself, except ErrorCodeDaemonRestarted:
 //
 //	ErrorCodeDaemonUnreached   — RemoteExecutor, when the router call failed
 //	                             (no daemon connected, NATS timeout, ...)
@@ -148,6 +169,8 @@ type ProcessOutputEvent struct {
 //	ErrorCodeDaemonInterrupted — the NATS bridge, when the daemon's connection
 //	                             closed while the request was in flight: the
 //	                             daemon may have run it, and may still be
+//	ErrorCodeDaemonRestarted   — the daemon, once restarted, for a call it was
+//	                             running when its previous process died
 //
 // Everything the TOOL reports about its own execution — including a command
 // that exited non-zero — comes back Success=true / IsError=false with the exit
@@ -159,6 +182,11 @@ const (
 	ErrorCodeDaemonUnreached   = "DAEMON_EXECUTION_ERROR"
 	ErrorCodeDaemonRoundTrip   = "DAEMON_ERROR"
 	ErrorCodeDaemonInterrupted = "DAEMON_INTERRUPTED"
+	// ErrorCodeDaemonRestarted is the daemon's own answer, after it restarted,
+	// for a call that was running when its previous process died. A running
+	// call cannot be resumed, so the outcome is unknown. It comes from the
+	// daemon (it persisted the fact), not from a transport.
+	ErrorCodeDaemonRestarted = "DAEMON_RESTARTED"
 )
 
 // IsTransportErrorCode reports whether an ErrorCode means no result came back
@@ -168,7 +196,7 @@ const (
 // as a lint/test/build failure.
 func IsTransportErrorCode(code string) bool {
 	switch code {
-	case ErrorCodeDaemonUnreached, ErrorCodeDaemonRoundTrip, ErrorCodeDaemonInterrupted:
+	case ErrorCodeDaemonUnreached, ErrorCodeDaemonRoundTrip, ErrorCodeDaemonInterrupted, ErrorCodeDaemonRestarted:
 		return true
 	default:
 		return false

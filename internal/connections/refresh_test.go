@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/connections"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
 )
@@ -117,7 +118,7 @@ func TestRefresh_GenerationCASRejectsStaleWriter(t *testing.T) {
 	conn := e.connect("alice", "a")
 	gen := e.generation(conn.ID, "access_token")
 
-	err := e.store.WithSecretsLock(ctx, "alice", conn.ID, func(tx core.SecretsTx) error {
+	err := e.store.WithSecretsLock(ctx, "alice", conn.ID, func(tx *db.SecretsTx) error {
 		return tx.Replace(ctx, gen-1, []core.ConnectionSecret{{Field: "access_token", VaultKeyID: "x", Ciphertext: []byte("x")}}, nil)
 	})
 	require.ErrorIs(t, err, core.ErrGenerationConflict)
@@ -202,11 +203,11 @@ func TestRefresh_MissingRefreshTokenNeedsReauth(t *testing.T) {
 
 // countingStore counts how many refresh transactions reach the database.
 type countingStore struct {
-	core.ConnectionStore
+	db.ConnectionStore
 	locks atomic.Int32
 }
 
-func (c *countingStore) WithSecretsLock(ctx context.Context, userID, id string, fn func(core.SecretsTx) error) error {
+func (c *countingStore) WithSecretsLock(ctx context.Context, userID, id string, fn func(*db.SecretsTx) error) error {
 	c.locks.Add(1)
 	return c.ConnectionStore.WithSecretsLock(ctx, userID, id, fn)
 }
@@ -235,4 +236,55 @@ func TestRefresh_SingleFlightCollapsesDatabaseTransactions(t *testing.T) {
 	wg.Wait()
 	require.Equal(t, 1, int(e.gh.refreshCalls.Load()))
 	require.Equal(t, 1, int(counting.locks.Load()), "20 concurrent callers must share one refresh transaction")
+}
+
+type lateCallerKey struct{}
+
+// lateReaderStore holds back the caller whose context carries lateCallerKey
+// right after its first GetSecrets: it has read the generation the refresh is
+// about to replace, and resumes only once that refresh has returned.
+type lateReaderStore struct {
+	countingStore
+	read      chan struct{} // closed when the late caller has read
+	refreshed chan struct{} // closed by the test once the other caller's refresh returned
+	lateReads atomic.Int32
+}
+
+func (l *lateReaderStore) GetSecrets(ctx context.Context, userID, id string) (map[string]core.ConnectionSecret, error) {
+	secrets, err := l.countingStore.GetSecrets(ctx, userID, id)
+	if ctx.Value(lateCallerKey{}) != nil && l.lateReads.Add(1) == 1 {
+		close(l.read)
+		<-l.refreshed
+	}
+	return secrets, err
+}
+
+// The interleaving a loaded machine produces at random, forced: a caller reads
+// the expiring generation, is descheduled while another caller's refresh runs
+// and commits, and reaches the single-flight after that flight has ended. It
+// must take the refreshed token, not open a second refresh transaction.
+func TestRefresh_CallerThatReadTheReplacedGenerationOpensNoSecondTransaction(t *testing.T) {
+	e := newEnv(t)
+	conn := e.connect("alice", "a")
+	e.expireAccessToken(conn.ID)
+	store := &lateReaderStore{
+		countingStore: countingStore{ConnectionStore: e.store},
+		read:          make(chan struct{}),
+		refreshed:     make(chan struct{}),
+	}
+	src := connections.NewTokenSource(store, e.vault, e.providers, redirectingDoer{target: e.gh.srv})
+
+	lateErr := make(chan error, 1)
+	go func() {
+		_, err := src.Token(context.WithValue(context.Background(), lateCallerKey{}, true), "alice", conn.ID)
+		lateErr <- err
+	}()
+	<-store.read
+
+	_, err := src.Token(context.Background(), "alice", conn.ID)
+	require.NoError(t, err)
+	close(store.refreshed)
+	require.NoError(t, <-lateErr)
+	require.Equal(t, 1, int(e.gh.refreshCalls.Load()))
+	require.Equal(t, 1, int(store.locks.Load()), "a caller that read the replaced generation must not open a second refresh transaction")
 }

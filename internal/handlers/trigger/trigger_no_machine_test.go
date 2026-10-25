@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -17,27 +18,33 @@ import (
 // without no_machine is still the mistake it always was, so an older client
 // that omits the field cannot silently create a no-machine automation.
 func TestCreateTrigger_EmptyDaemonWithoutNoMachineIsStillRequired(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.DaemonId = "" }),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func TestCreateTrigger_NoMachineWithADaemonIsInvalid(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.NoMachine = true }),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 // The default builtin agent is given tag:coding:default — shell, view, edit —
 // so a no-machine automation of it is refused at create, with the reason and
 // the fix, instead of firing at 9 a.m. into a run that has none of its tools.
 func TestCreateTrigger_NoMachineRefusesAWorkflowThatNeedsAMachine(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
@@ -46,7 +53,7 @@ func TestCreateTrigger_NoMachineRefusesAWorkflowThatNeedsAMachine(t *testing.T) 
 		}),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "needs a machine")
 	assert.Contains(t, err.Error(), "shell", "the error names what needs the machine")
 	assert.Contains(t, err.Error(), "Pick a machine", "the error says how to fix it")
@@ -61,12 +68,14 @@ func TestCreateTrigger_NoMachineRefusesAWorkflowThatNeedsAMachine(t *testing.T) 
 		}),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }
 
 // The same agent given only web tools runs without a machine, so the trigger is
 // accepted, stored with no daemon, and round-trips as no_machine.
 func TestCreateTrigger_NoMachineAcceptsAServerOnlyWorkflow(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	webOnly, err := structpb.NewValue([]any{"tag:web"})
 	require.NoError(t, err)
@@ -99,6 +108,8 @@ func TestCreateTrigger_NoMachineAcceptsAServerOnlyWorkflow(t *testing.T) {
 // An update that turns an existing trigger into a no-machine one is checked the
 // same way as a create.
 func TestUpdateTrigger_NoMachineIsValidatedLikeCreate(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -110,5 +121,5 @@ func TestUpdateTrigger_NoMachineIsValidatedLikeCreate(t *testing.T) {
 		}),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }

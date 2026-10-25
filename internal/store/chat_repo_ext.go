@@ -49,6 +49,17 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
+// GetLiveChatIDForWorktree returns one non-archived bound chat, or an empty
+// string. Query the base table by its indexed binding, never a project-sized list.
+func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID string) (string, error) {
+	var id string
+	err := db.Bun().NewRaw(`SELECT id FROM chats WHERE worktree_id = ? AND state <> ? LIMIT 1`, worktreeID, core.ChatStateArchived).Scan(ctx, &id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
 // The chats writes (P5b L1b). Reads go through the view — see
 // chats_with_activity_repo_ext.go.
 
@@ -219,6 +230,27 @@ func SetChatQueuedForMachine(ctx context.Context, db orm.Context, chatID string,
 	res, err := db.Bun().NewRaw(setChatQueuedForMachineSQL, queued, chatID).Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to set chat queued-for-machine marker: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// setChatRunIDSQL records the Temporal run currently executing a chat's root
+// workflow. It only touches the chat whose root workflow it is, and only when
+// the id changes, so the write a run makes at every start is free when nothing
+// moved.
+const setChatRunIDSQL = `
+UPDATE chats SET run_id = ?0, updated_at = NOW()
+WHERE id = ?1
+  AND (workflow_id IS NULL OR workflow_id = ?2)
+  AND run_id IS DISTINCT FROM ?0`
+
+// SetChatRunID records runID as the chat's current run of workflowID and
+// reports whether the stored value changed.
+func SetChatRunID(ctx context.Context, db orm.Context, chatID, workflowID, runID string) (bool, error) {
+	res, err := db.Bun().NewRaw(setChatRunIDSQL, runID, chatID, workflowID).Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to record chat run id: %w", err)
 	}
 	n, err := res.RowsAffected()
 	return n > 0, err

@@ -25,6 +25,7 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"ask_user": {
 		Bindable: map[string]struct{}{
+			"blocking":  {},
 			"questions": {},
 		},
 		Unbindable: map[string]string{},
@@ -163,6 +164,12 @@ var generatedToolParams = map[string]ToolParams{
 			"replace_text": {},
 			"repo":         {},
 			"use_regex":    {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"fire_trigger": {
+		Bindable: map[string]struct{}{
+			"trigger_id": {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -572,6 +579,10 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"list_pending_questions": {
+		Bindable:   map[string]struct{}{},
+		Unbindable: map[string]string{},
+	},
 	"list_presets": {
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
@@ -596,6 +607,14 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"list_tasks": {
 		Bindable:   map[string]struct{}{},
+		Unbindable: map[string]string{},
+	},
+	"list_trigger_events": {
+		Bindable: map[string]struct{}{
+			"limit":      {},
+			"page_token": {},
+			"trigger_id": {},
+		},
 		Unbindable: map[string]string{},
 	},
 	"list_triggers": {
@@ -1030,6 +1049,13 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"count": {},
 			"query": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"withdraw_question": {
+		Bindable: map[string]struct{}{
+			"question_id": {},
+			"reason":      {},
 		},
 		Unbindable: map[string]string{},
 	},

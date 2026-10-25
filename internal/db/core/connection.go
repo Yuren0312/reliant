@@ -3,9 +3,9 @@
 package core
 
 import (
-	"context"
-	"errors"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // Connection kinds and states (research/CONNECTIONS_VAULT.md §4.1).
@@ -43,14 +43,14 @@ const (
 var (
 	// ErrConnectionNotFound covers a missing, deleted, or someone else's
 	// connection alike: ids must not be an oracle.
-	ErrConnectionNotFound = errors.New("connection not found")
+	ErrConnectionNotFound = svcerr.NotFound("connection")
 	// ErrConnectionNameTaken: the user already has a connection with that name
 	// for the integration.
-	ErrConnectionNameTaken = errors.New("connection name already in use")
+	ErrConnectionNameTaken = svcerr.AlreadyExists("connection name already in use")
 	// ErrOAuthFlowInvalid: unknown, expired, or already-consumed OAuth state.
-	ErrOAuthFlowInvalid = errors.New("oauth flow is invalid, expired or already used")
+	ErrOAuthFlowInvalid = svcerr.FailedPrecondition("oauth flow is invalid, expired or already used")
 	// ErrGenerationConflict: a secret was rewritten since it was read.
-	ErrGenerationConflict = errors.New("connection secret changed concurrently")
+	ErrGenerationConflict = svcerr.Aborted("connection secret changed concurrently")
 )
 
 // Connection is a user's saved, authorized login to an external service.
@@ -139,60 +139,4 @@ type ConnectionUpdate struct {
 	Scopes          []string
 	OAuthClient     string
 	AccessExpiresAt *time.Time
-}
-
-// ConnectionStore persists connections. Every method that takes a userID
-// enforces ownership in SQL; none returns ciphertext except the *Secrets
-// methods.
-type ConnectionStore interface {
-	// CreateConnection inserts the row, its secrets and its created event in
-	// one transaction. The first connection a user makes for an integration
-	// becomes its default.
-	CreateConnection(ctx context.Context, c *Connection, secrets []ConnectionSecret, ev ConnectionEvent) error
-	// ReauthorizeConnection rewrites secrets and identity on an existing row
-	// and returns it to active.
-	ReauthorizeConnection(ctx context.Context, userID, id string, upd ConnectionUpdate, secrets []ConnectionSecret, ev ConnectionEvent) (*Connection, error)
-
-	GetConnection(ctx context.Context, userID, id string) (*Connection, error)
-	ListConnections(ctx context.Context, userID, integrationID string) ([]*Connection, error)
-	DefaultConnection(ctx context.Context, userID, integrationID string) (*Connection, error)
-	FindByExternalAccount(ctx context.Context, userID, integrationID, externalAccountID string) (*Connection, error)
-
-	RenameConnection(ctx context.Context, userID, id, name string, ev ConnectionEvent) error
-	SetDefaultConnection(ctx context.Context, userID, id string, ev ConnectionEvent) error
-	// DeleteConnection soft-deletes the row and destroys its ciphertext.
-	DeleteConnection(ctx context.Context, userID, id string, ev ConnectionEvent) error
-	// RecordTestResult stores what a successful probe read; an empty value
-	// keeps the stored one.
-	RecordTestResult(ctx context.Context, userID, id, accountLabel, senderID string) error
-	TouchConnectionUsed(ctx context.Context, userID, id string) error
-
-	// GetSecrets returns the sealed fields of a connection the user owns.
-	GetSecrets(ctx context.Context, userID, id string) (map[string]ConnectionSecret, error)
-	// WithSecretsLock runs fn with the connection's secret rows locked
-	// (SELECT ... FOR UPDATE) inside one transaction, serializing refreshes
-	// across worker processes.
-	WithSecretsLock(ctx context.Context, userID, id string, fn func(SecretsTx) error) error
-
-	CreateOAuthFlow(ctx context.Context, f *OAuthFlow) error
-	// PeekOAuthFlow returns an unexpired, unconsumed flow without consuming
-	// it; anything else is ErrOAuthFlowInvalid.
-	PeekOAuthFlow(ctx context.Context, stateHash []byte, now time.Time) (*OAuthFlow, error)
-	// ConsumeOAuthFlow atomically marks an unexpired, unconsumed flow consumed
-	// and returns it; anything else is ErrOAuthFlowInvalid.
-	ConsumeOAuthFlow(ctx context.Context, stateHash []byte, now time.Time) (*OAuthFlow, error)
-
-	AppendConnectionEvent(ctx context.Context, ev ConnectionEvent) error
-	ListConnectionEvents(ctx context.Context, userID, id string, limit int, beforeID int64) ([]ConnectionEvent, error)
-}
-
-// SecretsTx is the locked view of one connection's secrets.
-type SecretsTx interface {
-	Connection() *Connection
-	Secrets() map[string]ConnectionSecret
-	// Replace rewrites the given fields and bumps their generation, but only
-	// if the access_token row is still at expectedGeneration.
-	Replace(ctx context.Context, expectedGeneration int64, secrets []ConnectionSecret, accessExpiresAt *time.Time) error
-	MarkStatus(ctx context.Context, status, reason string) error
-	AppendEvent(ctx context.Context, ev ConnectionEvent) error
 }

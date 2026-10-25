@@ -89,9 +89,9 @@ import (
 // stranded-spawn repairs, orphaned mailbox resolution — is unconditional too.
 //
 // Every anomaly class increments reliant_reconciler_anomalies_total and logs
-// at ERROR (which the logging package forwards to Sentry).
+// at ERROR (each an issue in forge's ClickStack).
 type Reconciler struct {
-	repo       db.Repository
+	repo       ReconcilerStore
 	tempClient client.Client
 
 	// Background polling state
@@ -438,7 +438,7 @@ func DefaultConfig() *ReconcilerConfig {
 
 // NewReconciler creates a new workflow reconciler. Zero-valued config fields
 // fall back to DefaultConfig values.
-func NewReconciler(repo db.Repository, tempClient client.Client, config *ReconcilerConfig) *Reconciler {
+func NewReconciler(repo ReconcilerStore, tempClient client.Client, config *ReconcilerConfig) *Reconciler {
 	def := DefaultConfig()
 	if config == nil {
 		config = def
@@ -609,7 +609,7 @@ func (s *passStats) snapshot() (total int, summary string) {
 
 // recordAnomaly increments the Prometheus anomaly counter for the class and
 // adds it to the per-pass summary. Callers pair every recordAnomaly with a
-// context-rich ERROR log (which the logging package forwards to Sentry —
+// context-rich ERROR log (an issue in forge's ClickStack —
 // these classes are actionable and must never be suppressed).
 func (r *Reconciler) recordAnomaly(stats *passStats, class string) {
 	observability.ReconcilerAnomaliesTotal.WithLabelValues(class).Inc()
@@ -972,7 +972,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			return result // another reconciler already handled this
 		}
 
-		// ERROR (Sentry-visible): the DB believed this workflow was live but
+		// ERROR (an issue): the DB believed this workflow was live but
 		// Temporal has no record of it — state was silently lost somewhere.
 		logging.ErrorContext(ctx, "[Reconciler] Workflow not found in Temporal, marked as completed",
 			"workflowID", wf.ID,
@@ -1191,7 +1191,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	// with ZERO pending work in Temporal — the shape of a silent wedge from an
 	// UNKNOWN cause (every enumerated detector above requires a pending task
 	// to look at). Track HistoryLength across passes; a frozen history across
-	// the detection thresholds is reported (ERROR + metric, no action), and
+	// the detection thresholds is reported (WARN + metric, no action), and
 	// only after the confirmation thresholds (double detection) is the
 	// workflow terminated, marked failed (checkpoint preserved — SendMessage
 	// resumes at position), and the user told how to continue.
@@ -1202,7 +1202,15 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			// Report only. The cause is unknown — it could still be a wait
 			// class this reconciler doesn't know about — so give it a full
 			// confirmation window before doing anything destructive.
-			logging.ErrorContext(ctx, "[Reconciler] Progress stall detected: running workflow has no pending work and no history growth",
+			//
+			// WARN, not ERROR: nothing is lost yet and nobody has to act. In
+			// prod (106 detections, 2026-10-19..23) every one was a run parked
+			// on a wait this watchdog does not model — a whole fleet at
+			// 00:05-00:18 on 10-23 while the Claude accounts were rate-limited
+			// (usage-limit timers), and long-lived chats whose spawned agents
+			// sat idle for days — and each resumed on its own or on the next
+			// message. The confirmed stage below is where a stall is acted on.
+			logging.WarnContext(ctx, "[Reconciler] Progress stall detected: running workflow has no pending work and no history growth",
 				"workflowID", wf.ID,
 				"chatID", wf.ChatID,
 				"historyLength", temporalState.HistoryLength,
@@ -1720,7 +1728,7 @@ const (
 	// legitimate user-input wait — nothing to do this pass.
 	progressStageNone progressStage = iota
 	// progressStageDetected: the detection thresholds were just crossed —
-	// report (ERROR + metric) but take no action. Returned exactly once per
+	// report (WARN + metric) but take no action. Returned exactly once per
 	// streak.
 	progressStageDetected
 	// progressStageConfirmed: the confirmation thresholds (double detection)
@@ -1804,7 +1812,7 @@ func (r *Reconciler) observeProgress(ctx context.Context, wf *db.Workflow, state
 		return progressStageConfirmed, passes, elapsed
 	}
 
-	// Mark the detection as reported so the ERROR/metric fire once per streak.
+	// Mark the detection as reported so the WARN/metric fire once per streak.
 	r.progressMu.Lock()
 	if cur := r.progressObservations[wf.ID]; cur != nil {
 		cur.detected = true
@@ -1906,7 +1914,7 @@ func (r *Reconciler) recoverStuckWorkflowByReset(ctx context.Context, wf *db.Wor
 		return fmt.Errorf("resetting workflow execution: %w", err)
 	}
 
-	// ERROR (Sentry-visible) even though recovery succeeded: a task was LOST
+	// ERROR (an issue) even though recovery succeeded: a task was LOST
 	// from Temporal's queue, which should never happen — the repair working is
 	// not a reason to hide the anomaly.
 	logging.ErrorContext(ctx, "[Reconciler] Recovered stuck workflow via reset (task was lost from queue)",
@@ -3056,7 +3064,7 @@ func (r *Reconciler) silentEnd(ctx context.Context, workflowID string, state *Te
 //     how it ended — and still did not report it: ERROR,
 //     silent_terminal_drift. Unless the failure that ended it is the user's
 //     to act on, which the error-class handler (#686) writes at INFO with
-//     error_class=user and never sends to Sentry; it is counted as expected.
+//     error_class=user so it never becomes an issue; it is counted as expected.
 func (r *Reconciler) logSilentEnd(stats *passStats, message string, wf *db.Workflow, end silentEnd) {
 	fields := []any{
 		"workflowID", wf.ID,

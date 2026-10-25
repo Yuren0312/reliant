@@ -22,7 +22,7 @@ import (
 // A tool has no business knowing what a launcher or a workflow engine is, and
 // the packages that implement these (internal/launch, internal/runs) depend on
 // this one, so the tools take narrow interfaces declared here and the wiring
-// (internal/app's worker root, internal/serverapi) supplies the implementation. A
+// (internal/app's api and worker providers) supplies the implementation. A
 // nil implementation is valid: the daemon runtime has no Temporal connection,
 // and each tool then says it is unavailable rather than pretending.
 
@@ -144,7 +144,7 @@ type runCaller struct {
 // resolveRunCaller loads the calling chat, whose UserID is the identity every
 // run-management tool acts as. The owner is never a parameter: a model must not
 // be able to name someone else's account.
-func resolveRunCaller(rctx *rctx.ToolContext, repo db.Repository) (*runCaller, *ToolResponse) {
+func resolveRunCaller(rctx *rctx.ToolContext, repo runCallerStore) (*runCaller, *ToolResponse) {
 	if repo == nil {
 		resp := NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode")
 		return nil, &resp
@@ -165,7 +165,7 @@ func resolveRunCaller(rctx *rctx.ToolContext, repo db.Repository) (*runCaller, *
 //
 // A run that does not exist and a run someone else owns produce the SAME
 // response, so the tool cannot be used to probe for other users' chat ids.
-func resolveOwnedRun(rctx *rctx.ToolContext, repo db.Repository, caller *runCaller, runID string) (*db.Chat, *ToolResponse) {
+func resolveOwnedRun(rctx *rctx.ToolContext, repo runCallerStore, caller *runCaller, runID string) (*db.Chat, *ToolResponse) {
 	notFound := func() (*db.Chat, *ToolResponse) {
 		resp := NewTextErrorResponse(fmt.Sprintf("Run %q not found. list_runs shows the runs you can manage.", runID))
 		return nil, &resp

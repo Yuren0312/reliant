@@ -42,7 +42,11 @@ fixtures make that class of change fail at **test time** instead.
 | `machine_wait_signaled.json` | same | The same wait woken by its machine: the `machine_wait` signal (sent by the api-server when one of the user's machines connects) lands while the run sleeps on the recheck timer, the timer is cancelled, and the check runs at once. |
 | `workflow_panic.json` | `replay-panic` (user draft: one top-level `call_llm`) | A panic in workflow code: `workflowPanicInjector` (`panic_injector_test.go`) panics on the run's root coroutine where it schedules `CallLLM`. The run recovers it, records the `workflow-panic-fails-run` marker, runs `Cleanup`, shows the panic (`WorkflowError`), records itself failed (`WorkflowStatus`) and fails. Every replayer runs the injector too — it touches no other workflow — so the history replays the panic it was recorded with. |
 | `usage_limit_wait.json` | `builtin://agent` | A run held for a provider usage limit: the spawned agent's first `CallLLM` is refused with a window resetting seconds from now, the agent writes its wait marker (`UsageLimitWait`), parks on a durable timer (reset plus margin), clears the marker (`UsageLimitWait`), retries the same step (`usage-limit-wait` and, now, `usage-limit-failover` version markers) and completes; the parent never sees a failure, hears the completion and finishes. |
-| `ask_user_yields_to_message.json` | `builtin://agent` (`tools: [ask_user]`) | An `ask_user` wait ended by a message instead of an answer: the agent asks (`QuestionCreate`, 24h timer), the user messages the asking thread through the production `SendAgentMessage` handler, its `thread_wake` doorbell ends the wait (`ask-user-yields-to-thread-input/<question>/1` version marker, timer cancelled), the question is resolved unanswered (`QuestionResolve`), and the next `CallLLM` drains the mailbox, reads the message and completes. |
+| `ask_user_yields_to_message.json` | `builtin://agent` (`tools: [ask_user]`) | An `ask_user` wait ended by a message instead of an answer: the agent asks with `blocking: true` (`ask-user-async/<tool call>` version marker, `QuestionCreate`, 24h timer), the user messages the asking thread through the production `SendAgentMessage` handler, its `thread_wake` doorbell ends the wait (`ask-user-yields-to-thread-input/<question>/1` version marker, timer cancelled), the question is resolved unanswered (`QuestionResolve`), and the next `CallLLM` drains the mailbox, reads the message and completes. |
+| `ask_user_async_by_default.json` | `builtin://agent` (`tools: [ask_user]`) | ask_user's default: a call with no flag records `ask-user-async/<tool call>` at `askUserAsyncByDefault`, posts an async question (`QuestionCreate`) and returns with no timer or signal wait; the next `CallLLM` carries on and the run completes with the question still pending. |
+| `capacity_wake_resumes_stopped_agent.json` | `builtin://agent` | A chat-wide capacity wake (`capacity-wake-resumes-chat` marker at run start): the spawned agent's first `CallLLM` is refused for spent credit and fails at once, the agent stops and reports to its parent, and while the parent reads the failure "Retry now" goes through the production `RetryUsageLimitWait` handler. The wake (`signal.usage_limit.retry`) resumes the stopped agent (its row back to "started") with no message to it; its next `CallLLM` is served, it reports a completion under a fresh slot, and the parent finishes. |
+
+| `provider_switch_waiting_spawn.json` | `builtin://agent` | A root model picker update while a general spawn waits on a usage limit. `chat-provider-switch-preserve-tags/update/<n>` binds descendant routing to the chosen provider without creating the old concrete-root-model fallback lease. Durable stopped-descendant lookup and the wait retry are versioned. |
 
 ## Frozen sets
 
@@ -71,10 +75,20 @@ that shape.
 | `2026-10-19-usage-limit-no-failover` | `usage_limit_wait.json` at the commit before account failover: a usage limit waits for its own reset whatever the activity reports about the provider's other accounts | `usageLimitFailoverChangeID` (`runtime/usage_limit_wait.go`) |
 | `2026-10-19-usage-limit-no-stay` | `usage_limit_wait.json` at the commit before the stay refinements: a probe bench is read as a reset, and a fallback stay lapses at its first end | `usageLimitStayChangeID` (`runtime/usage_limit_wait.go`) |
 | `2026-10-21-ask-user-ignores-thread-input` | An `ask_user` wait recorded before it yielded: a `thread_wake` and an `interrupt_thread` for the asking thread land inside the wait and are ignored; the answer ends it | `askUserYieldChangeID` (`runtime/ask_user_yield.go`), asked per observation |
+| `2026-10-22-ask-user-blocks-by-default` | `ask_user_yields_to_message.json` at `cbc5221a`: an ask_user call with no flag, recorded when that meant blocking — no `ask-user-async` marker, `QuestionCreate` then the 24h timer | `askUserIsAsync` (`runtime/ask_user_async.go`): `ask-user-async/<tool call>` answers `DefaultVersion`, which blocks |
+| `2026-10-23-capacity-wake-ignored` | Every fixture at `a84e40ac`, plus `capacity_wake_ignored_while_paused.json` and `capacity_wake_ignored.json`: a capacity wake (`signal.usage_limit.retry`) that lands while the root is self-paused on spent credit, or with a sub-agent stopped on it, is never read — no usage-limit wait started the listener — and only `signal.resume` (or nothing) moves the run | `capacityWakeChangeID` (`runtime/capacity_wake.go`), asked at run start |
 | `2026-10-11-integration-action-approval` | `action_approval.json` at `14f6aff7`: an attended turn's mutating integration action asks first (`ApprovalCreate`, a timer, `signal.approval.*`), is denied, and `ExecuteTools` refuses it — the prompt #664 removed | `actionApprovalRemovedChangeID` (`runtime/action_approval_legacy.go`) |
 
 Retire a set only together with its gate, once no run older than the gate's
 deploy can still be open.
+
+One gate is pinned outside these sets: `lowerContinueAsNewChangeID`
+(`runtime/continue_as_new.go`, the 40k → 10k soft continue-as-new threshold).
+Its old shape only differs past 10,000 events, too large to check in, so
+`TestLoweredCANThreshold_VersionGate` and
+`TestLoweredCANThreshold_InFlightRunRollsOverOnDeploy`
+(`runtime/continue_as_new_version_test.go`) record it on a dev server in the
+test, replay it through the current code, and fail when the gate is removed.
 
 ## When `TestReplayFixtures` fails
 
@@ -141,35 +155,18 @@ against the current code.
 
 ### Which Postgres it uses
 
-The generator needs a Postgres it can migrate and write to; `DATABASE_URL`
-decides which:
+The generator's database is internal/db's test database (`db.SetupTestDB`):
+a fresh copy of the migrated schema on forge pgtest's server, an embedded
+Postgres of the major `forge.yaml` declares, booted on demand and shared by
+every test process on the machine. Nothing needs starting, and nothing shared
+is written to. Set `FORGE_TEST_POSTGRES_URL` (a maintenance DSN, database
+`postgres`) to use a server of your own instead; it must run the declared
+major. `DATABASE_URL` is never read.
 
-- **`DATABASE_URL` set** — that database is used as-is and nothing is started.
-  This is the mode for anyone who must not touch shared infrastructure (an
-  agent, a second worktree): point it at an isolated database you created.
-
-  ```
-  DATABASE_URL='postgres://postgres:postgres@localhost:55434/reliant_mine?sslmode=disable' \
-    make replay-fixtures
-  ```
-
-  `make replay-fixtures DATABASE_URL=...` is equivalent.
-- **`DATABASE_URL` unset (or empty)** — `docker compose up -d postgres` brings
-  up this repo's compose Postgres, published on `localhost:5433`, and the
-  generator uses its `reliant` database. That server is shared by every
-  `scripts/dev.sh` stack on the machine, so prefer the first mode whenever you
-  have a database of your own.
-
-That choice is the Makefile's, and it is the same for every Make target that
-runs Go tests (see "Which Postgres the Go tests use" in the `Makefile`). The
-generator itself never picks a server: run by hand without `DATABASE_URL`, it
-exits with an error instead.
-
-The two steps are also fine to run by hand, which is all the target does. Only
-the first needs a database; the replay check is hermetic:
+The two steps are also fine to run by hand, which is all the task does:
 
 ```
-DATABASE_URL=... go test -tags replayfixtures -count=1 -timeout=10m -v ./internal/workflow/runtime/replaytest/
+go test -tags replayfixtures -count=1 -timeout=10m -v ./internal/workflow/runtime/replaytest/
 go test -count=1 -timeout=5m -v -run TestReplayFixtures ./internal/workflow/runtime/replaytest/
 ```
 

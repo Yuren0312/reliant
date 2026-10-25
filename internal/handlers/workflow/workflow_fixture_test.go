@@ -2,10 +2,10 @@ package workflow_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	workflow "github.com/reliant-labs/reliant/internal/handlers/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 )
@@ -24,17 +24,17 @@ func callerDraft(t *testing.T, slug string) *db.WorkflowDraft {
 // draftsRepo is a store holding these drafts of the harness caller, in a
 // project p-1 the caller owns. A slug it does not hold is absent (nil, nil),
 // as the repository answers; any other project is not found.
-func draftsRepo(drafts ...*db.WorkflowDraft) *workflow.StubRepo {
+func draftsRepo(drafts ...*db.WorkflowDraft) *workflow.MockRepository {
 	bySlug := map[string]*db.WorkflowDraft{}
 	for _, d := range drafts {
 		bySlug[d.Slug] = d
 	}
-	return &workflow.StubRepo{
+	return &workflow.MockRepository{
 		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
 			if id == "p-1" && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Name: "proj"}, nil
 			}
-			return nil, errors.New("project not found")
+			return nil, core.ErrProjectNotFound
 		},
 		GetWorkflowDraftBySlugFunc: func(_ context.Context, userID, slug string) (*db.WorkflowDraft, error) {
 			if d, ok := bySlug[slug]; ok && userID == d.UserID {

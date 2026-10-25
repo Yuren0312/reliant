@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -30,6 +31,9 @@ func feedEvent(t *testing.T, repo *Repo, id, triggerID, userID string, outcome c
 }
 
 func TestListTriggerEvents_PaginatesTiedOccurredAt(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -65,6 +69,8 @@ func TestListTriggerEvents_PaginatesTiedOccurredAt(t *testing.T) {
 }
 
 func TestListTriggerEvents_OutcomeFilter(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -87,6 +93,9 @@ func TestListTriggerEvents_OutcomeFilter(t *testing.T) {
 }
 
 func TestListTriggerEvents_JoinsRunState(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -149,6 +158,9 @@ func TestListTriggerEvents_JoinsRunState(t *testing.T) {
 }
 
 func TestListTriggerEvents_ScopedToUser(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -169,6 +181,8 @@ func TestListTriggerEvents_ScopedToUser(t *testing.T) {
 }
 
 func TestRecentTriggerFirings_WindowPerTrigger(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -189,6 +203,9 @@ func TestRecentTriggerFirings_WindowPerTrigger(t *testing.T) {
 }
 
 func TestTriggerNamesJoined(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -228,6 +245,8 @@ func TestTriggerNamesJoined(t *testing.T) {
 }
 
 func TestFiringsSinceLastSuccess_StopsAtTheNewestSuccessAndIsNotWindowed(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -266,6 +285,9 @@ func TestFiringsSinceLastSuccess_StopsAtTheNewestSuccessAndIsNotWindowed(t *test
 }
 
 func TestTrigger_NotifyOnCompleteRoundTrips(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

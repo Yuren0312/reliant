@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 func (f *fixture) probeIdle(w Worktree) Result {
@@ -20,6 +22,7 @@ func (f *fixture) probeIdle(w Worktree) Result {
 // An active worktree is reported finished only when everything the automatic
 // removal needs holds, with the longer floor. The daemon never removes it.
 func TestIdleDone_ReportsOnlyAFinishedWorktree(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -37,6 +40,7 @@ func TestIdleDone_ReportsOnlyAFinishedWorktree(t *testing.T) {
 
 func TestIdleDone_RefusesEverythingNotFinished(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "six fixtures through a probe (~41 git processes)")
 	cases := map[string]func(t *testing.T, f *fixture, w Worktree){
 		"untracked file": func(t *testing.T, f *fixture, w Worktree) { write(t, filepath.Join(w.Path, "wip.txt"), "x\n") },
 		"modified file":  func(t *testing.T, f *fixture, w Worktree) { write(t, filepath.Join(w.Path, "a.txt"), "changed\n") },
@@ -63,8 +67,14 @@ func TestIdleDone_RefusesEverythingNotFinished(t *testing.T) {
 			w := f.worktree("x", "feat/x")
 			setup(t, f, w)
 			got := f.probeIdle(w)
-			if got.Outcome == OutcomeIdleDone {
-				t.Fatalf("%s: reported finished: %+v", name, got)
+			// A definite "no" is still locked; only a check that could not
+			// run says so with probe_inconclusive.
+			want := OutcomeLocked
+			if name == "process list unreadable" {
+				want = OutcomeProbeInconclusive
+			}
+			if got.Outcome != want {
+				t.Fatalf("%s: got %+v, want %s", name, got, want)
 			}
 			if !exists(w.Path) {
 				t.Fatalf("%s: directory removed", name)
@@ -85,6 +95,7 @@ func TestIdleDone_RecentlyTouchedIsNotFinished(t *testing.T) {
 }
 
 func TestIdleDone_NeedsTheServerToAsk(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -97,6 +108,7 @@ func TestIdleDone_NeedsTheServerToAsk(t *testing.T) {
 }
 
 func TestIdleDone_AWorktreeBeingRestoredIsNeverProbed(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -166,6 +178,7 @@ func TestReconcile_AStalledWorktreeIsDeferredAndTheOthersFinish(t *testing.T) {
 
 func TestReconcile_ResultsKeepRequestOrder(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "several worktrees through one reconcile (~72 git processes)")
 	f := newFixture(t)
 	f.idle()
 	var ws []Worktree
@@ -186,6 +199,7 @@ func TestReconcile_ResultsKeepRequestOrder(t *testing.T) {
 // Its change is on main, so losing the name loses nothing.
 func TestOrphan_TipWhoseWorkIsOnBaseDoesNotHold(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~57 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("rb", "feat/rb")
@@ -210,6 +224,7 @@ func TestOrphan_TipWhoseWorkIsOnBaseDoesNotHold(t *testing.T) {
 // automatic pass saves it under a ref before removing (see backup_test.go).
 func TestOrphan_TipWithWorkNotOnBaseIsSavedBeforeRemoval(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "an orphaned tip saved to a backup ref, then a full reclaim (~84 git processes)")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("lost", "feat/lost")

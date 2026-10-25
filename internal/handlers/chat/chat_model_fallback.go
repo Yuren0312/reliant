@@ -44,6 +44,12 @@ func (s *Service) fallBackFromUnservableModels(ctx context.Context, userID, chat
 // moved. It tells no one; the caller posts the notices once the run that will
 // use the inputs is known to be getting them.
 func (s *Service) moveUnservableModels(ctx context.Context, userID, chatID, projectID, workflowName, workflowID string, inputs map[string]interface{}) []launch.ModelSubstitution {
+	// An ordinary send cannot authorize spending on a different provider.
+	// Bound chats keep their explicit binding; an unservable selector holds
+	// visibly at its model-call boundary until the user edits the root picker.
+	if s.chatProvider(ctx, chatID) != "" {
+		return nil
+	}
 	subs := s.launcher().SubstituteUnservableModels(ctx, userID, workflowName, projectID, inputs)
 	for _, sub := range subs {
 		logging.InfoContext(ctx, "Send moved a model input off a provider that cannot serve it",
@@ -121,16 +127,17 @@ func (s *Service) resumeInputUpdate(ctx context.Context, userID, chatID, project
 
 // runInputsTimeout bounds the get_workflow_inputs query a send makes on the
 // run it is about to resume. A parked run answers from its worker's cache; a
-// closed one is replayed first. Past this the send goes on without them.
+// closed one is refused (rtemporal.QueryOpenRun). Past this the send goes on
+// without them.
 const runInputsTimeout = 10 * time.Second
 
 // runInputsForSend is the run's current inputs, for resumeInputUpdate, or nil
 // when Temporal cannot say in time — then only what the send carries is
 // checked against the user's providers.
-func (s *Service) runInputsForSend(ctx context.Context, workflowID, runID string) map[string]interface{} {
+func (s *Service) runInputsForSend(ctx context.Context, workflowID string) map[string]interface{} {
 	queryCtx, cancel := context.WithTimeout(ctx, runInputsTimeout)
 	defer cancel()
-	inputs, err := s.queryRunInputs(queryCtx, workflowID, runID)
+	inputs, err := s.queryRunInputs(queryCtx, workflowID)
 	if err != nil {
 		logging.InfoContext(ctx, "Could not read the run's inputs; checking only the send's own params against the user's providers",
 			"workflowID", workflowID, "error", err)
