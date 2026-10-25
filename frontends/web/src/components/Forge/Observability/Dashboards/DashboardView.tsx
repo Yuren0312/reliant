@@ -69,6 +69,7 @@ import { ObsError } from "../ObsStates";
 import { useReleaseMarkers } from "../releaseMarkers";
 import { DashboardHeader } from "./DashboardHeader";
 import { ViewerControls } from "./ViewerControls";
+import { OrganizationCostsView } from "./OrganizationCostsView";
 import { visiblePanel, viewerQuery } from "./viewerModel";
 import {
   alertBands,
@@ -138,11 +139,11 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const envId = env === ENV_ALL ? null : (environments.find((candidate) => candidate.name === env)?.id ?? null);
   const unrecorded = env !== ENV_ALL && !envId;
   const scope = useMemo<ObsScope | null>(
-    () => (orgId && !unrecorded ? { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] } : null),
-    [orgId, project, envId, unrecorded]
+    () => (orgId && !unrecorded && dashRef.kind !== "builtin" ? { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] } : null),
+    [orgId, project, envId, unrecorded, dashRef.kind]
   );
 
-  const doc = useDashboard(orgId, dashRef, search.version, search.release);
+  const doc = useDashboard(orgId, dashRef, dashRef.kind === "builtin" ? undefined : search.version, dashRef.kind === "builtin" ? undefined : search.release);
   const spec = doc.data?.spec;
   const summary = doc.data?.summary;
 
@@ -167,8 +168,8 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const marks = !!spec && marksReleases(spec) && search.releases !== false;
   const releases = useReleaseMarkers(scope, range, environments, marks);
   const delivery = useMemo(() => (scope ? deliveryScopeOf(scope, environments) : null), [scope, environments]);
-  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!envId });
-  const history = useAlertHistory(orgId, range, envId ?? undefined);
+  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!envId && dashRef.kind !== "builtin" });
+  const history = useAlertHistory(dashRef.kind === "builtin" ? null : orgId, range, envId ?? undefined);
   const scopeEnvIds = useMemo(() => (envId ? [envId] : environments.map((candidate) => candidate.id)), [envId, environments]);
   const bands = useMemo(
     () => search.alerts === false ? [] : alertBands(history.data ?? [], scopeEnvIds, Date.now(), search.service),
@@ -236,6 +237,8 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
       <ObsError error={doc.error} subject={project} onRetry={() => void doc.refetch()} retrying={doc.isFetching} />
     );
   }
+
+  if (summary.viewKind === "organization-costs") return <OrganizationCostsView orgId={orgId!} />;
 
   const currentVersion = summary.workspace?.version ?? 0;
   const viewingOld = !!search.version && search.version !== currentVersion;

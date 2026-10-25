@@ -151,7 +151,15 @@ export function DashboardsPage() {
   const hrefs = useObservabilityHrefs();
   const navigateTo = useNavigateTo();
   return (
-    <RosterGate testId="console-dashboards" topic="dashboards">
+    // Not behind RosterGate: organization costs are a builtin dashboard that
+    // needs no deployed environment, so the list stays reachable and the
+    // getting-started guidance sits above it instead of replacing it.
+    <div className="space-y-4" data-testid="console-dashboards">
+      {environments.length === 0 && (
+        <div data-testid="observability-no-envs">
+          <ObsNoEnvironments topic="dashboards" />
+        </div>
+      )}
       <DashboardsList
         project={forgeProject}
         env={env}
@@ -161,7 +169,7 @@ export function DashboardsPage() {
         hrefs={hrefs}
         navigateTo={navigateTo}
       />
-    </RosterGate>
+    </div>
   );
 }
 
@@ -174,7 +182,7 @@ export function DashboardPage() {
   const hrefs = useObservabilityHrefs();
   const navigateTo = useNavigateTo();
   const dashRef = useMemo<DashboardRef | null>(
-    () => (isDashboardPageKind(kind) ? { kind, projectId: forgeProject, key } : null),
+    () => (isDashboardPageKind(kind) ? { kind, projectId: kind === "builtin" ? "" : forgeProject, key } : null),
     [kind, forgeProject, key]
   );
   const search: DashboardSearch = {
@@ -196,6 +204,8 @@ export function DashboardPage() {
     release: typeof raw.release === "string" ? raw.release : undefined,
   };
   if (!dashRef) return null;
+  // Organization accounting is discoverable without a deployed environment.
+  if (dashRef.kind === "builtin") return <DashboardView key={`builtin/${key}`} project={forgeProject} dashRef={dashRef} env={env} environments={environments} search={search} onSearch={onSearch} onEnvChange={setEnv} hrefs={hrefs} navigateTo={navigateTo} />;
   return (
     <RosterGate testId="console-dashboard" topic="dashboards">
       <DashboardView
