@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Regression cover for the loopback OAuth redirect.
@@ -86,6 +86,11 @@ const redirectTargetFrom = (mock: ReturnType<typeof vi.fn>): string => {
 }
 
 describe('OAuth redirect target in a packaged Electron build', () => {
+  beforeAll(async () => {
+    // Transform the transitive client graph during setup, not the first
+    // redirect assertion's 10s budget. Each case still resets module state.
+    await import('@/store/authStore')
+  })
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()

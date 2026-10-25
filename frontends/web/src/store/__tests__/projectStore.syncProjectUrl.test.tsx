@@ -20,7 +20,7 @@
  * spy-based test would have happily passed against the broken call.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import React from "react";
 import {
   createRootRoute,
@@ -169,6 +169,11 @@ async function selectProjectIgnoringSideEffects(
 }
 
 describe("syncProjectUrl — search params survive project selection", () => {
+  beforeAll(async () => {
+    // Cold transformation is setup, not URL-navigation behavior. Keep the
+    // per-case reset below so every assertion still uses a fresh store.
+    await import("../projectStore");
+  });
   beforeEach(() => {
     vi.resetModules();
   });
