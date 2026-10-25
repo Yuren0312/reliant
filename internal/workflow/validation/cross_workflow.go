@@ -323,10 +323,14 @@ func validateProtoInputsAgainstSchema(
 	for key, value := range merged {
 		inputDef, exists := schema[key]
 		if !exists {
-			// Skip CEL template expressions - evaluated at runtime
-			if strVal, ok := value.(string); ok && containsTemplate(strVal) {
-				continue
-			}
+			// An unknown NAME is a static fact: the child schema either
+			// declares the input or it does not, and writing the value as a
+			// template ("{{inputs.x}}") changes nothing about that. The
+			// template only makes the VALUE untypeable until run time — and
+			// that check lives below, on the known-input branch. Skipping the
+			// name check for templated values let a renamed arg (yield, now
+			// ask) pass validation and get dropped at run time, silently
+			// disarming whatever it was meant to configure.
 			unknownInputs = append(unknownInputs, key)
 			continue
 		}
