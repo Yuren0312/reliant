@@ -1671,6 +1671,9 @@ function App() {
                 onNavigateToSettings={() => {
                   navigate({ to: '/settings' });
                 }}
+                onManageProjects={() => {
+                  navigate({ to: '/settings/$section', params: { section: 'projects' } });
+                }}
                 onOpenForge={() => {
                   navigate({ to: '/apps' });
                 }}
@@ -1708,6 +1711,9 @@ function App() {
                   onOpenChatSearch={() => void shortcutHost?.run("onChatSearch")}
                   onNavigateToSettings={() => {
                     navigate({ to: '/settings' });
+                  }}
+                  onManageProjects={() => {
+                    navigate({ to: '/settings/$section', params: { section: 'projects' } });
                   }}
                   onOpenForge={() => {
                     navigate({ to: '/apps' });

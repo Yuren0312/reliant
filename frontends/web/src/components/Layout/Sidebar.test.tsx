@@ -53,9 +53,13 @@ const mockChatListData = [
 
 const mockArchivedChatData: Array<Record<string, unknown>> = [];
 
+// Stable, as a query result is: a new array each render would re-run the
+// sidebar's effects on every render.
+const NO_MAIN_WORKTREES: never[] = [];
+
 vi.mock("../../hooks/chat-queries", () => ({
   useChatListWithWorkspaces: () => ({
-    data: { chats: mockChatListData, lastUserUpdateSequence: 0, mainWorktrees: [] },
+    data: { chats: mockChatListData, lastUserUpdateSequence: 0, mainWorktrees: NO_MAIN_WORKTREES },
     isLoading: false,
   }),
   useArchivedChats: () => ({ data: mockArchivedChatData, isFetched: true }),

@@ -59,7 +59,6 @@ import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { openChat, openNewChat } from "../../store/openChat";
 import { openAddProject } from "../../store/addProjectDialogStore";
 import { useProjects } from "../../hooks/project-queries";
-import { useNavigate } from "@tanstack/react-router";
 import { ProjectFilterMenu } from "./ProjectFilterMenu";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
@@ -138,6 +137,8 @@ interface SidebarProps {
   onOpenRuns?: (search?: RunsSearch) => void;
   onOpenChatSearch?: () => void;
   onNavigateToSettings?: () => void;
+  /** Settings → Projects, where projects are renamed and removed. */
+  onManageProjects?: () => void;
   onOpenForge?: () => void;
   /** The org-wide Observability area (/forge/observability). */
   onOpenObservability?: () => void;
@@ -686,6 +687,7 @@ function SidebarComponent({
   onOpenInbox,
   onOpenChatSearch,
   onNavigateToSettings,
+  onManageProjects,
   onOpenForge,
   onOpenObservability,
 }: SidebarProps) {
@@ -695,7 +697,6 @@ function SidebarComponent({
   const projectFilterId = useWorkspaceStateStore((state) => state.projectFilterId);
   const setProjectFilter = useProjectStore((state) => state.setProjectFilter);
   const { projects } = useProjects();
-  const navigate = useNavigate();
   const { data: chatList } = useChatListWithWorkspaces(projectFilterId);
   const listedChats = useMemo(() => chatList?.chats ?? [], [chatList?.chats]);
   // The list carries each chat's workspace and every listed project's main
@@ -979,10 +980,6 @@ function SidebarComponent({
     },
     [setProjectFilter],
   );
-
-  const handleManageProjects = useCallback(() => {
-    void navigate({ to: "/settings/$section", params: { section: "projects" } });
-  }, [navigate]);
 
   // Chats waiting on the user, per project: the switcher shows them so a
   // filtered list never hides that another project needs you.
@@ -1590,7 +1587,7 @@ function SidebarComponent({
               projects={projects}
               onChange={handleFilterChange}
               onAddProject={() => openAddProject()}
-              onManageProjects={handleManageProjects}
+              onManageProjects={() => onManageProjects?.()}
               needsYouByProject={needsYouByProject}
             />
           </div>

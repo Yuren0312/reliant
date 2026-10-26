@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   projects: [] as Array<{ id: string; name: string; path: string; last_active: string }>,
   loadChats: vi.fn(async () => {}),
   clearCurrentChat: vi.fn(),
-  deleteProjectRpc: vi.fn(async () => {}),
+  deleteProjectRpc: vi.fn(async (_id: string) => {}),
 }));
 
 vi.mock("../../hooks/project-queries", () => ({
