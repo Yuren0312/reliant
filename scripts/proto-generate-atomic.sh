@@ -42,6 +42,45 @@ for dir in "$@"; do
   esac
 done
 
+# ── Skip a regeneration that cannot change anything ─────────────────────
+# buf over the whole vendored contract costs ~50s on a loaded host, and every
+# `forge generate` runs this hook, while its inputs move only when the contract
+# is re-vendored. So a run whose inputs AND outputs are byte-identical to those
+# of an earlier successful run on this machine skips: the generator is a pure
+# function of the inputs fingerprinted below, so it would write the outputs it
+# wrote then, which are the outputs on disk now. A hand edit of an output
+# changes the output fingerprint and regenerates. The record is shared by every
+# checkout (keyed by content, not path). PROTO_GENERATE_FORCE=1 always runs.
+#
+# Inputs: this script, the template, every file under the template's input
+# directories, the Go and npm pins of buf and the plugins, BUF, and the Go
+# toolchain.
+fingerprint_inputs() {
+  local d
+  {
+    sha256sum "${BASH_SOURCE[0]}" "$template" go.mod go.sum tools/protoc-gen-es/package-lock.json
+    printf 'BUF=%s\n' "${BUF:-}"
+    go env GOVERSION
+    for d in $(sed -n 's/^[[:space:]]*-[[:space:]]*directory:[[:space:]]*//p' "$template"); do
+      find "$d" -type f -print0 | sort -z | xargs -0 -r sha256sum
+    done
+    true
+  } 2>/dev/null | sha256sum | cut -c1-32
+}
+fingerprint_outputs() {
+  local d
+  for d in "$@"; do
+    if [[ -d "$d" ]]; then find "$d" -type f -print0 | sort -z | xargs -0 -r sha256sum; fi
+  done | sha256sum | cut -c1-32
+}
+record_dir=${XDG_CACHE_HOME:-$HOME/.cache}/reliant-proto-generate
+in_fp=$(fingerprint_inputs)
+record="$record_dir/$(basename "$template").$in_fp"
+if [[ "${PROTO_GENERATE_FORCE:-}" != 1 ]] && [[ -f "$record" ]] && [[ "$(cat "$record")" == "$(fingerprint_outputs "$@")" ]]; then
+  echo "proto-generate-atomic: $template's inputs and outputs are unchanged since a verified run; skipped (PROTO_GENERATE_FORCE=1 regenerates)"
+  exit 0
+fi
+
 # The scratch dir lives inside the repo (gitignored tmp/) so the final mv is a
 # same-filesystem rename, not a cross-device copy.
 mkdir -p tmp
@@ -78,3 +117,9 @@ for dir in "$@"; do
   fi
   mv "$staging/$dir" "$dir"
 done
+
+# Record what these inputs generate, for the skip above. Best effort: a
+# record that cannot be written only costs the next run its skip.
+mkdir -p "$record_dir" 2>/dev/null &&
+  fingerprint_outputs "$@" >"$record.$$" 2>/dev/null &&
+  mv -f "$record.$$" "$record" 2>/dev/null || rm -f "$record.$$" 2>/dev/null || true
