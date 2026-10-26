@@ -21480,6 +21480,11 @@
             "ProtoType": "[]message",
             "IsOptional": false,
             "MessageType": "reliant.v1.ModelEndpoint"
+          },
+          {
+            "Name": "credentials_available",
+            "ProtoType": "bool",
+            "IsOptional": false
           }
         ],
         "TestModelEndpointRequest": [
@@ -21560,6 +21565,10 @@
             "kind": "message",
             "type_name": "reliant.v1.ModelEndpoint",
             "repeated": true
+          },
+          {
+            "name": "credentials_available",
+            "kind": "bool"
           }
         ],
         "reliant.v1.LocalModelEndpoint": [
@@ -41108,7 +41117,7 @@
     "reliant/v1/integration.proto": "767cea1a652eb5c4ff2101c1f220e5e915566dd8ebda98567b4edfb26e420e0a",
     "reliant/v1/mcp.proto": "d27eec630292113ac64b4b2e3468e72516d1f5c211dbfe536c2730e43ed2efd1",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",
-    "reliant/v1/model_endpoint.proto": "e0cc2fe196e9924630a5fed14a68e89e4e51192d98b763201af3f7f84210caf3",
+    "reliant/v1/model_endpoint.proto": "78c975ea77eacab893b2389073746b4cc29f298c44a9b80543a74b13d1c649cc",
     "reliant/v1/package_commands.proto": "963ee23dd0200e0295f734f074c820290cfbc4fd5ed4ac6301f9e7c52367fcff",
     "reliant/v1/plan.proto": "10d988e3ed00486d4591339f2173afc72882fe0293b52427fe37736709564f5d",
     "reliant/v1/preset.proto": "4a4d7a48d45412e11b50bac80bbdc2d2e5c9a86596f680598efa312cb9f300c5",
