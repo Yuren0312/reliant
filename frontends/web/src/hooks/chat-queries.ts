@@ -96,7 +96,14 @@ export function getChatSelection(chatId: string): ChatSelection | null | undefin
 }
 
 /** Re-read the chat's selection from the server, e.g. after a refused stale edit. */
-export function refetchChatSelection(chatId: string): Promise<unknown> {
+export async function refetchChatSelection(chatId: string): Promise<unknown> {
+  // The selection is read through the chat detail, which is fresh for minutes:
+  // mark it stale so this re-read reaches the server.
+  await queryClient.invalidateQueries({
+    queryKey: chatKeys.detail(chatId),
+    exact: true,
+    refetchType: "none",
+  });
   return queryClient.refetchQueries({ queryKey: chatKeys.selection(chatId), exact: true });
 }
 
@@ -250,12 +257,31 @@ export function useChatListWithWorkspaces(projectId?: string) {
   });
 }
 
-export function useChat(chatId?: string) {
-  return useQuery({
+/**
+ * The chat's detail, kept current by the stream. The stream patches this cache
+ * as the chat changes (title, state, activity, worktree, config), and every
+ * path that reads a chat from the server seeds it (seedChatDetail, which
+ * selectChat runs on open) -- so a mount re-reading GetChat is a round trip
+ * for what the cache already holds. That duplicate was the extra GetChat on
+ * every open and every switch back to a chat.
+ *
+ * Fresh for CHAT_DETAIL_STALE_MS rather than forever: a missed event heals on
+ * the next mount past that, and a stream disruption invalidates every chat
+ * query read before it (globalUpdatesStore.handleStatusChange).
+ */
+export const CHAT_DETAIL_STALE_MS = 5 * 60_000;
+
+export function chatDetailQueryOptions(chatId: string | undefined) {
+  return {
     queryKey: chatKeys.detail(chatId),
     queryFn: () => chatActions.getChat(chatId!),
     enabled: !!chatId,
-  });
+    staleTime: CHAT_DETAIL_STALE_MS,
+  };
+}
+
+export function useChat(chatId?: string) {
+  return useQuery(chatDetailQueryOptions(chatId));
 }
 
 /**
@@ -277,10 +303,25 @@ export function useChat(chatId?: string) {
 export function useChatSelection(chatId?: string) {
   return useQuery({
     queryKey: chatKeys.selection(chatId),
-    queryFn: async () => (await chatActions.getChat(chatId!)).selection ?? null,
+    queryFn: () => fetchChatSelection(chatId!),
     enabled: !!chatId,
     staleTime: Infinity,
   });
+}
+
+/**
+ * The cold read of a chat's selection. It is the chat detail's own GetChat
+ * (the selection rides on it), so it goes through the detail query: a chat
+ * opened from the sidebar has its detail seeded, a chat whose detail is
+ * already loading shares that one request, and only a chat nothing has read
+ * yet costs a call -- one, where the composer and the header used to make one
+ * each. refetchChatSelection (after a refused stale edit) must reach the
+ * server, so it marks the detail stale first; fetchQuery returns cached
+ * detail only while it is fresh.
+ */
+async function fetchChatSelection(chatId: string): Promise<ChatSelection | null> {
+  const chat = await queryClient.fetchQuery(chatDetailQueryOptions(chatId));
+  return chat.selection ?? null;
 }
 
 /**

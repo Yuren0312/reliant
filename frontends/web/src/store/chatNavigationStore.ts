@@ -67,21 +67,8 @@ export function chatNeedsAttention(
 }
 
 async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
-  const projectId = useProjectStore.getState().currentProject?.id;
-  if (projectId) {
-    const worktreeStore = useWorktreeStore.getState();
-    if (chat.worktreeId) {
-      const targetWorktree = await resolveWorktree(chat.worktreeId);
-      if (targetWorktree) {
-        await worktreeStore.switchWorktreeContext(projectId, targetWorktree);
-      }
-    } else {
-      await worktreeStore.switchWorktreeContext(projectId, null);
-    }
-  }
-
-  const { useChatStore } = await import("./chatStore");
-  useChatStore.getState().selectChat(chat);
+  const { openChatInWorkspace } = await import("../lib/openChatInWorkspace");
+  await openChatInWorkspace(chat);
 }
 
 /**
