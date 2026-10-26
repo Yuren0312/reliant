@@ -139,6 +139,17 @@ func TestMigrationChangeRequiresMigsafetyAndLintOnAPinMove(t *testing.T) {
 	}
 }
 
+// A diff that moves only root pins has no directory to scope lint to: the
+// whole-module lint a pin needs runs in the release gate, so the merge gate is
+// not obliged to lint (migsafety still follows forge.yaml).
+func TestPinOnlyChangeDoesNotRequireLint(t *testing.T) {
+	pl := &Plan{Files: []FileReport{{Path: "go.mod"}, {Path: "go.sum"}, {Path: "forge.yaml"}}}
+	dir := gateDir(t, pl, map[string]int{"plan": 0, "build": 0, "test": 0, "migsafety": 0})
+	if code, out := verify(t, dir); code != 0 {
+		t.Fatalf("a pin-only change must pass without a lint row: %s", out)
+	}
+}
+
 // A phase the script decided to run is declared in <dir>/expected; one that
 // left no row (the gate was cut off before it finished) fails.
 func TestDeclaredPhaseWithoutARowFails(t *testing.T) {

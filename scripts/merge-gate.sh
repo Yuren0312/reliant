@@ -19,15 +19,21 @@
 #   npm-*      npm ci where a selected lane needs node_modules it lacks
 #   generate   pinned forge generate must be a no-op; only when a forge input changed
 #   docs       every docs generator must be a no-op; only when a docs input changed
-#   build      go build ./...
-#   test       tools/test-affected run -reach direct -lanes go,web,electron (-short,
-#              cached, no -race): the changed packages and their DIRECT importers;
-#              deeper dependents run in the release gate (MG_REACH=all for all)
-#   typecheck  frontends/web's `npm run typecheck` (tsc -b: app, tests, gen,
-#              node configs), when the web lane is selected or anything under
+#   build      compile (go list -export: no link) every package whose build
+#              contains a change (the plan's go.build), or ./... on a full Go lane
+#   test       tools/test-affected run -plan <the plan> (-short, cached, no
+#              -race): the changed packages and their DIRECT importers, and the
+#              vitest files within two imports of a changed module; deeper
+#              dependents run in the release gate (MG_REACH=all for all). A Go
+#              test this change adds or edits that runs over the per-test budget
+#              fails it (-test-budget auto)
+#   typecheck  scripts/web-typecheck.sh: frontends/web's `tsc -b` (app, tests,
+#              gen, node configs), from the newest incremental state any checkout
+#              of this clone left, when the web lane is selected or anything under
 #              frontends/web/ changed; vitest strips types without checking
 #              them, so this is the only phase that sees a test's type error
-#   lint       forge lint --scope <changed dirs> (unscoped when a pin moved);
+#   lint       forge lint's own lanes (named; no golangci-lint or buf lint, which
+#              the release gate runs) --scope <changed dirs>, a pin move included;
 #              re-run on the amended tree whenever a generator rewrote it, and
 #              that run is the verdict (lint reads generated files such as
 #              gen/forge_descriptor.json, so the first run judged a stale tree)
@@ -38,7 +44,9 @@
 # judge; build, test, typecheck, lint and migsafety then run at the same time.
 #
 # The whole gate holds ONE host heavy slot (forge slot run), taken here; every
-# phase nests inside it and never queues again. MG_LOGDIR=<dir> keeps the
+# phase nests inside it and never queues again. Its phases share a CPU budget
+# (MG_CPUS) instead of each spawning one thread per core of a host whose other
+# slots are busy too. MG_LOGDIR=<dir> keeps the
 # phase logs there (default: a fresh directory under ~/.cache/reliant-merge-gate).
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 2
@@ -49,7 +57,7 @@ while [ $# -gt 0 ]; do
     --base) base=$2; shift 2 ;;
     --amend) amend=1; shift ;;
     --regen) regen=1; shift ;;
-    -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,50p' "$0"; exit 0 ;;
     *) echo "merge-gate: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -67,6 +75,26 @@ if [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${MG_IN_SLOT:-}" ] && "$slotforge" slo
 fi
 t0=$(date +%s)
 slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
+
+# ── the gate's CPU budget ─────────────────────────────────────────────────
+# Every Go command, go test binary, golangci and vitest otherwise sizes itself
+# to the whole machine (32 threads each), and the gate runs six of them at
+# once in one slot of eight: at a host load of 150 every gate was CPU-starved,
+# tsc (one thread) included. So the gate gets the cores the host has free, but
+# never less than twice its slot's share, and each concurrent phase a part of
+# that: the test phase (the longest) half for Go and half for vitest, the
+# others a quarter. MG_CPUS=<n>
+# overrides the budget.
+cpus=$(nproc 2>/dev/null || echo 4)
+slots=$("$slotforge" slot status --class heavy 2>/dev/null | sed -n 's/^heavy slots: \([0-9]*\).*/\1/p' | head -1)
+[ -n "$slots" ] && [ "$slots" -gt 0 ] || slots=$(( cpus / 4 > 0 ? cpus / 4 : 1 ))
+load=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null | cut -d. -f1); load=${load:-0}
+share=$(( 2 * cpus / slots )); [ "$share" -ge 4 ] || share=4
+free=$(( cpus - load ))
+gate_cpus=${MG_CPUS:-$(( free > share ? free : share ))}
+[ "$gate_cpus" -le "$cpus" ] || gate_cpus=$cpus
+half=$(( gate_cpus / 2 )); [ "$half" -ge 2 ] || half=2
+quarter=$(( gate_cpus / 4 )); [ "$quarter" -ge 2 ] || quarter=2
 
 [ -n "$base" ] || base=$(git merge-base HEAD origin/main) || { echo "merge-gate: no merge-base with origin/main (fetch it, or pass --base)" >&2; exit 2; }
 base=$(git rev-parse "$base")
@@ -163,19 +191,19 @@ gen_forge() {
     tc=$(sed -n 's/^toolchain //p' go.mod); [ -n "$tc" ] || tc="go$(sed -n 's/^go //p' go.mod)"
     for h in $hooks; do
       echo "==> generate hook $h: $(jq -r --arg h "$h" '.forge_generate.hook_commands[$h] | join(" ")' "$L/plan.json")"
-      (cd "$wt" && jq -r --arg h "$h" '.forge_generate.hook_commands[$h][]' "$L/plan.json" | tr '\n' '\0' | xargs -0 env GOWORK=off GOTOOLCHAIN="$tc") || return 1
+      (cd "$wt" && jq -r --arg h "$h" '.forge_generate.hook_commands[$h][]' "$L/plan.json" | tr '\n' '\0' | xargs -0 env GOMAXPROCS="$gen_procs" GOWORK=off GOTOOLCHAIN="$tc") || return 1
     done
     judge generate "$b" "$wt"
     return
   fi
-  (cd "$wt" && task generate:forge) || return 1
+  (cd "$wt" && GOMAXPROCS=$gen_procs task generate:forge) || return 1
   judge generate "$b" "$wt" || return 1
-  (cd "$wt" && "${forge[@]}" lint --no-fix --conventions) || { echo "forge lint --conventions failed"; return 1; }
+  (cd "$wt" && GOMAXPROCS=$gen_procs "${forge[@]}" lint --no-fix --conventions) || { echo "forge lint --conventions failed"; return 1; }
 }
 gen_docs() {
   local wt=$1 b
   b=$(cd "$wt" && snapshot)
-  (cd "$wt" && task generate:docs) || return 1
+  (cd "$wt" && GOMAXPROCS=$gen_procs task generate:docs) || return 1
   judge docs "$b" "$wt"
 }
 
@@ -233,6 +261,9 @@ done
 # first, because a scratch checkout of HEAD would not see your edits.
 inplace=0; [ -n "$(git status --porcelain)" ] && inplace=1
 pids=()
+# A generator beside the other phases gets a quarter of the budget; one that
+# runs first, alone (a dirty tree), all of it.
+gen_procs=$quarter; [ "$inplace" = 1 ] && gen_procs=$gate_cpus
 if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   [ "$fgen" = true ] && { phase generate gen_forge "$root" || fail=1; }
   [ "$fail" = 0 ] && [ "$dgen" = true ] && { phase docs gen_docs "$root" || fail=1; }
@@ -244,12 +275,29 @@ elif [ "$fail" = 0 ]; then
     if scratch docs; then phase docs gen_docs "$SCRATCH" & pids+=($!); else fail=1; fi
   fi
 fi
+# build_check: compile, without linking, every package whose build contains a
+# change. `go build ./...` also linked every main package of the module (the
+# server, the CLI, a dozen generators: most of its 100-800s); the link check
+# runs in the release gate's build. A full Go lane (a pin moved) compiles
+# ./... . go list -export compiles each package for its export data and exits
+# non-zero naming any that does not compile.
+build_check() {
+  local pkgs
+  if [ "$gofull" = true ]; then pkgs=(./...); else mapfile -t pkgs < <(j '.go.build // [] | .[]'); fi
+  if [ ${#pkgs[@]} -eq 0 ]; then echo "build: no Go package's build contains a change"; return 0; fi
+  echo "build: compiling ${pkgs[*]:0:20}$([ ${#pkgs[@]} -gt 20 ] && echo " ... (${#pkgs[@]} packages)")"
+  # Errors go to stderr; the package list on stdout is noise.
+  GOMAXPROCS=$quarter go list -export "${pkgs[@]}" >/dev/null
+}
 run_checks() {
-  local sfx=${1:-}
-  phase "build$sfx" go build ./... & pids+=($!)
-  phase "test$sfx" go run ./tools/test-affected run -reach "$reach" -base "$base" -lanes go,web,electron & pids+=($!)
+  local sfx=${1:-} plan_arg=(-plan "$L/plan.json")
+  # After --amend rewrote code the plan is stale: plan again.
+  [ -n "$sfx" ] && plan_arg=(-reach "$reach" -base "$base")
+  phase "build$sfx" build_check & pids+=($!)
+  phase "test$sfx" env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
+    go run ./tools/test-affected run "${plan_arg[@]}" -lanes go,web,electron -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
   if [ "$typecheck" = true ]; then
-    phase "typecheck$sfx" npm --prefix frontends/web run --silent typecheck & pids+=($!)
+    phase "typecheck$sfx" scripts/web-typecheck.sh & pids+=($!)
   fi
 }
 # lint reads generated files (gen/forge_descriptor.json for db-grants, among
@@ -257,20 +305,27 @@ run_checks() {
 # rewrite. Its verdict is therefore held until the generators finish: when they
 # rewrote nothing it stands; when --amend folds a rewrite in, lint runs again on
 # the amended tree and that run is the verdict.
+#
+# The merge tier runs forge's own lanes, named, over the changed directories;
+# golangci-lint, buf lint and the whole-project and deploy lanes run in the
+# release gate's unscoped `forge lint`. Measured on one loaded host, the same
+# two-directory scope: every default lane 331s (golangci the bulk; 405s
+# average, 2735s unscoped on a pin move, in the merge queue), these lanes 41s.
+# A pin move no longer unscopes it: what a new forge or module version breaks
+# across the module is the release gate's to find; the regenerated files a
+# pin bump commits are in the diff, so they are in scope here.
+lint_lanes=(--contract --conventions --generated-drift --go-markers --proto-markers
+  --create-nullability --computed-fields --read-only-fields --db-grants
+  --column-markers --closed-sets --tracing --guarded-fields)
 lint_cmd=() lint_pid= lint_deferred=0
-if echo "$files" | grep -qE '^(go\.(mod|sum)|forge\.yaml)$'; then
-  notes+=("lint: unscoped (a pin moved)")
-  lint_cmd=("${forge[@]}" lint --quiet --no-fix --skip-frontends)
+# One awk, not a dirname per file: forking hundreds of processes on a
+# loaded host delayed lint's start by over a minute.
+scope=$(echo "$files" | awk -F/ 'NF > 1 { NF--; print }' OFS=/ | sort -u | while read -r d; do [ -d "$d" ] && echo "$d"; done | paste -sd, -)
+if [ -n "$scope" ]; then
+  notes+=("lint: forge's own lanes over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s); golangci-lint and buf lint run in the release gate")
+  lint_cmd=(env GOMAXPROCS="$quarter" "${forge[@]}" lint --quiet --no-fix --skip-frontends --scope "$scope" "${lint_lanes[@]}")
 else
-  # One awk, not a dirname per file: forking hundreds of processes on a
-  # loaded host delayed lint's start by over a minute.
-  scope=$(echo "$files" | awk -F/ 'NF > 1 { NF--; print }' OFS=/ | sort -u | while read -r d; do [ -d "$d" ] && echo "$d"; done | paste -sd, -)
-  if [ -n "$scope" ]; then
-    notes+=("lint: --scope over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s)")
-    lint_cmd=("${forge[@]}" lint --quiet --no-fix --skip-frontends --scope "$scope")
-  else
-    notes+=("lint: not run (only root files changed)")
-  fi
+  notes+=("lint: not run (only root files changed; the release gate lints the module)")
 fi
 if [ "$fail" = 0 ]; then
   run_checks

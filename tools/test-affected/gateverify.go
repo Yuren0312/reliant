@@ -76,16 +76,14 @@ func verifyGate(planPath, dir string) []string {
 	if pl.MigOrder.Full {
 		obliged["migorder"] = "the plan selected the migration-order lane"
 	}
-	var migration, pin, subdir, web bool
+	var migration, subdir, web bool
 	for _, f := range pl.Files {
 		p := f.Path
 		switch {
 		case strings.HasPrefix(p, "db/migrations/"):
 			migration = true
 		case p == "forge.yaml":
-			migration, pin = true, true
-		case p == "go.mod" || p == "go.sum":
-			pin = true
+			migration = true
 		}
 		if strings.HasPrefix(p, "frontends/web/") {
 			web = true
@@ -100,7 +98,10 @@ func verifyGate(planPath, dir string) []string {
 	if migration {
 		obliged["migsafety"] = "a migration or forge.yaml changed"
 	}
-	if pin || subdir {
+	// Lint is scoped to the changed directories. A diff that moves only a pin
+	// at the root (go.mod, go.sum, forge.yaml) has none: its whole-module
+	// lint is the release gate's (dev-docs/merge-and-release-gates.md).
+	if subdir {
 		obliged["lint"] = "the diff touches linted code"
 	}
 	// Phases the script itself decided to run (it appends each to <dir>/expected
