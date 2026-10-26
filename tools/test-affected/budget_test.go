@@ -67,6 +67,26 @@ func TestBudgetFilterPrintsWhatPlainGoTestWould(t *testing.T) {
 	}
 }
 
+// A package that dies with a test running (a panic, a timeout) reports no
+// result for it: its output must still be printed.
+func TestBudgetFilterPrintsAnUnfinishedTestsOutput(t *testing.T) {
+	var out strings.Builder
+	f := newBudgetFilter(time.Second, nil, &out)
+	_, _ = io.WriteString(f, `{"Action":"run","Package":"m/p","Test":"TestHang"}
+{"Action":"output","Package":"m/p","Test":"TestHang","Output":"panic: test timed out after 5m0s\n"}
+{"Action":"output","Package":"m/p","Output":"FAIL\tm/p\t300.1s\n"}
+{"Action":"fail","Package":"m/p","Elapsed":300.1}
+{"Action":"run","Package":"m/q","Test":"TestCut"}
+{"Action":"output","Package":"m/q","Test":"TestCut","Output":"last words\n"}
+`)
+	_ = f.Close()
+	for _, want := range []string{"panic: test timed out", "FAIL\tm/p", "last words"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("output lacks %q:\n%s", want, out.String())
+		}
+	}
+}
+
 func TestBudgetFailsOnlyTheTestsTheChangeWrote(t *testing.T) {
 	owned := ownedTests("example.com/m", []changedPkg{{Dir: "./p", Tests: []string{"TestMineSlow", "TestFast"}}})
 	_, report, failed := runFilter(t, owned)

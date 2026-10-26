@@ -117,7 +117,8 @@ func (f *budgetFilter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// Close flushes a final line with no newline.
+// Close flushes a final line with no newline, and the output of any test
+// that never finished.
 func (f *budgetFilter) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -125,7 +126,25 @@ func (f *budgetFilter) Close() error {
 		f.line(append(f.partial, '\n'))
 		f.partial = nil
 	}
+	f.flush("")
 	return nil
+}
+
+// flush prints and drops the held output of the tests whose key has prefix.
+func (f *budgetFilter) flush(prefix string) {
+	keys := make([]string, 0, len(f.held))
+	for k := range f.held {
+		if strings.HasPrefix(k, prefix) {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		for _, o := range f.held[k] {
+			_, _ = io.WriteString(f.out, o)
+		}
+		delete(f.held, k)
+	}
 }
 
 func (f *budgetFilter) line(b []byte) {
@@ -149,6 +168,11 @@ func (f *budgetFilter) line(b []byte) {
 			f.held[key] = append(f.held[key], ev.Output)
 		}
 	case "fail":
+		if ev.Test == "" {
+			// A package that failed with tests still running (a panic, a
+			// timeout) never reports them: their output is the evidence.
+			f.flush(ev.Package + "\x00")
+		}
 		for _, o := range f.held[key] {
 			_, _ = io.WriteString(f.out, o)
 		}
