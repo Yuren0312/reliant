@@ -104,7 +104,8 @@ type Plan struct {
 	DocGen   DocGenPlan   `json:"docs_generate"`
 	MigOrder MigOrderPlan `json:"migration_order"`
 	// Lockfiles are the npm projects whose manifest or lockfile changed: the
-	// runner checks each still installs with `npm ci` before any test runs.
+	// runner checks each still installs from its lockfile (`npm ci`, or pnpm's
+	// --frozen-lockfile) before any test runs.
 	Lockfiles []LockfileCheck `json:"npm_lockfiles,omitempty"`
 }
 
@@ -115,38 +116,51 @@ type Plan struct {
 // hand-edited the lockfile, and every fresh install of main failed with
 // "Missing: zone.js from lock file" while every local test stayed green.
 type LockfileCheck struct {
-	Dir   string `json:"dir"`
-	Lanes []lane `json:"lanes"`
-	Why   string `json:"why"`
+	Dir      string `json:"dir"`
+	Lockfile string `json:"lockfile"`
+	Lanes    []lane `json:"lanes"`
+	Why      string `json:"why"`
 }
 
-// npmProjects are the repo's npm projects (a directory with a committed
-// package-lock.json), and the lanes whose tooling installs from each.
-// TestNPMProjectsNameEveryLockfile holds this to the tree.
-var npmProjects = map[string][]lane{
-	".":                   {laneWeb, laneElectron},
-	"frontends/web":       {laneWeb},
-	"electron":            {laneElectron},
-	"tools/protoc-gen-es": {laneForgeGen},
+// npmProject is a directory with a committed lockfile: which one (the package
+// manager follows from it), and the lanes whose tooling installs from it.
+type npmProject struct {
+	lockfile string
+	lanes    []lane
+}
+
+const (
+	npmLock  = "package-lock.json"
+	pnpmLock = "pnpm-lock.yaml"
+)
+
+// npmProjects are the repo's npm projects. TestNPMProjectsNameEveryLockfile
+// holds this to the tree.
+var npmProjects = map[string]npmProject{
+	".":                   {npmLock, []lane{laneWeb, laneElectron}},
+	"frontends/web":       {pnpmLock, []lane{laneWeb}},
+	"electron":            {npmLock, []lane{laneElectron}},
+	"tools/protoc-gen-es": {npmLock, []lane{laneForgeGen}},
 }
 
 func (c *classifier) noteLockfile(ch Change) {
 	base := path.Base(ch.Path)
-	if base != "package.json" && base != "package-lock.json" {
-		return
-	}
 	dir := path.Dir(ch.Path)
-	lanes, ok := npmProjects[dir]
-	if !ok {
+	proj, ok := npmProjects[dir]
+	if !ok || (base != "package.json" && base != proj.lockfile && base != "pnpm-workspace.yaml") {
 		return
 	}
+	if base == "pnpm-workspace.yaml" && proj.lockfile != pnpmLock {
+		return
+	}
+	lanes := proj.lanes
 	for i := range c.pl.Lockfiles {
 		if c.pl.Lockfiles[i].Dir == dir {
 			c.pl.Lockfiles[i].Why += ", " + base
 			return
 		}
 	}
-	c.pl.Lockfiles = append(c.pl.Lockfiles, LockfileCheck{Dir: dir, Lanes: lanes, Why: "changed: " + base})
+	c.pl.Lockfiles = append(c.pl.Lockfiles, LockfileCheck{Dir: dir, Lockfile: proj.lockfile, Lanes: lanes, Why: "changed: " + base})
 }
 
 type reasons struct {
