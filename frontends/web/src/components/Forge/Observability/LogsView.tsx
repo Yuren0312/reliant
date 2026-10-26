@@ -131,16 +131,16 @@ export function LogsView({
         navigate={navigate}
       />
       {traceId && (
-        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" data-testid="obs-logs-trace-scope">
-          Showing logs from trace <span className="font-mono text-foreground">{shortId(traceId)}</span>
+        <p className="flex flex-wrap items-center gap-2 text-xs text-ink-muted" data-testid="obs-logs-trace-scope">
+          Showing logs from trace <span className="font-mono text-ink">{shortId(traceId)}</span>
           {spanId && (
             <>
-              , span <span className="font-mono text-foreground">{shortId(spanId)}</span>
+              , span <span className="font-mono text-ink">{shortId(spanId)}</span>
             </>
           )}
           <button
             type="button"
-            className="rounded-sm text-foreground underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded-sm text-ink underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => navigate({ trace: undefined, span: undefined })}
           >
             Show all logs
@@ -222,7 +222,7 @@ function LogsToolbar({
             Search logs
           </label>
           <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-ink-muted" aria-hidden="true" />
             <input
               id="obs-log-query"
               type="search"
@@ -232,25 +232,25 @@ function LogsToolbar({
               aria-invalid={queryError ? true : undefined}
               aria-describedby={queryError ? "obs-log-query-error" : undefined}
               className={cn(
-                "h-8 w-full rounded-md border bg-background pl-8 pr-3 font-mono text-sm text-foreground placeholder:font-sans placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                queryError ? "border-destructive" : "border-border"
+                "h-8 w-full rounded-md border bg-surface-sunken pl-8 pr-3 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                queryError ? "border-danger" : "border-border"
               )}
               data-testid="obs-log-query"
             />
           </div>
           {queryError && (
-            <p id="obs-log-query-error" role="alert" className="mt-1 text-xs text-destructive" data-testid="obs-log-query-error">
+            <p id="obs-log-query-error" role="alert" className="mt-1 text-xs text-danger-ink" data-testid="obs-log-query-error">
               {queryError}
             </p>
           )}
-          <details className="mt-1 text-xs text-muted-foreground">
-            <summary className="cursor-pointer rounded-sm hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <details className="mt-1 text-xs text-ink-muted">
+            <summary className="cursor-pointer rounded-sm hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               Query syntax
             </summary>
-            <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-0.5 rounded-md border border-border/60 bg-background px-3 py-2">
+            <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-0.5 rounded-md border border-border/60 bg-surface-sunken px-3 py-2">
               {QUERY_SYNTAX.map(([example, meaning]) => (
                 <div key={example} className="contents">
-                  <dt className="font-mono text-foreground">{example}</dt>
+                  <dt className="font-mono text-ink">{example}</dt>
                   <dd>{meaning}</dd>
                 </div>
               ))}
@@ -288,8 +288,8 @@ function LogsToolbar({
               className={cn(
                 "rounded-full border px-2.5 py-0.5 text-xs capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 on
-                  ? "border-primary bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:text-foreground"
+                  ? "border-primary bg-primary/10 text-ink"
+                  : "border-border text-ink-muted hover:text-ink"
               )}
             >
               {severity}
@@ -348,7 +348,7 @@ export function ServiceSelect({
         id={id}
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value || undefined)}
-        className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:h-[44px]"
+        className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:h-[44px]"
         data-testid={id}
       >
         {includeAll && <option value="">All services</option>}
@@ -439,7 +439,7 @@ function LogList({
     <Card padding="none" className="overflow-hidden">
       <div
         aria-hidden="true"
-        className={cn(ROW_GRID, "border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground max-md:hidden")}
+        className={cn(ROW_GRID, "border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-muted max-md:hidden")}
       >
         <span />
         {table.getHeaderGroups()[0]?.headers.map((header) => (
@@ -483,14 +483,14 @@ function LogList({
                   onFocus={() => setActive(item.index)}
                   className={cn(
                     ROW_GRID,
-                    "w-full px-3 py-1 text-left font-mono text-xs hover:bg-muted/50 focus:outline-none focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    "w-full px-3 py-1 text-left font-mono text-xs hover:bg-ink/5 focus:outline-none focus-visible:bg-ink/5 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                     "touch:min-h-[44px] max-md:gap-y-0.5 max-md:py-2",
-                    open && "bg-muted/40"
+                    open && "bg-surface-sunken"
                   )}
                   data-testid="obs-log-row"
                 >
                   <ChevronRight
-                    className={cn("h-3 w-3 self-center text-muted-foreground transition-transform", open && "rotate-90")}
+                    className={cn("h-3 w-3 self-center text-ink-muted transition-transform", open && "rotate-90")}
                     aria-hidden="true"
                   />
                   {row.getAllCells().map((cell) => (
@@ -498,7 +498,7 @@ function LogList({
                       key={cell.id}
                       className={cn(
                         "min-w-0",
-                        cell.column.id === "body" ? cn("truncate text-foreground", LOG_BODY) : "truncate text-muted-foreground"
+                        cell.column.id === "body" ? cn("truncate text-ink", LOG_BODY) : "truncate text-ink-muted"
                       )}
                     >
                       <table.FlexRender cell={cell} />
@@ -506,8 +506,8 @@ function LogList({
                   ))}
                 </button>
                 {open && (
-                  <div id={detailsId} className="space-y-3 border-t border-border/50 bg-background px-9 py-3 max-md:px-3" data-testid="obs-log-details">
-                    <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">{record.body}</pre>
+                  <div id={detailsId} className="space-y-3 border-t border-border/50 bg-surface-sunken px-9 py-3 max-md:px-3" data-testid="obs-log-details">
+                    <pre className="whitespace-pre-wrap break-words font-mono text-xs text-ink">{record.body}</pre>
                     {record.traceId && (
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -549,13 +549,13 @@ function LogList({
 }
 
 const SEVERITY_CLASS: Record<Severity, string> = {
-  fatal: "text-destructive font-semibold",
-  error: "text-destructive",
-  warn: "text-warning",
-  info: "text-foreground",
-  debug: "text-muted-foreground",
-  trace: "text-muted-foreground",
-  unknown: "text-muted-foreground",
+  fatal: "text-danger-ink font-semibold",
+  error: "text-danger-ink",
+  warn: "text-warning-ink",
+  info: "text-ink",
+  debug: "text-ink-muted",
+  trace: "text-ink-muted",
+  unknown: "text-ink-muted",
 };
 
 export function SeverityLabel({ severity, text }: { severity: Severity; text?: string }) {

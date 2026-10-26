@@ -145,27 +145,3 @@ describe("usageNotice", () => {
     expect(usageNotice({ ...base, exempt: true, state: "over_150" })?.title).toMatch(/not billed/);
   });
 });
-
-describe("Usage tab", () => {
-  it("is reachable from the panel and works before the tenant store exists", async () => {
-    const user = userEvent.setup();
-    const harness = renderPanel(createFixtureApi({ failWith: undefined }), {});
-    await user.click(await screen.findByTestId("obs-view-usage"));
-    expect(harness.current().view).toBe("usage");
-    expect(await screen.findByTestId("obs-usage")).toBeInTheDocument();
-  });
-
-  it("is not hidden by the not-set-up state of the other views", async () => {
-    const api = createFixtureApi({ usage: {} });
-    const notSet = {
-      ...api,
-      getServiceOverview: async () => {
-        const { ConnectError } = await import("@connectrpc/connect");
-        throw new ConnectError("observability is not set up for this organization yet", Code.FailedPrecondition);
-      },
-    };
-    renderPanel(notSet, { view: "usage" });
-    await waitFor(() => expect(screen.getByTestId("obs-usage")).toBeInTheDocument());
-    expect(screen.queryByTestId("obs-not-set-up")).not.toBeInTheDocument();
-  });
-});

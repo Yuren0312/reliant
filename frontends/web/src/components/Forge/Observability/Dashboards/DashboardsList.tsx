@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * OBSERVABILITY › DASHBOARDS (console v3, decision DB): every dashboard of
+ * OBSERVABILITY › DASHBOARDS: every dashboard of
  * the project in the console's scope, as the reader looks for one.
  *
  *   toolbar           search, Source (release / workspace), Owner (forge,

@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Native dashboards (console v3, decision DB) in the console's model — what
+ * Native dashboards in the console's model — what
  * dashboardsApi.ts maps control-plane `DashboardService` into.
  *
  * A HYBRID of two kinds a reader can open, plus a gallery:

@@ -13,7 +13,7 @@
  *    project here declares is still a scope: the pages read the control plane
  *    by it, with no daemon.
  *
- * 2. THE ENVIRONMENT SCOPE (envScope.ts, decision D1): resolved from `?env=`,
+ * 2. THE ENVIRONMENT SCOPE (envScope.ts): resolved from `?env=`,
  *    the project's remembered scope, then prod; reflected back into the URL
  *    on every list page (replace, so it costs no history entry), remembered
  *    when the reader picks one.

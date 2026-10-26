@@ -2,7 +2,7 @@
 
 /**
  * The app switcher, in the sidebar's brand row: the one scope that changes the
- * nav (PROPOSAL §3.1). It names the FORGE app the console is reporting on — the
+ * nav. It names the FORGE app the console is reporting on — the
  * URL's subject — and lists the org's apps (the Apps list's, useApps), with
  * "All apps" on top leading back to that list (/apps).
  *

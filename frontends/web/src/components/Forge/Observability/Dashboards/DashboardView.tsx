@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * ONE DASHBOARD (console v3, decision DB): its panels over the console's
+ * ONE DASHBOARD: its panels over the console's
  * scope, with the controls the mockup draws.
  *
  *   header       title, star, source tag; one meta line (where it came from,
@@ -837,13 +837,17 @@ function VariablesBar({
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2" data-testid="dashboard-variables">
-      <VariableSelect
-        id="dashboard-var-env"
-        label="env"
-        value={env}
-        options={[{ value: ENV_ALL, label: "all" }, ...environments.map((candidate) => ({ value: candidate.name, label: candidate.name }))]}
-        onChange={onEnvChange}
-      />
+      {/* The console's top bar is the one environment selector. Full screen
+          hides the top bar, so only there does the dashboard offer its own. */}
+      {tv && (
+        <VariableSelect
+          id="dashboard-var-env"
+          label="env"
+          value={env}
+          options={[...environments.map((candidate) => ({ value: candidate.name, label: candidate.name })), { value: ENV_ALL, label: "All" }]}
+          onChange={onEnvChange}
+        />
+      )}
       {hasProcessFilter && <VariableSelect
         id="dashboard-var-service"
         label="process"

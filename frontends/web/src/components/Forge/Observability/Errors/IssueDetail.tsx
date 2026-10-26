@@ -154,14 +154,14 @@ function IssueBody({
       <header className="space-y-1.5" data-testid="obs-issue-header">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={issue.status} />
-          <h3 className="min-w-0 break-words text-base font-semibold text-foreground">{issue.title || issue.exceptionType || issue.fingerprint}</h3>
+          <h3 className="min-w-0 break-words text-base font-semibold text-ink">{issue.title || issue.exceptionType || issue.fingerprint}</h3>
           <span className="ml-auto">
             <AskReliantButton subject={{ kind: "issue", issueId: issue.id, env: issue.envName || null }} />
           </span>
         </div>
-        {issue.culprit && <p className="break-all font-mono text-xs text-muted-foreground" data-testid="obs-issue-culprit">{issue.culprit}</p>}
-        <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span className="font-mono text-foreground">{issue.service || "(unnamed)"}</span>
+        {issue.culprit && <p className="break-all font-mono text-xs text-ink-muted" data-testid="obs-issue-culprit">{issue.culprit}</p>}
+        <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-muted">
+          <span className="font-mono text-ink">{issue.service || "(unnamed)"}</span>
           {issue.platform && <span>{PLATFORM_LABEL[issue.platform]}</span>}
           {issue.envName && <span>in {issue.envName}</span>}
           {issue.lastSeenMs > 0 && <span title={formatWhen(issue.lastSeenMs, now)}>last seen {formatAgo(issue.lastSeenMs, now)}</span>}
@@ -169,7 +169,7 @@ function IssueBody({
           {issue.status === "resolved" && issue.resolvedVersion && <span>resolved in {issue.resolvedVersion}</span>}
           {issue.status === "ignored" && <span>{issue.ignoredUntilMs ? `ignored until ${formatWhen(issue.ignoredUntilMs, now)}` : "ignored until unignored"}</span>}
           {issue.mergedInto && (
-            <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => openIssue(issue.mergedInto)}>
+            <button type="button" className="underline underline-offset-2 hover:text-ink" onClick={() => openIssue(issue.mergedInto)}>
               merged into another issue
             </button>
           )}
@@ -185,7 +185,7 @@ function IssueBody({
             {detail.latestEvent ? (
               <LatestEvent event={detail.latestEvent} onTrace={openTrace} onSession={openSession} />
             ) : (
-              <p className="px-4 py-4 text-sm text-muted-foreground">The newest event has aged out of retention; the counts still stand.</p>
+              <p className="px-4 py-4 text-sm text-ink-muted">The newest event has aged out of retention; the counts still stand.</p>
             )}
           </Card>
           <Card padding="none" data-testid="obs-issue-frames">
@@ -206,12 +206,12 @@ function IssueBody({
             <div className="space-y-3 px-4 py-3">
               <p className="flex flex-wrap items-baseline gap-x-4 text-sm">
                 <span>
-                  <span className="text-lg font-semibold tabular-nums text-foreground">{formatCount(issue.events)}</span>{" "}
-                  <span className="text-muted-foreground">events</span>
+                  <span className="text-lg font-semibold tabular-nums text-ink">{formatCount(issue.events)}</span>{" "}
+                  <span className="text-ink-muted">events</span>
                 </span>
                 <span>
-                  <span className="text-lg font-semibold tabular-nums text-foreground">{formatCount(issue.affected)}</span>{" "}
-                  <span className="text-muted-foreground">{affectedNoun(issue.platform, issue.affected)}</span>
+                  <span className="text-lg font-semibold tabular-nums text-ink">{formatCount(issue.affected)}</span>{" "}
+                  <span className="text-ink-muted">{affectedNoun(issue.platform, issue.affected)}</span>
                 </span>
               </p>
               <Trend points={issue.trend} label={`${formatCount(issue.events)} events, by hour`} />
@@ -220,8 +220,8 @@ function IssueBody({
           <Card padding="none" data-testid="obs-issue-release">
             <Section title="First release" />
             {detail.firstRelease ? (
-              <div className="space-y-1 px-4 py-3 text-xs text-muted-foreground">
-                <p className="font-mono text-sm text-foreground">{detail.firstRelease.version}</p>
+              <div className="space-y-1 px-4 py-3 text-xs text-ink-muted">
+                <p className="font-mono text-sm text-ink">{detail.firstRelease.version}</p>
                 {detail.firstRelease.gitCommit && (
                   <p className="inline-flex items-center gap-1 font-mono" title={detail.firstRelease.gitCommit}>
                     <GitCommitHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
@@ -232,8 +232,8 @@ function IssueBody({
                 {detail.firstRelease.promotedAtMs > 0 && <p>promoted {formatWhen(detail.firstRelease.promotedAtMs, now)}</p>}
               </div>
             ) : (
-              <p className="px-4 py-3 text-xs text-muted-foreground">
-                First seen in <span className="font-mono text-foreground">{issue.firstVersion || "an unstamped build"}</span>, which isn&apos;t a release the ledger knows.
+              <p className="px-4 py-3 text-xs text-ink-muted">
+                First seen in <span className="font-mono text-ink">{issue.firstVersion || "an unstamped build"}</span>, which isn&apos;t a release the ledger knows.
               </p>
             )}
           </Card>
@@ -244,7 +244,7 @@ function IssueBody({
           <Card padding="none" data-testid="obs-issue-related">
             <Section title="Fires with" note="Issues seen in the same traces or sessions." />
             {detail.coOccurringIssueIds.length === 0 ? (
-              <p className="px-4 py-3 text-xs text-muted-foreground">Nothing else tends to fire alongside it.</p>
+              <p className="px-4 py-3 text-xs text-ink-muted">Nothing else tends to fire alongside it.</p>
             ) : (
               <ul className="space-y-1 px-4 py-3">
                 {detail.coOccurringIssueIds.map((id) => (
@@ -252,7 +252,7 @@ function IssueBody({
                     <button
                       type="button"
                       onClick={() => openIssue(id)}
-                      className="font-mono text-xs text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="font-mono text-xs text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       data-testid={`obs-issue-related-${id}`}
                     >
                       {id}
@@ -275,8 +275,8 @@ function IssueBody({
 function Section({ title, note }: { title: string; note?: string }) {
   return (
     <div className="border-b border-border/60 px-4 py-3">
-      <h4 className="text-sm font-medium text-foreground">{title}</h4>
-      {note && <p className="text-xs text-muted-foreground">{note}</p>}
+      <h4 className="text-sm font-medium text-ink">{title}</h4>
+      {note && <p className="text-xs text-ink-muted">{note}</p>}
     </div>
   );
 }
@@ -287,7 +287,7 @@ function TraceLink({ event, onTrace }: { event: IssueEvent; onTrace: (traceId: s
     <button
       type="button"
       onClick={() => onTrace(event.traceId, event.spanId)}
-      className="inline-flex items-center gap-1 text-xs text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="inline-flex items-center gap-1 text-xs text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       data-testid={`obs-issue-trace-${event.traceId}`}
     >
       <ExternalLink className="h-3 w-3" aria-hidden="true" />
@@ -299,10 +299,10 @@ function TraceLink({ event, onTrace }: { event: IssueEvent; onTrace: (traceId: s
 function LatestEvent({ event, onTrace, onSession }: { event: IssueEvent; onTrace: (traceId: string, spanId?: string) => void; onSession: SessionLinks }) {
   return (
     <div className="space-y-3 px-4 py-3">
-      <p className="whitespace-pre-wrap break-words font-mono text-xs text-foreground" data-testid="obs-issue-latest-message">
+      <p className="whitespace-pre-wrap break-words font-mono text-xs text-ink" data-testid="obs-issue-latest-message">
         {event.message || "(no message)"}
       </p>
-      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
         {event.serviceVersion && <span className="font-mono">{event.serviceVersion}</span>}
         {event.urlPath && <span className="font-mono">{event.urlPath}</span>}
         <SessionLink event={event} onSession={onSession} />
@@ -314,13 +314,13 @@ function LatestEvent({ event, onTrace, onSession }: { event: IssueEvent; onTrace
 }
 
 function Frames({ frames }: { frames: IssueFrame[] }) {
-  if (frames.length === 0) return <p className="px-4 py-3 text-xs text-muted-foreground">No stack was recorded for the latest event.</p>;
+  if (frames.length === 0) return <p className="px-4 py-3 text-xs text-ink-muted">No stack was recorded for the latest event.</p>;
   return (
     <ol className="divide-y divide-border/40 font-mono text-xs">
       {frames.map((frame, index) => (
         <li
           key={`${index}-${frame.file}-${frame.line}`}
-          className={cn("px-4 py-1.5", frame.inApp ? "text-foreground" : "text-muted-foreground")}
+          className={cn("px-4 py-1.5", frame.inApp ? "text-ink" : "text-ink-muted")}
           data-testid="obs-issue-frame"
           data-in-app={frame.inApp}
         >
@@ -333,12 +333,12 @@ function Frames({ frames }: { frames: IssueFrame[] }) {
 }
 
 function Versions({ detail }: { detail: IssueDetailModel }) {
-  if (detail.byVersion.length === 0) return <p className="px-4 py-3 text-xs text-muted-foreground">No events in the window.</p>;
+  if (detail.byVersion.length === 0) return <p className="px-4 py-3 text-xs text-ink-muted">No events in the window.</p>;
   return (
     <StackedTable className="w-full text-xs">
       <caption className="sr-only">Events and affected per version</caption>
       <thead>
-        <tr className="border-b border-border text-left font-medium uppercase tracking-wide text-muted-foreground">
+        <tr className="border-b border-border text-left font-medium uppercase tracking-wide text-ink-muted">
           <th scope="col" className="px-4 py-1.5 font-medium">Version</th>
           <th scope="col" className="px-4 py-1.5 text-right font-medium">Events</th>
           <th scope="col" className="px-4 py-1.5 text-right font-medium">Affected</th>
@@ -347,7 +347,7 @@ function Versions({ detail }: { detail: IssueDetailModel }) {
       <tbody>
         {detail.byVersion.map((v) => (
           <tr key={v.version} className="border-b border-border/50 last:border-b-0" data-testid={`obs-issue-version-${v.version}`}>
-            <th scope="row" className="px-4 py-1.5 text-left font-mono font-normal text-foreground">{v.version || "(unstamped)"}</th>
+            <th scope="row" className="px-4 py-1.5 text-left font-mono font-normal text-ink">{v.version || "(unstamped)"}</th>
             <td className="px-4 py-1.5 text-right tabular-nums">{formatCount(v.events)}</td>
             <td className="px-4 py-1.5 text-right tabular-nums">{formatCount(v.affected)}</td>
           </tr>
@@ -361,21 +361,21 @@ function RecentEvents({ issueId, onTrace, onSession }: { issueId: string; onTrac
   const events = useIssueEvents(issueId);
   const rows = events.data?.pages.flatMap((page) => page.events) ?? [];
   if (events.isLoading) return <ObsLoadingRows rows={3} testId="obs-issue-events-loading" />;
-  if (events.error && !events.data) return <p className="px-4 py-3 text-xs text-destructive">The events didn&apos;t load.</p>;
-  if (rows.length === 0) return <p className="px-4 py-3 text-xs text-muted-foreground">No events retained.</p>;
+  if (events.error && !events.data) return <p className="px-4 py-3 text-xs text-danger-ink">The events didn&apos;t load.</p>;
+  if (rows.length === 0) return <p className="px-4 py-3 text-xs text-ink-muted">No events retained.</p>;
   const now = Date.now();
   return (
     <div>
       <ol className="divide-y divide-border/40">
         {rows.map((event, index) => (
           <li key={`${event.timeMs}-${event.traceId}-${index}`} className="space-y-0.5 px-4 py-2 text-xs" data-testid="obs-issue-event">
-            <p className="flex flex-wrap items-center gap-x-3 text-muted-foreground">
+            <p className="flex flex-wrap items-center gap-x-3 text-ink-muted">
               <span className="tabular-nums">{formatTimestamp(event.timeMs, now)}</span>
               {event.serviceVersion && <span className="font-mono">{event.serviceVersion}</span>}
               <TraceLink event={event} onTrace={onTrace} />
               <SessionLink event={event} onSession={onSession} />
             </p>
-            {event.message && <p className="truncate font-mono text-foreground">{event.message}</p>}
+            {event.message && <p className="truncate font-mono text-ink">{event.message}</p>}
           </li>
         ))}
       </ol>

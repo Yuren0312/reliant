@@ -204,7 +204,7 @@ function RedGroups({ groups, groupBy, onNarrow }: { groups: TraceRedGroup[]; gro
       <StackedTable className="w-full text-sm">
         <caption className="sr-only">Rate, errors and latency of the matching traces per {groupBy.map(attributeLabel).join(" and ")}</caption>
         <thead>
-          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
             <th scope="col" className="px-4 py-2 font-medium">
               {groupBy.map(attributeLabel).join(" · ")}
             </th>
@@ -226,14 +226,14 @@ function RedGroups({ groups, groupBy, onNarrow }: { groups: TraceRedGroup[]; gro
                     type="button"
                     onClick={() => onNarrow(group)}
                     title="Narrow to this group"
-                    className="rounded-sm font-mono text-sm text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="rounded-sm font-mono text-sm text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {label}
                   </button>
                 </th>
                 <td className="px-4 py-1.5 text-right tabular-nums">{formatCount(red.traceCount)}</td>
                 <td className="px-4 py-1.5 text-right tabular-nums">{formatRate(red.ratePerSecond)}</td>
-                <td className={cn("px-4 py-1.5 text-right tabular-nums", red.errorRate >= 0.05 && "text-destructive")}>{formatPercent(red.errorRate)}</td>
+                <td className={cn("px-4 py-1.5 text-right tabular-nums", red.errorRate >= 0.05 && "text-danger-ink")}>{formatPercent(red.errorRate)}</td>
                 <td className="px-4 py-1.5 text-right tabular-nums">{formatDuration(red.p50Ms)}</td>
                 <td className="px-4 py-1.5 text-right tabular-nums">{formatDuration(red.p95Ms)}</td>
                 <td className="px-4 py-1.5 text-right tabular-nums">{formatDuration(red.p99Ms)}</td>
@@ -258,14 +258,14 @@ function RedStrip({ red }: { red: TraceRed }) {
   ];
   return (
     <dl
-      className="grid grid-cols-3 gap-3 rounded-lg border border-border bg-card px-4 py-3 sm:grid-cols-6"
+      className="grid grid-cols-3 gap-3 rounded-lg border border-border bg-surface px-4 py-3 sm:grid-cols-6"
       aria-label="Summary of the matching traces"
       data-testid="obs-trace-red"
     >
       {facts.map(([label, value, alert]) => (
         <div key={label}>
-          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
-          <dd className={cn("text-sm font-semibold tabular-nums", alert ? "text-destructive" : "text-foreground")}>{value}</dd>
+          <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</dt>
+          <dd className={cn("text-sm font-semibold tabular-nums", alert ? "text-danger-ink" : "text-ink")}>{value}</dd>
         </div>
       ))}
     </dl>
@@ -304,7 +304,7 @@ function TraceToolbar({
           Root operation contains
         </label>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-ink-muted" aria-hidden="true" />
           <input
             id="obs-trace-query"
             type="search"
@@ -314,14 +314,14 @@ function TraceToolbar({
             aria-invalid={filterError ? true : undefined}
             aria-describedby={filterError ? "obs-trace-query-error" : undefined}
             className={cn(
-              "h-8 w-full rounded-md border bg-background pl-8 pr-3 font-mono text-sm text-foreground placeholder:font-sans placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              filterError ? "border-destructive" : "border-border"
+              "h-8 w-full rounded-md border bg-surface-sunken pl-8 pr-3 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              filterError ? "border-danger" : "border-border"
             )}
             data-testid="obs-trace-query"
           />
         </div>
         {filterError && (
-          <p id="obs-trace-query-error" role="alert" className="mt-1 text-xs text-destructive">
+          <p id="obs-trace-query-error" role="alert" className="mt-1 text-xs text-danger-ink">
             {filterError}
           </p>
         )}
@@ -340,7 +340,7 @@ function TraceToolbar({
         id="obs-min-duration"
         value={minDuration ?? ""}
         onChange={(event) => navigate({ minDuration: event.target.value || undefined }, { replace: true })}
-        className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         data-testid="obs-min-duration"
       >
         <option value="">Any duration</option>
@@ -386,7 +386,7 @@ function TraceTable({
         column.accessor("startMs", {
           header: "Started",
           sortFn: "basic",
-          cell: (info) => <span className="tabular-nums text-muted-foreground">{formatTimestamp(info.getValue())}</span>,
+          cell: (info) => <span className="tabular-nums text-ink-muted">{formatTimestamp(info.getValue())}</span>,
         }),
         column.accessor("rootOperation", {
           header: "Root operation",
@@ -395,8 +395,8 @@ function TraceTable({
             const trace = info.row.original;
             return (
               <span className="flex min-w-0 items-baseline gap-2">
-                <span className="shrink-0 text-muted-foreground">{trace.rootService || "unknown"}</span>
-                <span className="truncate font-mono text-foreground">{trace.rootOperation || trace.traceId}</span>
+                <span className="shrink-0 text-ink-muted">{trace.rootService || "unknown"}</span>
+                <span className="truncate font-mono text-ink">{trace.rootOperation || trace.traceId}</span>
                 <OperatorBadge provenance={trace} />
               </span>
             );
@@ -410,18 +410,18 @@ function TraceTable({
           sortFn: "basic",
           cell: (info) => (
             <span className="flex items-center gap-2">
-              <span className="w-16 shrink-0 tabular-nums text-foreground">{formatDuration(info.getValue())}</span>
+              <span className="w-16 shrink-0 tabular-nums text-ink">{formatDuration(info.getValue())}</span>
               {info.row.original.durationMs > info.getValue() * 1.05 && (
                 <span className="sr-only">, trace {formatDuration(info.row.original.durationMs)} in all</span>
               )}
               <span className="h-1.5 w-24 overflow-hidden rounded-full bg-border/60" aria-hidden="true">
                 <span
-                  className={cn("block h-full rounded-full", info.row.original.errorCount > 0 ? "bg-destructive" : "bg-primary")}
+                  className={cn("block h-full rounded-full", info.row.original.errorCount > 0 ? "bg-danger" : "bg-primary")}
                   style={{ width: `${Math.max((info.getValue() / maxDuration) * 100, 2)}%` }}
                 />
               </span>
               {info.row.original.durationMs > info.getValue() * 1.05 && (
-                <span className="shrink-0 text-2xs tabular-nums text-muted-foreground" aria-hidden="true" title="Whole trace, including work after the root span returned">
+                <span className="shrink-0 text-2xs tabular-nums text-ink-muted" aria-hidden="true" title="Whole trace, including work after the root span returned">
                   {formatDuration(info.row.original.durationMs)} total
                 </span>
               )}
@@ -431,18 +431,18 @@ function TraceTable({
         column.accessor("spanCount", {
           header: "Spans",
           sortFn: "basic",
-          cell: (info) => <span className="tabular-nums text-muted-foreground">{info.getValue()}</span>,
+          cell: (info) => <span className="tabular-nums text-ink-muted">{info.getValue()}</span>,
         }),
         column.accessor("errorCount", {
           header: "Status",
           sortFn: "basic",
           cell: (info) =>
             info.getValue() > 0 ? (
-              <span className="text-destructive">
+              <span className="text-danger-ink">
                 {info.getValue()} error{info.getValue() === 1 ? "" : "s"}
               </span>
             ) : (
-              <span className="text-muted-foreground">OK</span>
+              <span className="text-ink-muted">OK</span>
             ),
         }),
       ]),
@@ -515,7 +515,7 @@ function TraceTable({
             <col className="w-20" />
             <col className="w-24" />
           </colgroup>
-          <thead className="sticky top-0 z-10 bg-card">
+          <thead className="sticky top-0 z-10 bg-surface">
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id} className="border-b border-border">
                 {group.headers.map((header) => {
@@ -525,12 +525,12 @@ function TraceTable({
                       key={header.id}
                       scope="col"
                       aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"}
-                      className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                      className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-ink-muted"
                     >
                       <button
                         type="button"
                         onClick={header.column.getToggleSortingHandler()}
-                        className="inline-flex items-center gap-1 rounded-sm uppercase hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="inline-flex items-center gap-1 rounded-sm uppercase hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         <table.FlexRender header={header} />
                         {sorted === "asc" && <ArrowUp className="h-3 w-3" aria-hidden="true" />}
@@ -555,7 +555,7 @@ function TraceTable({
               return (
                 <tr
                   key={row.id}
-                  className="border-b border-border/50 hover:bg-muted/50"
+                  className="border-b border-border/50 hover:bg-ink/5"
                   style={narrow ? undefined : { height: ROW_HEIGHT }}
                   data-index={item.index}
                   ref={narrow ? virtualizer.measureElement : undefined}

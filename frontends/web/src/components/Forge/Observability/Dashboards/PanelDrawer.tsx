@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The add / edit panel drawer (decision DB): a visual builder over forge's
+ * The add / edit panel drawer: a visual builder over forge's
  * panel spec, the spec itself as JSON, and a live preview of the panel over
  * the dashboard's scope, window and service — the same PanelBody the grid
  * draws, so what the preview shows is what the dashboard will.
@@ -81,7 +81,7 @@ export interface PanelDrawerProps {
   scopeLabel: string;
   /** The workspace version being edited (Save writes the next one). */
   version: number;
-  /** The environments the dashboard is about, in words (D1: a write names where it lands). */
+  /** The environments the dashboard is about, in words (a write names where it lands). */
   envScope: string;
   saving: boolean;
   error: ReactNode;

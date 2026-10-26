@@ -4,7 +4,7 @@
  * "Create alert from this panel": a dialog that turns a panel into the KCL
  * alert rule that watches the same number, to paste into the repo.
  *
- * Alerts stay declarative (decision DB): nothing is stored. The dialog prefills
+ * Alerts stay declarative: nothing is stored. The dialog prefills
  * the rule from the panel (its query, with threshold, comparator, look-back
  * window, hold time and severity as editable fields), shows the SQL it
  * produced and the KCL around it, and says where to paste it. A panel that is
@@ -149,7 +149,7 @@ function AlertFromPanelBody({ panel, dashboardTitle, environments, env, services
               {result.instead}
             </p>
           )}
-          <p className="text-xs text-ink-muted">Alerts stay in your repo as KCL, so this console does not store one for you; it writes the rule for panels that are a single number.</p>
+          <p className="text-xs text-ink-muted">Alerts stay in your repo as KCL, so Reliant does not store one for you; it writes the rule for panels that are a single number.</p>
         </div>
       </Modal>
     );

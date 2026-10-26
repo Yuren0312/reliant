@@ -75,7 +75,7 @@ export function DeployApproveStep({
     return (
       <p
         data-testid="deploy-not-approvable"
-        className="rounded-lg border border-dashed border-destructive/50 px-3 py-2 text-xs text-destructive-ink"
+        className="rounded-lg border border-dashed border-danger-border px-3 py-2 text-xs text-danger-ink"
       >
         This cannot be deployed from what is on screen. Work out the changes again, and if
         that keeps happening the environment may never have been built.
@@ -107,7 +107,7 @@ export function DeployApproveStep({
       {outstanding.length > 0 && (
         <p
           data-testid="deploy-approve-outstanding"
-          className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
+          className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-ink-muted"
         >
           Accept the irreversible changes above to continue.
         </p>

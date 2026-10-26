@@ -151,7 +151,7 @@ export function ReleaseComparison({ scope, subject, target, envName, width, back
     if (kind === "not-available") {
       return frame(
         "unavailable",
-        <p role="status" className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground" data-testid="obs-compare-unavailable">
+        <p role="status" className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted" data-testid="obs-compare-unavailable">
           Release health isn&apos;t available on this control plane, so there is no before-and-after verdict for this promotion. Its logs, traces and
           alerts are still in their own views.
         </p>
@@ -160,7 +160,7 @@ export function ReleaseComparison({ scope, subject, target, envName, width, back
     if (kind === "not-found") {
       return frame(
         "not-found",
-        <p role="status" className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground" data-testid="obs-compare-not-found">
+        <p role="status" className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted" data-testid="obs-compare-not-found">
           That promotion isn&apos;t in the release ledger any more, or isn&apos;t one you can see from here. Pick a release from the list to compare it.
         </p>
       );
@@ -175,7 +175,7 @@ export function ReleaseComparison({ scope, subject, target, envName, width, back
       {back}
       <ComparisonHeader health={h} target={target} envName={envName} />
       <div className="flex flex-wrap items-center gap-3">
-        <div role="group" aria-label="Window on each side" className="inline-flex rounded-lg border border-border bg-background p-0.5">
+        <div role="group" aria-label="Window on each side" className="inline-flex rounded-lg border border-border bg-surface-sunken p-0.5">
           {HEALTH_WINDOWS.map((w) => (
             <button
               key={w}
@@ -185,7 +185,7 @@ export function ReleaseComparison({ scope, subject, target, envName, width, back
               data-testid={`obs-compare-window-${w}`}
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                w === width ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                w === width ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
               )}
             >
               {w}
@@ -200,7 +200,7 @@ export function ReleaseComparison({ scope, subject, target, envName, width, back
       <Card padding="none" data-testid="obs-compare-services">
         <SectionTitle title="Requests, errors and latency" note="Server spans per service, weighted for sampling, before and after the promotion." />
         {h.services.length === 0 ? (
-          <p className="px-4 py-5 text-sm text-muted-foreground" data-testid="obs-compare-services-empty">
+          <p className="px-4 py-5 text-sm text-ink-muted" data-testid="obs-compare-services-empty">
             No server traffic in either window.
           </p>
         ) : (
@@ -254,11 +254,11 @@ function ComparisonHeader({ health, target, envName }: { health: ReleaseHealth; 
   const at = p?.promotedAtMs || target.promotedAtMs;
   return (
     <div className="space-y-1" data-testid="obs-compare-header">
-      <h3 className="flex flex-wrap items-center gap-2 text-base font-semibold text-foreground">
+      <h3 className="flex flex-wrap items-center gap-2 text-base font-semibold text-ink">
         Before and after <span className="font-mono">{version}</span>
         {envName && <> in <span className="font-mono">{envName}</span></>}
       </h3>
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
         <span title={formatWhen(at)}>
           Promoted {formatWhen(at)} ({formatAgo(at)})
         </span>
@@ -270,7 +270,7 @@ function ComparisonHeader({ health, target, envName }: { health: ReleaseHealth; 
         )}
         {p?.previousVersion && (
           <span data-testid="obs-compare-replaced">
-            · replaced <span className="font-mono text-foreground">{p.previousVersion}</span>
+            · replaced <span className="font-mono text-ink">{p.previousVersion}</span>
           </span>
         )}
       </p>
@@ -286,10 +286,10 @@ function WindowsLine({ health, width }: { health: ReleaseHealth; width: HealthWi
   const afterLen = after.endMs - after.startMs;
   const shortened = Math.min(beforeLen, afterLen) < asked - 1000;
   return (
-    <div className="text-xs text-muted-foreground" data-testid="obs-compare-windows" data-after-complete={health.afterComplete}>
+    <div className="text-xs text-ink-muted" data-testid="obs-compare-windows" data-after-complete={health.afterComplete}>
       <p>
-        <span className="font-medium text-foreground">Before</span> {formatWhen(before.startMs)} – {formatWhen(before.endMs)} ·{" "}
-        <span className="font-medium text-foreground">After</span> {formatWhen(after.startMs)} – {formatWhen(after.endMs)}
+        <span className="font-medium text-ink">Before</span> {formatWhen(before.startMs)} – {formatWhen(before.endMs)} ·{" "}
+        <span className="font-medium text-ink">After</span> {formatWhen(after.startMs)} – {formatWhen(after.endMs)}
       </p>
       {!health.afterComplete ? (
         <p data-testid="obs-compare-open">
@@ -303,10 +303,10 @@ function WindowsLine({ health, width }: { health: ReleaseHealth; width: HealthWi
 }
 
 const VERDICT: Record<ReleaseVerdict, { title: string; tone: string; icon: ReactNode }> = {
-  pass: { title: "No regression found", tone: "text-success", icon: <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> },
-  fail: { title: "This release made things worse", tone: "text-destructive", icon: <XCircle className="h-5 w-5" aria-hidden="true" /> },
-  inconclusive: { title: "Not proven either way", tone: "text-warning", icon: <CircleHelp className="h-5 w-5" aria-hidden="true" /> },
-  unknown: { title: "No verdict", tone: "text-muted-foreground", icon: <CircleHelp className="h-5 w-5" aria-hidden="true" /> },
+  pass: { title: "No regression found", tone: "text-success-ink", icon: <CheckCircle2 className="h-5 w-5" aria-hidden="true" /> },
+  fail: { title: "This release made things worse", tone: "text-danger-ink", icon: <XCircle className="h-5 w-5" aria-hidden="true" /> },
+  inconclusive: { title: "Not proven either way", tone: "text-warning-ink", icon: <CircleHelp className="h-5 w-5" aria-hidden="true" /> },
+  unknown: { title: "No verdict", tone: "text-ink-muted", icon: <CircleHelp className="h-5 w-5" aria-hidden="true" /> },
 };
 
 /** The finding codes as a reader names them (not_evaluated lists the same tokens). */
@@ -352,7 +352,7 @@ function Verdict({ health: h }: { health: ReleaseHealth }) {
           <p className={cn("text-sm font-semibold", v.tone)} data-testid="obs-compare-verdict-title">
             {v.title}
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-ink-muted">
             {h.verdict === "pass"
               ? "Every check the server ran stayed inside its threshold."
               : h.verdict === "fail"
@@ -367,21 +367,21 @@ function Verdict({ health: h }: { health: ReleaseHealth }) {
         <ul className="divide-y divide-border/50 border-t border-border/60" data-testid="obs-compare-findings">
           {[...fails, ...warns].map((f, index) => (
             <li key={`${f.code}-${f.service}-${index}`} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 px-4 py-2 text-xs" data-testid="obs-compare-finding" data-policy={f.policy} data-code={f.code ?? ""}>
-              <span className={cn("inline-flex items-center gap-1 font-medium", f.policy === "fail" ? "text-destructive" : "text-warning")}>
+              <span className={cn("inline-flex items-center gap-1 font-medium", f.policy === "fail" ? "text-danger-ink" : "text-warning-ink")}>
                 <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
                 {f.policy === "fail" ? "Fail" : "Warn"}
               </span>
-              <span className="font-medium text-foreground">{f.code ? FINDING_LABEL[f.code] : "Finding"}</span>
-              {f.service && <span className="font-mono text-foreground">{f.service}</span>}
-              <span className="tabular-nums text-muted-foreground">{findingFigure(f)}</span>
-              {f.message && <span className="basis-full text-muted-foreground">{f.message}</span>}
+              <span className="font-medium text-ink">{f.code ? FINDING_LABEL[f.code] : "Finding"}</span>
+              {f.service && <span className="font-mono text-ink">{f.service}</span>}
+              <span className="tabular-nums text-ink-muted">{findingFigure(f)}</span>
+              {f.message && <span className="basis-full text-ink-muted">{f.message}</span>}
             </li>
           ))}
         </ul>
       )}
       {h.notEvaluated.length > 0 && (
-        <p className="border-t border-border/60 px-4 py-2 text-xs text-muted-foreground" data-testid="obs-compare-not-evaluated">
-          <span className="font-medium text-foreground">Not checked:</span> {h.notEvaluated.map(findingLabel).join(", ")}. This control plane can&apos;t read
+        <p className="border-t border-border/60 px-4 py-2 text-xs text-ink-muted" data-testid="obs-compare-not-evaluated">
+          <span className="font-medium text-ink">Not checked:</span> {h.notEvaluated.map(findingLabel).join(", ")}. This control plane can&apos;t read
           them, so {h.verdict === "pass" ? "the pass doesn't cover them" : "they are not part of this verdict"}.
         </p>
       )}
@@ -392,19 +392,19 @@ function Verdict({ health: h }: { health: ReleaseHealth }) {
 function SectionTitle({ title, note }: { title: string; note: string }) {
   return (
     <div className="border-b border-border/60 px-4 py-3">
-      <h4 className="text-sm font-medium text-foreground">{title}</h4>
-      <p className="text-xs text-muted-foreground">{note}</p>
+      <h4 className="text-sm font-medium text-ink">{title}</h4>
+      <p className="text-xs text-ink-muted">{note}</p>
     </div>
   );
 }
 
 const MOVE_TONE: Record<Movement, string> = {
-  "up-bad": "text-destructive",
-  "down-bad": "text-destructive",
-  "up-good": "text-success",
-  "down-good": "text-success",
-  flat: "text-muted-foreground",
-  none: "text-muted-foreground",
+  "up-bad": "text-danger-ink",
+  "down-bad": "text-danger-ink",
+  "up-good": "text-success-ink",
+  "down-good": "text-success-ink",
+  flat: "text-ink-muted",
+  none: "text-ink-muted",
 };
 
 const MOVE_WORD: Record<Movement, string> = {
@@ -435,9 +435,9 @@ function Change({
   const text = changeText(before, after, kind);
   return (
     <span className="inline-flex flex-wrap items-baseline gap-x-1.5 tabular-nums" data-testid={testId} data-movement={move}>
-      <span className="text-muted-foreground">{before == null ? "—" : format(before)}</span>
-      <ArrowRight className="h-3 w-3 self-center text-muted-foreground" aria-label="to" />
-      <span className="font-medium text-foreground">{after == null ? "—" : format(after)}</span>
+      <span className="text-ink-muted">{before == null ? "—" : format(before)}</span>
+      <ArrowRight className="h-3 w-3 self-center text-ink-muted" aria-label="to" />
+      <span className="font-medium text-ink">{after == null ? "—" : format(after)}</span>
       {text && (
         <span className={cn("text-2xs font-medium", MOVE_TONE[move])} title={MOVE_WORD[move]}>
           {text}
@@ -462,7 +462,7 @@ function ServiceTable({ services, before, after, version }: { services: ServiceH
       <StackedTable className="w-full text-sm">
         <caption className="sr-only">Each service before and after the promotion</caption>
         <thead>
-          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
             <th scope="col" className="px-4 py-2 font-medium">Service</th>
             <th scope="col" className="px-4 py-2 font-medium">Requests</th>
             <th scope="col" className="px-4 py-2 font-medium">Error rate</th>
@@ -474,7 +474,7 @@ function ServiceTable({ services, before, after, version }: { services: ServiceH
         <tbody>
           {rows.map((s) => (
             <tr key={s.service} className="border-b border-border/50 align-top last:border-b-0" data-testid={`obs-compare-service-${s.service}`}>
-              <th scope="row" className="px-4 py-2 text-left font-mono text-xs font-medium text-foreground">
+              <th scope="row" className="px-4 py-2 text-left font-mono text-xs font-medium text-ink">
                 {s.service || "(unnamed)"}
               </th>
               <td className="px-4 py-2 text-xs">
@@ -489,7 +489,7 @@ function ServiceTable({ services, before, after, version }: { services: ServiceH
               <td className="px-4 py-2 text-xs">
                 <Change before={s.before?.p99Ms ?? null} after={s.after?.p99Ms ?? null} format={formatDuration} higherIsWorse />
               </td>
-              <td className="px-4 py-2 text-xs tabular-nums text-foreground" data-testid={`obs-compare-share-${s.service}`}>
+              <td className="px-4 py-2 text-xs tabular-nums text-ink" data-testid={`obs-compare-share-${s.service}`}>
                 {formatPercent(s.versionShare)}
               </td>
             </tr>
@@ -516,12 +516,12 @@ function IssueList({
   const all = [...regressed.map((issue) => ({ issue, kind: "regressed" as const })), ...newIssues.map((issue) => ({ issue, kind: "new" as const }))];
   if (all.length === 0) {
     return (
-      <p className="px-4 py-4 text-sm text-muted-foreground" data-testid="obs-compare-issues-empty">
+      <p className="px-4 py-4 text-sm text-ink-muted" data-testid="obs-compare-issues-empty">
         {unchecked ? "Not checked: this control plane can't read issues." : "None: nothing new and nothing regressed."}
       </p>
     );
   }
-  const linkClass = "block truncate text-left text-sm font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  const linkClass = "block truncate text-left text-sm font-medium text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
   return (
     <ul className="divide-y divide-border/50">
       {all.map(({ issue, kind }) => (
@@ -537,7 +537,7 @@ function IssueList({
                 {issue.title || issue.fingerprint}
               </button>
             )}
-            <p className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+            <p className="flex flex-wrap gap-x-2 text-xs text-ink-muted">
               <span className="font-mono">{issue.service}</span>
               <span className="tabular-nums">{formatCount(issue.events)} events</span>
             </p>
@@ -552,7 +552,7 @@ function AlertsAndRestarts({ health: h }: { health: ReleaseHealth }) {
   const alertsUnchecked = h.notEvaluated.includes("alert_firing");
   if (h.firingAlerts.length === 0 && h.workloadFindings.length === 0) {
     return (
-      <p className="px-4 py-4 text-sm text-muted-foreground" data-testid="obs-compare-alerts-empty">
+      <p className="px-4 py-4 text-sm text-ink-muted" data-testid="obs-compare-alerts-empty">
         {alertsUnchecked ? "No restarts. Alerts were not checked: this control plane can't read alert state." : "Nothing firing, nothing restarted."}
       </p>
     );
@@ -561,19 +561,19 @@ function AlertsAndRestarts({ health: h }: { health: ReleaseHealth }) {
     <ul className="divide-y divide-border/50">
       {h.firingAlerts.map((a) => (
         <li key={a.fingerprint || a.rule} className="flex items-start gap-2 px-4 py-2 text-sm" data-testid={`obs-compare-alert-${a.rule}`}>
-          <Bell className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+          <Bell className="mt-0.5 h-4 w-4 shrink-0 text-danger-ink" aria-hidden="true" />
           <div className="min-w-0">
-            <p className="font-medium text-foreground">{a.rule}</p>
-            <p className="text-xs text-muted-foreground">firing since {formatWhen(a.firingAtMs)}</p>
+            <p className="font-medium text-ink">{a.rule}</p>
+            <p className="text-xs text-ink-muted">firing since {formatWhen(a.firingAtMs)}</p>
           </div>
         </li>
       ))}
       {h.workloadFindings.map((w) => (
         <li key={w.workload} className="flex items-start gap-2 px-4 py-2 text-sm" data-testid={`obs-compare-restarts-${w.workload}`}>
-          <RotateCw className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+          <RotateCw className="mt-0.5 h-4 w-4 shrink-0 text-warning-ink" aria-hidden="true" />
           <div className="min-w-0">
-            <p className="font-mono text-foreground">{w.workload}</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="font-mono text-ink">{w.workload}</p>
+            <p className="text-xs text-ink-muted">
               {formatCount(w.restarts)} restart{w.restarts === 1 ? "" : "s"}
               {w.lastTerminatedReason && ` · last: ${w.lastTerminatedReason}`}
             </p>
@@ -588,7 +588,7 @@ function ResourceRows({ before, after }: { before: PanelResult | undefined; afte
   const rows = compareWorkloads(before, after);
   if (rows.length === 0) {
     return (
-      <p className="px-4 py-5 text-sm text-muted-foreground" data-testid="obs-compare-resources-empty">
+      <p className="px-4 py-5 text-sm text-ink-muted" data-testid="obs-compare-resources-empty">
         No container metrics in either window: the environment&apos;s workloads report none, or none ran.
       </p>
     );
@@ -598,7 +598,7 @@ function ResourceRows({ before, after }: { before: PanelResult | undefined; afte
       <StackedTable className="w-full text-sm">
         <caption className="sr-only">Each workload&apos;s resource use before and after the promotion</caption>
         <thead>
-          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
             <th scope="col" className="px-4 py-2 font-medium">Workload</th>
             <th scope="col" className="px-4 py-2 font-medium">CPU</th>
             <th scope="col" className="px-4 py-2 font-medium">Memory</th>
@@ -607,7 +607,7 @@ function ResourceRows({ before, after }: { before: PanelResult | undefined; afte
         <tbody>
           {rows.map((r) => (
             <tr key={r.workload} className="border-b border-border/50 last:border-b-0" data-testid={`obs-compare-workload-${r.workload}`}>
-              <th scope="row" className="px-4 py-2 text-left font-mono text-xs font-medium text-foreground">
+              <th scope="row" className="px-4 py-2 text-left font-mono text-xs font-medium text-ink">
                 {r.workload || "(unnamed)"}
               </th>
               <td className="px-4 py-2 text-xs">
@@ -627,18 +627,18 @@ function ResourceRows({ before, after }: { before: PanelResult | undefined; afte
 const SOURCE_LABEL: Record<string, string> = { release_shape: "declared in the release shape", default: "default", request: "this request" };
 
 function Thresholds({ health: h }: { health: ReleaseHealth }) {
-  if (h.thresholds.length === 0) return <p className="px-4 py-4 text-sm text-muted-foreground">The server reported no thresholds.</p>;
+  if (h.thresholds.length === 0) return <p className="px-4 py-4 text-sm text-ink-muted">The server reported no thresholds.</p>;
   return (
     <table className="w-full text-xs">
       <caption className="sr-only">Thresholds applied, with their source</caption>
       <tbody>
         {h.thresholds.map((t) => (
           <tr key={t.name} className="border-b border-border/50 last:border-b-0" data-testid={`obs-compare-threshold-${t.name}`}>
-            <th scope="row" className="px-4 py-1.5 text-left font-mono font-normal text-foreground">
+            <th scope="row" className="px-4 py-1.5 text-left font-mono font-normal text-ink">
               {t.name}
             </th>
-            <td className="px-4 py-1.5 font-mono tabular-nums text-foreground">{t.value}</td>
-            <td className="px-4 py-1.5 text-muted-foreground">{SOURCE_LABEL[t.source] ?? t.source}</td>
+            <td className="px-4 py-1.5 font-mono tabular-nums text-ink">{t.value}</td>
+            <td className="px-4 py-1.5 text-ink-muted">{SOURCE_LABEL[t.source] ?? t.source}</td>
           </tr>
         ))}
       </tbody>

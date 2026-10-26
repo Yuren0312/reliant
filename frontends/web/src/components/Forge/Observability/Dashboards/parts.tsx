@@ -51,7 +51,7 @@ export function StarButton({
         event.stopPropagation();
         onToggle();
       }}
-      className={cn(ICON_BUTTON, starred && "text-warning hover:text-warning")}
+      className={cn(ICON_BUTTON, starred && "text-warning-ink hover:text-warning-ink")}
       data-testid={testId}
     >
       <Star className={cn("h-4 w-4", starred && "fill-current")} aria-hidden="true" />
@@ -72,7 +72,7 @@ export function SourceTag({ source }: { source: DashboardSource }) {
           : source === "repo"
             ? "Declared in your repo under deploy/observability/dashboards; ships with each release. Read-only here."
             : source === "workspace"
-              ? "Saved in the console: versioned, editable, promotable to code."
+              ? "Saved in Reliant: versioned, editable, promotable to code."
               : "A starting point; using it saves a workspace copy."
       }
     >

@@ -1,21 +1,24 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * OVERVIEW — the project home, merged with Workloads (research/console-v3
- * DECISIONS.md; PROPOSAL §4.1).
+ * OVERVIEW — the project home: workloads, health and telemetry in one place
+ * (there is no separate Observability home; its strip is this page's).
  *
- *   top, left    one cell per environment (its worst workload, the release
- *                live there, who put it there), the health KPIs with release
- *                markers, and what needs attention.
- *   top, right   recent releases and recent activity.
+ *   top, left    a deploy that is in flight or failed, when there is one; one
+ *                status cell per environment (its worst workload, the release
+ *                live there, who put it there), the health KPIs, and what
+ *                needs attention — each item with the release it followed and
+ *                the way back.
+ *   top, right   recent releases.
  *   below        the Services table (long-running workloads: health, ready,
  *                release, restarts and last exit, CPU and memory against their
  *                limits) and the Jobs table (migrations, provisioning,
  *                scheduled jobs: result, the release that ran it, duration).
  *
- * Every row opens the workload's page. The top-bar scope (D1) narrows the
- * tables, the KPIs and "Needs attention"; the environment strip always shows
- * every environment, because it is how the reader picks one.
+ * Every row opens the workload's page. The top-bar scope narrows the tables,
+ * the KPIs and "Needs attention"; the environment strip always shows every
+ * environment's STATUS. It is not a second selector — the top bar is the one
+ * — so each cell is a link to the Overview scoped to that environment.
  *
  * ONE READ FOR THE WORKLOADS. ListWorkloads is asked once for the whole
  * project, and the strip, the tables and "Needs attention" are cut from that
@@ -28,14 +31,14 @@
  */
 
 import { useMemo, type CSSProperties, type ReactNode } from "react";
-import { ArrowRight, Boxes, Search } from "lucide-react";
+import { ArrowRight, Boxes, RotateCcw, Search } from "lucide-react";
 
 import Link from "@/components/forge-ui/link";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import PageHeader from "@/components/forge-ui/page_header";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { useAlerts, useObservabilityOrg, useReleases, useWorkloads } from "@/hooks/observability-queries";
+import { useAlerts, useObservabilityOrg, useWorkloads } from "@/hooks/observability-queries";
 import { useProjectReleases } from "@/hooks/release-queries";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
@@ -49,6 +52,7 @@ import { cn } from "@/lib/utils";
 import { ENV_ALL } from "../Console/envScope";
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatAgo, formatBytes, formatCores } from "../Observability/format";
+import { promotionIsSuspect, type RollbackTarget } from "../Promote/rollback";
 import { HealthStrip } from "../Observability/Home/HealthStrip";
 import { ObsAsOf, ObsError, ObsNotSetUp } from "../Observability/ObsStates";
 import { Ago, INK_BUTTON, INK_LINK, Panel } from "../Releases/releaseParts";
@@ -59,6 +63,7 @@ import {
   KIND_LABEL,
   attentionItems,
   filterServices,
+  formatAge,
   formatSeconds,
   jobRows,
   kindsOf,
@@ -93,10 +98,21 @@ export interface OverviewSearch {
 
 export interface OverviewHrefs {
   workload: (name: string, env: string) => string;
-  release: (version: string) => string;
+  /** A release's page; `tab`/`env` open one of its tabs for one environment (its Health, after a bad promotion). */
+  release: (version: string, open?: { tab?: string; env?: string }) => string;
   releases: string;
   alerts: string;
-  activity: string;
+  /** The Overview scoped to one environment: what an environment cell links to. */
+  scoped: (env: string) => string;
+}
+
+/** Rolling an environment back from "Needs attention": the targets, and the confirm flow that carries one out. */
+export interface OverviewRollback {
+  /** By environment name: what it runs and what it ran before. */
+  targets: ReadonlyMap<string, RollbackTarget>;
+  onRollback: (target: RollbackTarget) => void;
+  /** Set when rolling back is impossible from here, with the reason. */
+  blockedReason: string | null;
 }
 
 export interface OverviewHomeProps {
@@ -109,8 +125,10 @@ export interface OverviewHomeProps {
   search: OverviewSearch;
   onSearch: (next: Partial<OverviewSearch>) => void;
   hrefs: OverviewHrefs;
-  onSelectEnv: (env: string) => void;
   navigateTo: (href: string) => void;
+  rollback?: OverviewRollback;
+  /** Above the environment strip: a deploy in flight or failed (DeployAttemptsBanner), when there is one. */
+  deploys?: ReactNode;
   /**
    * What the platform observes of each HOSTED environment's workloads
    * (DeployService.GetStatus), by environment name then workload name: the
@@ -131,7 +149,6 @@ const NO_HOSTED: HostedByEnv = new Map();
 
 /** The Overview's window when the URL names none: a day, so "Restarts" reads as restarts today. */
 export const OVERVIEW_RANGE: RangePreset = "24h";
-const ACTIVITY_DAYS = 30;
 
 export function OverviewHome({
   project,
@@ -141,8 +158,9 @@ export function OverviewHome({
   search,
   onSearch,
   hrefs,
-  onSelectEnv,
   navigateTo,
+  rollback,
+  deploys,
   hosted = NO_HOSTED,
   hostedLoading = false,
   domains,
@@ -193,11 +211,16 @@ export function OverviewHome({
   const where = all ? "all environments" : env;
   const unhealthy = services.filter(needsAttention).length;
 
+  // NOTHING DEPLOYED: the header states no counts. They would be drawn from
+  // telemetry about environments the page is about to say do not exist.
+  const empty = !envsLoading && envs.length === 0;
   const header = (
     <PageHeader
       title="Overview"
       meta={
-        loading ? (
+        empty ? (
+          <span data-testid="overview-counts">Not deployed</span>
+        ) : loading ? (
           <span className="inline-flex h-4 w-56 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading" />
         ) : (
           <>
@@ -221,10 +244,11 @@ export function OverviewHome({
     />
   );
 
-  if (!envsLoading && envs.length === 0) {
+  if (empty) {
     return (
       <div className="space-y-6" data-testid="overview" data-state="empty">
         {header}
+        {deploys}
         <GettingStarted
           testId="overview-getting-started"
           icon={<Boxes className="h-4 w-4" />}
@@ -272,7 +296,8 @@ export function OverviewHome({
 
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
-          <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={!!listed.error && !keepsLastResult(listed.error, listed.data)} onSelectEnv={onSelectEnv} />
+          {deploys}
+          <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={!!listed.error && !keepsLastResult(listed.error, listed.data)} scopedHref={hrefs.scoped} />
           {unrecorded ? (
             <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-5 text-sm text-ink-muted" data-testid="overview-unrecorded-env">
               Reliant has no record of <span className="font-medium text-ink">{env}</span>, so nothing it runs is reported here. Once it is deployed through Reliant, its
@@ -289,18 +314,20 @@ export function OverviewHome({
                 showEnv={all}
                 hrefOf={(item) => (item.workload ? hrefs.workload(item.workload, item.envName) : hrefs.alerts)}
                 navigateTo={navigateTo}
+                envs={envs}
+                releaseHref={hrefs.release}
+                rollback={rollback}
               />
             </>
           )}
         </div>
         <aside className="space-y-4" aria-label="Recent changes">
           <RecentReleases project={project} envs={envs} hrefs={hrefs} />
-          <RecentActivity project={project} orgId={orgId} env={env} envs={envs} scopedEnvId={scopedEnv?.id ?? null} hrefs={hrefs} />
         </aside>
       </div>
 
       {notSetUp ? (
-        <ObsNotSetUp subject={project} />
+        <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} />
       ) : listed.error && !keepsLastResult(listed.error, listed.data) ? (
         <ObsError error={listed.error} subject={project} onRetry={() => void listed.refetch()} retrying={listed.isFetching} />
       ) : (
@@ -447,7 +474,7 @@ function EnvStrip({
   jobs,
   loading,
   failed,
-  onSelectEnv,
+  scopedHref,
 }: {
   envs: StripEnv[];
   env: string;
@@ -455,7 +482,7 @@ function EnvStrip({
   jobs: JobRow[];
   loading: boolean;
   failed: boolean;
-  onSelectEnv: (env: string) => void;
+  scopedHref: (env: string) => string;
 }) {
   const long = envs.filter((candidate) => !candidate.preview);
   const previews = envs.filter((candidate) => candidate.preview);
@@ -473,7 +500,7 @@ function EnvStrip({
       data-testid="overview-env-strip"
     >
       {cells.map((cell, index) => (
-        <EnvCell key={cell.env.name} cell={cell} first={index === 0} selected={cell.env.name === env} loading={loading} failed={failed} onSelect={() => onSelectEnv(cell.env.name)} />
+        <EnvCell key={cell.env.name} cell={cell} first={index === 0} selected={cell.env.name === env} loading={loading} failed={failed} href={scopedHref(cell.env.name)} />
       ))}
       {previewCell && (
         <div className={cn("relative min-w-0 px-4 py-3", cells.length > 0 && "border-l border-border")} data-testid="overview-env-previews" data-selected={previewSelected ? "true" : undefined}>
@@ -487,14 +514,13 @@ function EnvStrip({
             {previews.map((preview, index) => (
               <span key={preview.name}>
                 {index > 0 && <span aria-hidden="true">· </span>}
-                <button
-                  type="button"
-                  onClick={() => onSelectEnv(preview.name)}
-                  aria-pressed={preview.name === env}
-                  className={cn("rounded hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent", preview.name === env && "font-medium text-ink")}
+                <Link
+                  href={scopedHref(preview.name)}
+                  aria-current={preview.name === env ? "page" : undefined}
+                  className={cn("no-color rounded text-ink-muted hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent", preview.name === env && "font-medium text-ink")}
                 >
                   {preview.name}
-                </button>
+                </Link>
               </span>
             ))}
           </div>
@@ -511,26 +537,25 @@ function EnvCell({
   selected,
   loading,
   failed,
-  onSelect,
+  href,
 }: {
   cell: StripCell;
   first: boolean;
   selected: boolean;
   loading: boolean;
   failed: boolean;
-  onSelect: () => void;
+  href: string;
 }) {
   const { env } = cell;
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      title={selected ? `The console is scoped to ${env.name}` : `Scope the console to ${env.name}`}
+    <Link
+      href={href}
+      aria-current={selected ? "page" : undefined}
+      title={selected ? `Showing ${env.name}` : `Show ${env.name}`}
       data-testid={`overview-env-${env.name}`}
       data-tone={loading || failed ? undefined : cell.tone}
       className={cn(
-        "relative min-w-0 px-4 py-3 text-left transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+        "no-color relative block min-w-0 px-4 py-3 text-left transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
         !first && "border-l border-border"
       )}
     >
@@ -561,7 +586,7 @@ function EnvCell({
         )}
       </div>
       {selected && <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 bg-ink" />}
-    </button>
+    </Link>
   );
 }
 
@@ -575,6 +600,9 @@ function NeedsAttention({
   showEnv,
   hrefOf,
   navigateTo,
+  envs,
+  releaseHref,
+  rollback,
 }: {
   items: AttentionItem[];
   loading: boolean;
@@ -583,6 +611,9 @@ function NeedsAttention({
   showEnv: boolean;
   hrefOf: (item: AttentionItem) => string;
   navigateTo: (href: string) => void;
+  envs: StripEnv[];
+  releaseHref: OverviewHrefs["release"];
+  rollback?: OverviewRollback;
 }) {
   return (
     <Panel title="Needs attention" flush testId="overview-attention">
@@ -603,6 +634,8 @@ function NeedsAttention({
           <tbody>
             {items.map((item) => {
               const href = hrefOf(item);
+              const suspect = suspectOf(item, envs);
+              const target = rollback?.targets.get(item.envName);
               return (
                 <tr
                   key={item.key}
@@ -629,7 +662,32 @@ function NeedsAttention({
                   )}
                   <td className="h-10 w-px max-w-64 truncate whitespace-nowrap px-4 text-right text-xs text-ink-muted" title={item.detail}>
                     {item.detail}
+                    {suspect && (
+                      <span className="block" data-testid={`attention-suspect-${item.key}`}>
+                        started {formatAge(suspect.afterMs)} after{" "}
+                        <Link href={releaseHref(suspect.release, { tab: "health", env: item.envName })} className={INK_LINK} title={`${suspect.release}: its health before and after`}>
+                          {shortVersion(suspect.release)}
+                        </Link>
+                      </span>
+                    )}
                   </td>
+                  {rollback && (
+                    <td className="h-10 w-px whitespace-nowrap pr-4 text-right">
+                      {target && (
+                        <button
+                          type="button"
+                          onClick={() => rollback.onRollback(target)}
+                          disabled={!!rollback.blockedReason}
+                          title={rollback.blockedReason ?? `Plan a rollback of ${target.env} to ${target.previous}`}
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-surface px-2 text-xs font-medium text-ink hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-60"
+                          data-testid={`attention-rollback-${item.key}`}
+                        >
+                          <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                          Roll back {target.env} to {shortVersion(target.previous)}
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -638,6 +696,23 @@ function NeedsAttention({
       )}
     </Panel>
   );
+}
+
+/**
+ * The promotion an attention item followed, when it followed one closely
+ * enough to be the suspect: the environment's current release, promoted
+ * within SUSPECT_WINDOW_MS before the trouble was seen (its latest warning or
+ * failed run; now when nothing timestamps it), and the release the workload is
+ * on (or one it cannot name). Alerts name no release, so they get none.
+ */
+function suspectOf(item: AttentionItem, envs: readonly StripEnv[]): { release: string; afterMs: number } | null {
+  if (item.kind === "alert") return null;
+  const env = envs.find((candidate) => candidate.name === item.envName);
+  if (!env?.release || !env.promotedAt) return null;
+  if (item.release && item.release !== env.release) return null;
+  const troubleAt = item.troubleAtMs ?? Date.now();
+  if (!promotionIsSuspect(env.promotedAt, troubleAt)) return null;
+  return { release: env.release, afterMs: troubleAt - Date.parse(env.promotedAt) };
 }
 
 // ── The rail ────────────────────────────────────────────────────────────────
@@ -696,89 +771,12 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
   );
 }
 
-/**
- * Promotions and rollbacks into the scope, newest first — what the ledger
- * records today. The typed activity stream (D3) adds restarts, secret changes
- * and alerts; the Activity page is where it lands.
- */
-function RecentActivity({
-  project,
-  orgId,
-  env,
-  envs,
-  scopedEnvId,
-  hrefs,
-}: {
-  project: string;
-  orgId: string | null;
-  env: string;
-  envs: StripEnv[];
-  scopedEnvId: string | null;
-  hrefs: OverviewHrefs;
-}) {
-  const scope = useMemo(
-    () => (orgId && (env === ENV_ALL || scopedEnvId) ? { orgId, projectId: project, envIds: scopedEnvId ? [scopedEnvId] : envs.map((candidate) => candidate.id) } : null),
-    [orgId, project, env, scopedEnvId, envs]
-  );
-  const ledger = useReleases(scope, `days:${ACTIVITY_DAYS}`, () => ({ startMs: Date.now() - ACTIVITY_DAYS * 86_400_000, endMs: Date.now() }), { limit: 50 });
-  const recent = useMemo(() => [...(ledger.data?.promotions ?? [])].reverse().slice(0, 4), [ledger.data]);
-  return (
-    <Panel title="Recent activity" actions={<RailLink href={hrefs.activity}>All</RailLink>} testId="overview-recent-activity">
-      {!scope ? (
-        <p className="text-xs text-ink-muted">Nothing is recorded for {env}.</p>
-      ) : ledger.isLoading ? (
-        <div className="h-20 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading activity" />
-      ) : ledger.error ? (
-        <p className="text-xs text-ink-muted">Activity could not be read right now.</p>
-      ) : recent.length === 0 ? (
-        <p className="text-xs text-ink-muted">Nothing was promoted {env === ENV_ALL ? "" : `to ${env} `}in the last {ACTIVITY_DAYS} days.</p>
-      ) : (
-        <ul className="divide-y divide-border/70 text-xs">
-          {recent.map((p) => {
-            const who = p.promotedBy || "Someone";
-            const version = p.version || p.releaseId.slice(0, 12);
-            return (
-              <li key={p.promotionId} className="flex items-start gap-2 py-2 first:pt-0 last:pb-0">
-                <span aria-hidden="true" className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-border text-2xs font-medium text-ink-muted">
-                  {who.slice(0, 1).toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-ink">
-                    <span className="font-medium">{who}</span>{" "}
-                    {p.kind === "rollback" ? (
-                      <>
-                        rolled back {p.envName} to{" "}
-                        <Link href={hrefs.release(p.version)} className={INK_LINK}>
-                          {shortVersion(version)}
-                        </Link>
-                      </>
-                    ) : (
-                      <>
-                        promoted{" "}
-                        <Link href={hrefs.release(p.version)} className={INK_LINK}>
-                          {shortVersion(version)}
-                        </Link>{" "}
-                        to {p.envName}
-                      </>
-                    )}
-                  </span>
-                  <span className="block text-ink-muted">{formatAgo(p.promotedAtMs)}</span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </Panel>
-  );
-}
-
 // ── Tables ──────────────────────────────────────────────────────────────────
 
 const TH = "h-9 whitespace-nowrap px-4 text-left text-xs font-medium text-ink-muted";
 const TD = "h-10 whitespace-nowrap px-4 text-sm text-ink";
 const ROW = "relative border-t border-border/70 first:border-t-0 hover:bg-ink/5";
-/** The name cell's link covers the whole row: the row is the link (PROPOSAL §6, tables). */
+/** The name cell's link covers the whole row: the row is the link. */
 const ROW_LINK =
   "no-color font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent";
 

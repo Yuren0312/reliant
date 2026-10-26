@@ -508,13 +508,22 @@ export function describeSeries(series: ChartSeries[], unit: ValueUnit | undefine
  * The markers inside the chart's time span, oldest first. A bucket's timestamp
  * is its start, so the span runs one bucket past the last one: a marker in the
  * newest bucket belongs on the chart.
+ *
+ * ONE MARKER PER LABEL: a version promoted twice in the window (re-promoted,
+ * or rolled back to) is drawn at its latest landing, not listed twice.
  */
 export function visibleMarkers(markers: readonly ChartMarker[], timestamps: number[]): ChartMarker[] {
   if (timestamps.length === 0) return [];
   const first = timestamps[0];
   const last = timestamps[timestamps.length - 1];
   const step = timestamps.length > 1 ? timestamps[1] - timestamps[0] : 0;
-  return markers.filter((m) => m.timeSec >= first && m.timeSec <= last + step).sort((a, b) => a.timeSec - b.timeSec);
+  const latest = new Map<string, ChartMarker>();
+  for (const m of markers) {
+    if (m.timeSec < first || m.timeSec > last + step) continue;
+    const seen = latest.get(m.label);
+    if (!seen || m.timeSec > seen.timeSec) latest.set(m.label, m);
+  }
+  return [...latest.values()].sort((a, b) => a.timeSec - b.timeSec);
 }
 
 /** "Marked: v1.8.2 at 14:05." */

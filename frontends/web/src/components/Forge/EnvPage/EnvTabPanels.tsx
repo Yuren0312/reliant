@@ -4,7 +4,7 @@
  * The bodies of an environment page's tabs. See envTabs.ts for which
  * environment gets which, and which tabs read the daemon.
  *
- * Every panel is built from existing pieces — LiveState, LiveReleases,
+ * Every panel is built from existing pieces — LiveState,
  * LiveSecretsSection, DevStackPanel, RegisterEnvPanel —
  * re-grouped by the question they
  * answer. Sections are forge-ui Cards with a CardHeader, rather than three
@@ -33,8 +33,6 @@ import { RegisterEnvPanel } from "../Preview/RegisterEnvPanel";
 import { DevStackPanel } from "../Status/DevStackPanel";
 import { DaemonNeeded } from "./DaemonNeeded";
 import { EnvDomains } from "./EnvDomains";
-import { LiveActivity } from "./LiveActivity";
-import { LiveReleases } from "./LiveReleases";
 import { LiveSecretsSection } from "./LiveSecretsSection";
 import { LiveState } from "./LiveState";
 
@@ -146,7 +144,7 @@ export function OverviewTab(props: OverviewTabProps) {
   return (
     <div className="space-y-4" data-testid="live-section" data-kind={live.kind}>
       {registered && (
-        <p data-testid="register-done" className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground">
+        <p data-testid="register-done" className="rounded-lg border border-border bg-surface px-4 py-3 text-sm text-ink">
           Registered. <span className="font-mono">{envName}</span> is tracked in Reliant now — its secrets can be set
           from the Secrets tab, with your daemon offline.
         </p>
@@ -154,18 +152,18 @@ export function OverviewTab(props: OverviewTabProps) {
       <Panel title="State" testId="env-state">
         {declaredNotBuilt(live) ? (
           <div className="space-y-2">
-            <p data-testid="live-declared-not-built" className="text-sm text-muted-foreground">
+            <p data-testid="live-declared-not-built" className="text-sm text-ink-muted">
               Declared, not built yet. Its secrets can be set; a build records the first release.
             </p>
             {live.provenance !== "" && (
-              <p data-testid="live-provenance" className="font-mono text-xs text-muted-foreground">
+              <p data-testid="live-provenance" className="font-mono text-xs text-ink-muted">
                 {live.provenance}
               </p>
             )}
           </div>
         ) : neverBuilt(live) ? (
-          <p data-testid="live-row-blank" className="text-sm text-muted-foreground">
-            Registered, with nothing recorded yet. <code className="font-mono text-foreground">forge env build {live.name} --release</code>{" "}
+          <p data-testid="live-row-blank" className="text-sm text-ink-muted">
+            Registered, with nothing recorded yet. <code className="font-mono text-ink">forge env build {live.name} --release</code>{" "}
             records the first release.
           </p>
         ) : (
@@ -174,7 +172,7 @@ export function OverviewTab(props: OverviewTabProps) {
             {/* THE PROVENANCE LINE (§2.1): images from the release's source,
                 config from the render's. Descriptive, not approving. */}
             {live.provenance !== "" && (
-              <p data-testid="live-provenance" className="font-mono text-xs text-muted-foreground">
+              <p data-testid="live-provenance" className="font-mono text-xs text-ink-muted">
                 {live.provenance}
               </p>
             )}
@@ -205,9 +203,9 @@ export function OverviewTab(props: OverviewTabProps) {
       {/* The workloads themselves — health, pods, releases, restarts — are the
           Overview's (one place, every environment), not a second copy here. */}
       <Panel title="Workloads" testId="section-workloads">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-ink-muted">
           {props.envName}&apos;s services and jobs, their health and their pods are on the{" "}
-          <Link href={props.workloadsHref} className="text-foreground underline underline-offset-2" data-testid="env-workloads-link">
+          <Link href={props.workloadsHref} className="text-ink underline underline-offset-2" data-testid="env-workloads-link">
             Overview, scoped to {props.envName}
           </Link>
           .
@@ -288,18 +286,18 @@ function ForgeLedgerFacts({ env }: { env: ForgeTopologyEnv }) {
     >
       {env.release ? (
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
-          <dt className="text-muted-foreground">Release</dt>
-          <dd className="font-mono text-foreground">{env.release}</dd>
+          <dt className="text-ink-muted">Release</dt>
+          <dd className="font-mono text-ink">{env.release}</dd>
           {env.promoted_at && (
             <>
-              <dt className="text-muted-foreground">Promoted</dt>
-              <dd className="text-foreground">{formatTimestamp(env.promoted_at)}</dd>
+              <dt className="text-ink-muted">Promoted</dt>
+              <dd className="text-ink">{formatTimestamp(env.promoted_at)}</dd>
             </>
           )}
           {env.kube_context && (
             <>
-              <dt className="text-muted-foreground">Cluster</dt>
-              <dd className="font-mono text-foreground">
+              <dt className="text-ink-muted">Cluster</dt>
+              <dd className="font-mono text-ink">
                 {env.kube_context}
                 {env.namespace ? ` / ${env.namespace}` : ""}
               </dd>
@@ -307,115 +305,8 @@ function ForgeLedgerFacts({ env }: { env: ForgeTopologyEnv }) {
           )}
         </dl>
       ) : (
-        <p className="text-sm text-muted-foreground">Never promoted in forge&apos;s ledger.</p>
+        <p className="text-sm text-ink-muted">Never promoted in forge&apos;s ledger.</p>
       )}
-    </Panel>
-  );
-}
-
-// ── Releases ────────────────────────────────────────────────────────────────
-
-export function ReleasesTab({
-  live,
-  promotions,
-  isLoading,
-  error,
-  forgeEnv,
-}: {
-  live: LiveEnv | null;
-  promotions: CloudPromotion[] | undefined;
-  isLoading: boolean;
-  error: Error | null;
-  forgeEnv: ForgeTopologyEnv | null;
-}) {
-  if (!live) {
-    return forgeEnv ? (
-      <ForgeLedgerFacts env={forgeEnv} />
-    ) : (
-      <p className="text-sm text-muted-foreground" data-testid="releases-unregistered">
-        Reliant has no record of this environment, so it has no release history here. Register it from Overview.
-      </p>
-    );
-  }
-  return (
-    <Panel
-      title="Releases"
-      description="Every release promoted to this environment, newest first. Promotion writes a pointer; deploying moves bytes."
-      testId="section-releases"
-      flush
-    >
-      <LiveReleases env={live} promotions={promotions} isLoading={isLoading} error={error} />
-    </Panel>
-  );
-}
-
-// ── Activity ────────────────────────────────────────────────────────────────
-
-export function ActivityTab({
-  live,
-  promotions,
-  convergences,
-  isLoading,
-  error,
-}: {
-  live: LiveEnv | null;
-  promotions: CloudPromotion[] | undefined;
-  convergences: LiveConvergence[] | undefined;
-  isLoading: boolean;
-  error: Error | null;
-}) {
-  if (!live) {
-    return (
-      <p className="text-sm text-muted-foreground" data-testid="activity-unregistered">
-        Reliant has no record of this environment, so it has no activity here. Register it from Overview.
-      </p>
-    );
-  }
-  return (
-    <Panel
-      title="Activity"
-      description="What happened here, newest first: each promotion, and what Reliant observed on the cluster after it."
-      testId="section-activity"
-      flush
-    >
-      <LiveActivity env={live} promotions={promotions} convergences={convergences} isLoading={isLoading} error={error} />
-    </Panel>
-  );
-}
-
-// ── Domains ─────────────────────────────────────────────────────────────────
-
-export function DomainsTab({
-  live,
-  domains,
-  domainsLoading,
-  onManageDomains,
-}: {
-  live: LiveEnv | null;
-  domains: DomainsState | undefined;
-  domainsLoading: boolean;
-  onManageDomains: () => void;
-}) {
-  if (!live) {
-    return (
-      <p className="text-sm text-muted-foreground" data-testid="domains-unregistered">
-        Reliant has no record of this environment, so no domain can point at it yet. Register it from Overview.
-      </p>
-    );
-  }
-  return (
-    <Panel
-      title="Custom domains"
-      description="Hostnames that serve this environment. Domains belong to your organization and are added, moved and removed on the Domains screen."
-      testId="section-domains"
-    >
-      <EnvDomains
-        environmentId={live.id}
-        placed={isPlacedKind(live.kind)}
-        state={domains}
-        isLoading={domainsLoading}
-        onManage={onManageDomains}
-      />
     </Panel>
   );
 }
@@ -487,15 +378,15 @@ export function RunningTab({
     return (
       <div
         data-testid="running-stopped"
-        className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-background px-4 py-4"
+        className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-4"
       >
-        <Play className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <Play className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
         <div className="space-y-1">
-          <p className="text-sm text-foreground">
+          <p className="text-sm text-ink">
             <span className="font-mono">{envName}</span> isn&apos;t running on this machine.
           </p>
-          <p className="text-xs text-muted-foreground">
-            Start it with <code className="font-mono text-foreground">forge env up {envName}</code>.
+          <p className="text-xs text-ink-muted">
+            Start it with <code className="font-mono text-ink">forge env up {envName}</code>.
           </p>
         </div>
       </div>

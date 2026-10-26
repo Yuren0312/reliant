@@ -65,13 +65,16 @@ describe("ObservabilityPanel", () => {
   });
 
   it("says ONCE that observability is not set up, in place of every view", async () => {
-    const user = userEvent.setup();
     renderPanel(createFixtureApi({ failWith: Code.FailedPrecondition }));
     expect(await screen.findByTestId("obs-not-set-up")).toHaveTextContent("isn't set up for this organization yet");
     // Not presented as an error, and nothing to retry.
     expect(screen.getByTestId("obs-not-set-up")).toHaveAttribute("role", "status");
     expect(screen.queryByTestId("obs-retry")).not.toBeInTheDocument();
-    await user.click(screen.getByTestId("obs-view-logs"));
+  });
+
+  it("says it once on another view too, in place of the view rather than beside it", async () => {
+    renderPanel(createFixtureApi({ failWith: Code.FailedPrecondition }), { view: "logs" });
+    expect(await screen.findByTestId("obs-not-set-up")).toBeInTheDocument();
     expect(screen.getAllByTestId("obs-not-set-up")).toHaveLength(1);
     expect(screen.queryByTestId("obs-logs")).not.toBeInTheDocument();
   });
@@ -171,19 +174,6 @@ describe("ObservabilityPanel", () => {
     expect(error).toHaveAttribute("role", "alert");
     expect(error).toHaveTextContent("shorter time range");
     expect(within(error).getByTestId("obs-retry")).toBeInTheDocument();
-  });
-
-  it("moves between views with the arrow keys and clears the previous view's filters", async () => {
-    const user = userEvent.setup();
-    const harness = renderPanel(createFixtureApi(), { view: "logs", q: "timeout", service: "api" });
-    await screen.findByTestId("obs-logs");
-    screen.getByTestId("obs-view-logs").focus();
-    await user.keyboard("{ArrowRight}");
-    await waitFor(() => expect(screen.getByTestId("obs-panel")).toHaveAttribute("data-view", "traces"));
-    expect(screen.getByTestId("obs-view-traces")).toHaveFocus();
-    // The window and the service travel; the log query does not.
-    expect(harness.current()).toMatchObject({ view: "traces", service: "api" });
-    expect(harness.current().q).toBeUndefined();
   });
 
   it("re-reads the window on Refresh", async () => {

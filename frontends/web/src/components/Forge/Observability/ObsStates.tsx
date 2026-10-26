@@ -48,17 +48,17 @@ function StateFrame({
     <div
       data-testid={testId}
       role={tone === "error" ? "alert" : "status"}
-      className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-background px-4 py-5"
+      className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5"
     >
       <span
-        className={tone === "error" ? "mt-0.5 shrink-0 text-destructive" : "mt-0.5 shrink-0 text-muted-foreground"}
+        className={tone === "error" ? "mt-0.5 shrink-0 text-danger-ink" : "mt-0.5 shrink-0 text-ink-muted"}
         aria-hidden="true"
       >
         {icon}
       </span>
       <div className="min-w-0 space-y-1.5">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        {children && <div className="space-y-1 text-xs text-muted-foreground">{children}</div>}
+        <p className="text-sm font-medium text-ink">{title}</p>
+        {children && <div className="space-y-1 text-xs text-ink-muted">{children}</div>}
         {actions && <div className="flex flex-wrap gap-2 pt-1">{actions}</div>}
       </div>
     </div>
@@ -435,7 +435,7 @@ export function OperatorBadge({ provenance }: { provenance: Provenance }) {
   const label = provenance.source || "operator";
   return (
     <span
-      className="shrink-0 rounded border border-border px-1 py-px font-sans text-2xs uppercase tracking-wide text-muted-foreground"
+      className="shrink-0 rounded border border-border px-1 py-px font-sans text-2xs uppercase tracking-wide text-ink-muted"
       title="Reliant operator data: platform telemetry, not this app's"
       data-testid="obs-operator-badge"
     >

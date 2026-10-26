@@ -7,7 +7,7 @@
  * promote, domain bindings, the local dev stack).
  *
  * This was the console's Overview while the nav was the environment roster.
- * Environment is the top bar's scope now (decision D1), so this list is the
+ * Environment is the top bar's scope now, so this list is the
  * one page that does not narrow to it: it is where the scope's choices are
  * configured.
  *
@@ -158,17 +158,17 @@ function UnregisteredEnvs({ envs, onOpen }: { envs: RosterEnv[]; onOpen: (env: s
               type="button"
               onClick={() => onOpen(env.name)}
               data-testid={`unregistered-${env.name}`}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
-              <CircleDashed className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <span className="font-mono text-sm font-medium text-foreground">{env.name}</span>
+              <CircleDashed className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+              <span className="font-mono text-sm font-medium text-ink">{env.name}</span>
               {/* Only a lifecycle someone actually stated. Without a control-
                   plane row or forge's runtime answer, "deployed" would be a
                   guess — dev's destination is `mixed`, same as prod's. */}
-              {env.lifecycle === "local" && <span className="text-xs text-muted-foreground">Runs locally</span>}
+              {env.lifecycle === "local" && <span className="text-xs text-ink-muted">Runs locally</span>}
               {env.forge?.release && (
-                <span className="text-xs text-muted-foreground">
-                  · forge ledger: <span className="font-mono text-foreground">{env.forge.release}</span>
+                <span className="text-xs text-ink-muted">
+                  · forge ledger: <span className="font-mono text-ink">{env.forge.release}</span>
                 </span>
               )}
               <span className="ml-auto text-xs text-primary">Open</span>
