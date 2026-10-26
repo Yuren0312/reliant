@@ -174,6 +174,9 @@ type CompactStore interface {
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	threads.Repository
 	LLMHistoryStore
+	// The user's Settings → Model tag preferences, read exactly as CallLLM
+	// reads them, so the summary resolves to the model that filled the thread.
+	toolbindings.SettingsReader
 }
 
 // CreateWorkflowWithThreadStore is what CreateWorkflowWithThreadActivity reads

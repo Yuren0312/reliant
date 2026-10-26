@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/accumulator"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -414,6 +415,16 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 		PresetModelTags:   rtx.PresetModelTags,
 		Routing:           a.routing,
 		Failover:          failover,
+		// The run's provider choice and the user's tag preferences, exactly as
+		// CallLLM passes them. Without them a tag selector ([moderate]) resolved
+		// to the catalog default (Claude on Anthropic) while the agent loop ran
+		// on gpt-6.1-sol on codex: a thread of ~740k codex
+		// tokens was sent to a 1M Claude window as 1.11M Claude tokens and
+		// refused, ending the agent (prod, 2026-10-26).
+		RunProviders: rtx.ProviderPreference,
+	}
+	if a.repo != nil {
+		spec.TagPrefsReader = a.repo
 	}
 
 	// Pick the summarization model. With an injected resolver (tests) the
@@ -464,8 +475,37 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 	// Call LLM to generate summary using streaming (required for long operations)
 	// We use streaming mode because Anthropic requires it for operations that may take >10 minutes
 	// The accumulator will collect all chunks and return the final response
-	response, err := accumulator.StreamAndAccumulate(a.routing.observe(ctx, chat.UserID, resolved.Account), resolved.Driver, compactionPrompts, history, []tools.Tool{})
-	if err != nil {
+	//
+	// The pre-request trim cannot guarantee the history fits: it trusts the
+	// thread's stored token count, which another model's tokenizer measured
+	// whenever the summarizer is not the model that filled the thread, and
+	// after flattening there are no tool results left for it to cut. So a
+	// provider that refuses the prompt as too long is answered by summarizing
+	// less of it, never by failing the agent: a summary of the recent
+	// conversation keeps the run going; a failed compaction ends it.
+	var response *llm.DriverResponse
+	for attempt := 1; ; attempt++ {
+		response, err = accumulator.StreamAndAccumulate(a.routing.observe(ctx, chat.UserID, resolved.Account), resolved.Driver, compactionPrompts, history, []tools.Tool{})
+		if err == nil {
+			break
+		}
+		overflow, isOverflow := parseContextOverflow(err)
+		if isOverflow && attempt < summarizeOverflowAttempts {
+			if shrunk, ok := shrinkSummarizationHistory(history, overflow.keepFraction()); ok {
+				logging.WarnContext(ctx, "[COMPACTION] Summarizer refused the history as too long; retrying with the oldest turns omitted",
+					"chatID", chat.ID,
+					"thread", thread,
+					"model", definitionID(resolved.Definition),
+					"provider", resolved.ProviderDriver,
+					"attempt", attempt,
+					"promptTokens", overflow.Actual,
+					"limitTokens", overflow.Limit,
+					"messagesBefore", len(history),
+					"messagesAfter", len(shrunk))
+				history = shrunk
+				continue
+			}
+		}
 		return "", a.routing.providerFailure(ctx, fmt.Errorf("failed to generate summary: %w", err), usageLimitContext{
 			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: failover,
