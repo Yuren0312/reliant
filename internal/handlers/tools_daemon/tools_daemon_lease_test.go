@@ -43,6 +43,18 @@ import (
 // connect, renew on every heartbeat its receive loop reads, release — of its
 // own session's row only — on teardown.
 
+// leaseSettle bounds every wait in this file for the gateway's asynchronous
+// lease and state writes to land. They are prompt in production, but the
+// tests share a machine (and pgtest's Postgres) with every other test process,
+// and the fixed 2-3s waits these used timed out under load while the write
+// was still on its way: the renewal then failed against the dropped test
+// database after the test ended. None of these assertions is about speed:
+// "at once" below means "without waiting out a lease"
+// (daemon_registry.AttachmentStaleThreshold, 90s), so the bound stays well
+// under it, and a renewal stuck behind a parked state write never arrives
+// however long the wait.
+const leaseSettle = 30 * time.Second
+
 func heartbeatMsg(ts int64) *reliantv1.DaemonMessage {
 	return &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Heartbeat{
 		Heartbeat: &reliantv1.DaemonHeartbeat{Timestamp: ts},
@@ -100,7 +112,7 @@ func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
 		return p.String
 	}
 	beat()
-	require.Eventually(t, func() bool { return ports() == "[3000]" }, 3*time.Second, 20*time.Millisecond)
+	require.Eventually(t, func() bool { return ports() == "[3000]" }, leaseSettle, 20*time.Millisecond)
 
 	// The reaper deletes the lease while the stream is still held (it does
 	// so whenever no renewal landed for 15 minutes).
@@ -114,18 +126,18 @@ func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
 	require.Eventually(t, func() bool {
 		attached, err := repo.IsDaemonIDAttached(ctx, daemonID, daemon_registry.AttachmentStaleThreshold)
 		return err == nil && attached
-	}, 3*time.Second, 20*time.Millisecond,
+	}, leaseSettle, 20*time.Millisecond,
 		"a heartbeat read off a live stream must re-create the lease the reaper deleted; "+
 			"otherwise ListDaemons reports the daemon DISCONNECTED until it happens to reconnect")
 	require.Eventually(t, func() bool { return len(daemonListRefetches(t, hub)[userID]) > refetchesBefore },
-		3*time.Second, 20*time.Millisecond,
+		leaseSettle, 20*time.Millisecond,
 		"re-creating a lease must tell the owner's clients to re-read the daemon list; "+
 			"they were showing the machine disconnected and nothing else would correct them before the slow fallback poll")
 
 	// The re-created row starts with no detected ports; the next heartbeat
 	// must rewrite them even though the set did not change.
 	beat()
-	require.Eventually(t, func() bool { return ports() == "[3000]" }, 3*time.Second, 20*time.Millisecond,
+	require.Eventually(t, func() bool { return ports() == "[3000]" }, leaseSettle, 20*time.Millisecond,
 		"the re-created lease lost the daemon's detected ports and the unchanged set was never rewritten")
 }
 
@@ -189,7 +201,7 @@ func TestLeaseRenewalIsNotQueuedBehindStatePersistence(t *testing.T) {
 
 	stream.recv <- heartbeatMsg(time.Now().UnixMilli())
 
-	require.Eventually(t, func() bool { return repo.renewalCount() == 1 }, 2*time.Second, 10*time.Millisecond,
+	require.Eventually(t, func() bool { return repo.renewalCount() == 1 }, leaseSettle, 10*time.Millisecond,
 		"the heartbeat's lease renewal waited behind an unrelated state write; the lease "+
 			"must track the receive loop reading heartbeats, not the state worker's backlog")
 	repo.mu.Lock()
@@ -272,7 +284,7 @@ func TestServerHeartbeatAcknowledgesTheNewestDaemonHeartbeatRead(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		return newServerHeartbeat(conn, time.Now()).GetHeartbeat().GetAckedDaemonHeartbeat() == 2_000
-	}, 2*time.Second, 5*time.Millisecond, "the keepalive must acknowledge the newest daemon heartbeat read")
+	}, leaseSettle, 5*time.Millisecond, "the keepalive must acknowledge the newest daemon heartbeat read")
 }
 
 // ---------------------------------------------------------------------------
@@ -406,14 +418,16 @@ func TestHeartbeatRestoresAMissingLeaseAndDisconnectIsStillPrompt(t *testing.T) 
 	require.NoError(t, stream.Send(heartbeatMsg(time.Now().UnixMilli())))
 	require.Eventually(t, func() bool {
 		return registryStatus(t, registry, userID, daemonID) == reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE
-	}, 3*time.Second, 20*time.Millisecond,
+	}, leaseSettle, 20*time.Millisecond,
 		"the daemon's keepalive did not restore its missing lease; the registry keeps reporting a serving daemon as DISCONNECTED")
 
 	// The daemon goes away for real: reported without waiting out a lease.
+	// The wait must be too short for a lease to expire, or it proves nothing.
+	require.Less(t, leaseSettle, daemon_registry.AttachmentStaleThreshold/2)
 	require.NoError(t, stream.CloseRequest())
 	require.Eventually(t, func() bool {
 		return registryStatus(t, registry, userID, daemonID) == reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED
-	}, 3*time.Second, 20*time.Millisecond, "a real disconnect must still release the (re-created) lease at once")
+	}, leaseSettle, 20*time.Millisecond, "a real disconnect must still release the (re-created) lease at once")
 }
 
 // livenessDownRepo lists the user's daemon but cannot read the lease table.
