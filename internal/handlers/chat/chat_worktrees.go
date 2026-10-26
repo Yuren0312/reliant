@@ -12,10 +12,10 @@ import (
 // worktreeSummaryToProto is the part of a worktree a chat list renders.
 func worktreeSummaryToProto(w *db.Worktree) *reliantv1.WorktreeSummary {
 	out := &reliantv1.WorktreeSummary{
-		Id:     w.ID,
-		Name:   w.Name,
-		Branch: w.Branch,
-		Path:   w.Path,
+		Id:        w.ID,
+		Name:      w.Name,
+		Branch:    w.Branch,
+		Path:      w.Path,
 		IsMain:    w.IsMain,
 		Status:    reliantv1.WorktreeStatus(w.Status),
 		ProjectId: w.ProjectID,

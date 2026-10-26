@@ -387,6 +387,13 @@ func TestDaemonStaysActiveWhenTheOldReplicaTearsDownAfterAReconnect(t *testing.T
 		"the old replica's teardown deleted the lease of the session now serving on another replica")
 }
 
+// leasePromptWithin bounds "at once" for a lease write or release that rides a
+// stream event. Each step is a few DB round trips plus a goroutine handoff, so
+// it is milliseconds on an idle machine; the bound is what a heavily loaded
+// gate host needs (3s timed out there), and still nothing like the
+// 15-minute daemonstate.AttachmentTTL that "waiting out the lease" would take.
+const leasePromptWithin = 15 * time.Second
+
 // The fence must not cost the ordinary case: a lease a heartbeat re-created is
 // still this session's, and a real disconnect releases it at once rather than
 // leaving a serving-looking lease to expire.
@@ -406,14 +413,14 @@ func TestHeartbeatRestoresAMissingLeaseAndDisconnectIsStillPrompt(t *testing.T) 
 	require.NoError(t, stream.Send(heartbeatMsg(time.Now().UnixMilli())))
 	require.Eventually(t, func() bool {
 		return registryStatus(t, registry, userID, daemonID) == reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE
-	}, 3*time.Second, 20*time.Millisecond,
+	}, leasePromptWithin, 20*time.Millisecond,
 		"the daemon's keepalive did not restore its missing lease; the registry keeps reporting a serving daemon as DISCONNECTED")
 
 	// The daemon goes away for real: reported without waiting out a lease.
 	require.NoError(t, stream.CloseRequest())
 	require.Eventually(t, func() bool {
 		return registryStatus(t, registry, userID, daemonID) == reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED
-	}, 3*time.Second, 20*time.Millisecond, "a real disconnect must still release the (re-created) lease at once")
+	}, leasePromptWithin, 20*time.Millisecond, "a real disconnect must still release the (re-created) lease at once")
 }
 
 // livenessDownRepo lists the user's daemon but cannot read the lease table.
