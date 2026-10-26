@@ -6,8 +6,9 @@
  * (selectChat marks it read, subscribes the update stream to it and loads its
  * plan). The mobile surface names the chat on screen in its route, so that
  * remembered chat is one the user is not looking at; it passes
- * `restoreWorkspace: false`, and the switch is then the project and its chats
- * only — no worktree / chat RPCs, no chat selected behind the user's back.
+ * `restoreWorkspace: false`, and the switch is then the project only — no
+ * worktree / chat RPCs, no chat selected behind the user's back. (The chat
+ * list is not reloaded either way: it spans every project, not the context.)
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project } from "../projectStore";
@@ -66,11 +67,11 @@ describe("selectProject workspace restore", () => {
     expect(selectChat).toHaveBeenCalledWith(expect.objectContaining({ id: rememberedChat.id }));
   });
 
-  it("with restoreWorkspace: false, switches the project and loads its chats only", async () => {
+  it("with restoreWorkspace: false, switches the project only", async () => {
     await useProjectStore.getState().selectProject(to, { restoreWorkspace: false });
 
     expect(useProjectStore.getState().currentProject?.id).toBe(to.id);
-    expect(loadChats).toHaveBeenCalledTimes(1);
+    expect(loadChats).not.toHaveBeenCalled();
     expect(restoreLastWorktree).not.toHaveBeenCalled();
     expect(selectChat).not.toHaveBeenCalled();
   });
