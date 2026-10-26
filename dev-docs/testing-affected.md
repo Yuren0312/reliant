@@ -72,6 +72,21 @@ what it left out as `deferred`. The merge gate runs that mode
 (`dev-docs/merge-and-release-gates.md`). The default, `-reach all`, is the full
 closure described below.
 
+**Reach.** `-reach all` (the default, `task test:affected`) runs every Go
+package whose test binary contains a change and every vitest file whose import
+closure does. `-reach direct` (the merge gate) runs the changed Go packages and
+their direct importers, and the vitest files within two import edges of a
+changed module (one edge for a hub, a module more than 60 test files reach in
+two, and for every module when together they reach more than 150 at two:
+`web.edges`); the rest are listed in the plan as `deferred` and run in the release
+gate (dev-docs/merge-and-release-gates.md). The plan's `go.build` lists every
+package whose build contains a change, for the merge gate's compile check.
+
+**`run` options.** `-plan <file>` runs a plan an earlier `plan -json` wrote
+instead of computing one. `-test-budget auto|<duration>` times every Go test
+(`go test -json`) and fails one the diff adds or edits that runs over the
+budget, reporting the others (budget.go).
+
 Knobs (environment): `TEST_BASE=<rev>` moves the diff base (a stacked branch),
 `TEST_FULL=1` runs every lane in full; `task test:affected LANES=go,web` picks
 lanes. For other
@@ -102,11 +117,11 @@ rule claims and no Go package owns runs **everything** (fail-safe).
 | `go.mod`, `go.sum`, `tools/tools.go` | **Go: full** (`go.mod`/`go.sum` also run forge-generate and docs-generate) |
 | `package.json`, lockfiles at the root | **web and electron: full** |
 | `frontends/web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `frontends/web/src/test/setup.ts` | **web: full** |
-| `buf*.yaml` | **everything: full** |
+| `buf*.yaml` (root) | forge-generate only: the code it generates is in the diff and selects its own tests, or the no-op check fails |
 | `Taskfile.yml` | **forge-generate and docs-generate: full** (the tasks they run); the test lanes do not run through the Taskfile |
 | `forge.yaml` (the forge pin) | Go and forge-generate: full |
 | `proto/**` that is not a `.proto` | **Go and web: full** |
-| a deleted web module | **web: full** (its importers can no longer be found) |
+| a deleted web module | the vitest files that still reach it (the graph resolves specifiers against the base tree's files too); its importers changed too and select their own |
 | anything else | **everything: full** |
 
 **npm lockfiles.** Every lane tests against the `node_modules` already on disk,
