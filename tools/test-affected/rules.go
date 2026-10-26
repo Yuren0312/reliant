@@ -84,7 +84,25 @@ var forgeHookOf = map[string]string{
 	"tools/integrationgen":                                "integrations",
 }
 
+// forgeInputsExcept are paths under forgeInputs that forge generate neither
+// reads nor writes: a handler package's hand-written tests. forge scans a
+// handler package's non-test files for the rpcs already implemented
+// (codegen.ScanExistingMethods skips _test.go), and of its tests reads only
+// its own one-shot scaffold tests, to warn when one names a pb type that no
+// longer exists (a warning, never a write). The tests it generates
+// (*_gen_test.go) stay inputs: a hand edit to one is drift. A handler test
+// fix selected the whole forge generate, ~5 minutes on the loaded host.
+var forgeInputsExcept = []string{"internal/handlers/**/*_test.go"}
+
 func isForgeInput(p string) bool {
+	if strings.HasSuffix(p, "_gen_test.go") {
+		return true
+	}
+	for _, pat := range forgeInputsExcept {
+		if matchGlob(pat, p) {
+			return false
+		}
+	}
 	for _, pat := range forgeInputs {
 		if matchGlob(pat, p) {
 			return true

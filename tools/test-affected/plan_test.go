@@ -268,7 +268,7 @@ func TestForgeInputsRunForgeGenerate(t *testing.T) {
 		"proto/reliant/v1/chat.proto", "db/migrations/20261101000000_x.up.sql", "internal/vault/contract.go",
 		"internal/vault/doc.go", "internal/handlers/chat/rpc_send.go", "internal/vault/mock_gen.go",
 		"gen/forge_descriptor.json", "deploy/observability/x.json", ".forge/hashes.json",
-		"forge.yaml", "go.mod",
+		"forge.yaml", "go.mod", "internal/handlers/chat/handlers_crud_ops_gen_test.go",
 	} {
 		pl := classify(p)
 		if !pl.ForgeGen.Full {
@@ -278,8 +278,17 @@ func TestForgeInputsRunForgeGenerate(t *testing.T) {
 			t.Errorf("%s: the reason must name the path: %v", p, pl.ForgeGen.Reasons)
 		}
 	}
-	for _, p := range []string{"internal/leaf/leaf.go", "frontends/web/src/lib/leaf.ts", "electron/src/menu-shortcuts.js", "docs/x.md", ".github/workflows/ci.yml"} {
-		if pl := classify(p); pl.ForgeGen.Full {
+	// A handler package's hand-written tests: forge reads none of them.
+	g := testGraph()
+	chat := mod + "/internal/handlers/chat"
+	g.DirPkg["internal/handlers/chat"] = chat
+	g.TestDeps[chat] = map[string]bool{chat: true}
+	for _, f := range []string{"rpc_send_test.go", "handlers_scaffold_send_test.go"} {
+		g.Files["internal/handlers/chat/"+f] = FileInfo{Pkg: chat, Kind: KindTest}
+	}
+	for _, p := range []string{"internal/leaf/leaf.go", "frontends/web/src/lib/leaf.ts", "electron/src/menu-shortcuts.js", "docs/x.md", ".github/workflows/ci.yml",
+		"internal/handlers/chat/rpc_send_test.go", "internal/handlers/chat/handlers_scaffold_send_test.go"} {
+		if pl := classifyIn(g, p); pl.ForgeGen.Full {
 			t.Errorf("%s is not a forge input: forge-generate must not run (%v)", p, pl.ForgeGen.Reasons)
 		}
 	}
