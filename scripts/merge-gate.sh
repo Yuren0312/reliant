@@ -34,14 +34,19 @@
 #              them, so this is the only phase that sees a test's type error
 #   lint       forge lint's own lanes (named; no golangci-lint or buf lint, which
 #              the release gate runs) --scope <changed dirs>, a pin move included;
-#              re-run on the amended tree whenever a generator rewrote it, and
-#              that run is the verdict (lint reads generated files such as
-#              gen/forge_descriptor.json, so the first run judged a stale tree)
+#              like build and test it starts after the generators in --amend
+#              mode, so it reads the amended tree (lint reads generated files
+#              such as gen/forge_descriptor.json)
 #   migsafety  forge lint --migration-safety, only when a migration changed
 #   migorder   every migration is versioned above origin/main's newest (fetched
 #              first, fail closed), only when a migration changed
-# generate and docs run first, because they can change the tree the others
-# judge; build, test, typecheck, lint and migsafety then run at the same time.
+# When the gate may rewrite the tree it judges (--amend, or a dirty tree),
+# generate and docs run FIRST, in place, and only then do build, test,
+# typecheck, lint and migsafety run, at the same time, on the regenerated tree:
+# a stale generated file (a mock the merge left a step behind) must never be
+# built and tested before the regenerate that fixes it. On a clean tree without
+# --amend the generators cannot change what is judged, so they run in scratch
+# checkouts beside the other phases.
 #
 # The whole gate holds ONE host heavy slot (forge slot run), taken here; every
 # phase nests inside it and never queues again. Its phases share a CPU budget
@@ -57,7 +62,7 @@ while [ $# -gt 0 ]; do
     --base) base=$2; shift 2 ;;
     --amend) amend=1; shift ;;
     --regen) regen=1; shift ;;
-    -h|--help) sed -n '2,50p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,55p' "$0"; exit 0 ;;
     *) echo "merge-gate: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -84,10 +89,8 @@ slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
 # never less than half the machine (a floor of twice a slot's share measured
 # slower: lint's contract lane alone ran 75s at GOMAXPROCS=2 against 41s for
 # all its lanes uncapped, on a host where every other job takes all 32), and
-# each concurrent phase a part of
-# that: the test phase (the longest) half for Go and half for vitest, the
-# others a quarter. MG_CPUS=<n>
-# overrides the budget.
+# each concurrent phase a part of that: the test phase (the longest) half for
+# Go and half for vitest, the others a quarter. MG_CPUS=<n> overrides it.
 cpus=$(nproc 2>/dev/null || echo 4)
 load=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null | cut -d. -f1); load=${load:-0}
 share=$(( cpus / 2 )); [ "$share" -ge 4 ] || share=4
@@ -129,9 +132,9 @@ snapshot() {
 }
 # judge <phase> <snapshot before> <checkout>: did the generator change <checkout>?
 # Writes $L/<phase>.changed (the paths) and $L/<phase>.wt (where). In --amend
-# mode a change confined to generated paths passes, and is copied into the
-# gate's own tree and amended once every phase has finished (never while build
-# and test are reading it); anything else fails the phase.
+# mode a change confined to generated paths passes (the generators ran in the
+# gate's own tree, which is amended into HEAD before build and test start);
+# anything else fails the phase.
 judge() {
   local n=$1 before=$2 wt=$3 changed bad
   changed=$(cd "$wt" && diff <(printf '%s\n' "$before") <(snapshot) | awk -F'\t' '/^[<>] / { print substr($1, 3) }' | sort -u | grep -v '^$' | grep -v '\(^\|/\)node_modules$' || true)
@@ -171,6 +174,7 @@ scratch() {
   done
   return 0
 }
+commit_amend() { git add -A && git -c user.name="${GIT_AUTHOR_NAME:-reliant-merge-gate}" -c user.email="${GIT_AUTHOR_EMAIL:-merge-gate@reliantlabs.io}" commit -q --amend --no-edit --no-verify; }
 cleanup() { local wt; for wt in "${scratches[@]}"; do git worktree remove --force "$wt" >/dev/null 2>&1; done; }
 scratches=()
 trap cleanup EXIT
@@ -260,18 +264,46 @@ for d in $(printf '%s\n' "${need[@]}" | sort -u); do
 done
 for p in "${npm_pids[@]}"; do wait "$p" || fail=1; done
 
-# ── generate ‖ docs ‖ build ‖ test ‖ typecheck ‖ lint ‖ migsafety ──────────
-# A clean tree (the merge queue's case) runs the generators in scratch
-# checkouts, so every phase runs at once. A dirty one runs them in place,
-# first, because a scratch checkout of HEAD would not see your edits.
-inplace=0; [ -n "$(git status --porcelain)" ] && inplace=1
+# ── generate → docs, then build ‖ test ‖ typecheck ‖ lint ‖ migsafety ──────
+# Where a generator's output becomes the tree the other phases judge, it runs
+# first, in place: in --amend mode (the merge queue's: a regenerate is folded
+# into the squash, so build and test must judge the regenerated tree, never
+# the stale one the merge left), and in a dirty tree (a scratch checkout of
+# HEAD would not see your edits). The phases that read the tree start only
+# once the generators are done and, with --amend, their output is committed.
+# This costs generate's wall time only when generate is selected at all.
+#
+# Otherwise (a clean tree without --amend) a regenerate cannot change what is
+# judged — any change fails the generate phase — so the generators run in
+# scratch checkouts and every phase runs at once.
+inplace=0; { [ "$amend" = 1 ] || [ -n "$(git status --porcelain)" ]; } && inplace=1
 pids=()
-# A generator beside the other phases gets a quarter of the budget; one that
-# runs first, alone (a dirty tree), all of it.
+# A generator running first and alone gets the whole budget; one beside the
+# other phases (in a scratch checkout), a quarter.
 gen_procs=$quarter; [ "$inplace" = 1 ] && gen_procs=$gate_cpus
+# The plan build and test run: the plan phase's, unless --amend folded a
+# regenerate into HEAD (below), which can change what the diff reaches.
+# gate-verify still judges the obligations against plan.json.
+run_plan=$L/plan.json
 if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   [ "$fgen" = true ] && { phase generate gen_forge "$root" || fail=1; }
   [ "$fail" = 0 ] && [ "$dgen" = true ] && { phase docs gen_docs "$root" || fail=1; }
+  # --amend: fold what the generators rewrote (judge allowed generated paths
+  # only) into HEAD before anything builds or tests it.
+  if [ "$amend" = 1 ] && [ "$fail" = 0 ] && [ -n "$(git status --porcelain)" ]; then
+    commit_amend || fail=1
+    notes+=("regenerated before build and test: they judged the amended tree")
+    if [ "$fail" = 0 ]; then
+      phase plan-2 go run ./tools/test-affected plan -json -reach "$reach" -base "$base" || fail=1
+      sed -n '/^{/,$p' "$L/plan-2.log" >"$L/plan-2.json"; run_plan=$L/plan-2.json
+    fi
+    # A regenerate that rewrote web sources (src/gen, the shortcuts data)
+    # type-checks them, even when the branch itself touched no web.
+    if [ "$fail" = 0 ] && [ "$typecheck" != true ] && cat "$L"/*.changed 2>/dev/null | grep -q '^frontends/web/'; then
+      typecheck=true
+      npm_install . && npm_install frontends/web || fail=1
+    fi
+  fi
 elif [ "$fail" = 0 ]; then
   if [ "$fgen" = true ]; then
     if scratch gen; then phase generate gen_forge "$SCRATCH" & pids+=($!); else fail=1; fi
@@ -282,60 +314,45 @@ elif [ "$fail" = 0 ]; then
 fi
 # build_check: compile, without linking, every package whose build contains a
 # change. `go build ./...` also linked every main package of the module (the
-# server, the CLI, a dozen generators: most of its 100-800s); the link check
-# runs in the release gate's build. A full Go lane (a pin moved) compiles
-# ./... . go list -export compiles each package for its export data and exits
-# non-zero naming any that does not compile.
+# server, the CLI, a dozen generators): 41s with every package already
+# compiled, against 6s for this; the link check runs in the release gate's
+# build. A full Go lane (a pin moved) compiles ./... . go list -export compiles
+# each package for its export data and exits non-zero naming any that does not
+# compile, main packages included.
 build_check() {
   local pkgs
-  if [ "$gofull" = true ]; then pkgs=(./...); else mapfile -t pkgs < <(j '.go.build // [] | .[]'); fi
+  if [ "$gofull" = true ]; then pkgs=(./...); else mapfile -t pkgs < <(jq -r '.go.build // [] | .[]' "$run_plan"); fi
   if [ ${#pkgs[@]} -eq 0 ]; then echo "build: no Go package's build contains a change"; return 0; fi
   echo "build: compiling ${pkgs[*]:0:20}$([ ${#pkgs[@]} -gt 20 ] && echo " ... (${#pkgs[@]} packages)")"
   # Errors go to stderr; the package list on stdout is noise.
   GOMAXPROCS=$quarter go list -export "${pkgs[@]}" >/dev/null
 }
-run_checks() {
-  local sfx=${1:-} plan_arg=(-plan "$L/plan.json")
-  # After --amend rewrote code the plan is stale: plan again.
-  [ -n "$sfx" ] && plan_arg=(-reach "$reach" -base "$base")
-  phase "build$sfx" build_check & pids+=($!)
-  phase "test$sfx" env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
-    go run ./tools/test-affected run "${plan_arg[@]}" -lanes go,web,electron -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
-  if [ "$typecheck" = true ]; then
-    phase "typecheck$sfx" scripts/web-typecheck.sh & pids+=($!)
-  fi
-}
-# lint reads generated files (gen/forge_descriptor.json for db-grants, among
-# others), so a run beside a generator judges the tree the generator is about to
-# rewrite. Its verdict is therefore held until the generators finish: when they
-# rewrote nothing it stands; when --amend folds a rewrite in, lint runs again on
-# the amended tree and that run is the verdict.
-#
-# The merge tier runs forge's own lanes, named, over the changed directories;
-# golangci-lint, buf lint and the whole-project and deploy lanes run in the
-# release gate's unscoped `forge lint`. Measured on one loaded host, the same
-# two-directory scope: every default lane 331s (golangci the bulk; 405s
-# average, 2735s unscoped on a pin move, in the merge queue), these lanes 41s.
-# A pin move no longer unscopes it: what a new forge or module version breaks
-# across the module is the release gate's to find; the regenerated files a
-# pin bump commits are in the diff, so they are in scope here.
+# The merge tier runs forge lint's own lanes, named, over the changed
+# directories; golangci-lint, buf lint and the whole-project and deploy lanes
+# run in the release gate's unscoped `forge lint`. Measured on one loaded host,
+# the same two-directory scope: every default lane 331s (golangci the bulk;
+# 405s average, 2735s unscoped on a pin move, in the merge queue), these lanes
+# 41s. A pin move no longer unscopes it: what a new forge or module version
+# breaks across the module is the release gate's to find; the regenerated
+# files a pin bump commits are in the diff, so they are in scope here.
 lint_lanes=(--contract --conventions --generated-drift --go-markers --proto-markers
   --create-nullability --computed-fields --read-only-fields --db-grants
   --column-markers --closed-sets --tracing --guarded-fields)
-lint_cmd=() lint_pid= lint_deferred=0
-# One awk, not a dirname per file: forking hundreds of processes on a
-# loaded host delayed lint's start by over a minute.
-scope=$(echo "$files" | awk -F/ 'NF > 1 { NF--; print }' OFS=/ | sort -u | while read -r d; do [ -d "$d" ] && echo "$d"; done | paste -sd, -)
-if [ -n "$scope" ]; then
-  notes+=("lint: forge's own lanes over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s); golangci-lint and buf lint run in the release gate")
-  lint_cmd=(env GOMAXPROCS="$quarter" "${forge[@]}" lint --quiet --no-fix --skip-frontends --scope "$scope" "${lint_lanes[@]}")
-else
-  notes+=("lint: not run (only root files changed; the release gate lints the module)")
-fi
 if [ "$fail" = 0 ]; then
-  run_checks
-  if [ ${#lint_cmd[@]} -gt 0 ]; then
-    phase lint "${lint_cmd[@]}" & lint_pid=$!
+  phase build build_check & pids+=($!)
+  phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
+    go run ./tools/test-affected run -plan "$run_plan" -lanes go,web,electron -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
+  if [ "$typecheck" = true ]; then
+    phase typecheck scripts/web-typecheck.sh & pids+=($!)
+  fi
+  # One awk, not a dirname per file: forking hundreds of processes on a
+  # loaded host delayed lint's start by over a minute.
+  scope=$(echo "$files" | awk -F/ 'NF > 1 { NF--; print }' OFS=/ | sort -u | while read -r d; do [ -d "$d" ] && echo "$d"; done | paste -sd, -)
+  if [ -n "$scope" ]; then
+    notes+=("lint: forge's own lanes over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s); golangci-lint and buf lint run in the release gate")
+    phase lint env GOMAXPROCS="$quarter" "${forge[@]}" lint --quiet --no-fix --skip-frontends --scope "$scope" "${lint_lanes[@]}" & pids+=($!)
+  else
+    notes+=("lint: not run (only root files changed; the release gate lints the module)")
   fi
   if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
     phase migsafety "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
@@ -347,63 +364,11 @@ if [ "$fail" = 0 ]; then
     phase migorder go run ./tools/test-affected migration-order & pids+=($!)
   fi
   for p in "${pids[@]}"; do wait "$p" || fail=1; done
-  if [ -n "$lint_pid" ] && ! wait "$lint_pid"; then
-    # A failure stands unless a generator rewrote the tree lint read and
-    # --amend will fold that in: then the re-run below decides.
-    if [ "$amend" = 1 ] && ls "$L"/*.changed >/dev/null 2>&1; then lint_deferred=1; else fail=1; fi
-  fi
 fi
-lint_rerun() {
-  lint_deferred=0
-  [ ${#lint_cmd[@]} -gt 0 ] || return 0
-  [ -f "$L/lint.log" ] && mv "$L/lint.log" "$L/lint.pre-amend.log"
-  notes+=("lint: ran again on the amended tree (a generator rewrote files it reads)")
-  phase lint "${lint_cmd[@]}" & pids+=($!)
-}
-# --amend: fold what the generators rewrote (generated paths only) into HEAD.
-# build and test judged the tree before it; when the regenerated files include
-# code, run them again on the amended tree.
-if [ "$amend" = 1 ] && [ "$fail" = 0 ]; then
-  for n in generate docs; do
-    [ -f "$L/$n.changed" ] || continue
-    wt=$(cat "$L/$n.wt"); [ "$wt" = "$root" ] && continue
-    while IFS= read -r f; do
-      if [ -e "$wt/$f" ]; then mkdir -p "$(dirname "$f")" && cp -p "$wt/$f" "$f"; else rm -f "$f"; fi
-    done <"$L/$n.changed"
-  done
+# --amend: a failed gate leaves no half-regenerated tree behind.
+if [ "$amend" = 1 ] && [ "$fail" != 0 ] && [ -n "$(git status --porcelain)" ]; then
+  git reset -q --hard; git clean -fdq
 fi
-commit_amend() { git add -A && git -c user.name="${GIT_AUTHOR_NAME:-reliant-merge-gate}" -c user.email="${GIT_AUTHOR_EMAIL:-merge-gate@reliantlabs.io}" commit -q --amend --no-edit --no-verify; }
-if [ "$amend" = 1 ] && [ -n "$(git status --porcelain)" ]; then
-  if [ "$fail" = 0 ]; then
-    # The docs generators compile what generate just rewrote: re-judge them,
-    # in place and before the re-check (they may rewrite code too).
-    if [ "$dgen" = true ] && grep -qE '\.(go|proto)$' "$L/generate.changed" 2>/dev/null; then
-      rm -f "$L/docs.changed"; b=$(snapshot)
-      phase docs-2 bash -c "task generate:docs" || fail=1
-      [ "$fail" = 0 ] && { judge docs "$b" "$root" || fail=1; }
-    fi
-    if [ "$fail" = 0 ]; then
-      commit_amend
-      pids=()
-      lint_rerun
-      if cat "$L"/*.changed 2>/dev/null | grep -qE '\.(go|ts|tsx|proto)$'; then
-        notes+=("regenerated code: build and test ran again on the amended tree")
-        # A regenerate that rewrote web sources (src/gen, the shortcuts
-        # data) type-checks them, even when the branch itself touched no web.
-        if [ "$typecheck" != true ] && cat "$L"/*.changed 2>/dev/null | grep -q '^frontends/web/'; then
-          typecheck=true
-          npm_install . && npm_install frontends/web || fail=1
-        fi
-        run_checks -2
-      fi
-      for p in "${pids[@]}"; do wait "$p" || fail=1; done
-    fi
-  fi
-  [ "$fail" = 0 ] || { git reset -q --hard; git clean -fdq; }
-fi
-# A lint failure held for a re-run that never happened (nothing was amended)
-# stands: a held verdict is never a pass.
-[ "$lint_deferred" = 1 ] && fail=1
 [ -f "$L/notes" ] && while IFS= read -r n; do notes+=("$n"); done <"$L/notes"
 
 # ── fail closed: every phase the plan selected must have COMPLETED ────────
@@ -425,7 +390,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan npm-r npm-frontends-web npm-electron npm-tools-protoc-gen-es generate docs build test typecheck lint migsafety migorder build-2 test-2 typecheck-2 docs-2; do
+  for f in plan npm-r npm-frontends-web npm-electron npm-tools-protoc-gen-es generate docs plan-2 build test typecheck lint migsafety migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"
