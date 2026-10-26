@@ -63,7 +63,7 @@ const chats: Array<Record<string, unknown>> = ["chat-1", "chat-2", "chat-3"].map
 
 vi.mock("../../../hooks/chat-queries", () => ({
   useChatListWithWorkspaces: () => ({
-    data: { chats, lastUserUpdateSequence: 0, mainWorktree: undefined },
+    data: { chats, lastUserUpdateSequence: 0, mainWorktrees: [] },
     isLoading: false,
   }),
   useArchivedChats: () => ({ data: [], isFetched: true }),

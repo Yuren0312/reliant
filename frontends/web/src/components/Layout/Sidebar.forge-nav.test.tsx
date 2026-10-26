@@ -43,7 +43,7 @@ vi.mock("../../hooks/useDebounce", () => ({ useDebounce: <T,>(value: T) => value
 
 vi.mock("../../hooks/chat-queries", () => ({
   useChatListWithWorkspaces: () => ({
-    data: { chats: [], lastUserUpdateSequence: 0, mainWorktree: undefined },
+    data: { chats: [], lastUserUpdateSequence: 0, mainWorktrees: [] },
     isLoading: false,
   }),
   useArchivedChats: () => ({ data: [], isFetched: true }),
