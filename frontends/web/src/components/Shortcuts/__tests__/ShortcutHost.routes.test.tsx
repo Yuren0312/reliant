@@ -110,6 +110,8 @@ const WORKSPACE_HANDLERS = Object.entries(OFF_WORKSPACE)
 let workspace: Record<string, ReturnType<typeof vi.fn>>;
 let workspaceReady = true;
 let setWorkspaceReady: (ready: boolean) => void = () => {};
+/** A chat is open: the workspace shows a conversation, as ChatInterface marks it. */
+let chatOpen = false;
 
 function Workspace() {
   const [ready, setReady] = useState(workspaceReady);
@@ -118,7 +120,12 @@ function Workspace() {
     { handlers: workspace as unknown as ShortcutHandlers, workspace: true },
     ready,
   );
-  return <div data-testid="workspace">workspace</div>;
+  return (
+    <div data-testid="workspace">
+      workspace
+      {chatOpen && <div data-context="chat-view" />}
+    </div>
+  );
 }
 
 function SettingsPage() {
@@ -204,6 +211,7 @@ const CMD_SHIFT_P = { key: "p", code: "KeyP", metaKey: true, shiftKey: true };
 /** New chat in a browser tab (Cmd+T belongs to the browser). Option+N is a dead key. */
 const NEW_CHAT_WEB = { key: "Dead", code: "KeyN", metaKey: true, altKey: true };
 const CMD_J = { key: "j", code: "KeyJ", metaKey: true };
+const CMD_F = { key: "f", code: "KeyF", metaKey: true };
 
 const PROJECT: Project = {
   id: "p1",
@@ -231,6 +239,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
   setSurface({ electron: false });
   workspaceReady = true;
+  chatOpen = false;
   workspace = Object.fromEntries(WORKSPACE_HANDLERS.map((name) => [name, vi.fn()]));
   useShortcutsStore.setState({
     shortcuts: {},
@@ -343,12 +352,13 @@ describe("on /settings", () => {
     await waitFor(() => expect(workspace.onFocusTerminal).toHaveBeenCalledOnce());
   });
 
-  it("searches chat history, not a conversation that is not on screen", async () => {
+  it("leaves Cmd+F to the browser's find with no conversation on screen", async () => {
     await mountAt("/settings");
 
-    press({ key: "f", code: "KeyF", metaKey: true });
+    const event = press(CMD_F);
 
-    expect((await screen.findByTestId("chat-search")).dataset.mode).toBe("history");
+    expect(event.defaultPrevented).toBe(false);
+    expect(screen.queryByTestId("chat-search")).not.toBeInTheDocument();
   });
 
   it("leaves Escape and Cmd+Enter to the page", async () => {
@@ -470,6 +480,25 @@ describe("in the workspace", () => {
 
     act(() => setWorkspaceReady(true));
     await waitFor(() => expect(workspace.onNewChat).toHaveBeenCalledOnce());
+  });
+
+  it("searches the conversation on screen with Cmd+F", async () => {
+    chatOpen = true;
+    await mountAt("/project/p1");
+
+    const event = press(CMD_F);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect((await screen.findByTestId("chat-search")).dataset.mode).toBe("current");
+  });
+
+  it("leaves Cmd+F to the browser on a project with no chat open", async () => {
+    await mountAt("/project/p1");
+
+    const event = press(CMD_F);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(screen.queryByTestId("chat-search")).not.toBeInTheDocument();
   });
 
   it("always runs the newest closure, without re-registering", async () => {

@@ -19,7 +19,11 @@ import { api } from "../api/client";
 import { logger } from "../lib/logger";
 import { isPackagedRendererOrigin } from "../lib/protocol";
 import { parseBinding } from "../lib/keyboard/chord";
-import { detectPlatform, type KeyboardPlatform } from "../lib/keyboard/platform";
+import {
+  detectPlatform,
+  formatBinding,
+  type KeyboardPlatform,
+} from "../lib/keyboard/platform";
 import { getReservation, type Reservation } from "../lib/keyboard/reserved";
 import { ShortcutRegistry, type ResolvedShortcut } from "../lib/keyboard/registry";
 import { defaultShortcuts } from "./shortcutsData.generated";
@@ -110,6 +114,43 @@ export function effectiveBinding(
     return surfaceDefault;
   }
   return override;
+}
+
+/**
+ * A shortcut's binding as the user should see it on this surface ("⌘⌥N" in a
+ * Mac browser, "⌘T" in the desktop app), or "" when it is unbound.
+ *
+ * The one way to put a binding in front of the user. A literal "Cmd+T" in a
+ * tooltip is the desktop chord, and in a browser it opens a browser tab instead
+ * (shortcutLabels.test.ts rejects them).
+ */
+export function shortcutLabel(
+  shortcut: Pick<
+    ShortcutDefinition,
+    "currentBinding" | "defaultBinding" | "defaultWebBinding"
+  >,
+  platform: KeyboardPlatform = detectPlatform(),
+): string {
+  const authored = effectiveBinding(shortcut, platform);
+  if (!authored) return "";
+  return formatBinding(parseBinding(authored, platform.isMac), platform.isMac);
+}
+
+/**
+ * The live label for a shortcut id: follows remaps, and is "" until shortcuts
+ * load. Falls back to the generated default so a label never waits on the
+ * backend to say something true.
+ */
+export function useShortcutLabel(id: string): string {
+  const shortcut = useShortcutsStore((state) => state.shortcuts[id]);
+  if (shortcut) return shortcutLabel(shortcut);
+  const fallback = defaultShortcuts[id];
+  return fallback ? shortcutLabel({ ...fallback, currentBinding: null }) : "";
+}
+
+/** "Close tab (⌘K then X)" — a tooltip with its shortcut, when it has one. */
+export function withShortcut(text: string, label: string): string {
+  return label ? `${text} (${label})` : text;
 }
 
 /**
