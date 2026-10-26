@@ -75,6 +75,12 @@ interface NewChatViewProps {
    */
   heading?: ReactNode;
   welcomePanel?: ReactNode;
+  /**
+   * Show the project chip (the chat window's global New chat picks a project
+   * and lets the user change it). Off for a host whose chat belongs to one
+   * thing already, like the workflow editor's.
+   */
+  showProjectChip?: boolean;
 }
 
 export function NewChatView({
@@ -85,6 +91,7 @@ export function NewChatView({
   composerPrefill,
   heading,
   welcomePanel,
+  showProjectChip = false,
 }: NewChatViewProps) {
   const [isCreating, setIsCreating] = useState(false);
   // The message being sent while StartChat is in flight (PendingFirstMessage).
@@ -413,7 +420,7 @@ export function NewChatView({
               >
                 {/* The project the chat starts in: the global New chat picks
                     it (filter, open chat, last used); change it here. */}
-                <NewChatProjectChip disabled={isCreating} />
+                {showProjectChip && <NewChatProjectChip disabled={isCreating} />}
 
                 {canPickMachine && (
                   <MachinePicker
