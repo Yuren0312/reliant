@@ -2,6 +2,8 @@
 package main
 
 import (
+	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -213,6 +215,10 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 		{"frontends/web/src/test/setup.ts", []lane{laneWeb}},
 		{"package-lock.json", []lane{laneWeb, laneElectron}},
 		{"proto/buf.yaml", []lane{laneGo, laneWeb, laneForgeGen}},
+		// buf's root configuration reaches tests only through the code it
+		// generates, which the diff carries (or forge-generate fails).
+		{"buf.yaml", []lane{laneForgeGen}},
+		{"buf.gen.controlplane.yaml", []lane{laneForgeGen}},
 	}
 	for _, tc := range cases {
 		pl := classify(tc.path)
@@ -432,14 +438,155 @@ func TestWebTreeWalkersRunOnAnySourceChange(t *testing.T) {
 	}
 }
 
-func TestWebDeletedModuleForcesFullWeb(t *testing.T) {
-	pl := Classify([]Change{{Path: "frontends/web/src/lib/leaf.ts", Deleted: true}}, testGraph())
-	if !pl.Web.Full {
-		t.Fatal("a deleted module has no graph position left: run every web test")
+// TestBuildIsEveryPackageWhoseBuildContainsAChange pins the build phase's
+// set: every package compiling a changed one, at any distance and whatever
+// the test reach (a deferred package must still fail to COMPILE before the
+// merge), and nothing a test-only change cannot affect.
+func TestBuildIsEveryPackageWhoseBuildContainsAChange(t *testing.T) {
+	pkg := func(n string) string { return mod + "/" + n }
+	g := testGraph()
+	set := func(p string, deps ...string) {
+		g.BuildDeps[pkg(p)] = map[string]bool{pkg(p): true}
+		for _, d := range deps {
+			g.BuildDeps[pkg(p)][pkg(d)] = true
+		}
+	}
+	set("internal/leaf")
+	set("internal/mid", "internal/leaf")
+	set("cmd/app", "internal/mid", "internal/leaf")
+	set("internal/other")
+	for _, reach := range []string{ReachAll, ReachDirect} {
+		pl := ClassifyReach([]Change{{Path: "internal/leaf/leaf.go"}}, g, reach)
+		if want := []string{"./cmd/app", "./internal/leaf", "./internal/mid", "./tools/docgen/cli"}; !slices.Equal(pl.Go.Build, want) {
+			t.Errorf("reach %s: build %v, want %v", reach, pl.Go.Build, want)
+		}
+	}
+	if pl := ClassifyReach([]Change{{Path: "internal/leaf/leaf_test.go"}}, g, ReachDirect); len(pl.Go.Build) != 0 {
+		t.Errorf("a test-only change compiles no package (its test binary does): %v", pl.Go.Build)
+	}
+	if pl := classifyIn(g, "go.work"); !pl.Go.Full || len(pl.Go.Build) != 0 {
+		t.Errorf("a full Go lane builds ./... (Build empty): full=%v build=%v", pl.Go.Full, pl.Go.Build)
+	}
+}
+
+// TestWebDeletedModuleSelectsWhatStillReachesIt: deleting a module does not
+// run every vitest file (it did: 71 of 97 full web runs in the merge queue).
+// Its former importers changed too and select their own tests; a module that
+// still imports it resolves against the base tree's file list and selects the
+// tests reaching it.
+func TestWebDeletedModuleSelectsWhatStillReachesIt(t *testing.T) {
+	g := testGraph()
+	// leaf.ts is deleted: it is absent from disk (read fails) but present in
+	// the file list, which holds the base tree's paths too.
+	g.Web = BuildWebGraph(webFiles(), func(p string) (string, bool) {
+		if p == "frontends/web/src/lib/leaf.ts" {
+			return "", false
+		}
+		s, ok := webSrc[p]
+		return s, ok
+	})
+	pl := Classify([]Change{{Path: "frontends/web/src/lib/leaf.ts", Deleted: true}}, g)
+	if pl.Web.Full {
+		t.Fatalf("a deleted module must not force the full web lane: %v", pl.Web.Reasons)
+	}
+	for _, w := range []string{"src/lib/__tests__/leaf.test.ts", "src/lib/__tests__/mid.test.ts", "src/lib/__tests__/mock.test.ts", "src/lib/__tests__/guard.test.ts"} {
+		if !slices.Contains(pl.Web.Tests, w) {
+			t.Errorf("%s still reaches the deleted leaf.ts (or walks the tree) and must run; got %v", w, pl.Web.Tests)
+		}
+	}
+	if slices.Contains(pl.Web.Tests, "src/lib/__tests__/unrelated.test.ts") {
+		t.Errorf("unrelated test selected: %v", pl.Web.Tests)
 	}
 	pl = Classify([]Change{{Path: "frontends/web/src/lib/__tests__/leaf.test.ts", Deleted: true}}, testGraph())
-	if pl.Web.Full {
-		t.Fatal("a deleted TEST file selects nothing and must not force the full lane")
+	if pl.Web.Full || len(pl.Web.Tests) != 0 {
+		t.Fatalf("a deleted TEST file selects nothing: full=%v tests=%v", pl.Web.Full, pl.Web.Tests)
+	}
+}
+
+// TestWebReachDirect pins the merge tier's web fan-out, the same cut as the
+// Go lane's: a changed module runs the tests that import it and the tests of
+// the modules importing it by name; tests further away are Deferred.
+//
+//	leaf.ts <- mid.ts <- alias.ts <- alias.test.ts   (3 edges: deferred)
+//	        <- mid.test.ts via mid.ts                (2 edges: runs)
+//	        <- leaf.test.ts, mock.test.ts            (1 edge: runs)
+func TestWebReachDirect(t *testing.T) {
+	direct := ClassifyReach([]Change{{Path: "frontends/web/src/lib/leaf.ts"}}, testGraph(), ReachDirect)
+	for _, w := range []string{"src/lib/__tests__/leaf.test.ts", "src/lib/__tests__/mid.test.ts", "src/lib/__tests__/mock.test.ts", "src/lib/__tests__/guard.test.ts"} {
+		if !slices.Contains(direct.Web.Tests, w) {
+			t.Errorf("direct: %s must run; got %v", w, direct.Web.Tests)
+		}
+	}
+	if slices.Contains(direct.Web.Tests, "src/lib/__tests__/alias.test.ts") {
+		t.Errorf("direct: alias.test.ts is three imports from leaf.ts and must be deferred; got %v", direct.Web.Tests)
+	}
+	if want := []string{"src/lib/__tests__/alias.test.ts"}; !slices.Equal(direct.Web.Deferred, want) || direct.Web.Reach != ReachDirect {
+		t.Errorf("direct: reach %q deferred %v, want direct %v", direct.Web.Reach, direct.Web.Deferred, want)
+	}
+	// A hub (more than webHubFanout tests within two edges) runs only the
+	// tests that import or mock it by name.
+	g := testGraph()
+	src := map[string]string{"frontends/web/src/store/hub.ts": `export const s = 1`,
+		"frontends/web/src/store/__tests__/hub.test.ts": `import { s } from "../hub"`}
+	for i := 0; i <= webHubFanout; i++ {
+		src[fmt.Sprintf("frontends/web/src/c/C%d.tsx", i)] = `import { s } from "@/store/hub"`
+		src[fmt.Sprintf("frontends/web/src/c/__tests__/C%d.test.tsx", i)] = fmt.Sprintf(`import "../C%d"`, i)
+	}
+	files := slices.Collect(maps.Keys(src))
+	g.Web = BuildWebGraph(files, func(p string) (string, bool) { s, ok := src[p]; return s, ok })
+	hub := ClassifyReach([]Change{{Path: "frontends/web/src/store/hub.ts"}}, g, ReachDirect)
+	if want := []string{"src/store/__tests__/hub.test.ts"}; !slices.Equal(hub.Web.Tests, want) {
+		t.Errorf("direct: a hub runs only its by-name importers' tests: %v, want %v", hub.Web.Tests, want)
+	}
+	if len(hub.Web.Deferred) != webHubFanout+1 {
+		t.Errorf("direct: the hub's %d further tests are deferred, got %d", webHubFanout+1, len(hub.Web.Deferred))
+	}
+	if all := ClassifyReach([]Change{{Path: "frontends/web/src/store/hub.ts"}}, g, ReachAll); len(all.Web.Tests) != webHubFanout+2 {
+		t.Errorf("all: every test reaching the hub runs, got %d", len(all.Web.Tests))
+	}
+
+	// Modules that are no hub alone but together reach more than
+	// webNearBudget files at two edges: one edge from each.
+	g = testGraph()
+	src = map[string]string{}
+	var changed []Change
+	per := webNearBudget/3 + 1 // three modules, each under the hub line
+	for m := 0; m < 3; m++ {
+		mod := fmt.Sprintf("frontends/web/src/m%d.ts", m)
+		src[mod] = `export const v = 1`
+		src[fmt.Sprintf("frontends/web/src/__tests__/m%d.test.ts", m)] = fmt.Sprintf(`import "../m%d"`, m)
+		for i := 0; i < per; i++ {
+			src[fmt.Sprintf("frontends/web/src/c%d/C%d.tsx", m, i)] = fmt.Sprintf(`import { v } from "@/m%d"`, m)
+			src[fmt.Sprintf("frontends/web/src/c%d/__tests__/C%d.test.tsx", m, i)] = fmt.Sprintf(`import "../C%d"`, i)
+		}
+		changed = append(changed, Change{Path: mod})
+	}
+	if per > webHubFanout {
+		t.Fatalf("fixture: %d importers per module makes each a hub; lower it", per)
+	}
+	files = slices.Collect(maps.Keys(src))
+	g.Web = BuildWebGraph(files, func(p string) (string, bool) { s, ok := src[p]; return s, ok })
+	wide := ClassifyReach(changed, g, ReachDirect)
+	if want := []string{"src/__tests__/m0.test.ts", "src/__tests__/m1.test.ts", "src/__tests__/m2.test.ts"}; !slices.Equal(wide.Web.Tests, want) || wide.Web.Edges != 1 {
+		t.Errorf("direct: past webNearBudget each module runs only its by-name tests: edges %d, %v, want %v", wide.Web.Edges, wide.Web.Tests, want)
+	}
+	if narrow := ClassifyReach(changed[:1], g, ReachDirect); len(narrow.Web.Tests) != per+1 || narrow.Web.Edges != 2 {
+		t.Errorf("direct: one such module alone keeps two edges: edges %d, %d tests, want %d", narrow.Web.Edges, len(narrow.Web.Tests), per+1)
+	}
+
+	all := classify("frontends/web/src/lib/leaf.ts")
+	if !slices.Contains(all.Web.Tests, "src/lib/__tests__/alias.test.ts") || len(all.Web.Deferred) != 0 || all.Web.Reach != ReachAll {
+		t.Errorf("all: tests %v deferred %v reach %q: every importer's test must run", all.Web.Tests, all.Web.Deferred, all.Web.Reach)
+	}
+	// A changed test runs whatever its distance, and a proto's generated
+	// client fans out under the same cut.
+	pl := ClassifyReach([]Change{{Path: "frontends/web/src/lib/__tests__/alias.test.ts"}}, testGraph(), ReachDirect)
+	if !slices.Equal(pl.Web.Tests, []string{"src/lib/__tests__/alias.test.ts"}) {
+		t.Errorf("direct: a changed test selects itself: %v", pl.Web.Tests)
+	}
+	pl = ClassifyReach([]Change{{Path: "proto/reliant/v1/chat.proto"}}, testGraph(), ReachDirect)
+	if !slices.Contains(pl.Web.Tests, "src/lib/__tests__/genclient.test.ts") {
+		t.Errorf("direct: a proto change must run the tests importing its client: %v", pl.Web.Tests)
 	}
 }
 

@@ -43,6 +43,13 @@ type GoPlan struct {
 	// (the release gate).
 	Reach    string   `json:"reach"`
 	Deferred []string `json:"deferred,omitempty"`
+	// Build are the packages whose own build (not their tests') contains a
+	// changed package, at every reach: the merge gate's build phase
+	// compiles exactly these. Every other package is unchanged and already
+	// compiled, so this is `go build ./...` without the cache lookups for
+	// hundreds of untouched packages. Empty when the lane is Full: then it
+	// is ./... .
+	Build []string `json:"build,omitempty"`
 }
 
 // Reach modes (GoPlan.Reach).
@@ -57,6 +64,16 @@ type WebPlan struct {
 	// Tests are the test files to run, relative to frontends/web/.
 	Tests []string          `json:"tests"`
 	Why   map[string]string `json:"why,omitempty"`
+	// Reach and Deferred mirror GoPlan's: under ReachDirect a changed module
+	// selects only the tests within WebGraph.Near of it (the test imports it,
+	// or imports a module that imports it), and the rest of its importers'
+	// tests are Deferred to the full lane (the release gate).
+	Reach    string   `json:"reach"`
+	Deferred []string `json:"deferred,omitempty"`
+	// Edges is how many import edges from a changed module ReachDirect
+	// followed: 2, or 1 when two would have selected more than
+	// webNearBudget files (0 under ReachAll: the whole closure).
+	Edges int `json:"edges,omitempty"`
 }
 
 // ElectronPlan is the `node --test` lane (all or nothing: it is small).
@@ -205,9 +222,12 @@ type classifier struct {
 	hooks    map[string]bool
 	hookWhy  map[string]bool
 
-	web       *reasons // web test file (relative to frontends/web/) -> why
-	webTouch  bool     // a non-test web module changed
-	elecReads []string // why the electron lane runs, from tests naming a changed file
+	web         *reasons        // web test file (relative to frontends/web/) -> why
+	webNear     *reasons        // ReachDirect: the tests within two edges of a changed module
+	webDirect   *reasons        // ReachDirect: the tests within one edge
+	webDeferred map[string]bool // web tests ReachAll would add (ReachDirect only)
+	webTouch    bool            // a non-test web module changed
+	elecReads   []string        // why the electron lane runs, from tests naming a changed file
 }
 
 // Classify is the whole decision, as a pure function of the diff and the graph,
@@ -223,7 +243,7 @@ func ClassifyReach(changes []Change, g *Graph, reachMode string) *Plan {
 		pl:        &Plan{},
 		full:      map[lane][]string{},
 		code:      newReasons(), embed: newReasons(), testOnly: newReasons(), dbSel: newReasons(),
-		web:         newReasons(),
+		web: newReasons(), webNear: newReasons(), webDirect: newReasons(), webDeferred: map[string]bool{},
 		docGenDeps:  generatorDeps(g, func(dir string) bool { return strings.HasPrefix(dir+"/", docGenDir) }),
 		hookGenDeps: generatorDeps(g, func(dir string) bool { return slices.Contains(forgeHookGenerators, dir) }),
 		hookGens:    generatorSets(g, func(dir string) bool { return slices.Contains(forgeHookGenerators, dir) }),
@@ -489,11 +509,9 @@ func (c *classifier) applyRule(ch Change, r *rule, rep *FileReport) bool {
 		} else {
 			c.full[laneGo] = append(c.full[laneGo], fmt.Sprintf("%s: no generated Go package under gen/ for this proto (fail-safe)", ch.Path))
 		}
-		if w := c.g.Web; w != nil {
+		if c.g.Web != nil {
 			gen := "frontends/web/" + webGenPath(ch.Path)
-			for _, t := range w.Reach[gen] {
-				c.web.add(strings.TrimPrefix(t, "frontends/web/"), ch.Path+" regenerates "+path.Base(gen))
-			}
+			c.addWebReach(gen, ch.Path+" regenerates "+path.Base(gen))
 			c.webTouch = true
 		}
 	}
@@ -509,23 +527,57 @@ func (c *classifier) applyRule(ch Change, r *rule, rep *FileReport) bool {
 }
 
 func (c *classifier) attributeToWeb(ch Change) {
-	if ch.Deleted {
-		if !IsWebTestFile(ch.Path) {
-			c.full[laneWeb] = append(c.full[laneWeb], fmt.Sprintf("%s: a deleted web module (its importers can no longer be found)", ch.Path))
+	if IsWebTestFile(ch.Path) {
+		// A deleted test selects nothing: there is nothing left to run.
+		if !ch.Deleted {
+			c.web.add(strings.TrimPrefix(ch.Path, "frontends/web/"), "the test itself changed")
 		}
 		return
 	}
-	if IsWebTestFile(ch.Path) {
-		c.web.add(strings.TrimPrefix(ch.Path, "frontends/web/"), "the test itself changed")
-		return
-	}
 	c.webTouch = true
-	w := c.g.Web
-	if w == nil {
+	if c.g.Web == nil {
 		return
 	}
-	for _, t := range w.Reach[ch.Path] {
-		c.web.add(strings.TrimPrefix(t, "frontends/web/"), "imports "+path.Base(ch.Path))
+	// A deleted module needs no full run. Every module that imported it had
+	// to change too (or it no longer resolves), and each of those changes
+	// selects its own tests. What is left is a module that STILL imports the
+	// deleted one: the graph resolves specifiers against the base tree's
+	// files as well as HEAD's, so it finds those, and selects the tests that
+	// reach them (tsc -b fails on the dangling import before they run).
+	// Before this, a deleted module forced every vitest file: 71 of 97 full
+	// web runs in the merge queue (2026-10-26), ~27 minutes each.
+	why := "imports " + path.Base(ch.Path)
+	if ch.Deleted {
+		why = "still imports " + path.Base(ch.Path) + ", which this change deletes"
+	}
+	c.addWebReach(ch.Path, why)
+}
+
+// addWebReach selects the vitest files that reach the web file f: every one
+// under ReachAll; under ReachDirect those within WebGraph.Near, or only
+// WebGraph.Direct when f is a hub (webHubFanout). The others are recorded as
+// deferred to the full lane.
+func (c *classifier) addWebReach(f, why string) {
+	w := c.g.Web
+	trim := func(t string) string { return strings.TrimPrefix(t, "frontends/web/") }
+	if c.reachMode != ReachDirect {
+		for _, t := range w.Reach[f] {
+			c.web.add(trim(t), why)
+		}
+		return
+	}
+	near := w.Near[f]
+	if len(near) > webHubFanout {
+		near = w.Direct[f]
+	}
+	for _, t := range near {
+		c.webNear.add(trim(t), why)
+	}
+	for _, t := range w.Direct[f] {
+		c.webDirect.add(trim(t), why)
+	}
+	for _, t := range w.Reach[f] {
+		c.webDeferred[trim(t)] = true
 	}
 }
 
@@ -608,11 +660,32 @@ func (c *classifier) selectGo() {
 		}
 	}
 	gp.LaneFull = laneFull(c.full[laneGo])
+	if !gp.Full {
+		for _, p := range sortedKeys(g.BuildDeps) {
+			if reach(g.BuildDeps[p], c.code, c.embed) != "" {
+				gp.Build = append(gp.Build, dot(p))
+			}
+		}
+	}
 }
 
 func (c *classifier) selectWeb() {
 	wp := &c.pl.Web
 	wp.Why = map[string]string{}
+	if c.reachMode == ReachDirect {
+		// Two edges from every changed module, unless together they reach
+		// more than webNearBudget files: then one edge from each.
+		pick, edges := c.webNear, 2
+		if len(c.webNear.m) > webNearBudget {
+			pick, edges = c.webDirect, 1
+		}
+		wp.Edges = edges
+		for _, f := range pick.order {
+			for _, why := range pick.m[f] {
+				c.web.add(f, why)
+			}
+		}
+	}
 	if w := c.g.Web; w != nil && c.webTouch {
 		for _, t := range w.Walkers {
 			c.web.add(strings.TrimPrefix(t, "frontends/web/"), "reads whole directories of frontends/web/")
@@ -621,6 +694,15 @@ func (c *classifier) selectWeb() {
 	for _, f := range sortedKeys(c.web.m) {
 		wp.Tests = append(wp.Tests, f)
 		wp.Why[f] = c.web.why(f)
+	}
+	wp.Reach = ReachAll
+	if c.reachMode == ReachDirect {
+		wp.Reach = ReachDirect
+		for _, f := range sortedKeys(c.webDeferred) {
+			if !c.web.has(f) {
+				wp.Deferred = append(wp.Deferred, f)
+			}
+		}
 	}
 	wp.LaneFull = laneFull(c.full[laneWeb])
 }

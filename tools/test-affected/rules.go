@@ -215,12 +215,17 @@ var rules = []rule{
 		electron: true,
 	},
 	{
+		// buf's configuration reaches the tests only through the code buf
+		// generates. That code is committed: a change that regenerates it
+		// selects its own packages and clients, and one that does not is
+		// what the forge-generate lane (a no-op check) fails. Running every
+		// lane for it cost three merge-queue gates the whole web suite.
 		id: "global-config",
 		patterns: []string{
 			"buf.yaml", "buf.gen.yaml", "buf.gen.controlplane.yaml",
 		},
-		full:   allLanes,
-		reason: "build or generation configuration changed (a subset cannot judge it)",
+		full:   []lane{laneForgeGen},
+		reason: "buf's generation configuration changed: the generated code must match it",
 	},
 	{
 		// The Taskfile is what the codegen lanes run: `task generate:forge`
