@@ -34,6 +34,15 @@ async function arrive(page: Page, options: ClaimMockOptions = {}, hash = CLAIM_F
   return mock;
 }
 
+async function upgradeWithEmail(page: Page) {
+  await page.getByLabel('Email address').fill('new@example.com');
+  await page.getByLabel('Password', { exact: true }).fill('Sup3rSecret!pass');
+  await page.getByLabel('Confirm Password').fill('Sup3rSecret!pass');
+  await page.getByRole('button', { name: 'Create account and claim' }).click();
+  await page.getByLabel(/Verification code/i).fill('123456');
+  await page.getByRole('button', { name: /verify and continue/i }).click();
+}
+
 async function noSidewaysScroll(page: Page) {
   const width = await page.evaluate(() => document.documentElement.scrollWidth);
   const viewport = page.viewportSize()?.width ?? 0;
@@ -244,5 +253,41 @@ test.describe('the whole new-human flow', () => {
 
     await expect(page.getByTestId('claim-refused-claimable_claimed')).toBeVisible(LOADED);
     await shot(page, 'lost-race');
+  });
+  test('claimable_upgrade_required sends them back through /upgrade once, then completes', async ({ page }) => {
+    const mock = await arrive(page, { completeError: { code: 'permission_denied', reason: 'claimable_upgrade_required', times: 1 } });
+    await page.getByTestId('claim-submit').click();
+    await expect(page).toHaveURL(/\/upgrade/, LOADED);
+    await upgradeWithEmail(page);
+
+    await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+    expect(mock.calls.map((c) => c.rpc)).toEqual(['GetClaim', 'OpenClaimSession', 'CompleteClaim', 'CompleteClaim']);
+    await expect(page.getByTestId('apps-claimed')).toContainText('storefront is yours now');
+  });
+
+  test('claimable_existing_account shows the existing-account block beside the site', async ({ page }) => {
+    await arrive(page, { completeError: { code: 'permission_denied', reason: 'claimable_existing_account' } });
+    await page.getByTestId('claim-submit').click();
+    await expect(page).toHaveURL(/\/upgrade/, LOADED);
+    await upgradeWithEmail(page);
+
+    await expect(page.getByTestId('claim-existing-account')).toBeVisible(LOADED);
+    await expect(page.getByTestId('claim-existing-account')).toContainText('forge login');
+    await expect(page.getByTestId('claim-site')).toBeVisible();
+    await expect(page.getByTestId('claim-submit')).toHaveCount(0);
+    await shot(page, 'complete-existing-account');
+  });
+
+  test('a reason the page does not know gets a generic screen with a retry', async ({ page }) => {
+    const mock = await arrive(page, { completeError: { code: 'permission_denied', reason: 'claimable_something_new', times: 1 } });
+    await page.getByTestId('claim-submit').click();
+    await expect(page).toHaveURL(/\/upgrade/, LOADED);
+    await upgradeWithEmail(page);
+
+    await expect(page.getByTestId('claim-finish-declined')).toBeVisible(LOADED);
+    await shot(page, 'complete-declined');
+    await page.getByRole('button', { name: /try again/i }).click();
+    await expect(page).toHaveURL(/\/apps(\?|$)/, LOADED);
+    expect(mock.calls.filter((c) => c.rpc === 'CompleteClaim')).toHaveLength(2);
   });
 });

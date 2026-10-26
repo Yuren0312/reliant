@@ -329,6 +329,99 @@ describe('coming back upgraded (same user id) → CompleteClaim → /apps', () =
     expect(order).toEqual(['refresh', 'complete'])
   })
 
+  it('does not call CompleteClaim until the refresh has settled (the server reads the verified email off the refreshed token)', async () => {
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const complete = vi.fn(() => ({ orgId: 'o', claimPath: 'upgrade', hostnames: [], holds: [] }))
+    refreshSession.mockImplementationOnce(async () => (await gate, { data: {}, error: null }))
+    arrive({ 'ClaimableService.CompleteClaim': complete })
+
+    await screen.findByText(/making this site yours/i)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(refreshSession).toHaveBeenCalledTimes(1)
+    expect(complete).not.toHaveBeenCalled()
+
+    release()
+    await waitFor(() => expect(navigate).toHaveBeenCalled())
+    expect(complete).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['returns an error', async () => ({ data: {}, error: { message: 'refresh denied' } }) as never],
+    ['throws', async () => { throw new Error('network') }],
+  ])('still asks CompleteClaim when the refresh %s, and lets its answer decide', async (_name, failing) => {
+    refreshSession.mockImplementationOnce(failing)
+    const complete = vi.fn(() => ({ orgId: 'o', claimPath: 'upgrade', hostnames: [], holds: [] }))
+    arrive({ 'ClaimableService.CompleteClaim': complete })
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+    expect(complete).toHaveBeenCalledTimes(1)
+  })
+
+  it('a failed refresh followed by a refusal shows the refusal, not a refresh error', async () => {
+    refreshSession.mockImplementationOnce(async () => ({ data: {}, error: { message: 'refresh denied' } }) as never)
+    arrive({ 'ClaimableService.CompleteClaim': { error: refused('claimable_claimed') } })
+    expect(await screen.findByTestId('claim-refused-claimable_claimed')).toBeInTheDocument()
+  })
+
+  it('claimable_upgrade_required: back to /upgrade?returnTo=/claim, keeping the claim', async () => {
+    arrive({ 'ClaimableService.CompleteClaim': { error: refused('claimable_upgrade_required', Code.PermissionDenied) } })
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/upgrade', search: { returnTo: '/claim' } }))
+    expect(navigate).not.toHaveBeenCalledWith(expect.objectContaining({ to: '/apps' }))
+    expect(readPendingClaim()?.token).toBe(TOKEN)
+    expect(track).toHaveBeenCalledWith('claim_failed', { stage: 'complete', reason: 'claimable_upgrade_required' })
+  })
+
+  it('claimable_upgrade_required twice does not loop: it asks the person to verify, with a retry', async () => {
+    updatePendingClaim({ upgradeSent: true })
+    arrive({ 'ClaimableService.CompleteClaim': { error: refused('claimable_upgrade_required', Code.PermissionDenied) } })
+
+    expect(await screen.findByTestId('claim-finish-failed')).toHaveTextContent(/verified/i)
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('claimable_existing_account: the ExistingAccount block, the site, and no claim button', async () => {
+    const preview = vi.fn(() => LIVE)
+    arrive({
+      'ClaimableService.CompleteClaim': { error: refused('claimable_existing_account', Code.PermissionDenied) },
+      'ClaimableService.GetClaim': preview,
+    })
+
+    const block = await screen.findByTestId('claim-existing-account')
+    expect(block).toHaveTextContent('forge login')
+    expect(await screen.findByTestId('claim-site')).toBeInTheDocument()
+    expect(screen.queryByTestId('claim-submit')).toBeNull()
+    expect(navigate).not.toHaveBeenCalled()
+    expect(readPendingClaim()?.token).toBe(TOKEN)
+    expect(track).toHaveBeenCalledWith('claim_failed', { stage: 'complete', reason: 'claimable_existing_account' })
+  })
+
+  it('an unknown reason shows a generic screen, keeps the claim, and offers a retry', async () => {
+    let attempts = 0
+    arrive({
+      'ClaimableService.CompleteClaim': () => {
+        attempts += 1
+        if (attempts === 1) throw refused('claimable_something_new', Code.PermissionDenied)
+        return { orgId: 'o', claimPath: 'upgrade', hostnames: [], holds: [] }
+      },
+    })
+
+    const card = await screen.findByTestId('claim-finish-declined')
+    expect(card).toHaveTextContent(/couldn't complete this claim/i)
+    expect(card).toHaveTextContent('claimable_something_new')
+    expect(navigate).not.toHaveBeenCalled()
+    expect(readPendingClaim()?.token).toBe(TOKEN)
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/apps', search: { claimed: 'storefront' }, replace: true }))
+  })
+
+  it('a PermissionDenied with no reason at all gets the same generic screen', async () => {
+    arrive({ 'ClaimableService.CompleteClaim': { error: new ConnectError('no', Code.PermissionDenied) } })
+    expect(await screen.findByTestId('claim-finish-declined')).toBeInTheDocument()
+  })
+
   it('reports a lost race as claimed (someone else completed it first)', async () => {
     arrive({ 'ClaimableService.CompleteClaim': { error: refused('claimable_claimed') } })
     expect(await screen.findByTestId('claim-refused-claimable_claimed')).toBeInTheDocument()

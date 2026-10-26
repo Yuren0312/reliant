@@ -32,7 +32,8 @@ export interface ClaimMockOptions {
   /** Make GetClaim fail with this Connect error (reason in x-forge-error-reason). */
   getClaimError?: { code: string; reason?: string; status?: number };
   openSessionError?: { code: string; reason?: string; status?: number };
-  completeError?: { code: string; reason?: string; status?: number };
+  /** Make CompleteClaim fail with this error, `times` calls in a row (default: every call). */
+  completeError?: { code: string; reason?: string; status?: number; times?: number };
   /** Start already signed in as this user (a real account, or a different anonymous one). */
   signedInAs?: { id: string; email?: string; anonymous: boolean };
 }
@@ -144,13 +145,22 @@ export async function mockClaimBackend(page: Page, options: ClaimMockOptions = {
   });
 
   // ── control-plane: the claim rpcs ───────────────────────────────────────
-  const claimRpc = (rpc: string, answer: (body: Record<string, unknown>) => unknown, failure?: ClaimMockOptions['getClaimError']) =>
-    page.route(`**/controlplane.v1.ClaimableService/${rpc}`, async (route) => {
+  const claimRpc = (
+    rpc: string,
+    answer: (body: Record<string, unknown>) => unknown,
+    failure?: ClaimMockOptions['getClaimError'] & { times?: number },
+  ) => {
+    let failed = 0;
+    return page.route(`**/controlplane.v1.ClaimableService/${rpc}`, async (route) => {
       const body = (route.request().postDataJSON() ?? {}) as Record<string, unknown>;
       mock.calls.push({ rpc, body });
-      if (failure) return connectError(route, failure);
+      if (failure && failed < (failure.times ?? Infinity)) {
+        failed += 1;
+        return connectError(route, failure);
+      }
       return json(route, answer(body));
     });
+  };
 
   await claimRpc(
     'GetClaim',

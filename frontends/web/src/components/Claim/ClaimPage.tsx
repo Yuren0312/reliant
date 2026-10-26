@@ -20,7 +20,7 @@ import { CardInset } from "@/components/forge-ui/card";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import type { ClaimSite } from "@/services/controlPlane/claim";
 
-import { REFUSAL_COPY, REPLACE_ANONYMOUS_COPY } from "./claimCopy";
+import { FINISH_DECLINED_COPY, REFUSAL_COPY, REPLACE_ANONYMOUS_COPY } from "./claimCopy";
 import { ExistingAccount } from "./ExistingAccount";
 import type { ClaimSituation } from "./claimSituation";
 import { useClaimFlow } from "./useClaimFlow";
@@ -69,6 +69,16 @@ export function ClaimPage() {
             body={`${view.message} Your account is saved, and the site is still waiting for you.`}
             action={{ label: "Try again", onClick: retryFinish }}
             testId="claim-finish-failed"
+          />
+        )}
+
+        {view.kind === "finish-declined" && (
+          <Notice
+            tone="warning"
+            title={FINISH_DECLINED_COPY.title}
+            body={view.reason ? `${FINISH_DECLINED_COPY.body} (${view.reason})` : FINISH_DECLINED_COPY.body}
+            action={{ label: "Try again", onClick: retryFinish }}
+            testId="claim-finish-declined"
           />
         )}
 

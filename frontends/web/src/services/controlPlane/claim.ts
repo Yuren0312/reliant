@@ -98,6 +98,26 @@ export function claimRefusalOf(err: unknown): ClaimRefusal | null {
   return null;
 }
 
+/**
+ * What CompleteClaim can ask the page to DO rather than just report: both are
+ * PermissionDenied, and neither ends the claim.
+ */
+export const COMPLETE_ACTIONS = ["claimable_upgrade_required", "claimable_existing_account"] as const satisfies readonly ErrorReason[];
+
+export type CompleteAction = (typeof COMPLETE_ACTIONS)[number];
+
+export function completeActionOf(err: unknown): CompleteAction | null {
+  for (const reason of COMPLETE_ACTIONS) {
+    if (hasErrorReason(err, reason)) return reason;
+  }
+  return null;
+}
+
+/** The server answered and said no, in a way this page has no name for (not an outage). */
+export function isDeclined(err: unknown): boolean {
+  return err instanceof ConnectError && (err.code === Code.PermissionDenied || err.code === Code.FailedPrecondition);
+}
+
 /** The reason for the claim_failed funnel event: a server reason, a code, or "unknown". */
 export function failureReasonOf(err: unknown): string {
   const reason = errorReason(err);

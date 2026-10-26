@@ -39,6 +39,16 @@ export const REFUSAL_COPY: Record<ClaimRefusal, RefusalCopy> = {
   },
 };
 
+/** CompleteClaim said no for a reason this page does not know. Nothing was changed. */
+export const FINISH_DECLINED_COPY = {
+  title: "We couldn't complete this claim",
+  body: "Reliant declined to finish it, and your site was not changed. Try again, or ask your agent for a new claim link.",
+} as const;
+
+/** CompleteClaim keeps asking for an upgrade the page already sent the person to make. */
+export const UPGRADE_STILL_REQUIRED_MESSAGE =
+  "We couldn't confirm your email yet. Check that you've verified it, then try again.";
+
 /**
  * What an existing Reliant user is told. The way in for them (joining the
  * site's org) needs users to belong to more than one org, which is not built

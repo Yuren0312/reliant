@@ -48,6 +48,8 @@ export interface PendingClaim {
   project?: string;
   /** The link-opened event went out for this token (a reload must not count twice). */
   opened?: boolean;
+  /** CompleteClaim sent this browser back to /upgrade once; a second refusal must not loop. */
+  upgradeSent?: boolean;
 }
 
 /** The token in a URL fragment (`#rcl_…`), or null when it is not a claim token. */

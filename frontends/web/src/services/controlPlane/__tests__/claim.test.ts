@@ -21,6 +21,8 @@ import { setTransport } from '@/lib/connect'
 import { mockTransport } from '@/lib/test-utils'
 import {
   claimRefusalOf,
+  completeActionOf,
+  isDeclined,
   completeClaim,
   failureReasonOf,
   getClaim,
@@ -191,6 +193,27 @@ describe('claimRefusalOf / failureReasonOf', () => {
     expect(failureReasonOf(refused('claimable_claimed'))).toBe('claimable_claimed')
     expect(failureReasonOf(new ConnectError('x', Code.Unavailable))).toBe('unavailable')
     expect(failureReasonOf(new Error('plain'))).toBe('unknown')
+  })
+})
+
+describe('completeActionOf / isDeclined', () => {
+  it.each(['claimable_upgrade_required', 'claimable_existing_account'] as const)('reads %s as an action, never a refusal', (reason) => {
+    const err = refused(reason, Code.PermissionDenied)
+    expect(completeActionOf(err)).toBe(reason)
+    expect(claimRefusalOf(err)).toBeNull()
+  })
+
+  it('names no action for another reason, or none', () => {
+    expect(completeActionOf(refused('claimable_something_new', Code.PermissionDenied))).toBeNull()
+    expect(completeActionOf(new ConnectError('x', Code.PermissionDenied))).toBeNull()
+    expect(completeActionOf(new Error('plain'))).toBeNull()
+  })
+
+  it('a decline is the server answering no; an outage is not one', () => {
+    expect(isDeclined(new ConnectError('x', Code.PermissionDenied))).toBe(true)
+    expect(isDeclined(new ConnectError('x', Code.FailedPrecondition))).toBe(true)
+    expect(isDeclined(new ConnectError('x', Code.Unavailable))).toBe(false)
+    expect(isDeclined(new Error('plain'))).toBe(false)
   })
 })
 

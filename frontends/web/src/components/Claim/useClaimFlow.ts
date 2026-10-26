@@ -36,15 +36,18 @@ import {
   updatePendingClaim,
   type PendingClaim,
 } from "@/lib/claimLink";
+import { errorReason } from "@/lib/errorReasons";
 import { logger } from "@/lib/logger";
 import { queryClient } from "@/lib/query-client";
 import { supabase } from "@/lib/supabase";
 import { hasControlPlane } from "@/services/controlPlane/config";
 import {
   claimRefusalOf,
+  completeActionOf,
   completeClaim,
   failureReasonOf,
   getClaim,
+  isDeclined,
   openClaimSession,
   type ClaimRefusal,
   type ClaimSite,
@@ -52,6 +55,7 @@ import {
 } from "@/services/controlPlane/claim";
 import { useAuthStore } from "@/store/authStore";
 
+import { UPGRADE_STILL_REQUIRED_MESSAGE } from "./claimCopy";
 import { claimSituation, type ClaimSituation } from "./claimSituation";
 
 export type ClaimView =
@@ -63,7 +67,9 @@ export type ClaimView =
   | { kind: "unavailable"; message: string }
   | { kind: "ready"; site: ClaimSite; situation: ClaimSituation; working: boolean; error: string | null }
   | { kind: "finishing" }
-  | { kind: "finish-failed"; message: string };
+  | { kind: "finish-failed"; message: string }
+  /** CompleteClaim refused for a reason this page has no name for. */
+  | { kind: "finish-declined"; reason: string | null };
 
 export interface ClaimFlow {
   view: ClaimView;
@@ -95,6 +101,9 @@ export function useClaimFlow(): ClaimFlow {
   // so a failed install must be retried with these, not with a second open.
   const released = useRef<ReleasedSession | null>(null);
   const decided = useRef(false);
+  // CompleteClaim can decide the situation the page could not see from the
+  // session (an email that already has an account): a preview retry keeps it.
+  const forcedSituation = useRef<ClaimSituation | null>(null);
 
   useEffect(() => {
     if (!initialized) void initialize();
@@ -107,14 +116,23 @@ export function useClaimFlow(): ClaimFlow {
     [navigate],
   );
 
+  const loadPreviewRef = useRef<(pending: PendingClaim, situation: ClaimSituation) => Promise<void>>(async () => undefined);
+
   const finish = useCallback(
     async (pending: PendingClaim) => {
       setView({ kind: "finishing" });
       try {
-        // An upgrade that needed no email confirmation leaves the session's JWT
-        // still saying is_anonymous, and CompleteClaim refuses an anonymous
-        // caller. A refresh re-issues it from the upgraded user.
-        await supabase.auth.refreshSession().catch(() => undefined);
+        // The server decides "upgraded" from a verified email on the bearer
+        // token, not from is_anonymous. An upgrade that needed no email
+        // confirmation leaves the session's JWT stale, so re-issue it from the
+        // upgraded user BEFORE asking. A failed refresh is not fatal: the token
+        // may already be current, and CompleteClaim's own answer is the verdict.
+        try {
+          const { error } = await supabase.auth.refreshSession();
+          if (error) logger.warn("[Claim] refreshSession failed", { message: error.message });
+        } catch (refreshErr) {
+          logger.warn("[Claim] refreshSession threw", { message: messageOf(refreshErr, "unknown") });
+        }
         const done = await completeClaim(pending.token);
         trackEvent("claim_completed", { claimPath: done.claimPath, holds: done.holds });
         clearPendingClaim();
@@ -128,11 +146,34 @@ export function useClaimFlow(): ClaimFlow {
           setView({ kind: "refused", refusal });
           return;
         }
+        const action = completeActionOf(err);
+        if (action === "claimable_upgrade_required") {
+          // Still anonymous, or the email is not verified: back through the
+          // upgrade flow, once. If it bounces straight back here with the same
+          // answer, say so rather than loop.
+          if (pending.upgradeSent) {
+            setView({ kind: "finish-failed", message: UPGRADE_STILL_REQUIRED_MESSAGE });
+            return;
+          }
+          updatePendingClaim({ upgradeSent: true });
+          void navigate({ to: "/upgrade", search: { returnTo: CLAIM_RETURN_TO } });
+          return;
+        }
+        if (action === "claimable_existing_account") {
+          forcedSituation.current = "existing-account";
+          await loadPreviewRef.current(pending, "existing-account");
+          return;
+        }
+        if (isDeclined(err)) {
+          logger.warn("[Claim] CompleteClaim declined", { reason: failureReasonOf(err) });
+          setView({ kind: "finish-declined", reason: errorReason(err) });
+          return;
+        }
         logger.warn("[Claim] CompleteClaim failed", { reason: failureReasonOf(err) });
         setView({ kind: "finish-failed", message: messageOf(err, "We could not finish your claim.") });
       }
     },
-    [toApps],
+    [toApps, navigate],
   );
 
   const loadPreview = useCallback(
@@ -166,6 +207,7 @@ export function useClaimFlow(): ClaimFlow {
     },
     [],
   );
+  loadPreviewRef.current = loadPreview;
 
   // Decide once, when auth has settled, where in the flow this load is.
   useEffect(() => {
@@ -245,7 +287,7 @@ export function useClaimFlow(): ClaimFlow {
       setView({ kind: "no-link" });
       return;
     }
-    void loadPreview(pending, claimSituation(useAuthStore.getState().user, pending));
+    void loadPreview(pending, forcedSituation.current ?? claimSituation(useAuthStore.getState().user, pending));
   }, [loadPreview]);
 
   return { view, claim, retryFinish, retryPreview };
