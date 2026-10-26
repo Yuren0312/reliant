@@ -70,7 +70,10 @@ service BillingService {
   // Canonical current-period organization accounting. Requires billing:read,
   // not billing management. Unknown amounts stay absent; no historical range.
   rpc GetOrganizationCostSummary(GetOrganizationCostSummaryRequest) returns (GetOrganizationCostSummaryResponse) {
-    option (forge.v1.method) = {auth_required: true idempotent: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
   }
 
   // Read-only catalog.
