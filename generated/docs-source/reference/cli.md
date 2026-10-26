@@ -9041,7 +9041,7 @@ in ClickHouse; HyperDX cannot draw flamegraphs, so this exports them:
 
 Sample types: cpu (nanoseconds) and inuse_space / inuse_objects (live heap) by
 default; alloc_space / alloc_objects and goroutine only from a workload whose
-profiling block turns them on (see forge skill load observability/profiles). Raw samples (and so --trace) are kept 72h; the
+profiling block turns them on (see forge skill load observability/profiles). Raw samples (and so --trace) are kept 24h; the
 per-minute aggregate behind --since is kept 30 days. --sql prints the query so
 you can run it yourself against the ClickStack ClickHouse.
 
@@ -9065,7 +9065,7 @@ reliant forge obs profile [flags]
 | `--span` | `string` | - | narrow --trace to one span id |
 | `--sql` | `bool` | - | print the query and its parameters instead of running it |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
-| `--trace` | `string` | - | export only samples linked to this trace id (raw tier, last 72h) |
+| `--trace` | `string` | - | export only samples linked to this trace id (raw tier, last 24h) |
 | `--type` | `string` | `cpu` | sample type: cpu, alloc_space, inuse_space, alloc_objects, inuse_objects, goroutine |
 
 ---
