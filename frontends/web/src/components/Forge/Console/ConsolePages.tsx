@@ -62,18 +62,6 @@ function Page({ testId, children }: { testId: string; children: ReactNode }) {
   );
 }
 
-/** A page that has a place in the IA and nothing behind it yet. */
-function Placeholder({ title, line, testId }: { title: string; line: ReactNode; testId: string }) {
-  return (
-    <Page testId={testId}>
-      <Header title={title} meta={<span>Coming soon</span>} />
-      <Card>
-        <p className="text-sm text-ink-muted">{line}</p>
-      </Card>
-    </Page>
-  );
-}
-
 function RosterLoading() {
   return (
     <Card padding="none" aria-label="Loading" aria-busy="true">

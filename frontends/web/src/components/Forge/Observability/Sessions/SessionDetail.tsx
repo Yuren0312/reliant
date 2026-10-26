@@ -118,7 +118,7 @@ function SessionBody({
       {back}
       <header className="space-y-1.5" data-testid="session-header">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-base font-semibold text-foreground" data-testid="session-title">
+          <h3 className="text-base font-semibold text-ink" data-testid="session-title">
             {sessionTitle(session.service, session.startedMs, { now })}
           </h3>
           <Mono value={session.sessionId} length={8} />
@@ -129,10 +129,10 @@ function SessionBody({
           )}
           {live && <Status tone="neutral" pulse label="active now" />}
         </div>
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          {session.userId ? <span className="text-foreground">{session.userId}</span> : <span>anonymous user</span>}
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
+          {session.userId ? <span className="text-ink">{session.userId}</span> : <span>anonymous user</span>}
           <span>
-            entered on <span className="font-mono text-foreground">{session.entryPath || "/"}</span>
+            entered on <span className="font-mono text-ink">{session.entryPath || "/"}</span>
           </span>
           {session.serviceVersion && <span className="font-mono">{session.serviceVersion}</span>}
           {session.envName && <span>in {session.envName}</span>}
@@ -169,7 +169,7 @@ function SessionBody({
           )}
         </Card>
         <Card padding="md" data-testid="session-timeline-card">
-          <h4 className="mb-2 text-sm font-medium text-foreground">Timeline</h4>
+          <h4 className="mb-2 text-sm font-medium text-ink">Timeline</h4>
           {timeline.isLoading ? (
             <ObsLoadingRows rows={4} testId="session-timeline-loading" />
           ) : timeline.error && !timeline.data ? (

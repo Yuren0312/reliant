@@ -116,7 +116,7 @@ function SessionLink({ event, onSession }: { event: IssueEvent; onSession: Sessi
     <button
       type="button"
       onClick={() => onSession.open(event.sessionId, event.timeMs)}
-      className="inline-flex items-center gap-1 text-xs text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="inline-flex items-center gap-1 text-xs text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       title={`Session ${event.sessionId}`}
       data-testid={`obs-issue-session-${event.sessionId}`}
     >

@@ -40,7 +40,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { LiveConvergence, LiveEnv } from "@/services/forge/live";
+import type { LiveEnv } from "@/services/forge/live";
 
 import { LiveState } from "../LiveState";
 import { OverviewTab, type OverviewTabProps } from "../EnvTabPanels";
@@ -244,39 +244,6 @@ describe("a self-managed environment renders through the same component", () => 
     expect(code).not.toMatch(/self_managed/);
   });
 });
-
-// ── The merged timeline ─────────────────────────────────────────────────────
-
-const PROMOTION = {
-  id: "promo-1",
-  releaseVersion: "v12",
-  kind: "promote" as const,
-  fromEnvironmentId: "",
-  promotedByUserId: "",
-  promotedByActor: "ci",
-  note: "",
-  createdAt: "2026-10-01T14:02:00.000Z",
-  artifacts: [{ name: "api", digest: "sha256:aaaaaaaaaaaa" }],
-};
-
-const OBSERVED_OK: LiveConvergence = {
-  id: "conv-1",
-  state: "converged",
-  reason: "ReconciliationSucceeded",
-  message: "",
-  cluster: "hosted-us-central1",
-  observedAt: "2026-10-01T14:04:00.000Z",
-};
-
-const OBSERVED_FAIL: LiveConvergence = {
-  id: "conv-2",
-  state: "failed",
-  reason: "HealthCheckFailed",
-  message: "deployment api not ready",
-  cluster: "hosted-us-central1",
-  observedAt: "2026-10-01T14:40:00.000Z",
-};
-
 
 // ── The Overview tab, end to end ────────────────────────────────────────────
 

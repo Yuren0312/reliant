@@ -48,7 +48,7 @@ export const TONE_SWATCH: Record<ChartTone, string> = {
   secondary: "bg-secondary",
   success: "bg-success",
   warning: "bg-warning",
-  destructive: "bg-destructive",
+  destructive: "bg-danger",
   muted: "bg-muted-foreground",
 };
 

@@ -98,7 +98,7 @@ export function MetricDetail(props: MetricDetailProps) {
 function NoDataInWindow({ name, entry, range, onWiden }: { name: string; entry?: MetricCatalogEntry; range: RangePreset; onWiden?: () => void }) {
   const window = RANGE_LABELS[range].toLowerCase();
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-background px-3 py-3" role="status" data-testid="metric-no-data">
+    <div className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-3 py-3" role="status" data-testid="metric-no-data">
       <Clock className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
       <div className="min-w-0 space-y-1.5 text-xs">
         <p className="font-medium text-ink">
@@ -127,7 +127,7 @@ function Attributes({ detail, groupBy, onGroupBy, breakdownKey, onBreakdown }: M
   return (
     <div>
       <h3 className="mb-1.5 text-xs font-medium text-ink">Attributes</h3>
-      <ul className="divide-y divide-border/70 rounded-md border border-border/60 bg-background" data-testid="metric-attributes">
+      <ul className="divide-y divide-border/70 rounded-md border border-border/60 bg-surface-sunken" data-testid="metric-attributes">
         {attributes.map((attribute) => {
           const field = attributeField(attribute);
           const grouped = groupBy.includes(field);

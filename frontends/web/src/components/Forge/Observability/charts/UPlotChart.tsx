@@ -368,7 +368,7 @@ export function UPlotChart({
                 style={{ left: dot.x, top: dot.y }}
                 className={cn(
                   "pointer-events-auto absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
-                  exemplar.solid ? "bg-primary" : "bg-background"
+                  exemplar.solid ? "bg-primary" : "bg-surface-sunken"
                 )}
                 aria-label={exemplar.label}
                 data-testid="chart-exemplar-dot"
@@ -379,7 +379,7 @@ export function UPlotChart({
         </div>
       )}
       {!compact && annotationSummary && (
-        <p className="min-w-0 truncate text-xs text-muted-foreground" title={`${describeMarkers(markers)} ${describeBands(shown)}`} data-testid="chart-annotations" aria-hidden="true">
+        <p className="min-w-0 truncate text-xs text-ink-muted" title={`${describeMarkers(markers)} ${describeBands(shown)}`} data-testid="chart-annotations" aria-hidden="true">
           {annotationSummary}
         </p>
       )}

@@ -66,7 +66,7 @@ export function ExemplarRail({ exemplars, timestamps, stepSeconds, unit, onOpen,
   if (inWindow.length === 0) return null;
   return (
     <div className={cn("relative", AXIS_GUTTER)} data-testid="metrics-exemplar-rail">
-      <div className="relative h-7 rounded border border-border/60 bg-background" role="group" aria-label={`${inWindow.length} exemplars: a sampled observation and its trace`}>
+      <div className="relative h-7 rounded border border-border/60 bg-surface-sunken" role="group" aria-label={`${inWindow.length} exemplars: a sampled observation and its trace`}>
         {inWindow.map((e, i) => {
           const x = ((e.timeMs - start) / (end - start)) * 100;
           const y = hi > lo ? (e.value - lo) / (hi - lo) : 0.5;
@@ -81,7 +81,7 @@ export function ExemplarRail({ exemplars, timestamps, stepSeconds, unit, onOpen,
               style={{ left: `${x}%`, bottom: `${4 + y * 14}px` }}
               className={cn(
                 "absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full border border-primary transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
-                e.traceStored ? "bg-primary" : "bg-background"
+                e.traceStored ? "bg-primary" : "bg-surface-sunken"
               )}
               aria-label={exemplarLabel(e, unit)}
               data-testid="metrics-exemplar-dot"
@@ -155,7 +155,7 @@ export function ExemplarPopover({ at, bucketStartMs, exemplars, isLoading, error
       ) : (
         <ul className="max-h-80 space-y-1.5 overflow-y-auto" data-testid="metrics-exemplar-list">
           {ordered.map((e, i) => (
-            <li key={`${e.traceId}-${e.spanId}-${i}`} className="rounded-md border border-border/60 bg-background px-2.5 py-2 text-xs" data-stored={e.traceStored || undefined}>
+            <li key={`${e.traceId}-${e.spanId}-${i}`} className="rounded-md border border-border/60 bg-surface-sunken px-2.5 py-2 text-xs" data-stored={e.traceStored || undefined}>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium tabular-nums text-ink">{formatValue(e.value, unit)}</span>
                 <span className="text-ink-muted">{formatTimestamp(e.timeMs)}</span>

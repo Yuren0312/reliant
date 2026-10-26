@@ -389,7 +389,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
           <span data-testid="replay-masked-badge">Masked recording</span>
         </Tag>
         <span
-          className="text-xs text-muted-foreground"
+          className="text-xs text-ink-muted"
           title="A recording comes from the browser and can name any address. The replay is confined so that opening one never contacts those hosts: anything the page loaded from elsewhere shows as blank or unstyled."
           data-testid="replay-external-note"
         >
@@ -400,12 +400,12 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
             <Status tone="neutral" pulse size="sm" label="Live" />
           </span>
         )}
-        {ready && feed?.fetching && <span className="text-xs text-muted-foreground" data-testid="replay-buffering">Buffering…</span>}
+        {ready && feed?.fetching && <span className="text-xs text-ink-muted" data-testid="replay-buffering">Buffering…</span>}
       </div>
 
       <div
         ref={frameRef}
-        className={cn("relative w-full overflow-hidden rounded-md border border-border/60 bg-background", !ready && "min-h-[16rem]")}
+        className={cn("relative w-full overflow-hidden rounded-md border border-border/60 bg-surface-sunken", !ready && "min-h-[16rem]")}
         // The recorded viewport, scaled to the frame's width: runtime geometry.
         style={ready && viewport ? { height: Math.round(viewport.height * scale) } : undefined}
       >
@@ -434,10 +434,10 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
             >
               {playing ? "Pause" : "Play"}
             </Button>
-            <span className="text-xs tabular-nums text-muted-foreground" data-testid="replay-time">
+            <span className="text-xs tabular-nums text-ink-muted" data-testid="replay-time">
               {formatOffset(offset)} / {formatOffset(spanEnd - startMs)}
             </span>
-            <div role="group" aria-label="Playback speed" className="inline-flex rounded-lg border border-border bg-background p-0.5">
+            <div role="group" aria-label="Playback speed" className="inline-flex rounded-lg border border-border bg-surface-sunken p-0.5">
               {SPEEDS.map((value) => (
                 <button
                   key={value}
@@ -474,14 +474,14 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
 function chip(active: boolean) {
   return cn(
     "rounded-md px-2 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-    active ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+    active ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
   );
 }
 
 const MARK_TONE: Partial<Record<string, string>> = {
-  error: "bg-destructive",
+  error: "bg-danger",
   request_failed: "bg-warning",
-  navigation: "bg-foreground/60",
+  navigation: "bg-ink/60",
 };
 
 function Scrubber({
@@ -550,7 +550,7 @@ function blockingState(feed: ReplayFeedState | null, loadError: unknown, session
     };
   }
   if (!feed || feed.phase === "loading" || (feed.events >= 2 && feed.hasFullSnapshot && feed.phase !== "error")) {
-    return { id: "loading", node: () => <p className="text-sm text-muted-foreground" data-testid="replay-loading">Loading the recording…</p> };
+    return { id: "loading", node: () => <p className="text-sm text-ink-muted" data-testid="replay-loading">Loading the recording…</p> };
   }
   if (feed.phase === "error" && quotaOf(feed.error)) {
     return { id: "quota", node: () => <ObsWillLoad error={feed.error} /> };
@@ -614,12 +614,12 @@ function blockingState(feed: ReplayFeedState | null, loadError: unknown, session
 function StateNote({ icon, title, testId, onRetry, children }: { icon: ReactNode; title: string; testId: string; onRetry?: () => void; children: ReactNode }) {
   return (
     <div role="status" data-testid={testId} className="flex max-w-md items-start gap-3 text-left">
-      <span className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true">
+      <span className="mt-0.5 shrink-0 text-ink-muted" aria-hidden="true">
         {icon}
       </span>
       <div className="min-w-0 space-y-1.5">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="text-xs text-muted-foreground">{children}</p>
+        <p className="text-sm font-medium text-ink">{title}</p>
+        <p className="text-xs text-ink-muted">{children}</p>
         {onRetry && (
           <Button variant="outline" size="sm" onClick={onRetry} leftIcon={<RefreshCw className="h-3 w-3" />} data-testid={`${testId}-retry`}>
             Try again
@@ -672,7 +672,7 @@ function Notices({ feed, partialGap, pendingSeek, onRetry }: { feed: ReplayFeedS
           key={note.id}
           role="status"
           data-testid={`replay-notice-${note.id}`}
-          className={cn("flex flex-wrap items-center gap-2 text-xs", note.tone === "error" ? "text-destructive" : "text-muted-foreground")}
+          className={cn("flex flex-wrap items-center gap-2 text-xs", note.tone === "error" ? "text-danger-ink" : "text-ink-muted")}
         >
           <span>{note.text}</span>
           {note.action}

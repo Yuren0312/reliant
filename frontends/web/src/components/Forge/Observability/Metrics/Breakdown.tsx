@@ -69,7 +69,7 @@ export function Breakdown({ panel, field, scope, range, unit, onClose, onFilter,
             {groups.map((group) => {
               const timestamps = unionTimestamps(group.series);
               return (
-                <li key={group.value} className="min-w-0 rounded-md border border-border/60 bg-background p-2.5" data-value={group.value}>
+                <li key={group.value} className="min-w-0 rounded-md border border-border/60 bg-surface-sunken p-2.5" data-value={group.value}>
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <span className="truncate font-mono text-xs text-ink" title={group.value}>
                       {group.value || "(none)"}

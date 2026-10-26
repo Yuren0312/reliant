@@ -25,6 +25,7 @@ import {
   pinnedEnvOf,
   withSearch,
   type ConsolePage,
+  type LegacyEnvSearch,
   type OrgPage,
 } from "../paths";
 
@@ -123,7 +124,7 @@ describe("Observability views as pages", () => {
 });
 
 describe("redirects from the retired URLs", () => {
-  it.each([
+  it.each<[LegacyEnvSearch, string]>([
     [{}, "/forge/p/shop/environments/prod?env=prod"],
     [{ tab: "overview" }, "/forge/p/shop/environments/prod?env=prod"],
     [{ tab: "changes" }, "/forge/p/shop/environments/prod?env=prod"],

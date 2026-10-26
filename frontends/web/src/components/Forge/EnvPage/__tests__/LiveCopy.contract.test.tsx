@@ -22,9 +22,6 @@
 
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { Code, ConnectError } from "@connectrpc/connect";
-
-import type { LiveEnv } from "@/services/forge/live";
 
 import { CloudNotice } from "../../SourceNotices";
 
@@ -64,28 +61,6 @@ function expectNoInternalNouns(text: string) {
   for (const noun of INTERNAL_NOUNS) {
     expect(text, `copy must not name "${noun}"`).not.toMatch(noun);
   }
-}
-
-function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
-  return {
-    id: "denv_01HZXABCDEF",
-    name: "prod",
-    project: "hounders",
-    kind: "persistent",
-    declaredShape: null,
-    declaredBy: null,
-    release: "",
-    releaseProvenance: null,
-    promotedByActor: "",
-    promotedByUserId: "",
-    phase: "unspecified",
-    observed: { state: "not-reported" },
-    drift: { state: "not-reported" },
-    driftDetail: "",
-    provenance: "",
-    holds: [],
-    ...overrides,
-  };
 }
 
 describe("the unavailable notices", () => {
