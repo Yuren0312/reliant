@@ -7,7 +7,7 @@ import { DashboardPage, DashboardsPage } from "../DashboardsPages";
 
 const route = vi.hoisted(() => ({ params: { kind: "builtin", key: "org-costs" }, search: { env: "unrecorded", service: "worker", range: "7d", rpcMethod: "Get", version: 9 } }));
 vi.mock("@tanstack/react-router", async (original) => ({ ...(await original<typeof import("@tanstack/react-router")>()), useParams: () => route.params, useSearch: () => route.search, useNavigate: () => vi.fn() }));
-vi.mock("../../../Console/consoleContext", () => ({ useForgeConsole: () => ({ forgeProject: "shop", env: "unrecorded", setEnv: vi.fn(), href: () => "/dashboard", roster: { envs: [], isLoading: false, resolvingName: false, live: {} } }) }));
+vi.mock("../../../Console/consoleContext", async (original) => ({ ...(await original<typeof import("../../../Console/consoleContext")>()), useForgeConsole: () => ({ forgeProject: "shop", env: "unrecorded", setEnv: vi.fn(), href: () => "/dashboard", roster: { envs: [], isLoading: false, resolvingName: false, live: {} } }) }));
 vi.mock("../OrganizationCostsView", () => ({ OrganizationCostsView: ({ orgId }: { orgId: string }) => <h1>Organization costs for {orgId}</h1> }));
 vi.mock("uplot", async () => (await import("../../__tests__/obsMocks")).obsMocks.uplot());
 
@@ -31,11 +31,14 @@ describe("organization dashboard routes without deployments", () => {
     expect(onCall.mock.calls.some(([name]) => ["QueryPanel", "GetServiceOverview", "ListAlertHistory"].includes(name))).toBe(false);
   });
 
+  // main's getting-started guidance (#1632) still shows with no environment,
+  // but above the list rather than in place of it: the builtin cost view needs
+  // no deployment, so it must stay reachable.
   it("keeps automatic discovery reachable when the environment roster is empty", async () => {
     const api = createFixtureApi();
     api.listDashboards = vi.fn().mockResolvedValue({ dashboards: [builtin], canWrite: false });
     renderWithApi(api, <DashboardsPage />);
     expect(await screen.findByTestId("dashboards-builtin")).toHaveTextContent("Organization costs");
-    expect(screen.queryByTestId("observability-no-envs")).not.toBeInTheDocument();
+    expect(screen.getByTestId("observability-no-envs")).toBeInTheDocument();
   });
 });
