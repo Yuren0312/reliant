@@ -157,8 +157,9 @@ Every Go command, test binary, golangci-lint and vitest sizes itself to the
 whole machine, and the gate runs up to six of them at once inside one slot
 of eight: on 2026-10-26 the host ran at a load of ~150 on 32 cores, and
 every phase, `tsc` included, was starved. The gate now takes the cores the
-host has free, but never less than twice its slot's share (8 on that host),
-as `MG_CPUS`, and splits it: the test phase gets half (`go test -p`,
+host has free, but never less than half the machine (16 on that host; a
+floor of twice a slot's share, 8, starved lint's contract lane), as
+`MG_CPUS`, and splits it: the test phase gets half (`go test -p`,
 `GOMAXPROCS`) and a quarter for vitest's workers, the build, lint and a
 generator running beside the others a quarter each. A generator that runs
 first and alone (a dirty tree) gets all of it. `MG_CPUS=<n>` overrides the

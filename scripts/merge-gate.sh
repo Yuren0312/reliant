@@ -81,15 +81,16 @@ slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
 # to the whole machine (32 threads each), and the gate runs six of them at
 # once in one slot of eight: at a host load of 150 every gate was CPU-starved,
 # tsc (one thread) included. So the gate gets the cores the host has free, but
-# never less than twice its slot's share, and each concurrent phase a part of
+# never less than half the machine (a floor of twice a slot's share measured
+# slower: lint's contract lane alone ran 75s at GOMAXPROCS=2 against 41s for
+# all its lanes uncapped, on a host where every other job takes all 32), and
+# each concurrent phase a part of
 # that: the test phase (the longest) half for Go and half for vitest, the
 # others a quarter. MG_CPUS=<n>
 # overrides the budget.
 cpus=$(nproc 2>/dev/null || echo 4)
-slots=$("$slotforge" slot status --class heavy 2>/dev/null | sed -n 's/^heavy slots: \([0-9]*\).*/\1/p' | head -1)
-[ -n "$slots" ] && [ "$slots" -gt 0 ] || slots=$(( cpus / 4 > 0 ? cpus / 4 : 1 ))
 load=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null | cut -d. -f1); load=${load:-0}
-share=$(( 2 * cpus / slots )); [ "$share" -ge 4 ] || share=4
+share=$(( cpus / 2 )); [ "$share" -ge 4 ] || share=4
 free=$(( cpus - load ))
 gate_cpus=${MG_CPUS:-$(( free > share ? free : share ))}
 [ "$gate_cpus" -le "$cpus" ] || gate_cpus=$cpus
@@ -251,9 +252,13 @@ need=()
 if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ]; then need+=(. frontends/web); fi
 if [ "$elec" = true ]; then need+=(. electron); fi
 if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
+# Each install writes only its own node_modules: run them at once (one after
+# another, a lockfile bump spent 136s + 147s before any phase started).
+npm_pids=()
 for d in $(printf '%s\n' "${need[@]}" | sort -u); do
-  npm_install "$d" || fail=1
+  npm_install "$d" & npm_pids+=($!)
 done
+for p in "${npm_pids[@]}"; do wait "$p" || fail=1; done
 
 # ── generate ‖ docs ‖ build ‖ test ‖ typecheck ‖ lint ‖ migsafety ──────────
 # A clean tree (the merge queue's case) runs the generators in scratch
