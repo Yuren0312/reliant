@@ -43,7 +43,7 @@ import { IssueDetail } from "./IssueDetail";
 import { IssuesNotConfigured } from "./IssueStates";
 import { StatusBadge, Trend } from "./IssueBits";
 import { affectedNoun, PLATFORM_LABEL, SORT_LABEL, STATUS_LABEL } from "./issueModel";
-import { applyAssigneeFilter, assigneeFilterOf, assigneeFilterWaitsForMe, assigneeParam, serverAssignee } from "./issueTimelineModel";
+import { assigneeFilterOf, assigneeFilterWaitsForMe, assigneeParam, serverAssignee } from "./issueTimelineModel";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface ErrorsViewProps {
@@ -57,7 +57,7 @@ export interface ErrorsViewProps {
   statuses: IssueStatus[];
   platform: IssuePlatform | undefined;
   sort: IssueSort;
-  /** `me`, `unassigned` or a user id; absent: anyone's. */
+  /** `me` or a user id; absent: anyone's. */
   assignee: string | undefined;
   /** The issue open in detail. */
   issueId: string | undefined;
@@ -97,7 +97,7 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
     [range, statuses, platform, service, serverUser, sort, text]
   );
   const issues = useIssues(waitingForMe || meUnknown ? null : issueScope, filters);
-  const rows = useMemo(() => applyAssigneeFilter(issues.data?.pages.flatMap((page) => page.issues) ?? [], assigneeFilter), [issues.data, assigneeFilter]);
+  const rows = useMemo(() => issues.data?.pages.flatMap((page) => page.issues) ?? [], [issues.data]);
   const filtered = statuses.length > 0 || !!platform || !!service || !!text || assigneeFilter.kind !== "anyone";
 
   return (
@@ -237,7 +237,6 @@ function IssueToolbar({
         >
           <option value="">Anyone</option>
           <option value="me">Assigned to me</option>
-          <option value="unassigned">Unassigned</option>
           {people.map((person) => (
             <option key={person.id} value={assigneeParam({ kind: "user", userId: person.id })}>
               {person.name}

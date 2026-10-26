@@ -120,7 +120,7 @@ export interface ObsSearch {
   platform?: IssuePlatform;
   /** Errors: the order. Absent: most recently seen first. */
   isort?: IssueSort;
-  /** Errors: `me`, `unassigned` or a user id (assigneeFilterOf). Absent: anyone's. */
+  /** Errors: `me` or a user id (assigneeFilterOf). Absent: anyone's. */
   assignee?: string;
   /** Sessions: the session open in detail (its rum.sessionId). */
   session?: string;

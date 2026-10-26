@@ -2,10 +2,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { Issue, IssueComment, IssueTimelineEntry, IssueTimelineList } from "@/services/controlPlane/observability/issuesTypes";
+import type { IssueComment, IssueTimelineEntry, IssueTimelineList } from "@/services/controlPlane/observability/issuesTypes";
 
 import {
-  applyAssigneeFilter,
   assigneeFilterOf,
   assigneeFilterWaitsForMe,
   assigneeParam,
@@ -104,30 +103,20 @@ describe("who may touch a comment", () => {
 });
 
 describe("the assignee filter", () => {
-  const issue = (id: string, assignee: Issue["assignee"]) => ({ id, assignee }) as Issue;
-  const issues = [issue("a", { id: "u1", name: "ada" }), issue("b", null), issue("c", { id: "u2", name: "grace" })];
-
   it("round-trips through the URL", () => {
-    for (const param of [undefined, "me", "unassigned", "u2"]) expect(assigneeParam(assigneeFilterOf(param))).toBe(param);
+    for (const param of [undefined, "me", "u2"]) expect(assigneeParam(assigneeFilterOf(param))).toBe(param);
     expect(assigneeFilterOf("  ")).toEqual({ kind: "anyone" });
   });
 
-  it("asks the server for a user id only: mine and a named person, never unassigned", () => {
+  it("asks the server for a user id only: mine and a named person", () => {
     expect(serverAssignee({ kind: "me" }, "u1")).toBe("u1");
     expect(serverAssignee({ kind: "user", userId: "u2" }, "u1")).toBe("u2");
-    expect(serverAssignee({ kind: "unassigned" }, "u1")).toBeUndefined();
     expect(serverAssignee({ kind: "anyone" }, "u1")).toBeUndefined();
   });
 
   it("waits for the reader rather than showing everyone's when 'mine' cannot be asked yet", () => {
     expect(assigneeFilterWaitsForMe({ kind: "me" }, undefined)).toBe(true);
     expect(assigneeFilterWaitsForMe({ kind: "me" }, "u1")).toBe(false);
-    expect(assigneeFilterWaitsForMe({ kind: "unassigned" }, undefined)).toBe(false);
-  });
-
-  it("keeps the unassigned rows for 'unassigned' and passes the server-filtered ones through", () => {
-    expect(applyAssigneeFilter(issues, { kind: "unassigned" }).map((i) => i.id)).toEqual(["b"]);
-    expect(applyAssigneeFilter(issues, { kind: "anyone" })).toHaveLength(3);
-    expect(applyAssigneeFilter(issues, { kind: "me" })).toHaveLength(3);
+    expect(assigneeFilterWaitsForMe({ kind: "user", userId: "u2" }, undefined)).toBe(false);
   });
 });

@@ -11,7 +11,6 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import { obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import type {
-  Issue,
   IssueActor,
   IssueComment,
   IssueTimelineBody,
@@ -123,14 +122,21 @@ export function canDeleteComment(comment: IssueComment, me: IssueUser | null | u
 
 // ── The assignee filter ───────────────────────────────────────────────────────
 
-export type AssigneeFilter = { kind: "anyone" } | { kind: "me" } | { kind: "unassigned" } | { kind: "user"; userId: string };
+/**
+ * TODO(unassigned): ListIssues cannot filter to "unassigned" (an unset assignee
+ * means every issue, and an empty one is refused). A control-plane follow-up adds
+ * an explicit unassigned filter, and possibly a server-side "me". Once its proto
+ * is vendored, add `{ kind: "unassigned" }` here, send it in issuesApi.listIssues,
+ * and add the option to the ErrorsView select. It is deliberately not filtered
+ * client-side: that would only cover the pages loaded so far.
+ */
+export type AssigneeFilter = { kind: "anyone" } | { kind: "me" } | { kind: "user"; userId: string };
 
-/** `assignee=me` | `unassigned` | `<user id>`; absent: anyone. */
+/** `assignee=me` | `<user id>`; absent: anyone. */
 export function assigneeFilterOf(param: string | undefined): AssigneeFilter {
   const value = (param ?? "").trim();
   if (!value) return { kind: "anyone" };
   if (value === "me") return { kind: "me" };
-  if (value === "unassigned") return { kind: "unassigned" };
   return { kind: "user", userId: value };
 }
 
@@ -140,14 +146,12 @@ export function assigneeParam(filter: AssigneeFilter): string | undefined {
       return undefined;
     case "me":
       return "me";
-    case "unassigned":
-      return "unassigned";
     case "user":
       return filter.userId;
   }
 }
 
-/** The user id the server is asked for; undefined when the server has nothing to filter by ("unassigned" is the client's). */
+/** The user id the server is asked for; "me" is the signed-in user's id, known to this app. */
 export function serverAssignee(filter: AssigneeFilter, meId: string | undefined): string | undefined {
   if (filter.kind === "me") return meId;
   if (filter.kind === "user") return filter.userId;
@@ -157,15 +161,6 @@ export function serverAssignee(filter: AssigneeFilter, meId: string | undefined)
 /** "Mine" cannot be asked until the reader is known. */
 export function assigneeFilterWaitsForMe(filter: AssigneeFilter, meId: string | undefined): boolean {
   return filter.kind === "me" && !meId;
-}
-
-/**
- * The rows the filter keeps. The server filters by a user id; it has no
- * "unassigned", so that one is applied here, to the pages loaded so far. The
- * others are already exact and pass through.
- */
-export function applyAssigneeFilter(issues: readonly Issue[], filter: AssigneeFilter): Issue[] {
-  return filter.kind === "unassigned" ? issues.filter((issue) => !issue.assignee) : [...issues];
 }
 
 // ── Refusals ──────────────────────────────────────────────────────────────────

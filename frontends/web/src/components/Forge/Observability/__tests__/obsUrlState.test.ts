@@ -161,8 +161,8 @@ describe("the URL round trip", () => {
     );
   });
 
-  it("carries the Errors view's assignee filter: me, unassigned or a user id", () => {
-    for (const assignee of ["me", "unassigned", "user-ada"]) expect(throughTheUrl({ view: "errors", assignee }).parsed.assignee).toBe(assignee);
+  it("carries the Errors view's assignee filter: me or a user id", () => {
+    for (const assignee of ["me", "user-ada"]) expect(throughTheUrl({ view: "errors", assignee }).parsed.assignee).toBe(assignee);
   });
 
   it("carries a release comparison and its window, and drops one out of bounds", () => {

@@ -204,19 +204,16 @@ describe("the list", () => {
     expect(calls(onCall, "ListIssues").filter((r) => r.assignee === undefined)).toHaveLength(1);
   });
 
-  it("filters to unassigned on the client (the server has no such filter) and to a named person on the server", async () => {
+  it("filters to a named person on the server, and offers no 'unassigned' (the server cannot filter to it yet)", async () => {
     const user = userEvent.setup();
     const onCall = vi.fn();
     const harness = renderPanel(createFixtureApi({ onCall }), { view: "errors" }, ENV_PLACE);
     await screen.findByTestId("obs-errors-list");
-    await user.selectOptions(screen.getByTestId("obs-errors-assignee"), "unassigned");
-    expect(harness.current().assignee).toBe("unassigned");
-    await waitFor(() => expect(rowIds()).toEqual(["iss-checkout-total", "iss-worker-conns"]));
-    expect(calls(onCall, "ListIssues").at(-1).assignee).toBeUndefined();
-
     const pick = screen.getByTestId("obs-errors-assignee");
+    expect(within(pick).queryByRole("option", { name: "Unassigned" })).not.toBeInTheDocument();
     await waitFor(() => expect(within(pick).getByRole("option", { name: "grace@example.com" })).toBeInTheDocument());
     await user.selectOptions(pick, "user-grace");
+    expect(harness.current().assignee).toBe("user-grace");
     await waitFor(() => expect(rowIds()).toEqual(["iss-orders-deadline"]));
     expect(calls(onCall, "ListIssues").at(-1).assignee).toBe("user-grace");
   });
