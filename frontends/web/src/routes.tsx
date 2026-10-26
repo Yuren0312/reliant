@@ -609,7 +609,7 @@ const settingsConnectorRoutes = createSettingsConnectorRoutes(() => authenticate
   consent: ConnectorConsentPage,
 })
 
-// /settings/$section and /settings/environments/$machineId. Defined in
+// /settings/$section and /settings/machines/$machineId. Defined in
 // settingsSectionRoutes.tsx so the route tests mount the same definitions; an
 // unknown slug redirects to /settings with a notice rather than throwing.
 const settingsSectionRoutes = createSettingsSectionRoutes(() => authenticatedLayoutRoute, {

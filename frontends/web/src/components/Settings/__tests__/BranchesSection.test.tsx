@@ -91,7 +91,7 @@ vi.mock("../../Worktrees/CreateWorktreeModal", () => ({ CreateWorktreeModal: () 
 vi.mock("../../Worktrees/DiscoverWorktreesModal", () => ({ DiscoverWorktreesModal: () => null }));
 vi.mock("../../Worktrees/AddRepoModal", () => ({ AddRepoModal: () => null }));
 
-import { WorkspacesSection } from "../WorkspacesSection";
+import { BranchesSection } from "../BranchesSection";
 import { WORKTREE_PAGE_SIZE, type Worktree } from "../../../hooks/worktree-queries";
 import { setTransport } from "../../../lib/connect";
 import { queryClient } from "../../../lib/query-client";
@@ -154,7 +154,7 @@ const manyFeatures = () =>
 function renderSection() {
   return render(
     <QueryClientProvider client={queryClient}>
-      <WorkspacesSection />
+      <BranchesSection />
     </QueryClientProvider>,
   );
 }
@@ -169,7 +169,7 @@ async function renderLoaded() {
   return view;
 }
 
-describe("Settings → Workspaces", () => {
+describe("Settings → Branches", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.preferences.worktree.archiveMode = "ask_me";
@@ -188,8 +188,8 @@ describe("Settings → Workspaces", () => {
 
   it("explains the page and scopes it to the open project and machine", async () => {
     await renderLoaded();
-    expect(screen.getByRole("heading", { level: 1, name: "Workspaces" })).toBeInTheDocument();
-    expect(screen.getByText(/each branched chat gets its own git worktree/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Branches" })).toBeInTheDocument();
+    expect(screen.getByText(/each branched chat works in its own git worktree/i)).toBeInTheDocument();
     expect(screen.getByText("reliant", { selector: "span" })).toBeInTheDocument();
     expect(screen.getByText("studio.local")).toBeInTheDocument();
   });

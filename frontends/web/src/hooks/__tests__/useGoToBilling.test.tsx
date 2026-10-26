@@ -115,7 +115,7 @@ describe("useGoToBilling", () => {
     // Every trip to billing is a detour from something: a machine, a chat, a
     // run. Billing offers "Back to where you were" for each (it validates the
     // path as same-origin before navigating to it).
-    window.history.pushState({}, "", "/settings/environments/d-1");
+    window.history.pushState({}, "", "/settings/machines/d-1");
 
     const { result } = renderHook(() => useGoToBilling("machines"));
     act(() => result.current());
