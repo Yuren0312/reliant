@@ -96,14 +96,7 @@ export function getChatSelection(chatId: string): ChatSelection | null | undefin
 }
 
 /** Re-read the chat's selection from the server, e.g. after a refused stale edit. */
-export async function refetchChatSelection(chatId: string): Promise<unknown> {
-  // The selection is read through the chat detail, which is fresh for minutes:
-  // mark it stale so this re-read reaches the server.
-  await queryClient.invalidateQueries({
-    queryKey: chatKeys.detail(chatId),
-    exact: true,
-    refetchType: "none",
-  });
+export function refetchChatSelection(chatId: string): Promise<unknown> {
   return queryClient.refetchQueries({ queryKey: chatKeys.selection(chatId), exact: true });
 }
 
@@ -310,17 +303,19 @@ export function useChatSelection(chatId?: string) {
 }
 
 /**
- * The cold read of a chat's selection. It is the chat detail's own GetChat
- * (the selection rides on it), so it goes through the detail query: a chat
- * opened from the sidebar has its detail seeded, a chat whose detail is
- * already loading shares that one request, and only a chat nothing has read
- * yet costs a call -- one, where the composer and the header used to make one
- * each. refetchChatSelection (after a refused stale edit) must reach the
- * server, so it marks the detail stale first; fetchQuery returns cached
- * detail only while it is fresh.
+ * The read of a chat's selection: the chat's own GetChat (the selection rides
+ * on it), joined to the detail query's request when one is already in flight.
+ * A chat opened with no detail cached would otherwise make that call twice,
+ * once for the header and once for the composer.
+ *
+ * It never answers from a cached detail, however fresh: the project list seeds
+ * details without a selection, so a cached detail says nothing about whether
+ * the chat has one, and a selection read after the stream stopped maintaining
+ * it must reach the server. staleTime 0 makes fetchQuery fetch (or join the
+ * request in flight) instead of returning the cache.
  */
 async function fetchChatSelection(chatId: string): Promise<ChatSelection | null> {
-  const chat = await queryClient.fetchQuery(chatDetailQueryOptions(chatId));
+  const chat = await queryClient.fetchQuery({ ...chatDetailQueryOptions(chatId), staleTime: 0 });
   return chat.selection ?? null;
 }
 
