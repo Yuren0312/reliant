@@ -51,6 +51,7 @@ A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 | `Cmd+Shift+H` |  | Find and Replace |
 | `Cmd+F` |  | Find in File |
 | `Cmd+Shift+F` |  | Find in Files |
+| `Cmd+F` | desktop app only | Find in Page |
 | `Cmd+P` | `Cmd+K P` | Quick File Open |
 | `Cmd+F` |  | Search Chats |
 

@@ -48,6 +48,10 @@ export const OFF_WORKSPACE: Readonly<Record<string, OffWorkspace>> = {
   // key is the browser's find. The host still implements it everywhere for
   // the slash menu, which there searches chat history.
   onChatSearch: "here",
+  // The desktop app's find bar, wherever Cmd+F means "find on the page". The
+  // host implements it only in the desktop app: in a browser tab the shortcut
+  // is unbound (desktop_only) and the browser's own find bar is the one.
+  onFindInPage: "here",
   // Bound in `monaco`. With a selection in a file viewer it adds it to the
   // chat; otherwise it focuses the chat, as onFocusChat does.
   onAddSelectionToChat: "here",
