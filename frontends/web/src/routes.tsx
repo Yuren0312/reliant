@@ -119,6 +119,8 @@ const WorkflowDetailPage = lazyRoute(
   () => import('./components/workflows/detail/WorkflowDetailPage'), 'WorkflowDetailPage')
 const InboxPage = lazyRoute(
   () => import('./components/inbox/InboxPage'), 'InboxPage')
+const AppsPage = lazyRoute(
+  () => import('./components/Apps/AppsPage'), 'AppsPage')
 const OnboardingRoute = lazyRoute(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRoute(
@@ -191,8 +193,10 @@ const ForgeLandingRoute = lazyRoute(
   () => import('./components/Forge/Console/ForgeEntryRoutes'), 'ForgeLandingRoute')
 const ForgeLegacyEnvRoute = lazyRoute(
   () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyEnvRoute')
-const ForgeLegacyObservabilityRoute = lazyRoute(
-  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyObservabilityRoute')
+const ForgeOrgObservabilityRoute = lazyRoute(
+  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'OrgObservabilityRoute')
+const ForgeOrgLayout = lazyRoute(
+  () => import('./components/Forge/Org'), 'OrgConsoleLayout')
 const ForgeLegacyDomainsRoute = lazyRoute(
   () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyDomainsRoute')
 const ForgeLegacyCommandRoute = lazyRoute(
@@ -701,9 +705,10 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   monitoring: gated(ForgeConsoleMonitoringPage),
   settings: gated(ForgeConsoleSettingsPage),
   activity: gated(ForgeConsoleActivityPage),
+  orgLayout: gated(ForgeOrgLayout),
+  orgObservability: gated(ForgeOrgObservabilityRoute),
   landing: gated(ForgeLandingRoute),
   legacyEnv: gated(ForgeLegacyEnvRoute),
-  legacyObservability: gated(ForgeLegacyObservabilityRoute),
   legacyDomains: gated(ForgeLegacyDomainsRoute),
   legacyCommand: gated(ForgeLegacyCommandRoute),
 })
@@ -714,6 +719,16 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
 // without the conditional. /onboarding owns: reset-onboarding signal, GitHub
 // OAuth return at the onboarding context, and the "done — leave for /" hop.
 // See OnboardingRoute.tsx.
+// Apps: everything the user has built and deployed, with its live links
+// (components/Apps/AppsPage.tsx). The sidebar's Apps entry, and the bare
+// /forge, land here. Behind ForgeGate like every forge surface: it is the way
+// into the console, and the Developer off-switch has to turn it off too.
+const appsRoute = createRoute({
+  getParentRoute: () => authenticatedLayoutRoute,
+  path: '/apps',
+  component: gated(AppsPage),
+})
+
 const onboardingRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
   path: '/onboarding',
@@ -904,6 +919,7 @@ const routeTree = rootRoute.addChildren([
     workflowBuilderRoute,
     ...workflowsAreaRoutes,
     inboxRoute,
+    appsRoute,
   ]),
   appLayoutRoute.addChildren([indexRoute, projectRoute]),
 ])

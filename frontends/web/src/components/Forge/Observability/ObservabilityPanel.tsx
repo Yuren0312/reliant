@@ -36,6 +36,12 @@
  * so the panel asks once (the overview, a cache entry every view shares) and,
  * when that is the answer, shows the explanation in place of all the views
  * rather than one copy each.
+ *
+ * "Set up, but nothing has arrived yet" is the same kind of fact (about the
+ * scope, not a view), so it is asked once too (useNothingArrived, a week of
+ * GetServiceSignals) and answered once, in place of the telemetry views. Both
+ * lead with what the current view will show (ObsStates' OBS_TOPICS), then how
+ * to get data onto it.
  */
 
 import { useMemo } from "react";
@@ -52,6 +58,7 @@ import { RANGE_LABELS, RANGE_PRESETS, rangeOf } from "@/services/controlPlane/ob
 import { cn } from "@/lib/utils";
 
 import { AlertNotifications } from "./AlertNotifications";
+import { ObsAskContextValue } from "./AskReliant/askReliantContext";
 import { AlertsView } from "./AlertsView";
 import { ObsChartMarkersProvider } from "./charts/UPlotChart";
 import { compareParam, healthWindowOf, parseCompareParam } from "./deliveryScope";
@@ -72,15 +79,15 @@ import {
   type ObsSearch,
   type ObsView,
 } from "./obsSearch";
-import { envIdsOf, placeEnvironments, type ObsPlace } from "./obsPlace";
+import { envIdsOf, orgPickerEnvironments, orgSelectionIsEmpty, placeEnvironments, type ObsPlace } from "./obsPlace";
 import { ObsScopeBar } from "./ObsScopeBar";
-import { ObsError, ObsLoadingRows, ObsNotSetUp } from "./ObsStates";
+import { ObsError, ObsLoadingRows, ObsNoAppEnvironments, ObsNothingYet, ObsNotSetUp } from "./ObsStates";
 import { OverviewView } from "./OverviewView";
 import { ProfilesView } from "./ProfilesView";
 import { ReleaseComparison } from "./ReleaseComparison";
 import { useReleaseMarkers } from "./releaseMarkers";
 import { ReleaseStrip } from "./ReleaseStrip";
-import { signalState, useSignalsIndex, type SignalState } from "./serviceSignals";
+import { signalState, useNothingArrived, useSignalsIndex, type SignalState } from "./serviceSignals";
 import { SessionsView } from "./Sessions/SessionsView";
 import { TracesView } from "./TracesView";
 import { UsageView } from "./UsageView";
@@ -89,6 +96,9 @@ export type { ObsEnvironment, ObsPlace } from "./obsPlace";
 
 /** The views with time-series charts, where release markers are drawn and listed. */
 const MARKED_VIEWS: readonly ObsView[] = ["overview"];
+
+/** The views that read the scope's telemetry, so "nothing has arrived yet" is true of them (not Alerts or Usage). */
+const NOTHING_YET_VIEWS: readonly ObsView[] = ["overview", "errors", "sessions", "logs", "traces", "profiles"];
 
 /** The views that read one signal of one service, and the signal. */
 const SIGNAL_VIEWS: Partial<Record<ObsView, ServiceSignal>> = { logs: "logs", traces: "traces", profiles: "profiles" };
@@ -115,8 +125,12 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
 
   const filterTokens = useMemo(() => filterTokensOf(search.f), [search.f]);
   const groupBy = useMemo(() => groupByOf(search.groupBy), [search.groupBy]);
-  const envIdsKey = envIdsOf(place, search.envs).join(",");
-  const projectId = place.kind === "project" ? place.project : undefined;
+  const envIdsKey = envIdsOf(place, search.envs, search.apps).join(",");
+  // Apps picked that own no environment: an empty id list would read the whole org, so nothing is queried.
+  const noEnvironments = orgSelectionIsEmpty(place, search.envs, search.apps);
+  const selectedApps = useMemo(() => (place.kind === "org" ? (search.apps ?? []) : []), [place.kind, search.apps]);
+  const projectId =
+    place.kind === "project" ? place.project : place.kind === "org" && selectedApps.length === 1 && selectedApps[0] ? selectedApps[0] : undefined;
   const scope = useMemo<ObsScope | null>(
     () =>
       org.orgId
@@ -124,14 +138,22 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
         : null,
     [org.orgId, projectId, envIdsKey, filterTokens]
   );
-  const subject = place.kind === "env" ? place.env.name : place.project;
-  const overview = useServiceOverview(scope, range);
+  const subject =
+    place.kind === "env"
+      ? place.env.name
+      : place.kind === "project"
+        ? place.project
+        : selectedApps.length
+          ? selectedApps.join(", ")
+          : "All apps";
+  const queryScope = noEnvironments ? null : scope;
+  const overview = useServiceOverview(queryScope, range);
   const notSetUp = !!overview.error && obsErrorKind(overview.error) === "not-set-up";
   const groupable = (GROUPABLE_VIEWS as readonly ObsView[]).includes(view);
   const environments = useMemo(() => placeEnvironments(place), [place]);
   const comparing = parseCompareParam(search.compare);
-  const marked = !!scope && !notSetUp && !comparing && MARKED_VIEWS.includes(view);
-  const releases = useReleaseMarkers(scope, range, environments, marked);
+  const marked = !!queryScope && !notSetUp && !comparing && MARKED_VIEWS.includes(view);
+  const releases = useReleaseMarkers(queryScope, range, environments, marked);
   /** A comparison opens over the view (Back returns to it); a push, so the browser's Back closes it too. */
   const openCompare = (promotion: Promotion) => navigate({ compare: compareParam(promotion) });
   const closeCompare = () => navigate({ compare: undefined, cmpWindow: undefined });
@@ -169,12 +191,25 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
     });
   };
   const envName = (id: string) => placeEnvironments(place).find((env) => env.id === id)?.name;
+  const askContext = useMemo(() => ({ environments, forgeProject: place.kind === "project" ? place.project : undefined }), [environments, place]);
 
   // Narrowed to one service, the signal views it neither sends nor declares
   // are not offered and the idle ones are muted (serviceSignals.ts). The view
   // in the URL is always offered: a link never lands on a missing tab. The
   // console draws no tabs (its nav is the project's, every view kept).
   const signals = useSignalsIndex(!consoleChrome && search.service && !notSetUp ? scope : null, range);
+
+  // Set up, but nothing in scope has sent anything this week: the views say
+  // how to get data here, once, instead of each one "nothing in this window".
+  // Asked only when the window's overview came back empty: a service in it
+  // already answers "something has arrived", so a scope with data never pays
+  // for the week's probe. A deep link (an issue, a session, a trace) still
+  // opens: issues outlive the week, and the link is what the reader came for.
+  const deepLink = !!(search.issue || search.session || search.trace);
+  const windowEmpty = !notSetUp && overview.data?.services.length === 0;
+  const nothingYet = useNothingArrived(scope && windowEmpty ? scope : null) && !deepLink && NOTHING_YET_VIEWS.includes(view);
+  /** The one environment in scope, so a quoted command names it; none when it is all of them. */
+  const envHint = place.kind === "env" ? place.env.name : search.envs?.length === 1 ? search.envs[0] : undefined;
   const viewState = (id: ObsView): SignalState => {
     const signal = SIGNAL_VIEWS[id];
     return signal ? signalState(signals, search.service, signal) : { kind: "available" };
@@ -183,6 +218,7 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
   const selectableViews = tabViews.filter((id) => id === view || viewState(id).kind === "available");
 
   return (
+    <ObsAskContextValue.Provider value={askContext}>
     <div className="space-y-4" data-testid="obs-panel" data-view={view} data-place={place.kind}>
       <div className={cn("flex flex-wrap items-center gap-3", consoleChrome ? "justify-end" : "justify-between")}>
         {!consoleChrome && (
@@ -275,11 +311,26 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
 
       {/* Usage is the org's allowance, not a query over the scope: nothing here would narrow it. */}
       {/* Alerts keeps the environment picker; attribute filters and group-by mean nothing there. */}
-      {scope && (!notSetUp || view === "alerts") && view !== "usage" && (
+      {/* Nor does a filter mean anything over a scope that has sent nothing yet. */}
+      {scope && (!notSetUp || view === "alerts") && !nothingYet && view !== "usage" && (
         <ObsScopeBar
           scope={scope}
           range={range}
-          environments={place.kind === "project" && !consoleChrome ? place.environments : undefined}
+          environments={
+            place.kind === "org"
+              ? orgPickerEnvironments(place, selectedApps)
+              : place.kind === "project" && !consoleChrome
+                ? place.environments
+                : undefined
+          }
+          apps={place.kind === "org" ? place.apps : undefined}
+          selectedApps={selectedApps}
+          onAppsChange={(names) => {
+            // Picked environments that no longer belong to a selected app are dropped with it.
+            const inApps = new Set(orgPickerEnvironments(place, names).map((env) => env.name));
+            const envs = (search.envs ?? []).filter((name) => inApps.has(name));
+            navigate({ apps: names.length ? names : undefined, envs: envs.length ? envs : undefined }, { replace: true });
+          }}
           selectedEnvs={search.envs ?? []}
           onEnvsChange={(names) => navigate({ envs: names.length ? names : undefined }, { replace: true })}
           pinnedEnv={place.kind === "env" ? place.env.name : undefined}
@@ -288,8 +339,8 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
           onFiltersChange={(tokens) => navigate({ f: filterParam(tokens) }, { replace: true })}
           groupBy={groupBy}
           onGroupByChange={(keys) => navigate({ groupBy: groupByParam(keys) }, { replace: true })}
-          groupable={groupable}
-          filterable={view !== "alerts" && view !== "errors" && view !== "sessions"}
+          groupable={groupable && !noEnvironments}
+          filterable={view !== "alerts" && view !== "errors" && view !== "sessions" && !noEnvironments}
         />
       )}
 
@@ -312,12 +363,14 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
           ) : (
             // Signed in, but no organization resolved yet (mid-provisioning):
             // there is no tenant to read, which is the not-set-up answer.
-            <ObsNotSetUp subject={subject} />
+            <ObsNotSetUp subject={subject} topic={view} env={envHint} />
           )
         ) : view === "usage" ? (
           // Usage is a Postgres read, not a tenant query: it stays available
           // before the store exists, which is when the allowance is worth seeing.
           <UsageView orgId={scope.orgId} subject={subject} />
+        ) : noEnvironments ? (
+          <ObsNoAppEnvironments apps={selectedApps} />
         ) : view === "alerts" ? (
           // Alerting answers for itself (AlertingService, its own "not
           // configured"), and the declared rules come from the release shape,
@@ -342,7 +395,9 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
             navigate={navigate}
           />
         ) : notSetUp ? (
-          <ObsNotSetUp subject={subject} />
+          <ObsNotSetUp subject={subject} topic={view} env={envHint} />
+        ) : nothingYet ? (
+          <ObsNothingYet subject={subject} topic={view} env={envHint} />
         ) : view === "errors" ? (
           <ErrorsView
             scope={scope}
@@ -415,5 +470,6 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
         </ObsChartMarkersProvider>
       </div>
     </div>
+    </ObsAskContextValue.Provider>
   );
 }

@@ -50,7 +50,7 @@ interface NavItem {
 
 /**
  * The drawer's destinations, in the desktop sidebar's order (Layout/Sidebar):
- * New chat, then Apps and Observability (the running side of a project), then
+ * New chat, then Apps and Observability (the org's apps and their telemetry), then
  * the Inbox, then the rest.
  *
  * Apps and Observability open the forge console itself, outside `/m/*`: its
@@ -65,7 +65,7 @@ function navItems(): NavItem[] {
     { to: "/m/new", label: "New chat", icon: MessageSquarePlus },
     ...(forge
       ? [
-          { to: "/forge", label: "Apps", icon: Boxes },
+          { to: "/apps", label: "Apps", icon: Boxes },
           { to: "/forge/observability", label: "Observability", icon: Activity },
         ]
       : []),
