@@ -42,15 +42,18 @@ vi.mock("../../store/projectStore", () => ({
   },
 }));
 
+vi.mock("../../hooks/worktree-queries", () => ({
+  resolveWorktree: async (id: string) => {
+    calls.push(`resolveWorktree:${id}:start`);
+    await worktreeGate.promise;
+    calls.push(`resolveWorktree:${id}:end`);
+    return state.worktrees.get(id) ?? null;
+  },
+}));
+
 vi.mock("../../store/worktreeStore", () => ({
   useWorktreeStore: {
     getState: () => ({
-      resolveWorktree: async (id: string) => {
-        calls.push(`resolveWorktree:${id}:start`);
-        await worktreeGate.promise;
-        calls.push(`resolveWorktree:${id}:end`);
-        return state.worktrees.get(id) ?? null;
-      },
       switchWorktreeContext: async (projectId: string, worktree: { id: string } | null) => {
         calls.push(`switchWorktreeContext:${projectId}:${worktree?.id ?? "main"}`);
       },

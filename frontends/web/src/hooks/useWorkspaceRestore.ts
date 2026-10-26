@@ -23,7 +23,7 @@ import { openChatInWorkspace } from "../lib/openChatInWorkspace";
 import { useChatNavigationStore } from "../store/chatNavigationStore";
 import { useTerminalStore } from "../store/terminalStore";
 import { restoreLastWorktree } from "./worktree-actions";
-import { resolveWorktree, getCurrentWorktree } from "./worktree-queries";
+import { getCurrentWorktree } from "./worktree-queries";
 
 export interface WorkspaceRestoreResult {
   /** Whether restoration is in progress */
