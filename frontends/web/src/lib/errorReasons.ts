@@ -84,6 +84,17 @@ export const ERROR_REASONS = [
   // ── control-plane: git credentials (internal/gitcredential; reliant token_git.go) ──
   /** No git provider account is connected for the user. */
   "git_credential_not_connected",
+  // ── control-plane: claimable deploys (internal/claimable; the /claim page) ──
+  /** The deploy was already claimed: the first completion wins. */
+  "claimable_claimed",
+  /** Expired and purged, or past purge_after and no longer revivable. */
+  "claimable_expired",
+  /** Removed by an administrator; never claimable. */
+  "claimable_taken_down",
+  /** No such claim token: the same answer for "never existed" and "wrong". */
+  "claimable_not_found",
+  /** The anonymous session was already handed to a browser. */
+  "claimable_session_released",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];

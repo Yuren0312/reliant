@@ -10,6 +10,7 @@ import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import { createSettingsSectionRoutes } from './settingsSectionRoutes'
 import {
+  appsSearchSchema,
   authSearchSchema,
   connectionOAuthCallbackSearchSchema,
   githubOAuthCallbackSearchSchema,
@@ -71,6 +72,8 @@ const EmailVerification = lazyRoute(
   () => import('./components/EmailVerification'), 'EmailVerification')
 const UpgradeAccount = lazyRoute(
   () => import('./components/UpgradeAccount'), 'UpgradeAccount')
+const ClaimPage = lazyRoute(
+  () => import('./components/Claim/ClaimPage'), 'ClaimPage')
 const DesignSandboxPage = lazyRoute(
   () => import('./components/DesignSandbox/DesignSandboxPage'), 'DesignSandboxPage')
 // Proving harness for the forge → reliant token bridge (see index.css).
@@ -435,6 +438,17 @@ const upgradeRoute = createRoute({
   ),
 })
 
+// Claim a no-signup deploy (`/claim#rcl_<token>`, handed over by an agent).
+// Root-level and unguarded: the page shows what is being claimed to someone
+// with no session, and a layout redirect to /auth would lose the claim. The
+// token never reaches the router: lib/claimLinkBoot moves it out of the
+// fragment before the router is built. See components/Claim/ClaimPage.tsx.
+const claimRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/claim',
+  component: ClaimPage,
+})
+
 // Pathless layout route that owns the App shell + its shared search schema.
 // Children `/` and `/project/$projectId` both render <App />; placing the
 // validateSearch + AuthGuard on the parent means components inside App can
@@ -726,6 +740,7 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
 const appsRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
   path: '/apps',
+  validateSearch: appsSearchSchema,
   component: gated(AppsPage),
 })
 
@@ -880,6 +895,7 @@ const routeTree = rootRoute.addChildren([
   resetPasswordRoute,
   verifyEmailRoute,
   upgradeRoute,
+  claimRoute,
   designSandboxRoute,
   forgeTokenSandboxRoute,
   forgeSecretsPreviewRoute,
