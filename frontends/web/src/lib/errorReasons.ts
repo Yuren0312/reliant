@@ -81,6 +81,10 @@ export const ERROR_REASONS = [
   "observability_not_configured",
   /** The caller is not a member of the organization asked about. */
   "not_org_member",
+  /** The org's hourly observability query quota is spent; the QueryQuotaExhausted detail says when it resets. */
+  "obs_query_quota",
+  /** A background poll refused early, to keep the last of the quota for a person's own query. */
+  "obs_query_quota_soft",
   // ── control-plane: git credentials (internal/gitcredential; reliant token_git.go) ──
   /** No git provider account is connected for the user. */
   "git_credential_not_connected",

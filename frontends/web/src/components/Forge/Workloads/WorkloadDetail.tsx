@@ -41,6 +41,7 @@ import { useEnvPromotions, useProjectRelease, useProjectReleases } from "@/hooks
 import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 import { cn } from "@/lib/utils";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { ObsScope, ServiceSignal, Workload, WorkloadDetail as WorkloadDetailData, WorkloadEvent, WorkloadJob, WorkloadSeries } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cloudErrorDetail, type RestartedWorkload, type RunStateRequest } from "@/services/forge/cloudEnvs";
@@ -213,7 +214,7 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
     );
   }
 
-  const error = detail.error ?? (!detail.data ? listed.error : null);
+  const error = keepsLastResult(detail.error, detail.data) ? null : (detail.error ?? (!detail.data ? listed.error : null));
   if (error) {
     return (
       <div className="space-y-6" data-testid="workload-detail" data-state="error">

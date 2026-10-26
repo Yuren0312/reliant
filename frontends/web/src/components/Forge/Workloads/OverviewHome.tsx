@@ -38,6 +38,7 @@ import Tag from "@/components/forge-ui/tag";
 import { useAlerts, useObservabilityOrg, useReleases, useWorkloads } from "@/hooks/observability-queries";
 import { useProjectReleases } from "@/hooks/release-queries";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { ObsScope, Workload } from "@/services/controlPlane/observability/types";
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { frontendsInScope } from "@/services/forge/frontends";
@@ -300,7 +301,7 @@ export function OverviewHome({
 
       {notSetUp ? (
         <ObsNotSetUp subject={project} />
-      ) : listed.error ? (
+      ) : listed.error && !keepsLastResult(listed.error, listed.data) ? (
         <ObsError error={listed.error} subject={project} onRetry={() => void listed.refetch()} retrying={listed.isFetching} />
       ) : (
         <div className="space-y-4">

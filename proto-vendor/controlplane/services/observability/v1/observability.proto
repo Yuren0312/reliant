@@ -1673,6 +1673,39 @@ message DashboardAlert {
   string note = 8;
 }
 
+// === Query quota ===
+
+// QueryQuotaLimit names which of the org's hourly ClickHouse read limits ran
+// out. The quota is one per organization, shared by everything that reads for
+// it: the console, the CLI and alert evaluation.
+enum QueryQuotaLimit {
+  QUERY_QUOTA_LIMIT_UNSPECIFIED = 0;
+  // The number of queries in the interval.
+  QUERY_QUOTA_LIMIT_QUERIES = 1;
+  // Bytes read from storage in the interval.
+  QUERY_QUOTA_LIMIT_READ_BYTES = 2;
+  // Total query execution time in the interval.
+  QUERY_QUOTA_LIMIT_EXECUTION_TIME = 3;
+}
+
+// QueryQuotaExhausted is the typed detail on the ResourceExhausted (reason
+// "obs_query_quota", or "obs_query_quota_soft" for a background poll refused
+// early to keep a reserve for a person's own query) an org's hourly
+// observability query quota answers with. Reads are paused until resets_at;
+// ingest is not affected and nothing is lost. A client keeps showing what it
+// already has and retries after resets_at, not before.
+message QueryQuotaExhausted {
+  // The limit that ran out. UNSPECIFIED when ClickHouse named a limit this
+  // enum does not (resets_at is still right).
+  QueryQuotaLimit limit = 1;
+  // When the quota interval ends and the budget refills. Always set.
+  google.protobuf.Timestamp resets_at = 2;
+  // The query lane whose allowance ran out: "interactive" (the console),
+  // "automation" (alert evaluation) or "agent" (the CLI and tokens). Empty
+  // when the quota is not split into lanes.
+  string lane = 3;
+}
+
 // === Usage and billing ===
 
 message GetObservabilityUsageRequest {
