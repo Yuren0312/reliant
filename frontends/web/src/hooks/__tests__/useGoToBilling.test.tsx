@@ -122,7 +122,7 @@ describe("useGoToBilling", () => {
 
     expect(mockNavigate).toHaveBeenCalledWith(
       expect.objectContaining({
-        search: expect.objectContaining({ from: "machines", returnTo: "/settings/environments/d-1" }),
+        search: expect.objectContaining({ from: "machines", returnTo: "/settings/machines/d-1" }),
       }),
     );
   });

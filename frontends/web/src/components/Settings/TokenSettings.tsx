@@ -163,7 +163,7 @@ export function TokenSettings() {
     <div className="space-y-6">
       <SettingsPageHeader
         title="Access tokens"
-        description="Create tokens that let a self-hosted machine or headless daemon connect to your account. Come here to issue a token for a new machine, or revoke one you no longer trust."
+        description="Create tokens that let a self-hosted or headless machine connect to your account. Come here to issue a token for a new machine, or revoke one you no longer trust."
       />
 
       {shownError && (
@@ -175,7 +175,7 @@ export function TokenSettings() {
       {/* Usage instructions */}
       <div className="rounded-lg border border-border bg-card p-4">
         <p className="text-xs text-muted-foreground mb-2">
-          Use a token to connect a headless daemon:
+          Use a token to connect a headless machine:
         </p>
         <p className="text-sm font-mono">
           echo "your-token" | reliant daemon start --token
@@ -295,7 +295,7 @@ export function TokenSettings() {
                     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                       <span className="font-mono">{token.tokenPrefix}...</span>
                       {token.daemonId && (
-                        <span>Daemon {token.daemonId}</span>
+                        <span>Machine {token.daemonId}</span>
                       )}
                       <span>Created {formatDate(token.createdAt)}</span>
                       <span>Last used {formatDate(token.lastUsedAt)}</span>
