@@ -246,26 +246,26 @@ function AppPicker({ apps, selected, onChange }: { apps: string[]; selected: str
       testId="obs-app-picker"
       trigger={
         <>
-          <Boxes className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-          <span className="text-muted-foreground">App</span>
+          <Boxes className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
+          <span className="text-ink-muted">App</span>
           <span className="font-medium">{summary}</span>
-          <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+          <ChevronDown className="h-3 w-3 text-ink-muted" aria-hidden="true" />
         </>
       }
     >
       <fieldset>
-        <legend className="px-1 pb-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">Apps</legend>
+        <legend className="px-1 pb-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">Apps</legend>
         <button
           type="button"
           onClick={() => onChange([])}
-          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="obs-app-all"
         >
           <Check className={cn("h-3.5 w-3.5", active.length === 0 ? "text-primary" : "invisible")} aria-hidden="true" />
           Every app
         </button>
         {apps.map((app) => (
-          <label key={app} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted">
+          <label key={app} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-ink/5">
             <input
               type="checkbox"
               checked={active.includes(app)}

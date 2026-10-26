@@ -80,19 +80,21 @@ describe("ObservabilityPanel", () => {
   });
 
   it("leads the not-set-up answer with what the view shows, then how to get started", async () => {
-    const user = userEvent.setup();
     renderPanel(createFixtureApi({ failWith: Code.FailedPrecondition }));
     const state = await screen.findByTestId("obs-not-set-up");
     expect(within(state).getByTestId("obs-not-set-up-about")).toHaveTextContent("requests, error rate and latency");
     // The pinned environment names itself in the command to copy.
     expect(within(state).getByText("forge env deploy prod")).toBeInTheDocument();
     expect(within(state).getByTestId("obs-not-set-up-docs")).toHaveAttribute("href", "https://docs.reliantlabs.io/forge/observability");
-    await user.click(screen.getByTestId("obs-view-traces"));
-    expect(screen.getByTestId("obs-not-set-up-about")).toHaveTextContent("Traces follows every request");
+  });
+
+  it("leads the not-set-up answer with what THAT view shows on another view", async () => {
+    // The console nav picks the view (the panel draws no tabs): open it by URL.
+    renderPanel(createFixtureApi({ failWith: Code.FailedPrecondition }), { view: "traces" });
+    expect(await screen.findByTestId("obs-not-set-up-about")).toHaveTextContent("Traces follows every request");
   });
 
   it("says once that nothing has arrived yet, with the commands that deploy and check", async () => {
-    const user = userEvent.setup();
     renderPanel(createFixtureApi({ empty: true, signals: { services: [], truncated: false } }));
     const state = await screen.findByTestId("obs-nothing-yet");
     expect(state).toHaveAttribute("role", "status");
@@ -101,8 +103,11 @@ describe("ObservabilityPanel", () => {
     expect(within(state).getByText("forge env deploy prod")).toBeInTheDocument();
     expect(within(state).getByText("forge obs status prod")).toBeInTheDocument();
     expect(screen.queryByTestId("obs-no-data")).not.toBeInTheDocument();
-    // Sessions says how ITS data arrives: replay is opt-in, in two places, and masked.
-    await user.click(screen.getByTestId("obs-view-sessions"));
+  });
+
+  it("says how a view's own data arrives when nothing has: Sessions' replay is opt-in, in two places, and masked", async () => {
+    // The console nav picks the view (the panel draws no tabs): open it by URL.
+    renderPanel(createFixtureApi({ empty: true, signals: { services: [], truncated: false } }), { view: "sessions" });
     const sessions = await screen.findByTestId("obs-nothing-yet");
     expect(within(sessions).getByTestId("obs-nothing-yet-about")).toHaveTextContent("real users' browser sessions");
     expect(sessions).toHaveTextContent("VITE_OTEL_REPLAY=true");

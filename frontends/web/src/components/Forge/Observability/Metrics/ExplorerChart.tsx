@@ -49,7 +49,7 @@ export const TONE_SWATCH: Record<ChartTone, string> = {
   success: "bg-success",
   warning: "bg-warning",
   destructive: "bg-danger",
-  muted: "bg-muted-foreground",
+  muted: "bg-ink-muted",
 };
 
 export interface DisplaySeries {

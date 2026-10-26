@@ -98,7 +98,7 @@ interface TopicCopy {
 }
 
 const SIGNALS_ON = (signal: string) => (
-  <code className="font-mono text-foreground">{`signals = forge.ObservabilitySignals {${signal} = True}`}</code>
+  <code className="font-mono text-ink">{`signals = forge.ObservabilitySignals {${signal} = True}`}</code>
 );
 
 export const OBS_TOPICS: Record<ObsTopic, TopicCopy> = {
@@ -120,8 +120,8 @@ export const OBS_TOPICS: Record<ObsTopic, TopicCopy> = {
     source: (
       <>
         A forge frontend sends sessions on its own. Replay is opt-in: build the frontend with{" "}
-        <code className="font-mono text-foreground">VITE_OTEL_REPLAY=true</code> (
-        <code className="font-mono text-foreground">NEXT_PUBLIC_OTEL_REPLAY=true</code> for Next.js) and set {SIGNALS_ON("replay")} on the environment.
+        <code className="font-mono text-ink">VITE_OTEL_REPLAY=true</code> (
+        <code className="font-mono text-ink">NEXT_PUBLIC_OTEL_REPLAY=true</code> for Next.js) and set {SIGNALS_ON("replay")} on the environment.
         Every replay is masked; there is no unmasked mode.
       </>
     ),
@@ -146,9 +146,6 @@ export const OBS_TOPICS: Record<ObsTopic, TopicCopy> = {
   dashboards: {
     about: "Dashboards collects the dashboards forge generates from your services and frontends, the ones you commit, and the ones you build here.",
     docs: { href: DOCS.dashboards, label: "How dashboards work" },
-  },
-  usage: {
-    about: "Usage shows the telemetry your organization stored this month against its allowance.",
   },
 };
 
