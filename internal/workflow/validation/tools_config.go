@@ -30,7 +30,10 @@ import (
 // call_llm node in a loop body carries the same silent-failure exposure as one
 // on the root graph.
 func validateToolsConfigBindings(wf *reliantv1.Workflow, result *Result) {
+	validateToolInputDefaults(wf.GetInputs(), []string{"inputs"}, result)
 	walkWorkflowNodes(wf, nil, func(node *reliantv1.Node, nodePath []string) {
+		validateToolInputDefaults(node.GetWorkflow().GetInline().GetInputs(), joinPath(nodePath, "inline", "inputs"), result)
+		validateToolInputDefaults(node.GetLoop().GetInline().GetInputs(), joinPath(nodePath, "inline", "inputs"), result)
 		args := node.GetCallLlm()
 		if args == nil {
 			return
@@ -136,17 +139,43 @@ func validateToolFilterTags(list *reliantv1.CelStringList, path []string, result
 		return
 	}
 	for _, entry := range model.CelStringListValue(list) {
-		tag, isTag := strings.CutPrefix(strings.TrimSpace(entry), "tag:")
-		if !isTag || tag == "" {
+		if err := toolFilterTagError(entry); err != nil {
+			result.AddWarning(CategoryToolBinding, path, entry, err.Error())
+		}
+	}
+}
+
+// toolFilterTagError is shared by literal node filters and tools-typed input
+// values. Expressions and runtime-only names remain unjudged.
+func toolFilterTagError(entry string) error {
+	if containsTemplate(entry) {
+		return nil
+	}
+	tag, isTag := strings.CutPrefix(entry, "tag:")
+	if !isTag {
+		return nil
+	}
+	if slices.Contains(toolcatalog.Tags(), tag) {
+		return nil
+	}
+	return fmt.Errorf("tool tag %q is not in the tool-tag vocabulary, so this entry matches no tool and contributes nothing to the filter (known tags: %s)", tag, strings.Join(toolcatalog.Tags(), ", "))
+}
+
+// Defaults must be checked before binding: an expression forwarding inputs.tools
+// hides the literal entries from the terminal call_llm's tools_config.
+func validateToolInputDefaults(inputs map[string]*reliantv1.Input, path []string, result *Result) {
+	for name, input := range inputs {
+		if model.IsGroupInput(input) {
+			validateToolInputDefaults(model.GetGroupInputs(input), joinPath(path, name), result)
 			continue
 		}
-		if slices.Contains(toolcatalog.Tags(), tag) {
+		if input.GetType() != "tools" || input.GetToolsInput().GetDefault() == nil {
 			continue
 		}
-		result.AddWarning(
-			CategoryToolBinding, path, entry,
-			fmt.Sprintf("tool tag %q is not in the tool-tag vocabulary, so this entry matches no tool and contributes nothing to the filter (known tags: %s)", tag, strings.Join(toolcatalog.Tags(), ", ")),
-		)
+		value := input.GetToolsInput().GetDefault().AsInterface()
+		if err := validateProtoInputType(name, value, input, nil); err != nil {
+			result.AddError(CategoryInput, joinPath(path, name), "default", err.Error())
+		}
 	}
 }
 

@@ -50,12 +50,6 @@ inputs:
         description: Model override for implementer agents
         default:
           tags: ["flagship"]
-      max_turns:
-        type: integer
-        default: 200
-        min: 1
-        max: 500
-        description: Maximum agent loop iterations
       tools:
         type: tools
         default: ["tag:coding:default"]
