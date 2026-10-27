@@ -21,7 +21,7 @@ export function ViewerControls({ dashboard, scope, range, search, onSearch }: {
   const fields = breakdownFields(dashboard);
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="dashboard-viewer-controls">
-      <span className="text-sm text-muted-foreground">View only</span>
+      <span className="text-sm text-ink-muted">View only</span>
       {dashboard.filters.filter((filter) => attributeKey(filter.field) !== "service.name").map((filter) => (
         <ViewerFilter key={filter.id} filter={filter} scope={scope} range={range} search={search} onSearch={onSearch} />
       ))}
@@ -51,7 +51,7 @@ export function ViewerControls({ dashboard, scope, range, search, onSearch }: {
           detail: panel.section && search.hiddenSections?.includes(panel.section) ? "Section hidden" : dashboard.sections?.find((section) => section.id === panel.section)?.title,
           onSelect: () => onSearch({ hiddenPanels: toggledHidden(search.hiddenPanels, panel.id) }),
         }))} />
-      <span className="text-sm text-muted-foreground">Shared in the URL. Saved dashboard unchanged.</span>
+      <span className="text-sm text-ink-muted">Shared in the URL. Saved dashboard unchanged.</span>
     </div>
   );
 }
@@ -85,6 +85,6 @@ function ViewerFilter({ filter, scope, range, search, onSearch }: {
           onSearch({ variables: Object.keys(variables).length ? variables : undefined });
         }
       }} />
-    {!!values.error && <span className="text-sm text-muted-foreground" role="status">Values unavailable</span>}
+    {!!values.error && <span className="text-sm text-ink-muted" role="status">Values unavailable</span>}
   </div>;
 }

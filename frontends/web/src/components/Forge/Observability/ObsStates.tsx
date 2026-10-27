@@ -487,7 +487,7 @@ export function ObsAsOf({ updatedAt, className }: { updatedAt?: number; classNam
       role="status"
       data-testid="obs-as-of"
       title="The hourly query allowance is used up, so this is the last result that loaded. It updates by itself once the allowance refills."
-      className={`inline-flex items-center gap-1 rounded border border-border px-1.5 py-px text-2xs text-muted-foreground ${className ?? ""}`}
+      className={`inline-flex items-center gap-1 rounded border border-border px-1.5 py-px text-2xs text-ink-muted ${className ?? ""}`}
     >
       <PauseCircle className="h-3 w-3" aria-hidden="true" />
       Paused{updatedAt ? ` · as of ${formatClock(updatedAt)}` : ""} · query budget resets at {formatClock(state.resetsAtMs)}
@@ -525,14 +525,14 @@ export function ObsQuotaBanner({ usageHref = BILLING_USAGE_HREF, onOpenUsage }: 
       role="status"
       data-testid="obs-quota-banner"
       data-state={state.kind}
-      className="flex items-start gap-3 rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground"
+      className="flex items-start gap-3 rounded-lg border border-border bg-surface-sunken px-4 py-3 text-sm text-ink"
     >
-      <PauseCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <PauseCircle className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
       <div className="min-w-0 space-y-1">
         <p className="font-medium">
           {exhausted ? `Live updates are paused until ${resets}` : "Refresh slowed to protect your query allowance"}
         </p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ink-muted">
           {exhausted
             ? `${own ? "Your organization used this hour's query allowance for the console." : "Your organization used this hour's query allowance."} What is on screen is the last result that loaded; it updates by itself at ${resets}. `
             : `Searches, and opening a trace or an issue, still work. Normal refresh returns at ${resets}. `}

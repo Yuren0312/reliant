@@ -58,7 +58,7 @@ export function UsageView({ orgId, subject = "" }: { orgId: string | null; subje
   if (usage.error) {
     if (usage.error instanceof ConnectError && usage.error.code === Code.Unimplemented) return <>
       <BillingUnavailable label="Observability billing management" error={usage.error} retry={() => void usage.refetch()} />
-      <p className="text-sm text-muted-foreground">Showing legacy usage below, read-only. Actual charges, uncharged bytes, storage and editable limits are unavailable until the billing API is deployed.</p>
+      <p className="text-sm text-ink-muted">Showing legacy usage below, read-only. Actual charges, uncharged bytes, storage and editable limits are unavailable until the billing API is deployed.</p>
       <LegacyUsageView orgId={orgId} subject={subject} />
     </>;
     return <BillingUnavailable label="Observability billing" error={usage.error} retry={() => void usage.refetch()} />;
@@ -74,7 +74,7 @@ export function ObservabilityMonth({ usage: u }: { usage: GetObservabilityUsageR
   const fill = u.allowanceBytes > 0n ? Math.min(100, Number(u.usedBytes) / Number(u.allowanceBytes) * 100) : 0;
   const projectionKnown = !!u.measuredThrough && !!u.periodStart && Number(u.measuredThrough.seconds - u.periodStart.seconds) >= 3600;
   return <Card><CardHeader title="Observability" description="Ingested this month — not what's stored now. GB = 2^30 bytes of telemetry as stored, before compression, after sampling." />
-    <p className="text-2xl font-semibold tabular-nums">{gb(u.usedBytes)} <span className="text-sm font-normal text-muted-foreground">billable / {gb(u.allowanceBytes)} included</span></p>
+    <p className="text-2xl font-semibold tabular-nums">{gb(u.usedBytes)} <span className="text-sm font-normal text-ink-muted">billable / {gb(u.allowanceBytes)} included</span></p>
     <div className="mt-2 h-2 overflow-hidden rounded-full bg-border/60" role="progressbar" aria-label="Observability included allowance" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fill)}><div className="h-full bg-primary" style={{ width: `${fill}%` }} /></div>
     <dl className="mt-4 grid gap-3 sm:grid-cols-3">
       <Stat label="Charged so far" testId="obs-billing-charged" value={u.exempt ? "Not billed" : `${dollars(u.chargedCents)} of ${dollars(u.spendCapCents)}`} hint={`${dollars(Number(u.rateCentsPerGb))} per GB beyond included`} />
@@ -83,9 +83,9 @@ export function ObservabilityMonth({ usage: u }: { usage: GetObservabilityUsageR
     </dl>
     <p className="mt-3 text-sm">Charged overage ingestion: {gb(u.exempt ? 0n : u.usedBytes > u.allowanceBytes + u.unchargedBytes ? u.usedBytes - u.allowanceBytes - u.unchargedBytes : 0n)}. The included allowance and bytes kept free above cap are not charged.</p>
     <p className="mt-4 text-sm" role="status">{usageStateSentence(u)}</p>
-    <p className="mt-2 text-xs text-muted-foreground">{u.measuredThrough ? `Measured through ${at(u.measuredThrough)} (updated hourly; may lag by about 75 minutes).` : "No fully metered hour yet. Usage is not current; the first reading usually arrives within about 75 minutes."}</p>
+    <p className="mt-2 text-xs text-ink-muted">{u.measuredThrough ? `Measured through ${at(u.measuredThrough)} (updated hourly; may lag by about 75 minutes).` : "No fully metered hour yet. Usage is not current; the first reading usually arrives within about 75 minutes."}</p>
     <p className="mt-2 text-sm">Browser: {gb(u.browserBilledBytes)} of {gb(u.browserCapBytes)} billable; {gb(u.browserBytes > u.browserBilledBytes ? u.browserBytes - u.browserBilledBytes : 0n)} more kept free.</p>
-    <p className="mt-2 text-xs text-muted-foreground">Customer metadata: {gb(u.metadataBytes)}, included above. Period: {at(u.periodStart)} to {at(u.periodEnd)} (exclusive).</p>
+    <p className="mt-2 text-xs text-ink-muted">Customer metadata: {gb(u.metadataBytes)}, included above. Period: {at(u.periodStart)} to {at(u.periodEnd)} (exclusive).</p>
     <a className="mt-3 inline-block text-sm text-primary underline" href="/settings/billing?tab=limits#observability">Usage & limits in Billing & usage</a>
   </Card>;
 }

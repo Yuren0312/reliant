@@ -323,7 +323,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
         ))}
       </div>
       {!layout && shown.panels.every((panel) => !visiblePanel(panel, search)) && (
-        <p className="rounded-lg border border-dashed border-border bg-background p-4 text-sm text-muted-foreground" role="status">
+        <p className="rounded-lg border border-dashed border-border bg-surface-sunken p-4 text-sm text-ink-muted" role="status">
           All metrics are hidden in this view. Use Metrics to show them again; the saved dashboard is unchanged.
         </p>
       )}

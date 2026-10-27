@@ -256,7 +256,7 @@ function EnvFrontends({
     return loading ? (
       <FrontendsLoading />
     ) : (
-      <p className="px-4 pb-4 text-sm text-muted-foreground" data-testid="env-frontends-unavailable">
+      <p className="px-4 pb-4 text-sm text-ink-muted" data-testid="env-frontends-unavailable">
         Reliant could not read this environment&apos;s deployments just now, so its frontends are not shown. They will appear when the next read succeeds.
       </p>
     );
