@@ -105,9 +105,11 @@ type worktreeCreateRequest struct {
 	WorkspaceID string `json:"workspace_id"`
 	// SubPath is the path component under the workspace dir for this repo's
 	// checkout. Empty means the workspace root itself (single-repo project).
-	SubPath    string `json:"sub_path,omitempty"`
-	BaseBranch string `json:"base_branch"`
-	Force      bool   `json:"force"`
+	SubPath      string `json:"sub_path,omitempty"`
+	BaseBranch   string `json:"base_branch"`
+	FetchBranch  string `json:"fetch_branch,omitempty"`
+	ExpectedHead string `json:"expected_head,omitempty"`
+	Force        bool   `json:"force"`
 	// WorktreeID is the id of the worktree row this checkout belongs to; it is
 	// written into the git lock reason. Empty skips locking.
 	WorktreeID string `json:"worktree_id,omitempty"`
@@ -177,6 +179,16 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 			req.BaseBranch = current
 			baseSupplied = false
 		}
+	}
+
+	// Review-responder checkouts must refresh the exact target branch even
+	// when this clone already has a stale local or remote-tracking copy.
+	if req.FetchBranch != "" || req.ExpectedHead != "" {
+		if err := refreshWorktreeHead(ctx, req.ProjectPath, req.FetchBranch, req.ExpectedHead); err != nil {
+			return json.Marshal(worktreeCreateResponse{Error: err.Error()})
+		}
+		// Pin the checked SHA, not a mutable local branch that might be stale.
+		req.BaseBranch = req.ExpectedHead
 	}
 
 	// Decide what the branch is made from BEFORE anything touches disk, so a
