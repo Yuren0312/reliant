@@ -26,7 +26,7 @@ func TestGetRunProjectsBoundedNodesAfterOwnership(t *testing.T) {
 			require.Equal(t, rundiagnostics.RecordLimit+1, limit)
 			rows := make([]*db.StepExecution, limit)
 			for i := range rows {
-				rows[i] = &db.StepExecution{ID: "attempt", StepID: "build", ActivityName: "ExecuteRunStep", ExitCode: sql.NullInt64{Int64: 1, Valid: true}, OutputJSON: sql.NullString{String: `{"stderr":"api_key=hidden","stdout":"failed build"}`, Valid: true}}
+				rows[i] = &db.StepExecution{ID: "attempt", StepID: "build", ActivityName: "ExecuteRunStep", ExitCode: sql.NullInt64{Int64: 1, Valid: true}, OutputJSON: sql.NullString{String: `{"stderr":"AWS_SECRET_ACCESS_KEY=hidden","stdout":"failed build"}`, Valid: true}}
 			}
 			return rows, nil
 		},
@@ -37,6 +37,6 @@ func TestGetRunProjectsBoundedNodesAfterOwnership(t *testing.T) {
 	require.True(t, resp.Msg.NodesTruncated)
 	require.Len(t, resp.Msg.Nodes, rundiagnostics.RecordLimit)
 	require.Equal(t, "failed", resp.Msg.Nodes[0].Status)
-	require.Equal(t, "api_key=[REDACTED]", resp.Msg.Nodes[0].StderrTail)
+	require.Equal(t, "[REDACTED: credential-bearing diagnostic omitted]", resp.Msg.Nodes[0].StderrTail)
 	require.Equal(t, "failed build", resp.Msg.Nodes[0].StdoutTail)
 }

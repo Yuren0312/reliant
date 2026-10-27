@@ -23,13 +23,19 @@ const (
 	TextBudget = 128 << 10
 	TailBytes  = 8 << 10
 	TailLines  = 50
+	// Matches the SQL read cap. Never parse a partial JSON/secret value.
+	ScanLimit = 16 << 10
 )
 
 // Nodes preserves attempt and loop identities instead of collapsing a failed
 // iteration behind a later successful one. Rows arrive newest first.
 func Nodes(rows []*core.StepExecution) []*pb.RunNodeExecution {
+	if len(rows) > RecordLimit {
+		rows = rows[:RecordLimit]
+	}
 	out := make([]*pb.RunNodeExecution, 0, len(rows))
 	budget := TextBudget
+	scanBudget := TextBudget
 	for _, row := range rows {
 		n := &pb.RunNodeExecution{Id: row.ID, WorkflowId: row.WorkflowID,
 			NodeId: row.StepID, NodePath: row.NodePath.String, Activity: row.ActivityName,
@@ -50,8 +56,14 @@ func Nodes(rows []*core.StepExecution) []*pb.RunNodeExecution {
 			Skipped bool   `json:"skipped"`
 			Stdout  string `json:"stdout"`
 			Stderr  string `json:"stderr"`
+			Omitted bool   `json:"_diagnostic_omitted"`
 		}
-		_ = json.Unmarshal([]byte(row.OutputJSON.String), &output)
+		if len(row.OutputJSON.String) > ScanLimit || len(row.OutputJSON.String) > scanBudget {
+			output.Omitted = true
+		} else {
+			scanBudget -= len(row.OutputJSON.String)
+			_ = json.Unmarshal([]byte(row.OutputJSON.String), &output)
+		}
 		if row.ExitCode.Valid {
 			code := int32(row.ExitCode.Int64)
 			n.ExitCode = &code
@@ -65,8 +77,16 @@ func Nodes(rows []*core.StepExecution) []*pb.RunNodeExecution {
 		if strings.HasSuffix(row.ActivityName, "ExecuteRunStep") || n.ExitCode != nil {
 			n.StdoutTail = bounded(output.Stdout, TailBytes, TailLines)
 			n.StderrTail = bounded(output.Stderr, TailBytes, TailLines)
+			if output.Omitted {
+				n.StdoutTail = "[output omitted: safe diagnostic limit]"
+			}
 		}
 		errorText := row.ErrorMessage.String
+		if len(errorText) > ScanLimit || len(errorText) > scanBudget {
+			errorText = "[error omitted: safe diagnostic limit]"
+		} else {
+			scanBudget -= len(errorText)
+		}
 		if errorText == "" && n.Status == "failed" {
 			if n.ExitCode != nil {
 				errorText = fmt.Sprintf("command exited with code %d", *n.ExitCode)
@@ -93,7 +113,10 @@ func Nodes(rows []*core.StepExecution) []*pb.RunNodeExecution {
 // bounded redacts the complete stream BEFORE either presentation cut, so a
 // cut can never hide the credential prefix a masking pattern depends on.
 func bounded(s string, maxBytes, lines int) string {
-	s = logging.RedactText(s)
+	if len(s) > ScanLimit {
+		return "[text omitted: safe diagnostic limit]"
+	}
+	s = logging.RedactDiagnosticText(s)
 	s = strings.TrimRight(s, "\n")
 	parts := strings.Split(s, "\n")
 	truncated := len(parts) > lines

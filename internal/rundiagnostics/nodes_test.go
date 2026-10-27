@@ -27,7 +27,7 @@ func TestNodesVerdictsTimingAndCommandTails(t *testing.T) {
 	require.Equal(t, "2026-10-26T12:00:00Z", nodes[0].StartedAt)
 	require.Contains(t, nodes[0].StdoutTail, "last line")
 	require.Len(t, strings.Split(nodes[0].StdoutTail, "\n"), 51) // 50 lines plus the omission marker
-	require.Contains(t, nodes[0].StderrTail, "token=[REDACTED]")
+	require.Contains(t, nodes[0].StderrTail, "[REDACTED:")
 	require.Contains(t, nodes[0].Error, "command exited with code 2")
 	require.Equal(t, "skipped", nodes[1].Status)
 	require.Equal(t, "completed", nodes[2].Status)
@@ -49,6 +49,6 @@ func TestBoundsRedactBeforeCutAndBudget(t *testing.T) {
 	}
 	require.Less(t, total, TextBudget+RecordLimit*60)
 	require.LessOrEqual(t, len(bounded(strings.Repeat("x", 65537), TailBytes, 50)), TailBytes+50)
-	require.Contains(t, bounded(strings.Repeat("earlier\n", 15000)+"final error", TailBytes, 50), "final error")
+	require.Contains(t, bounded(strings.Repeat("earlier\n", 15000)+"final error", TailBytes, 50), "omitted")
 	require.Contains(t, Failure([]*core.StepExecution{{StepID: "test", ErrorMessage: sql.NullString{String: "bad", Valid: true}}}), "Node test failed: bad")
 }

@@ -1,13 +1,17 @@
 // Copyright (c) 2025 Reliant Labs
 import { useGetRun } from "@/hooks/run-service-hooks_gen";
 import type { RunNodeExecution } from "@/gen/reliant/v1/run_pb";
+import { WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
 import { Button } from "../ui/Button";
 
 /** Reads the same bounded projection get_run uses; never raw node inputs. */
 export function RunNodes({ workflowId }: { workflowId: string }) {
   const query = useGetRun({ runId: workflowId }, {
     enabled: !!workflowId,
-    refetchInterval: 5000,
+    refetchInterval: (query) => {
+      const run = query.state.data?.run;
+      return run?.state === WorkflowState.STOPPED && run.stopReason !== WorkflowStopReason.PAUSED ? false : 5000;
+    },
   });
   return (
     <details className="border-b border-border/60 bg-card px-6 py-3" open>

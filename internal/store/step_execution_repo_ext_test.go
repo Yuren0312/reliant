@@ -45,6 +45,78 @@ func TestListRunNodeExecutions(t *testing.T) {
 	}
 }
 
+func TestRunDiagnosticsBoundsBeforeJSONAndPreservesSkip(t *testing.T) {
+	env := storetest.New(t)
+	seedSteps(t, env)
+	ctx := context.Background()
+	// A huge JSON string and huge malformed JSON must both be omitted before
+	// any JSON cast, never transferred whole to the API process.
+	for i, raw := range []string{`{"stdout":"` + strings.Repeat("secret", 400000) + `"}`, strings.Repeat("bad json", 300000), `{"skipped":true}`} {
+		_, err := env.SQL.ExecContext(ctx, `INSERT INTO step_executions(id,workflow_id,step_id,activity_name,output_json,created_at) VALUES($1,'wf-s1',$1,'CustomAction',$2,now())`, fmt.Sprintf("bounded-%d", i), raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, err := store.ListRunNodeExecutions(ctx, env.ORM, "wf-s1", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundSkip := false
+	for _, row := range rows {
+		if len(row.OutputJSON.String) > 16384 {
+			t.Fatalf("unbounded fetch: %d", len(row.OutputJSON.String))
+		}
+		if row.ID == "bounded-2" {
+			foundSkip = strings.Contains(row.OutputJSON.String, `"skipped" : true`)
+		}
+		if row.ID == "bounded-0" || row.ID == "bounded-1" {
+			if row.OutputJSON.String != `{"_diagnostic_omitted":true}` {
+				t.Fatalf("unsafe output: %s", row.OutputJSON.String)
+			}
+		}
+	}
+	if !foundSkip {
+		t.Fatal("explicit skipped flag lost in SQL projection")
+	}
+	// Parent pointers alone must not grant access to another chat's records.
+	_, err = env.SQL.ExecContext(ctx, `UPDATE workflows SET parent_id='wf-s1' WHERE id='wf-other'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err = store.ListRunNodeExecutions(ctx, env.ORM, "wf-s1", 201)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range rows {
+		if row.WorkflowID == "wf-other" {
+			t.Fatal("cross-chat child leaked")
+		}
+	}
+	// Budget is cumulative as well as per-row. Empty errors stay empty,
+	// otherwise an omitted successful attempt could read as a failure.
+	for i := 0; i < 20; i++ {
+		_, err = env.SQL.ExecContext(ctx, `INSERT INTO step_executions(id,workflow_id,step_id,activity_name,output_json,created_at) VALUES($1,'wf-s1',$1,'ExecuteRunStep',$2,now())`, fmt.Sprintf("budget-%d", i), `{"stdout":"`+strings.Repeat("x", 14000)+`"}`)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, err = store.ListRunNodeExecutions(ctx, env.ORM, "wf-s1", 201)
+	if err != nil {
+		t.Fatal(err)
+	}
+	total := 0
+	omitted := 0
+	for _, row := range rows {
+		total += len(row.OutputJSON.String) + len(row.ErrorMessage.String)
+		if strings.Contains(row.OutputJSON.String, "_diagnostic_omitted") {
+			omitted++
+		}
+	}
+	if total > 140000 || omitted == 0 {
+		t.Fatalf("fetch budget not enforced: bytes=%d omitted=%d", total, omitted)
+	}
+}
+
 type stepSeed struct {
 	id, workflow, step, activity, nodePath string
 	output                                 string

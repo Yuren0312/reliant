@@ -5,9 +5,15 @@ import { RunNodeExecutionSchema } from "@/gen/reliant/v1/run_pb";
 import { RunNodeList, RunNodes } from "../RunNodes";
 
 const query = vi.hoisted(() => ({ isLoading: false, isError: false, data: undefined as unknown, refetch: vi.fn() }));
-vi.mock("@/hooks/run-service-hooks_gen", () => ({ useGetRun: () => query }));
+const hook = vi.hoisted(() => ({ options: undefined as any }));
+vi.mock("@/hooks/run-service-hooks_gen", () => ({ useGetRun: (_req: unknown, options: unknown) => { hook.options = options; return query; } }));
 
 describe("run node diagnostics", () => {
+ it("stops polling a stopped run", () => {
+  render(<RunNodes workflowId="root" />);
+  expect(hook.options.refetchInterval({ state: { data: { run: { state: 3 } } } })).toBe(false);
+  expect(hook.options.refetchInterval({ state: { data: { run: { state: 2 } } } })).toBe(5000);
+ });
  it("shows failed command details and keeps repeated attempts separate", () => {
   render(<RunNodeList truncated nodes={[
    create(RunNodeExecutionSchema, { id: "a", nodeId: "gate", workflowId: "root", status: "failed", attempt: 1, durationMs: 25n, exitCode: 2, error: "compile failed", stdoutTail: "building", stderrTail: "token=[REDACTED]" }),

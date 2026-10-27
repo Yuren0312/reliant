@@ -26,7 +26,7 @@ func TestAutomationFailureFallbackAndDetail(t *testing.T) {
 					return &db.Chat{ID: "chat", LaunchKind: kind, TriggerID: &tid}, nil
 				},
 				ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
-					return []*db.StepExecution{{ID: "attempt", StepID: "gate", CreatedAt: end, ExitCode: sql.NullInt64{Int64: 2, Valid: true}, ErrorMessage: sql.NullString{String: "api_key=secret", Valid: true}}}, nil
+					return []*db.StepExecution{{ID: "attempt", StepID: "gate", CreatedAt: end, ExitCode: sql.NullInt64{Int64: 2, Valid: true}, ErrorMessage: sql.NullString{String: "client_secret: secret", Valid: true}}}, nil
 				},
 				SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
 				GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) {
@@ -36,7 +36,7 @@ func TestAutomationFailureFallbackAndDetail(t *testing.T) {
 					require.Equal(t, "chat", chat)
 					require.Equal(t, "root", thread)
 					require.Equal(t, int32(pb.MessageRole_MESSAGE_ROLE_ASSISTANT), role)
-					require.Equal(t, "Node gate failed: api_key=[REDACTED]", content)
+					require.Equal(t, "Node gate failed: [REDACTED: credential-bearing diagnostic omitted]", content)
 					if key == "" {
 						key = id
 						saved++
@@ -49,7 +49,7 @@ func TestAutomationFailureFallbackAndDetail(t *testing.T) {
 			a := NewWorkflowStatusActivity(repo)
 			a.ensureAutomationFailureMessage(ctx, WorkflowStatusInput{ChatID: "chat", WorkflowID: "root"})
 			a.ensureAutomationFailureMessage(ctx, WorkflowStatusInput{ChatID: "chat", WorkflowID: "root"})
-			require.Equal(t, "Node gate failed: api_key=[REDACTED]", detail)
+			require.Equal(t, "Node gate failed: [REDACTED: credential-bearing diagnostic omitted]", detail)
 			if kind == "schedule" {
 				require.Equal(t, 1, saved)
 			} else {

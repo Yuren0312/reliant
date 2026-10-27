@@ -21,7 +21,7 @@ func TestGetRunNodeOutput(t *testing.T) {
 	writeRunNodes(&b, rundiagnostics.Nodes(rows), true)
 	require.Contains(t, b.String(), "gate [failed] (workflow root, attempt 0, 53 ms, exit 2)")
 	require.Contains(t, b.String(), "stdout (tail):\nbuilding")
-	require.Contains(t, b.String(), "stderr (tail):\npassword=[REDACTED]\ncompile failed")
+	require.Contains(t, b.String(), "stderr (tail):\n[REDACTED: credential-bearing diagnostic omitted]")
 	require.NotContains(t, b.String(), "hidden")
 	require.Contains(t, b.String(), "Older node attempts omitted")
 }
