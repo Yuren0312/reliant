@@ -1,5 +1,14 @@
 # The merge gate and the release gate
 
+**Owner contract (supersedes historical measurements/policies below): ≤300s on an idle 16-CPU host.**
+Merge runs affected compile, vet/forge lint, `go test -short` (no race), and proto lint.
+Web typecheck + affected vitest run only for a web change; migration checks only for changed migrations.
+Full test fallbacks, docs, Electron, production renderer builds, full lint, integration and e2e run at release.
+`--regen` runs only for changed generator inputs; generated-output-only diffs do not force generation.
+`scripts/merge-gate-budgets.json` pins step budgets; overruns say **GATE-HEALTH / requirement NOT MET**, not PR blame.
+Summary starts with exact failing Go tests + packages and vitest files + test names, never a log tail.
+The historical 236s warm run is not proof of the idle-host requirement or cold/broad batches.
+
 reliant has two local gates. The **merge gate** runs before every merge and
 judges only what the change can affect. The **release gate** runs on main
 before a release and judges everything. The split is deliberate: **speed was
