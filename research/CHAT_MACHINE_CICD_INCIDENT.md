@@ -67,7 +67,7 @@ those live workflows could keep switching machines until a new run started.
 
 This follow-up fills a **missing** activity selector from the durable chat pin
 at tool execution, workspace ensure, LLM tool/MCP discovery, preflight wake,
-create_worktree and git_publish. Explicit workflow/node selectors are unchanged;
+run-node commands and log writes, resume wake, create_worktree and git_publish. Explicit workflow/node selectors are unchanged;
 a spawned thread's own worktree still beats an inherited chat selector. No
 router ordering, lifecycle, schema, default-machine policy or new infrastructure.
 
@@ -85,6 +85,24 @@ Initial reproduction with the original routing behavior failed both workspace
 check and tool dispatch: expected `ws-ws-2aab1465`, got `ws-ws-e164d47d`.
 Unit cases also preserve explicit selectors, thread worktree precedence and
 no-machine behavior.
+
+Independent review of f3793533 correctly found run nodes still ignored the pin.
+`TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect` reproduced it
+through the real ExecuteRunStep activity, RemoteRunExecutor, RemoteExecutor and
+NATS registry path: expected original, got cicd after registration. The repair
+also fills the missing selector in MachineResumeWake, not just command dispatch.
+Run-node precedence is explicit selector > chat pin > chat worktree owner.
+
+The recovery regression uses an in-process NATS server with gateway replies and
+a real test database. It checks a second attached CI machine, explicit override
+without rewriting the pin, original suspended (run transport error, no command
+verdict), no tool/workspace/run/MCP delivery to CI, and resume wake not mistaking
+CI for the original. It then starts a run while original is disconnected, waits
+for the router's exact-id reconnect observer, reconnects original and verifies
+that same pending command completes there. Workspace/MCP and resume checks work
+again. A foreign-user persisted pin is refused without contacting that user or
+falling back to CI. The pin is checked unchanged throughout. This does not claim
+atomic moves across separately loaded batch requests.
 
 ## Deployment implication
 
