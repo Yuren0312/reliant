@@ -23,6 +23,22 @@ func CompareDaemonRestartStatus(ctx context.Context, db orm.Context, userID, dae
 }
 
 func writeDaemonRestartStatus(ctx context.Context, db orm.Context, userID, daemonID string, attachedAt time.Time, status string, previous *string) error {
+	// Lock order is attachment -> daemon, matching ReleaseDaemonAttachment's
+	// DELETE -> UPDATE. Upsert/renew/reap already take the attachment tuple
+	// lock. Locking the matching generation makes validation and mutation one
+	// serialized operation; an MVCC EXISTS snapshot alone cannot fence them.
+	return db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		var generation time.Time
+		if err := db.QueryRow(ctx, `SELECT attached_at FROM daemon_attachment
+ WHERE daemon_id = $1 AND user_id = $2 AND attached_at = $3
+ FOR UPDATE`, daemonID, userID, attachedAt).Scan(&generation); err != nil {
+			return err
+		}
+		return updateDaemonRestartStatus(ctx, db, userID, daemonID, attachedAt, status, previous)
+	})
+}
+
+func updateDaemonRestartStatus(ctx context.Context, db orm.Context, userID, daemonID string, attachedAt time.Time, status string, previous *string) error {
 	var value any
 	if status != "" {
 		value = status
