@@ -15,6 +15,10 @@
  * "Fire trigger now" fires the run's trigger (FireTrigger), which is a
  * different thing: the run it starts is the trigger's, unattended under its
  * settings, and lands in Runs rather than opening.
+ *
+ * "Run this on a schedule" turns a run that worked into an automation: the
+ * automation dialog, prefilled with the same workflow, prompt, inputs,
+ * workspace and machine, so the person only picks when (report 03 §6.2).
  */
 
 import { useState, type ReactNode } from "react";
@@ -24,6 +28,8 @@ import type { Chat } from "@/api/client";
 import { runErrorMessage, type LaunchEvent } from "@/hooks/run-queries";
 import { useFirstPrompt } from "@/hooks/run-queries";
 import { useFireTrigger } from "@/hooks/trigger-service-hooks_gen";
+import { NO_MACHINE } from "../Automations/daemonChoices";
+import { openAutomationDialog } from "../Automations/dialog/openAutomationDialog";
 import { RunWorkflowDialog } from "../workflow/run/RunWorkflowDialog";
 
 export interface Rerun {
@@ -31,6 +37,8 @@ export interface Rerun {
   onRerun?: () => void;
   /** Undefined unless the run belongs to a live automation. */
   onRunAutomationNow?: () => void;
+  /** Make an automation of this run; undefined while its start is unknown, or when an automation started it. */
+  onSchedule?: () => void;
   /** The recorded prompt, once loaded. */
   prompt?: string;
   busy: boolean;
@@ -63,10 +71,29 @@ export function useRerun(chat: Chat, event: LaunchEvent | null | undefined, trig
         })
     : undefined;
 
+  const onSchedule =
+    start && !promptLoading && !automationId
+      ? () =>
+          openAutomationDialog({
+            workflowRef: start.workflow,
+            projectId: chat.projectId,
+            custom: true,
+            prefill: {
+              workflow: start.workflow,
+              message: promptText ?? "",
+              presets: start.presets,
+              params: start.params,
+              worktreeId: chat.worktreeId || undefined,
+              machine: chat.noMachine ? NO_MACHINE : chat.activeDaemonId || undefined,
+            },
+          })
+      : undefined;
+
   return {
     // Wait for the prompt too, so the dialog never opens blank and then fills.
     onRerun: start && !promptLoading ? () => setOpen(true) : undefined,
     onRunAutomationNow,
+    onSchedule,
     prompt: promptText,
     busy: fire.isPending,
     dialog: start ? (

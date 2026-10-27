@@ -54,7 +54,7 @@ import DataTable from "../../forge-ui/data_table";
 import PageHeader from "../../forge-ui/page_header";
 import Modal from "../../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
-import { openAutomationDialog } from "../../Automations/automationDialog";
+import { openAutomationDialog } from "../../Automations/dialog/openAutomationDialog";
 import { RunNowDialog } from "../../workflow/run/RunNowDialog";
 import { workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { splitFindings } from "../../workflow/workflowDraftStatus";
@@ -531,7 +531,7 @@ function WorkflowsBody() {
       onRun: runnable ? () => setRunning({ ref: workflow.name, projectId }) : undefined,
       onSetUp:
         row.declaresTriggers && row.triggers.length === 0 && runnable
-          ? () => openAutomationDialog({ workflowRef: workflow.name, projectId })
+          ? () => openAutomationDialog({ workflowRef: workflow.name, projectId, mode: "setup", showOpenWorkflow: true })
           : undefined,
       // One switch per row while its triggers live in one project; across
       // several, each project is switched on the workflow's page.
