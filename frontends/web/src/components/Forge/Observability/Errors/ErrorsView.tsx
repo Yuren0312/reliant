@@ -105,7 +105,7 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
       <IssueToolbar scope={scope} range={range} text={text} service={service} statuses={statuses} platform={platform} sort={sort} assignee={assignee} navigate={navigate} />
       {issues.data && <ObsAsOf updatedAt={issues.dataUpdatedAt} />}
       {meUnknown ? (
-        <p className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground" data-testid="obs-errors-mine-unknown">
+        <p className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted" data-testid="obs-errors-mine-unknown">
           Reliant can&apos;t tell who you are here, so &ldquo;Assigned to me&rdquo; has nothing to match.{" "}
           <button type="button" className="underline underline-offset-2" onClick={() => navigate({ assignee: undefined }, { replace: true })}>
             Show everyone&apos;s
@@ -344,13 +344,13 @@ function IssueTable({
                 <td className="px-4 py-2">
                   <StatusBadge status={issue.status} />
                   {issue.relatedCount > 0 && (
-                    <span className="mt-1 block text-xs text-muted-foreground" data-testid={`obs-issue-related-count-${issue.id}`} title="Other issues of the same incident">
+                    <span className="mt-1 block text-xs text-ink-muted" data-testid={`obs-issue-related-count-${issue.id}`} title="Other issues of the same incident">
                       +{issue.relatedCount} related
                     </span>
                   )}
                 </td>
                 <td className="px-4 py-2 text-xs" data-testid={`obs-issue-assignee-${issue.id}`}>
-                  {issue.assignee ? <span className="text-foreground">{issue.assignee.name}</span> : <span className="text-muted-foreground">—</span>}
+                  {issue.assignee ? <span className="text-ink">{issue.assignee.name}</span> : <span className="text-ink-muted">—</span>}
                 </td>
                 <td className="px-4 py-2 text-right tabular-nums text-ink">{formatCount(issue.events)}</td>
                 <td className="px-4 py-2 text-right tabular-nums text-ink" title={affectedNoun(issue.platform, issue.affected)}>

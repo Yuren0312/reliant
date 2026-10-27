@@ -24,7 +24,7 @@ import type { Issue, IssueUser } from "@/services/controlPlane/observability/iss
 import { conflictSummary } from "./issueModel";
 import { discussionErrorText } from "./issueTimelineModel";
 
-const FIELD = "h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const FIELD = "h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** People the picker can offer: the roster, plus anyone it knows of that the roster did not list. */
 export function assigneeChoices(roster: readonly IssueUser[] | undefined, me: IssueUser | null | undefined, current: IssueUser | null): IssueUser[] {
@@ -55,12 +55,12 @@ export function IssueAssignee({ issue, orgId }: { issue: Issue; orgId: string })
   return (
     <div className="space-y-2" data-testid="obs-issue-assignee" data-assignee={issue.assignee?.id ?? ""}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
           <User className="h-3.5 w-3.5" aria-hidden="true" />
           Assignee
         </span>
-        <span className="text-sm font-medium text-foreground" data-testid="obs-issue-assignee-name">
-          {issue.assignee ? (mine ? `${issue.assignee.name} (you)` : issue.assignee.name) : <span className="font-normal text-muted-foreground">Unassigned</span>}
+        <span className="text-sm font-medium text-ink" data-testid="obs-issue-assignee-name">
+          {issue.assignee ? (mine ? `${issue.assignee.name} (you)` : issue.assignee.name) : <span className="font-normal text-ink-muted">Unassigned</span>}
         </span>
         <label htmlFor="obs-issue-assignee-pick" className="sr-only">
           Assign to
@@ -108,12 +108,12 @@ export function IssueAssignee({ issue, orgId }: { issue: Issue; orgId: string })
         )}
       </div>
       {members.error && !members.data && (
-        <p className="text-xs text-muted-foreground" data-testid="obs-issue-assignee-roster-closed">
+        <p className="text-xs text-ink-muted" data-testid="obs-issue-assignee-roster-closed">
           The member list isn&apos;t available to you, so only you and the current assignee are listed.
         </p>
       )}
       {conflict ? (
-        <p role="alert" className="flex items-start gap-2 rounded-md border border-warning/40 bg-background px-3 py-2 text-xs text-foreground" data-testid="obs-issue-assignee-conflict">
+        <p role="alert" className="flex items-start gap-2 rounded-md border border-warning/40 bg-surface-sunken px-3 py-2 text-xs text-ink" data-testid="obs-issue-assignee-conflict">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
           <span>
             Someone changed this issue while you were looking, so the assignee was not changed.{" "}
@@ -121,7 +121,7 @@ export function IssueAssignee({ issue, orgId }: { issue: Issue; orgId: string })
           </span>
         </p>
       ) : assign.error ? (
-        <p role="alert" className="text-xs text-destructive" data-testid="obs-issue-assignee-error">
+        <p role="alert" className="text-xs text-danger-ink" data-testid="obs-issue-assignee-error">
           {discussionErrorText(assign.error, "assign it")}
         </p>
       ) : null}

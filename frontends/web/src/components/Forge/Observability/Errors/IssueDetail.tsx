@@ -295,10 +295,10 @@ function IssueBody({
 function Incident({ issue, detail, openIssue }: { issue: Issue; detail: IssueDetailModel; openIssue: (id: string) => void }) {
   const ids = detail.incidentIssueIds;
   return (
-    <div className="rounded-md border border-border/60 bg-background px-3 py-2 text-xs" data-testid="obs-issue-incident" data-incident={issue.incidentKey}>
-      <p className="text-foreground">
+    <div className="rounded-md border border-border/60 bg-surface-sunken px-3 py-2 text-xs" data-testid="obs-issue-incident" data-incident={issue.incidentKey}>
+      <p className="text-ink">
         <strong className="font-medium">{issue.relatedCount} related {issue.relatedCount === 1 ? "error" : "errors"}</strong> (same incident)
-        <span className="text-muted-foreground"> — one cause failing several callers at about the same time. Each keeps its own counts and state.</span>
+        <span className="text-ink-muted"> — one cause failing several callers at about the same time. Each keeps its own counts and state.</span>
       </p>
       {ids.length > 0 && (
         <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
@@ -307,7 +307,7 @@ function Incident({ issue, detail, openIssue }: { issue: Issue; detail: IssueDet
               <button
                 type="button"
                 onClick={() => openIssue(id)}
-                className="font-mono text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="font-mono text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 data-testid={`obs-issue-incident-${id}`}
               >
                 {id}

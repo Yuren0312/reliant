@@ -52,7 +52,7 @@ import {
 export const COMMENT_MAX_LENGTH = 10_000;
 
 const TEXTAREA =
-  "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "w-full rounded-md border border-border bg-surface-sunken px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function IssueTimeline({ issueId, orgId }: { issueId: string; orgId: string }) {
   const timeline = useIssueTimeline(issueId);
@@ -72,7 +72,7 @@ export function IssueTimeline({ issueId, orgId }: { issueId: string; orgId: stri
         <ObsLoadingRows rows={3} testId="obs-issue-timeline-loading" />
       ) : refused ? (
         <div className="space-y-2 px-4 py-3" data-testid="obs-issue-timeline-error">
-          <p className="text-xs text-destructive">
+          <p className="text-xs text-danger-ink">
             {issuesErrorKind(timeline.error) === "not-configured" ? "This control plane doesn't keep an issue timeline yet." : "The timeline didn't load."}
           </p>
           <Button variant="ghost" size="sm" onClick={() => void timeline.refetch()} loading={timeline.isFetching}>
@@ -80,7 +80,7 @@ export function IssueTimeline({ issueId, orgId }: { issueId: string; orgId: stri
           </Button>
         </div>
       ) : entries.length === 0 ? (
-        <p className="px-4 py-3 text-xs text-muted-foreground" data-testid="obs-issue-timeline-empty">
+        <p className="px-4 py-3 text-xs text-ink-muted" data-testid="obs-issue-timeline-empty">
           Nothing yet. Be the first to say something about it.
         </p>
       ) : (
@@ -110,7 +110,7 @@ export function IssueTimeline({ issueId, orgId }: { issueId: string; orgId: stri
   );
 }
 
-const ICON = "mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground";
+const ICON = "mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-muted";
 
 function TimelineRow({
   entry,
@@ -130,12 +130,12 @@ function TimelineRow({
   const origin = entryOrigin(entry, timelineIssueId, viewedIssueId);
   const body = entry.body;
   const when = (
-    <span className="whitespace-nowrap text-muted-foreground" title={formatWhen(entry.timeMs, now)}>
+    <span className="whitespace-nowrap text-ink-muted" title={formatWhen(entry.timeMs, now)}>
       {formatAgo(entry.timeMs, now)}
     </span>
   );
   const originNote = origin && (
-    <span className="rounded border border-border/60 px-1.5 text-2xs text-muted-foreground" data-testid="obs-timeline-origin" data-origin-issue={origin.issueId} title={`Issue ${origin.issueId}`}>
+    <span className="rounded border border-border/60 px-1.5 text-2xs text-ink-muted" data-testid="obs-timeline-origin" data-origin-issue={origin.issueId} title={`Issue ${origin.issueId}`}>
       {origin.label}
     </span>
   );
@@ -150,7 +150,7 @@ function TimelineRow({
     case "status":
       return frame(
         <CircleDot className={ICON} aria-hidden="true" />,
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-foreground">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ink">
           <span>
             <strong className="font-medium">{actorName(entry.actor)}</strong> {describeStatus(body, now)}
           </span>
@@ -161,7 +161,7 @@ function TimelineRow({
     case "assignment":
       return frame(
         <UserRound className={ICON} aria-hidden="true" />,
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-foreground">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ink">
           <span>
             <strong className="font-medium">{actorName(entry.actor)}</strong> {describeAssignment(entry.actor, body.from, body.to)}
           </span>
@@ -172,7 +172,7 @@ function TimelineRow({
     case "chat":
       return frame(
         <MessageSquareText className={ICON} aria-hidden="true" />,
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-foreground">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ink">
           <span>
             <strong className="font-medium">{actorName(entry.actor ?? (body.link.linkedBy ? { kind: "user", id: body.link.linkedBy.id, name: body.link.linkedBy.name } : null))}</strong> started a chat:{" "}
             <ChatLink chatId={body.link.chatId} label={chatLabel(body.link)} />
@@ -203,7 +203,7 @@ function ChatLink({ chatId, label }: { chatId: string; label: string }) {
     <button
       type="button"
       onClick={() => void open()}
-      className="font-medium text-foreground underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="font-medium text-ink underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       title={`Chat ${chatId}`}
       data-testid={`obs-timeline-chat-${chatId}`}
     >
@@ -247,12 +247,12 @@ function CommentEntry({
 
   return (
     <>
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-foreground">
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-ink">
         <strong className="font-medium">{comment.author ? who : "A deleted account"}</strong>
-        <span className="text-muted-foreground">commented</span>
+        <span className="text-ink-muted">commented</span>
         {originNote}
         {when}
-        {isEdited(comment) && <span className="text-muted-foreground">(edited)</span>}
+        {isEdited(comment) && <span className="text-ink-muted">(edited)</span>}
         {!editing && (canEdit || canDelete) && (
           <span className="ml-auto inline-flex items-center gap-1">
             {canEdit && (
@@ -305,7 +305,7 @@ function CommentEntry({
             </Button>
           </div>
           {update.error ? (
-            <p role="alert" className="text-xs text-destructive" data-testid="obs-comment-error">
+            <p role="alert" className="text-xs text-danger-ink" data-testid="obs-comment-error">
               {discussionErrorText(update.error, "edited")}
             </p>
           ) : null}
@@ -314,8 +314,8 @@ function CommentEntry({
         <CommentBody body={comment.body} />
       )}
       {confirming && (
-        <div role="alertdialog" aria-label="Delete this comment?" className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-background px-3 py-2" data-testid={`obs-comment-confirm-${comment.id}`}>
-          <span className="text-foreground">Delete this comment? It leaves the timeline for everyone.</span>
+        <div role="alertdialog" aria-label="Delete this comment?" className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-surface-sunken px-3 py-2" data-testid={`obs-comment-confirm-${comment.id}`}>
+          <span className="text-ink">Delete this comment? It leaves the timeline for everyone.</span>
           <Button
             size="sm"
             variant="primary"
@@ -329,7 +329,7 @@ function CommentEntry({
             Keep it
           </Button>
           {remove.error ? (
-            <p role="alert" className="w-full text-xs text-destructive" data-testid="obs-comment-error">
+            <p role="alert" className="w-full text-xs text-danger-ink" data-testid="obs-comment-error">
               {discussionErrorText(remove.error, "deleted")}
             </p>
           ) : null}
@@ -387,10 +387,10 @@ function CommentComposer({ issueId, disabled }: { issueId: string; disabled: boo
         <Button type="submit" size="sm" variant="primary" leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />} disabled={empty || disabled || add.isPending} loading={add.isPending} data-testid="obs-comment-submit">
           Comment
         </Button>
-        <span className="text-2xs text-muted-foreground">⌘/Ctrl+Enter sends</span>
+        <span className="text-2xs text-ink-muted">⌘/Ctrl+Enter sends</span>
       </div>
       {add.error ? (
-        <p role="alert" className="text-xs text-destructive" data-testid="obs-comment-add-error">
+        <p role="alert" className="text-xs text-danger-ink" data-testid="obs-comment-add-error">
           {discussionErrorText(add.error, "commented on")}
         </p>
       ) : null}
