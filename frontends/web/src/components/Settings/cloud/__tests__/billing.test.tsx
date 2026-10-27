@@ -200,7 +200,12 @@ describe('BillingSection', () => {
 
     renderSection()
     expect(screen.getByRole('tab', { name: /usage & invoices/i })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByTestId('billing-observability-usage').id).toBe(destination.hash.slice(1))
+    const usageSection = screen.getByTestId('billing-observability-usage')
+    expect(usageSection.id).toBe('observability')
+    const hashTarget = document.getElementById(destination.hash.slice(1))
+    expect(hashTarget).not.toBeNull()
+    expect(usageSection).toContainElement(hashTarget)
+    expect(hashTarget).toHaveTextContent('Observability usage')
   })
 
   it('shows the plans empty state when no plans are configured', () => {
