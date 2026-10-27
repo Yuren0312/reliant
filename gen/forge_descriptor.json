@@ -35766,6 +35766,27 @@
             "name": "force",
             "kind": "message",
             "type_name": "reliant.v1.CelBool"
+          },
+          {
+            "name": "target_repo",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "base_branches",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
+          },
+          {
+            "name": "fetch_branch",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
+          },
+          {
+            "name": "expected_head",
+            "kind": "message",
+            "type_name": "reliant.v1.CelString"
           }
         ],
         "reliant.v1.DaemonSelectorProto": [
@@ -41294,7 +41315,7 @@
     "reliant/v1/tools_daemon.proto": "093e70e06ec18f1a4db9ef4416590b721dc8085192cba21ca9f2993d8b01b8c0",
     "reliant/v1/trigger.proto": "38043068f5343cee949349db66c1fed55fd989b21237b3f229624fb53f17e9ce",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
-    "reliant/v1/workflow_v2.proto": "bfd48242abaed06a26e9a2b6aecd003493d423b96dc2671d2aac61cf39107d6a",
+    "reliant/v1/workflow_v2.proto": "0beb777de1451dfe512db520d4e6cb0aacc394444053e9abb548e85bf61d821a",
     "reliant/v1/worktree.proto": "021b7ddfa340a326138bfd2072871bacdb284133e3af72c5e0fec3a5f2f6584a"
   }
 }
