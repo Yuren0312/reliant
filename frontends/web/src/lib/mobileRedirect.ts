@@ -106,7 +106,7 @@ export function mobilePathFor(pathname: string): string {
   if (run) return `/m/chats/${run[1]}`;
   if (path === "/workflows" || path.startsWith("/workflows/library")) return "/m/workflows";
 
-  if (path.startsWith("/settings/environments")) return "/m/daemons";
+  if (path.startsWith("/settings/machines") || path.startsWith("/settings/environments")) return "/m/daemons";
   if (path === "/settings" || path.startsWith("/settings/")) return "/m/settings";
 
   return "/m/chats";

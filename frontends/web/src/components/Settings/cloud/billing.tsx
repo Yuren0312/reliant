@@ -16,12 +16,12 @@ import {
 } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
+import { SettingsPageHeader } from "../SettingsPageHeader";
 import {
   Badge,
   Card,
   CardContent,
   EmptyState,
-  PageHeader,
   Table,
   Tbody,
   Td,
@@ -201,9 +201,10 @@ export function BillingSection() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader
+      <SettingsPageHeader
         title="Billing"
-        subtitle="Manage wallet credits, your compute plan, usage, and invoices."
+        description="Manage wallet credits, your compute plan, usage, and invoices."
+        className="mb-0"
       />
 
       {/* The route home, hoisted out of the Stripe-return banner.

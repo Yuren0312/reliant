@@ -284,9 +284,9 @@ describe("RunWorkflowDialog", () => {
     expect(alert).toHaveTextContent("no API keys configured");
     const link = within(alert).getByRole("link", { name: "Add a provider in Settings → AI → Providers" });
     // The AI section opens on its Providers tab.
-    expect(link).toHaveAttribute("href", "/settings/general");
+    expect(link).toHaveAttribute("href", "/settings/ai");
     await user.click(link);
-    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/general"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/ai"));
     expect(onClose).toHaveBeenCalled();
   });
 
