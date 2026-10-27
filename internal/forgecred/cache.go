@@ -17,16 +17,17 @@ import (
 
 // cacheVersion is the on-disk format version; a file of another version is
 // treated as empty (it is a cache — losing it costs one exchange).
-const cacheVersion = 1
+const cacheVersion = 2
 
 // tokenCache is the helper's memory across processes. forge runs the helper
 // once per command; without this, every `forge` command would mint a token.
 //
-// KEYED BY THE SESSION THAT MINTED IT. An entry records the control plane it
+// KEYED BY THE SESSION THAT MINTED IT, AND BY THE ORG IT ACTS IN. An entry records the control plane it
 // is for, the server that exchanged it, and a fingerprint (a hash prefix,
 // never the credential) of the session credential it came from. A re-sign-in
 // or a different account produces a different fingerprint, so a token minted
-// for one identity is never handed out on behalf of another.
+// for one identity is never handed out on behalf of another; nor is a token for one org handed
+// out when forge asked for a different one.
 //
 // BEST-EFFORT ON PURPOSE. A managed daemon's home may be read-only; a write
 // that fails costs a mint next time, never the command. A corrupt file is
@@ -42,6 +43,7 @@ type cacheEntry struct {
 	Endpoint  string    `json:"endpoint"`
 	Server    string    `json:"server"`
 	Subject   string    `json:"subject"`
+	Org       string    `json:"org,omitempty"`
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expires_at"`
 	Scopes    []string  `json:"scopes,omitempty"`
@@ -79,10 +81,10 @@ func (c tokenCache) load() cacheFile {
 
 // lookup returns s's cached token for endpoint while reuseWhileRemaining of
 // its life is left.
-func (c tokenCache) lookup(endpoint string, s Session, now time.Time) (cloudcred.Token, bool) {
+func (c tokenCache) lookup(endpoint, org string, s Session, now time.Time) (cloudcred.Token, bool) {
 	server, subject := serverKey(s.Server), fingerprint(s.Token)
 	for _, e := range c.load().Entries {
-		if e.Endpoint != endpoint || e.Server != server || e.Subject != subject {
+		if e.Endpoint != endpoint || e.Server != server || e.Subject != subject || e.Org != org {
 			continue
 		}
 		if e.ExpiresAt.Sub(now) < reuseWhileRemaining {
@@ -97,7 +99,7 @@ func (c tokenCache) lookup(endpoint string, s Session, now time.Time) (cloudcred
 // store records tok as s's token for endpoint, replacing the previous one and
 // dropping every expired entry. A token with no known expiry is not cached:
 // there would be no way to know when it stopped being safe to hand out.
-func (c tokenCache) store(endpoint string, s Session, tok cloudcred.Token, now time.Time) {
+func (c tokenCache) store(endpoint, org string, s Session, tok cloudcred.Token, now time.Time) {
 	if c.path == "" || tok.ExpiresAt == nil {
 		return
 	}
@@ -105,13 +107,13 @@ func (c tokenCache) store(endpoint string, s Session, tok cloudcred.Token, now t
 	f := c.load()
 	kept := f.Entries[:0]
 	for _, e := range f.Entries {
-		if !e.ExpiresAt.After(now) || (e.Endpoint == endpoint && e.Server == server && e.Subject == subject) {
+		if !e.ExpiresAt.After(now) || (e.Endpoint == endpoint && e.Server == server && e.Subject == subject && e.Org == org) {
 			continue
 		}
 		kept = append(kept, e)
 	}
 	f.Entries = append(kept, cacheEntry{
-		Endpoint: endpoint, Server: server, Subject: subject,
+		Endpoint: endpoint, Server: server, Subject: subject, Org: org,
 		Token: tok.Token, ExpiresAt: tok.ExpiresAt.UTC(), Scopes: tok.Scopes, Source: tok.Source,
 	})
 	_ = c.save(f)

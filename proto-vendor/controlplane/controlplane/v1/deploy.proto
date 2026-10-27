@@ -58,6 +58,11 @@ enum DeployTier {
   DEPLOY_TIER_CLUSTER = 4;
 }
 
+// DEPRECATED: placement is per workload (forge
+// docs/design/per-workload-placement.md); DeployEnvironment carries lifetime,
+// secret_posture and hosted_slot instead. Ignored on input; the next release
+// removes it.
+//
 // DeployEnvironmentKind separates environments that live until deleted from
 // per-PR previews that are reaped. A real discriminator rather than
 // "expires_at is set", because the two differ in more than expiry: a preview
@@ -75,10 +80,9 @@ enum DeployEnvironmentKind {
   // FailedPrecondition — it holds no namespace on any cluster, and its
   // secrets are the only ones readable back (LocalSecretService.PullSecrets).
   //
-  // Kind is IMMUTABLE, and for this member that is the security property: a
-  // persistent environment can never become LOCAL and so can never become
-  // readable. EnsureEnvironment with a kind differing from the stored row is
-  // FailedPrecondition, never a silent change.
+  // The security property is the SECRET POSTURE's: a write-only environment
+  // never becomes readable. A LOCAL environment whose declaration gains a
+  // deployed part is SEALED (write-only from then on) by EnsureEnvironment.
   DEPLOY_ENVIRONMENT_KIND_LOCAL = 3;
 
   // FORGE APPLIES IT; THE PLATFORM PLACES NOTHING. The tenant's own cluster
@@ -289,7 +293,11 @@ message DeployEnvironment {
   // 'dev' | 'staging' | 'prod' | 'preview-pr-123'. Free-form: the platform
   // owns an environment's lifecycle, not a tenant's taxonomy.
   string name = 2;
-  DeployEnvironmentKind kind = 3;
+  // DEPRECATED (per-workload placement, forge docs/design/per-workload-placement.md):
+  // placement is a property of each workload, never of the environment. Read
+  // lifetime, secret_posture and hosted_slot instead. Still populated, from
+  // the legacy column, until the next release reserves the tag.
+  DeployEnvironmentKind kind = 3 [deprecated = true];
 
   // READ-ONLY. The Kubernetes namespace, allocated by the platform from the
   // tenant's namespace_prefix. A client that could name this could name
@@ -409,6 +417,37 @@ message DeployEnvironment {
   // This is the secrets half of protection only. The source-of-truth half
   // (`protection`, `main_ref`: tags 18 and 19, reserved above) stays deferred to #516.
   bool protected = 24;
+
+  // Whether the environment is reaped: PREVIEW carries expires_at,
+  // PERSISTENT never does. Immutable.
+  DeployEnvironmentLifetime lifetime = 25;
+  // Whether its secrets read back. Only ever ratchets READABLE → WRITE_ONLY.
+  DeploySecretPosture secret_posture = 26;
+  // READ-ONLY and DERIVED: the environment holds a hosted slot (a namespace
+  // and host cluster on the platform fleet) because at least one of its
+  // parts is hosted. Its other parts may run anywhere.
+  bool hosted_slot = 27;
+}
+
+// DeployEnvironmentLifetime is the environment-wide half of the retired
+// DeployEnvironmentKind that is truly the environment's: whether it is reaped.
+enum DeployEnvironmentLifetime {
+  DEPLOY_ENVIRONMENT_LIFETIME_UNSPECIFIED = 0;
+  DEPLOY_ENVIRONMENT_LIFETIME_PERSISTENT = 1;
+  // Reaped at expires_at.
+  DEPLOY_ENVIRONMENT_LIFETIME_PREVIEW = 2;
+}
+
+// DeploySecretPosture is whether an environment's secrets can be read back.
+enum DeploySecretPosture {
+  DEPLOY_SECRET_POSTURE_UNSPECIFIED = 0;
+  // A developer environment: its control plane is only its secret store, and
+  // `forge env up` pulls the values. It holds no hosted slot, no deployment
+  // and no promotion.
+  DEPLOY_SECRET_POSTURE_READABLE = 1;
+  // Every environment that deploys anything anywhere. Never becomes
+  // READABLE again.
+  DEPLOY_SECRET_POSTURE_WRITE_ONLY = 2;
 }
 
 // DeployEnvironmentSpec is THE WRITABLE HALF of an environment — the whole of

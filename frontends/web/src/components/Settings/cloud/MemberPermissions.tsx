@@ -30,6 +30,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useActiveOrgStore } from "@/store/activeOrgStore";
 import { Loader2 } from "lucide-react";
 
 import {
@@ -71,6 +72,7 @@ const ORG_PERMISSIONS = [
 const ADMIN_PERMISSION = "token:write";
 
 export function MemberPermissions() {
+  const orgId = useActiveOrgStore((s) => s.effectiveId);
   const [members, setMembers] = useState<Member[]>([]);
   const [grantable, setGrantable] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,8 +93,11 @@ export function MemberPermissions() {
   }, []);
 
   useEffect(() => {
-    fetchMembers();
-  }, [fetchMembers]);
+    setMembers([]);
+    setGrantable([]);
+    setLoading(true);
+    void fetchMembers();
+  }, [fetchMembers, orgId]);
 
   const canAdminister = grantable.includes(ADMIN_PERMISSION);
 

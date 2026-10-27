@@ -62,6 +62,7 @@ import {
   useRotateLLMKey,
 } from "../../../hooks/useReliantAIQueries";
 import { LLMKeyStatus } from "../../../gen/controlplane/controlplane/v1/shared_pb";
+import { useActiveOrg } from "@/hooks/useOrgs";
 
 // ---------------------------------------------------------------------------
 // Formatting helpers (self-contained — reliant-web has no lib/billing).
@@ -181,10 +182,9 @@ function ReliantAIPanel() {
   const wallet = walletQ.data;
   const entitlement = overview?.entitlement;
 
-  // Org resolution mirrors admin-web: prefer the wallet's org, fall back to the
-  // entitlement's source ref. A signed-in user resolves to exactly one billing
-  // scope, so there is no org switcher.
-  const orgId = wallet?.organization?.id ?? entitlement?.sourceRefId ?? "";
+  // The org the switcher has selected (else the person's default): the same
+  // org the wallet and entitlement above were fetched for.
+  const orgId = useActiveOrg().activeOrgId ?? "";
 
   const { startDate, endDate } = useMemo(() => {
     const end = new Date();

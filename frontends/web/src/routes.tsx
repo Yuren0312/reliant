@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type RouteComponent } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
@@ -284,6 +285,7 @@ function RootShell() {
           is usually elsewhere (billing, a chat): the watch lives here, and
           loads its forge code only while it has something to watch. */}
       <QueuedDeployWatch pathname={pathname} />
+      <ActiveOrgBinding />
     </SurfaceProvider>
   );
 }

@@ -396,7 +396,11 @@ func (x *GetPlanResponse) GetPlan() *v1.Plan {
 }
 
 type GetCurrentUserSubscriptionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -429,6 +433,13 @@ func (x *GetCurrentUserSubscriptionRequest) ProtoReflect() protoreflect.Message 
 // Deprecated: Use GetCurrentUserSubscriptionRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserSubscriptionRequest) Descriptor() ([]byte, []int) {
 	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetCurrentUserSubscriptionRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type GetCurrentUserSubscriptionResponse struct {
@@ -488,7 +499,11 @@ type CreateCurrentUserCheckoutSessionRequest struct {
 	// redirect-based payment methods (some bank redirects) are enabled on the
 	// session; cards and wallets never leave the iframe. Validated against the
 	// redirect allowlist when present.
-	ReturnUrl     string `protobuf:"bytes,5,opt,name=return_url,json=returnUrl,proto3" json:"return_url,omitempty"`
+	ReturnUrl string `protobuf:"bytes,5,opt,name=return_url,json=returnUrl,proto3" json:"return_url,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,6,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -554,6 +569,13 @@ func (x *CreateCurrentUserCheckoutSessionRequest) GetUiMode() CheckoutUiMode {
 func (x *CreateCurrentUserCheckoutSessionRequest) GetReturnUrl() string {
 	if x != nil {
 		return x.ReturnUrl
+	}
+	return ""
+}
+
+func (x *CreateCurrentUserCheckoutSessionRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -637,8 +659,12 @@ type GetCurrentUserWalletOverviewRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	LedgerPage     int32                  `protobuf:"varint,1,opt,name=ledger_page,json=ledgerPage,proto3" json:"ledger_page,omitempty"`
 	LedgerPageSize int32                  `protobuf:"varint,2,opt,name=ledger_page_size,json=ledgerPageSize,proto3" json:"ledger_page_size,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetCurrentUserWalletOverviewRequest) Reset() {
@@ -683,6 +709,13 @@ func (x *GetCurrentUserWalletOverviewRequest) GetLedgerPageSize() int32 {
 		return x.LedgerPageSize
 	}
 	return 0
+}
+
+func (x *GetCurrentUserWalletOverviewRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type GetCurrentUserWalletOverviewResponse struct {
@@ -812,7 +845,11 @@ func (x *GetCurrentUserComputeSubscriptionResponse) GetSubscription() *v1.Subscr
 type CreateCurrentUserComputeSubscriptionIntentRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The compute plan to subscribe to.
-	PlanId        string `protobuf:"bytes,1,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	PlanId string `protobuf:"bytes,1,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -850,6 +887,13 @@ func (*CreateCurrentUserComputeSubscriptionIntentRequest) Descriptor() ([]byte, 
 func (x *CreateCurrentUserComputeSubscriptionIntentRequest) GetPlanId() string {
 	if x != nil {
 		return x.PlanId
+	}
+	return ""
+}
+
+func (x *CreateCurrentUserComputeSubscriptionIntentRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -937,10 +981,14 @@ type CreateCurrentUserWalletTopupSessionRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	AmountCents int64                  `protobuf:"varint,1,opt,name=amount_cents,json=amountCents,proto3" json:"amount_cents,omitempty"`
 	// Hosted mode only; see CreateCurrentUserCheckoutSessionRequest.
-	SuccessUrl    string         `protobuf:"bytes,2,opt,name=success_url,json=successUrl,proto3" json:"success_url,omitempty"`
-	CancelUrl     string         `protobuf:"bytes,3,opt,name=cancel_url,json=cancelUrl,proto3" json:"cancel_url,omitempty"`
-	UiMode        CheckoutUiMode `protobuf:"varint,4,opt,name=ui_mode,json=uiMode,proto3,enum=controlplane.v1.CheckoutUiMode" json:"ui_mode,omitempty"`
-	ReturnUrl     string         `protobuf:"bytes,5,opt,name=return_url,json=returnUrl,proto3" json:"return_url,omitempty"`
+	SuccessUrl string         `protobuf:"bytes,2,opt,name=success_url,json=successUrl,proto3" json:"success_url,omitempty"`
+	CancelUrl  string         `protobuf:"bytes,3,opt,name=cancel_url,json=cancelUrl,proto3" json:"cancel_url,omitempty"`
+	UiMode     CheckoutUiMode `protobuf:"varint,4,opt,name=ui_mode,json=uiMode,proto3,enum=controlplane.v1.CheckoutUiMode" json:"ui_mode,omitempty"`
+	ReturnUrl  string         `protobuf:"bytes,5,opt,name=return_url,json=returnUrl,proto3" json:"return_url,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,6,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1006,6 +1054,13 @@ func (x *CreateCurrentUserWalletTopupSessionRequest) GetUiMode() CheckoutUiMode 
 func (x *CreateCurrentUserWalletTopupSessionRequest) GetReturnUrl() string {
 	if x != nil {
 		return x.ReturnUrl
+	}
+	return ""
+}
+
+func (x *CreateCurrentUserWalletTopupSessionRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -1089,8 +1144,12 @@ func (x *CreateCurrentUserWalletTopupSessionResponse) GetSessionId() string {
 }
 
 type CreateCurrentUserWalletTopupPaymentIntentRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AmountCents   int64                  `protobuf:"varint,1,opt,name=amount_cents,json=amountCents,proto3" json:"amount_cents,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	AmountCents int64                  `protobuf:"varint,1,opt,name=amount_cents,json=amountCents,proto3" json:"amount_cents,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1130,6 +1189,13 @@ func (x *CreateCurrentUserWalletTopupPaymentIntentRequest) GetAmountCents() int6
 		return x.AmountCents
 	}
 	return 0
+}
+
+func (x *CreateCurrentUserWalletTopupPaymentIntentRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type CreateCurrentUserWalletTopupPaymentIntentResponse struct {
@@ -1325,7 +1391,11 @@ type RedeemCouponRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// code is case-insensitive and trimmed server-side — users paste these from
 	// emails and read them aloud, so case must never decide the outcome.
-	Code          string `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	Code string `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1363,6 +1433,13 @@ func (*RedeemCouponRequest) Descriptor() ([]byte, []int) {
 func (x *RedeemCouponRequest) GetCode() string {
 	if x != nil {
 		return x.Code
+	}
+	return ""
+}
+
+func (x *RedeemCouponRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -1463,8 +1540,12 @@ func (x *RedeemCouponResponse) GetNewGrantedSmallDaemonSecondsRemaining() int64 
 }
 
 type CreateCurrentUserBillingPortalSessionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ReturnUrl     string                 `protobuf:"bytes,1,opt,name=return_url,json=returnUrl,proto3" json:"return_url,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ReturnUrl string                 `protobuf:"bytes,1,opt,name=return_url,json=returnUrl,proto3" json:"return_url,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1502,6 +1583,13 @@ func (*CreateCurrentUserBillingPortalSessionRequest) Descriptor() ([]byte, []int
 func (x *CreateCurrentUserBillingPortalSessionRequest) GetReturnUrl() string {
 	if x != nil {
 		return x.ReturnUrl
+	}
+	return ""
+}
+
+func (x *CreateCurrentUserBillingPortalSessionRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -1551,7 +1639,11 @@ func (x *CreateCurrentUserBillingPortalSessionResponse) GetPortalUrl() string {
 }
 
 type ListCurrentUserInvoicesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1584,6 +1676,13 @@ func (x *ListCurrentUserInvoicesRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListCurrentUserInvoicesRequest.ProtoReflect.Descriptor instead.
 func (*ListCurrentUserInvoicesRequest) Descriptor() ([]byte, []int) {
 	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ListCurrentUserInvoicesRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type ListCurrentUserInvoicesResponse struct {
@@ -1719,7 +1818,11 @@ func (x *GetUsageSummaryResponse) GetSummaries() []*v1.UsageSummary {
 }
 
 type GetCurrentUserReliantStateRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1752,6 +1855,13 @@ func (x *GetCurrentUserReliantStateRequest) ProtoReflect() protoreflect.Message 
 // Deprecated: Use GetCurrentUserReliantStateRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserReliantStateRequest) Descriptor() ([]byte, []int) {
 	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *GetCurrentUserReliantStateRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type GetCurrentUserReliantStateResponse struct {
@@ -1807,7 +1917,11 @@ func (x *GetCurrentUserReliantStateResponse) GetManagedAccess() *v1.ManagedRelia
 }
 
 type RepairCurrentUserReliantAccessRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1840,6 +1954,13 @@ func (x *RepairCurrentUserReliantAccessRequest) ProtoReflect() protoreflect.Mess
 // Deprecated: Use RepairCurrentUserReliantAccessRequest.ProtoReflect.Descriptor instead.
 func (*RepairCurrentUserReliantAccessRequest) Descriptor() ([]byte, []int) {
 	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *RepairCurrentUserReliantAccessRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type RepairCurrentUserReliantAccessResponse struct {
@@ -1903,8 +2024,12 @@ func (x *RepairCurrentUserReliantAccessResponse) GetRepaired() bool {
 }
 
 type RotateCurrentUserReliantAccessRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	GracePeriod   *string                `protobuf:"bytes,1,opt,name=grace_period,json=gracePeriod,proto3,oneof" json:"grace_period,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	GracePeriod *string                `protobuf:"bytes,1,opt,name=grace_period,json=gracePeriod,proto3,oneof" json:"grace_period,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1942,6 +2067,13 @@ func (*RotateCurrentUserReliantAccessRequest) Descriptor() ([]byte, []int) {
 func (x *RotateCurrentUserReliantAccessRequest) GetGracePeriod() string {
 	if x != nil && x.GracePeriod != nil {
 		return *x.GracePeriod
+	}
+	return ""
+}
+
+func (x *RotateCurrentUserReliantAccessRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -2015,7 +2147,11 @@ func (x *RotateCurrentUserReliantAccessResponse) GetReplaced() bool {
 }
 
 type GetCurrentUserReliantOverviewRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2048,6 +2184,13 @@ func (x *GetCurrentUserReliantOverviewRequest) ProtoReflect() protoreflect.Messa
 // Deprecated: Use GetCurrentUserReliantOverviewRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserReliantOverviewRequest) Descriptor() ([]byte, []int) {
 	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *GetCurrentUserReliantOverviewRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type GetCurrentUserReliantOverviewResponse struct {
@@ -2095,8 +2238,12 @@ func (x *GetCurrentUserReliantOverviewResponse) GetOverview() *v1.ReliantOvervie
 }
 
 type SetCurrentUserReliantEnabledRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Enabled bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2136,6 +2283,13 @@ func (x *SetCurrentUserReliantEnabledRequest) GetEnabled() bool {
 		return x.Enabled
 	}
 	return false
+}
+
+func (x *SetCurrentUserReliantEnabledRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type SetCurrentUserReliantEnabledResponse struct {
@@ -2411,7 +2565,11 @@ func (x *SetCurrentUserInfraOverageResponse) GetSubscription() *v1.Subscription 
 // a spinner nobody needs to see. Same reasoning as
 // GetDeployTenantResponse.clusters.
 type GetCurrentUserInfraOverageRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2444,6 +2602,13 @@ func (x *GetCurrentUserInfraOverageRequest) ProtoReflect() protoreflect.Message 
 // Deprecated: Use GetCurrentUserInfraOverageRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserInfraOverageRequest) Descriptor() ([]byte, []int) {
 	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *GetCurrentUserInfraOverageRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type GetCurrentUserInfraOverageResponse struct {
@@ -2878,7 +3043,11 @@ func (x *SavedPaymentMethod) GetExpYear() int64 {
 }
 
 type GetCurrentUserWalletAutoRechargeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2911,6 +3080,13 @@ func (x *GetCurrentUserWalletAutoRechargeRequest) ProtoReflect() protoreflect.Me
 // Deprecated: Use GetCurrentUserWalletAutoRechargeRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserWalletAutoRechargeRequest) Descriptor() ([]byte, []int) {
 	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *GetCurrentUserWalletAutoRechargeRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type GetCurrentUserWalletAutoRechargeResponse struct {
@@ -2980,8 +3156,12 @@ type SetCurrentUserWalletAutoRechargeRequest struct {
 	// REQUIRED when enabled. Unlike the compute overage cap, 0 is not "uncapped"
 	// here — it is rejected. An automatic charger must have a wall.
 	MaxPerMonthCents int64 `protobuf:"varint,4,opt,name=max_per_month_cents,json=maxPerMonthCents,proto3" json:"max_per_month_cents,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SetCurrentUserWalletAutoRechargeRequest) Reset() {
@@ -3042,6 +3222,13 @@ func (x *SetCurrentUserWalletAutoRechargeRequest) GetMaxPerMonthCents() int64 {
 	return 0
 }
 
+func (x *SetCurrentUserWalletAutoRechargeRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
 type SetCurrentUserWalletAutoRechargeResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	AutoRecharge  *WalletAutoRecharge    `protobuf:"bytes,1,opt,name=auto_recharge,json=autoRecharge,proto3" json:"auto_recharge,omitempty"`
@@ -3087,7 +3274,11 @@ func (x *SetCurrentUserWalletAutoRechargeResponse) GetAutoRecharge() *WalletAuto
 }
 
 type CreateCurrentUserWalletPaymentMethodSetupRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3120,6 +3311,13 @@ func (x *CreateCurrentUserWalletPaymentMethodSetupRequest) ProtoReflect() protor
 // Deprecated: Use CreateCurrentUserWalletPaymentMethodSetupRequest.ProtoReflect.Descriptor instead.
 func (*CreateCurrentUserWalletPaymentMethodSetupRequest) Descriptor() ([]byte, []int) {
 	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *CreateCurrentUserWalletPaymentMethodSetupRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type CreateCurrentUserWalletPaymentMethodSetupResponse struct {
@@ -3181,8 +3379,12 @@ func (x *CreateCurrentUserWalletPaymentMethodSetupResponse) GetSetupIntentClient
 type ConfirmCurrentUserWalletPaymentMethodRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	PaymentMethodId string                 `protobuf:"bytes,1,opt,name=payment_method_id,json=paymentMethodId,proto3" json:"payment_method_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConfirmCurrentUserWalletPaymentMethodRequest) Reset() {
@@ -3218,6 +3420,13 @@ func (*ConfirmCurrentUserWalletPaymentMethodRequest) Descriptor() ([]byte, []int
 func (x *ConfirmCurrentUserWalletPaymentMethodRequest) GetPaymentMethodId() string {
 	if x != nil {
 		return x.PaymentMethodId
+	}
+	return ""
+}
+
+func (x *ConfirmCurrentUserWalletPaymentMethodRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -3267,8 +3476,12 @@ func (x *ConfirmCurrentUserWalletPaymentMethodResponse) GetPaymentMethod() *Save
 }
 
 type GetCurrentUserComputeUsageRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Period        *string                `protobuf:"bytes,1,opt,name=period,proto3,oneof" json:"period,omitempty"` // "current" (default) | "previous"
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Period *string                `protobuf:"bytes,1,opt,name=period,proto3,oneof" json:"period,omitempty"` // "current" (default) | "previous"
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3306,6 +3519,13 @@ func (*GetCurrentUserComputeUsageRequest) Descriptor() ([]byte, []int) {
 func (x *GetCurrentUserComputeUsageRequest) GetPeriod() string {
 	if x != nil && x.Period != nil {
 		return *x.Period
+	}
+	return ""
+}
+
+func (x *GetCurrentUserComputeUsageRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -3702,7 +3922,11 @@ func (x *StorageUsage) GetCentsPerGibMonth() string {
 }
 
 type GetCurrentUserComputeEligibilityRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3735,6 +3959,13 @@ func (x *GetCurrentUserComputeEligibilityRequest) ProtoReflect() protoreflect.Me
 // Deprecated: Use GetCurrentUserComputeEligibilityRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserComputeEligibilityRequest) Descriptor() ([]byte, []int) {
 	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *GetCurrentUserComputeEligibilityRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type GetCurrentUserComputeEligibilityResponse struct {
@@ -4152,10 +4383,12 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x0eGetPlanRequest\x12\x17\n" +
 	"\aplan_id\x18\x01 \x01(\tR\x06planId\"<\n" +
 	"\x0fGetPlanResponse\x12)\n" +
-	"\x04plan\x18\x01 \x01(\v2\x15.controlplane.v1.PlanR\x04plan\"#\n" +
-	"!GetCurrentUserSubscriptionRequest\"g\n" +
+	"\x04plan\x18\x01 \x01(\v2\x15.controlplane.v1.PlanR\x04plan\"J\n" +
+	"!GetCurrentUserSubscriptionRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"g\n" +
 	"\"GetCurrentUserSubscriptionResponse\x12A\n" +
-	"\fsubscription\x18\x01 \x01(\v2\x1d.controlplane.v1.SubscriptionR\fsubscription\"\xdb\x01\n" +
+	"\fsubscription\x18\x01 \x01(\v2\x1d.controlplane.v1.SubscriptionR\fsubscription\"\x82\x02\n" +
 	"'CreateCurrentUserCheckoutSessionRequest\x12\x17\n" +
 	"\aplan_id\x18\x01 \x01(\tR\x06planId\x12\x1f\n" +
 	"\vsuccess_url\x18\x02 \x01(\tR\n" +
@@ -4164,29 +4397,35 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"cancel_url\x18\x03 \x01(\tR\tcancelUrl\x128\n" +
 	"\aui_mode\x18\x04 \x01(\x0e2\x1f.controlplane.v1.CheckoutUiModeR\x06uiMode\x12\x1d\n" +
 	"\n" +
-	"return_url\x18\x05 \x01(\tR\treturnUrl\"\xcb\x01\n" +
+	"return_url\x18\x05 \x01(\tR\treturnUrl\x12\x1a\n" +
+	"\x06org_id\x18\x06 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xcb\x01\n" +
 	"(CreateCurrentUserCheckoutSessionResponse\x12!\n" +
 	"\fcheckout_url\x18\x01 \x01(\tR\vcheckoutUrl\x12#\n" +
 	"\rclient_secret\x18\x02 \x01(\tR\fclientSecret\x128\n" +
 	"\aui_mode\x18\x03 \x01(\x0e2\x1f.controlplane.v1.CheckoutUiModeR\x06uiMode\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x04 \x01(\tR\tsessionId\"p\n" +
+	"session_id\x18\x04 \x01(\tR\tsessionId\"\x97\x01\n" +
 	"#GetCurrentUserWalletOverviewRequest\x12\x1f\n" +
 	"\vledger_page\x18\x01 \x01(\x05R\n" +
 	"ledgerPage\x12(\n" +
-	"\x10ledger_page_size\x18\x02 \x01(\x05R\x0eledgerPageSize\"c\n" +
+	"\x10ledger_page_size\x18\x02 \x01(\x05R\x0eledgerPageSize\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"c\n" +
 	"$GetCurrentUserWalletOverviewResponse\x12;\n" +
 	"\boverview\x18\x01 \x01(\v2\x1f.controlplane.v1.WalletOverviewR\boverview\"*\n" +
 	"(GetCurrentUserComputeSubscriptionRequest\"n\n" +
 	")GetCurrentUserComputeSubscriptionResponse\x12A\n" +
-	"\fsubscription\x18\x01 \x01(\v2\x1d.controlplane.v1.SubscriptionR\fsubscription\"L\n" +
+	"\fsubscription\x18\x01 \x01(\v2\x1d.controlplane.v1.SubscriptionR\fsubscription\"s\n" +
 	"1CreateCurrentUserComputeSubscriptionIntentRequest\x12\x17\n" +
-	"\aplan_id\x18\x01 \x01(\tR\x06planId\"\xd7\x01\n" +
+	"\aplan_id\x18\x01 \x01(\tR\x06planId\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xd7\x01\n" +
 	"2CreateCurrentUserComputeSubscriptionIntentResponse\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x122\n" +
 	"\x15payment_client_secret\x18\x02 \x01(\tR\x13paymentClientSecret\x12(\n" +
 	"\x10amount_due_cents\x18\x03 \x01(\x03R\x0eamountDueCents\x12\x1a\n" +
-	"\bcurrency\x18\x04 \x01(\tR\bcurrency\"\xe8\x01\n" +
+	"\bcurrency\x18\x04 \x01(\tR\bcurrency\"\x8f\x02\n" +
 	"*CreateCurrentUserWalletTopupSessionRequest\x12!\n" +
 	"\famount_cents\x18\x01 \x01(\x03R\vamountCents\x12\x1f\n" +
 	"\vsuccess_url\x18\x02 \x01(\tR\n" +
@@ -4195,16 +4434,20 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"cancel_url\x18\x03 \x01(\tR\tcancelUrl\x128\n" +
 	"\aui_mode\x18\x04 \x01(\x0e2\x1f.controlplane.v1.CheckoutUiModeR\x06uiMode\x12\x1d\n" +
 	"\n" +
-	"return_url\x18\x05 \x01(\tR\treturnUrl\"\x82\x02\n" +
+	"return_url\x18\x05 \x01(\tR\treturnUrl\x12\x1a\n" +
+	"\x06org_id\x18\x06 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\x82\x02\n" +
 	"+CreateCurrentUserWalletTopupSessionResponse\x122\n" +
 	"\x05topup\x18\x01 \x01(\v2\x1c.controlplane.v1.WalletTopupR\x05topup\x12!\n" +
 	"\fcheckout_url\x18\x02 \x01(\tR\vcheckoutUrl\x12#\n" +
 	"\rclient_secret\x18\x03 \x01(\tR\fclientSecret\x128\n" +
 	"\aui_mode\x18\x04 \x01(\x0e2\x1f.controlplane.v1.CheckoutUiModeR\x06uiMode\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x05 \x01(\tR\tsessionId\"U\n" +
+	"session_id\x18\x05 \x01(\tR\tsessionId\"|\n" +
 	"0CreateCurrentUserWalletTopupPaymentIntentRequest\x12!\n" +
-	"\famount_cents\x18\x01 \x01(\x03R\vamountCents\"\xd4\x01\n" +
+	"\famount_cents\x18\x01 \x01(\x03R\vamountCents\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xd4\x01\n" +
 	"1CreateCurrentUserWalletTopupPaymentIntentResponse\x122\n" +
 	"\x05topup\x18\x01 \x01(\v2\x1c.controlplane.v1.WalletTopupR\x05topup\x12?\n" +
 	"\x1cpayment_intent_client_secret\x18\x02 \x01(\tR\x19paymentIntentClientSecret\x12*\n" +
@@ -4217,51 +4460,67 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\vtotal_cents\x18\x03 \x01(\x03R\n" +
 	"totalCents\x12\x1f\n" +
 	"\vfee_percent\x18\x04 \x01(\x03R\n" +
-	"feePercent\")\n" +
+	"feePercent\"P\n" +
 	"\x13RedeemCouponRequest\x12\x12\n" +
-	"\x04code\x18\x01 \x01(\tR\x04code\"\xdb\x02\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xdb\x02\n" +
 	"\x14RedeemCouponResponse\x12!\n" +
 	"\famount_cents\x18\x01 \x01(\x03R\vamountCents\x12\x12\n" +
 	"\x04code\x18\x02 \x01(\tR\x04code\x12*\n" +
 	"\x11new_balance_cents\x18\x03 \x01(\x03R\x0fnewBalanceCents\x127\n" +
 	"\x04kind\x18\x04 \x01(\x0e2#.controlplane.v1.RedeemedCouponKindR\x04kind\x12'\n" +
 	"\x0fcompute_minutes\x18\x05 \x01(\x03R\x0ecomputeMinutes\x12Y\n" +
-	"*new_granted_small_daemon_seconds_remaining\x18\a \x01(\x03R%newGrantedSmallDaemonSecondsRemainingJ\x04\b\x06\x10\aR\x1dnew_compute_minutes_remaining\"M\n" +
+	"*new_granted_small_daemon_seconds_remaining\x18\a \x01(\x03R%newGrantedSmallDaemonSecondsRemainingJ\x04\b\x06\x10\aR\x1dnew_compute_minutes_remaining\"t\n" +
 	",CreateCurrentUserBillingPortalSessionRequest\x12\x1d\n" +
 	"\n" +
-	"return_url\x18\x01 \x01(\tR\treturnUrl\"N\n" +
+	"return_url\x18\x01 \x01(\tR\treturnUrl\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"N\n" +
 	"-CreateCurrentUserBillingPortalSessionResponse\x12\x1d\n" +
 	"\n" +
-	"portal_url\x18\x01 \x01(\tR\tportalUrl\" \n" +
-	"\x1eListCurrentUserInvoicesRequest\"W\n" +
+	"portal_url\x18\x01 \x01(\tR\tportalUrl\"G\n" +
+	"\x1eListCurrentUserInvoicesRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"W\n" +
 	"\x1fListCurrentUserInvoicesResponse\x124\n" +
 	"\binvoices\x18\x01 \x03(\v2\x18.controlplane.v1.InvoiceR\binvoices\"/\n" +
 	"\x16GetUsageSummaryRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"V\n" +
 	"\x17GetUsageSummaryResponse\x12;\n" +
-	"\tsummaries\x18\x01 \x03(\v2\x1d.controlplane.v1.UsageSummaryR\tsummaries\"#\n" +
-	"!GetCurrentUserReliantStateRequest\"\xb9\x01\n" +
+	"\tsummaries\x18\x01 \x03(\v2\x1d.controlplane.v1.UsageSummaryR\tsummaries\"J\n" +
+	"!GetCurrentUserReliantStateRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xb9\x01\n" +
 	"\"GetCurrentUserReliantStateResponse\x12E\n" +
 	"\ventitlement\x18\x01 \x01(\v2#.controlplane.v1.ReliantEntitlementR\ventitlement\x12L\n" +
-	"\x0emanaged_access\x18\x02 \x01(\v2%.controlplane.v1.ManagedReliantAccessR\rmanagedAccess\"'\n" +
-	"%RepairCurrentUserReliantAccessRequest\"\xd9\x01\n" +
+	"\x0emanaged_access\x18\x02 \x01(\v2%.controlplane.v1.ManagedReliantAccessR\rmanagedAccess\"N\n" +
+	"%RepairCurrentUserReliantAccessRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xd9\x01\n" +
 	"&RepairCurrentUserReliantAccessResponse\x12E\n" +
 	"\ventitlement\x18\x01 \x01(\v2#.controlplane.v1.ReliantEntitlementR\ventitlement\x12L\n" +
 	"\x0emanaged_access\x18\x02 \x01(\v2%.controlplane.v1.ManagedReliantAccessR\rmanagedAccess\x12\x1a\n" +
-	"\brepaired\x18\x03 \x01(\bR\brepaired\"`\n" +
+	"\brepaired\x18\x03 \x01(\bR\brepaired\"\x87\x01\n" +
 	"%RotateCurrentUserReliantAccessRequest\x12&\n" +
-	"\fgrace_period\x18\x01 \x01(\tH\x00R\vgracePeriod\x88\x01\x01B\x0f\n" +
-	"\r_grace_period\"\xf3\x01\n" +
+	"\fgrace_period\x18\x01 \x01(\tH\x00R\vgracePeriod\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x01R\x05orgId\x88\x01\x01B\x0f\n" +
+	"\r_grace_periodB\t\n" +
+	"\a_org_id\"\xf3\x01\n" +
 	"&RotateCurrentUserReliantAccessResponse\x12E\n" +
 	"\ventitlement\x18\x01 \x01(\v2#.controlplane.v1.ReliantEntitlementR\ventitlement\x12L\n" +
 	"\x0emanaged_access\x18\x02 \x01(\v2%.controlplane.v1.ManagedReliantAccessR\rmanagedAccess\x12\x18\n" +
 	"\arotated\x18\x03 \x01(\bR\arotated\x12\x1a\n" +
-	"\breplaced\x18\x04 \x01(\bR\breplaced\"&\n" +
-	"$GetCurrentUserReliantOverviewRequest\"e\n" +
+	"\breplaced\x18\x04 \x01(\bR\breplaced\"M\n" +
+	"$GetCurrentUserReliantOverviewRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"e\n" +
 	"%GetCurrentUserReliantOverviewResponse\x12<\n" +
-	"\boverview\x18\x01 \x01(\v2 .controlplane.v1.ReliantOverviewR\boverview\"?\n" +
+	"\boverview\x18\x01 \x01(\v2 .controlplane.v1.ReliantOverviewR\boverview\"f\n" +
 	"#SetCurrentUserReliantEnabledRequest\x12\x18\n" +
-	"\aenabled\x18\x01 \x01(\bR\aenabled\"m\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"m\n" +
 	"$SetCurrentUserReliantEnabledResponse\x12E\n" +
 	"\ventitlement\x18\x01 \x01(\v2#.controlplane.v1.ReliantEntitlementR\ventitlement\"x\n" +
 	"#SetCurrentUserComputeOverageRequest\x12\x18\n" +
@@ -4274,8 +4533,10 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\fbudget_cents\x18\x01 \x01(\x03H\x00R\vbudgetCents\x88\x01\x01B\x0f\n" +
 	"\r_budget_cents\"g\n" +
 	"\"SetCurrentUserInfraOverageResponse\x12A\n" +
-	"\fsubscription\x18\x01 \x01(\v2\x1d.controlplane.v1.SubscriptionR\fsubscription\"#\n" +
-	"!GetCurrentUserInfraOverageRequest\"\xa6\x03\n" +
+	"\fsubscription\x18\x01 \x01(\v2\x1d.controlplane.v1.SubscriptionR\fsubscription\"J\n" +
+	"!GetCurrentUserInfraOverageRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xa6\x03\n" +
 	"\"GetCurrentUserInfraOverageResponse\x12D\n" +
 	"\n" +
 	"dimensions\x18\x01 \x03(\v2$.controlplane.v1.InfraDimensionUsageR\n" +
@@ -4313,32 +4574,42 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x05brand\x18\x01 \x01(\tR\x05brand\x12\x14\n" +
 	"\x05last4\x18\x02 \x01(\tR\x05last4\x12\x1b\n" +
 	"\texp_month\x18\x03 \x01(\x03R\bexpMonth\x12\x19\n" +
-	"\bexp_year\x18\x04 \x01(\x03R\aexpYear\")\n" +
-	"'GetCurrentUserWalletAutoRechargeRequest\"\xef\x01\n" +
+	"\bexp_year\x18\x04 \x01(\x03R\aexpYear\"P\n" +
+	"'GetCurrentUserWalletAutoRechargeRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xef\x01\n" +
 	"(GetCurrentUserWalletAutoRechargeResponse\x12M\n" +
 	"\rauto_recharge\x18\x01 \x01(\v2#.controlplane.v1.WalletAutoRechargeH\x00R\fautoRecharge\x88\x01\x01\x12O\n" +
 	"\x0epayment_method\x18\x02 \x01(\v2#.controlplane.v1.SavedPaymentMethodH\x01R\rpaymentMethod\x88\x01\x01B\x10\n" +
 	"\x0e_auto_rechargeB\x11\n" +
-	"\x0f_payment_method\"\xbe\x01\n" +
+	"\x0f_payment_method\"\xe5\x01\n" +
 	"'SetCurrentUserWalletAutoRechargeRequest\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12'\n" +
 	"\x0fthreshold_cents\x18\x02 \x01(\x03R\x0ethresholdCents\x12!\n" +
 	"\famount_cents\x18\x03 \x01(\x03R\vamountCents\x12-\n" +
-	"\x13max_per_month_cents\x18\x04 \x01(\x03R\x10maxPerMonthCents\"t\n" +
+	"\x13max_per_month_cents\x18\x04 \x01(\x03R\x10maxPerMonthCents\x12\x1a\n" +
+	"\x06org_id\x18\x05 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"t\n" +
 	"(SetCurrentUserWalletAutoRechargeResponse\x12H\n" +
-	"\rauto_recharge\x18\x01 \x01(\v2#.controlplane.v1.WalletAutoRechargeR\fautoRecharge\"2\n" +
-	"0CreateCurrentUserWalletPaymentMethodSetupRequest\"\xd4\x01\n" +
+	"\rauto_recharge\x18\x01 \x01(\v2#.controlplane.v1.WalletAutoRechargeR\fautoRecharge\"Y\n" +
+	"0CreateCurrentUserWalletPaymentMethodSetupRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xd4\x01\n" +
 	"1CreateCurrentUserWalletPaymentMethodSetupResponse\x12O\n" +
 	"\x0epayment_method\x18\x01 \x01(\v2#.controlplane.v1.SavedPaymentMethodH\x00R\rpaymentMethod\x88\x01\x01\x12;\n" +
 	"\x1asetup_intent_client_secret\x18\x02 \x01(\tR\x17setupIntentClientSecretB\x11\n" +
-	"\x0f_payment_method\"Z\n" +
+	"\x0f_payment_method\"\x81\x01\n" +
 	",ConfirmCurrentUserWalletPaymentMethodRequest\x12*\n" +
-	"\x11payment_method_id\x18\x01 \x01(\tR\x0fpaymentMethodId\"{\n" +
+	"\x11payment_method_id\x18\x01 \x01(\tR\x0fpaymentMethodId\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"{\n" +
 	"-ConfirmCurrentUserWalletPaymentMethodResponse\x12J\n" +
-	"\x0epayment_method\x18\x01 \x01(\v2#.controlplane.v1.SavedPaymentMethodR\rpaymentMethod\"K\n" +
+	"\x0epayment_method\x18\x01 \x01(\v2#.controlplane.v1.SavedPaymentMethodR\rpaymentMethod\"r\n" +
 	"!GetCurrentUserComputeUsageRequest\x12\x1b\n" +
-	"\x06period\x18\x01 \x01(\tH\x00R\x06period\x88\x01\x01B\t\n" +
-	"\a_period\"\xc5\b\n" +
+	"\x06period\x18\x01 \x01(\tH\x00R\x06period\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x01R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_periodB\t\n" +
+	"\a_org_id\"\xc5\b\n" +
 	"\"GetCurrentUserComputeUsageResponse\x12?\n" +
 	"\x1cestimated_overage_cost_cents\x18\x04 \x01(\x01R\x19estimatedOverageCostCents\x12=\n" +
 	"\fperiod_start\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
@@ -4376,8 +4647,10 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\n" +
 	"cost_cents\x18\x05 \x01(\tR\tcostCents\x120\n" +
 	"\x14projected_cost_cents\x18\x06 \x01(\tR\x12projectedCostCents\x12-\n" +
-	"\x13cents_per_gib_month\x18\a \x01(\tR\x10centsPerGibMonth\")\n" +
-	"'GetCurrentUserComputeEligibilityRequest\"\xb9\x03\n" +
+	"\x13cents_per_gib_month\x18\a \x01(\tR\x10centsPerGibMonth\"P\n" +
+	"'GetCurrentUserComputeEligibilityRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\xb9\x03\n" +
 	"(GetCurrentUserComputeEligibilityResponse\x12\x1a\n" +
 	"\beligible\x18\x01 \x01(\bR\beligible\x12@\n" +
 	"\x06reason\x18\x02 \x01(\x0e2(.controlplane.v1.ComputeIneligibleReasonR\x06reason\x126\n" +
@@ -4660,13 +4933,32 @@ func file_services_billing_v1_billing_proto_init() {
 		return
 	}
 	file_services_billing_v1_billing_proto_msgTypes[0].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[4].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[6].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[8].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[12].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[14].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[16].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[20].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[22].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[24].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[28].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[30].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[32].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[34].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[36].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[38].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[40].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[42].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[43].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[47].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[48].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[49].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[51].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[52].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[53].OneofWrappers = []any{}
 	file_services_billing_v1_billing_proto_msgTypes[55].OneofWrappers = []any{}
+	file_services_billing_v1_billing_proto_msgTypes[59].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
