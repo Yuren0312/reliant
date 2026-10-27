@@ -8499,7 +8499,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\rInjectFileMsg\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x1b\n" +
 	"\tmime_type\x18\x02 \x01(\tR\bmimeType\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\"\xe4\v\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\"\xbd\f\n" +
 	"\x12CreateWorktreeArgs\x12\x92\x01\n" +
 	"\x04name\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBg\x82\xb5\x18c\n" +
 	"LA short name for the worktree; it becomes part of the worktree's folder path\x82\x01\x12fix-login-redirectR\x04name\x12L\n" +
@@ -8512,16 +8512,16 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"copy_files\x18\x04 \x03(\tB\x8b\x01\x82\xb5\x18\x86\x01\n" +
 	"YExact paths from the project root to copy into the new worktree, such as untracked config\x82\x01\x18[.env, web/node_modules]\x8a\x01\rlist of pathsR\tcopyFiles\x12]\n" +
 	"\x05force\x18\x05 \x01(\v2\x13.reliant.v1.CelBoolB2\x82\xb5\x18.\n" +
-	",Force creation by deleting existing worktreeR\x05force\x12\xa1\x01\n" +
-	"\vtarget_repo\x18\x06 \x01(\v2\x15.reliant.v1.CelStringBi\x82\xb5\x18e\n" +
-	"cRegistered repository relative path (for example control-plane); never an arbitrary filesystem pathR\n" +
-	"targetRepo\x12\xbb\x01\n" +
-	"\rbase_branches\x18\a \x03(\v20.reliant.v1.CreateWorktreeArgs.BaseBranchesEntryBd\x82\xb5\x18`\n" +
-	"^Per-repo base overrides keyed by registered relative path; omitted siblings use their defaultsR\fbaseBranches\x12\xa7\x01\n" +
-	"\ffetch_branch\x18\b \x01(\v2\x15.reliant.v1.CelStringBm\x82\xb5\x18i\n" +
-	"gTarget repo origin branch to fetch as data, not a shell command; requires target_repo and expected_headR\vfetchBranch\x12\x9c\x01\n" +
-	"\rexpected_head\x18\t \x01(\v2\x15.reliant.v1.CelStringB`\x82\xb5\x18\\\n" +
-	"ZExact SHA expected after fetching fetch_branch; drift refuses creation before any checkoutR\fexpectedHead\x1a?\n" +
+	",Force creation by deleting existing worktreeR\x05force\x12\xb1\x01\n" +
+	"\vtarget_repo\x18\x06 \x01(\v2\x15.reliant.v1.CelStringBy\x82\xb5\x18u\n" +
+	"cRegistered repository relative path (for example control-plane); never an arbitrary filesystem path\x82\x01\rcontrol-planeR\n" +
+	"targetRepo\x12\xcf\x01\n" +
+	"\rbase_branches\x18\a \x03(\v20.reliant.v1.CreateWorktreeArgs.BaseBranchesEntryBx\x82\xb5\x18t\n" +
+	"^Per-repo base overrides keyed by registered relative path; omitted siblings use their defaults\x82\x01\x11{\"forge\": \"main\"}R\fbaseBranches\x12\xbd\x01\n" +
+	"\ffetch_branch\x18\b \x01(\v2\x15.reliant.v1.CelStringB\x82\x01\x82\xb5\x18~\n" +
+	"gTarget repo origin branch to fetch as data, not a shell command; requires target_repo and expected_head\x82\x01\x12feat/review-repairR\vfetchBranch\x12\xbb\x01\n" +
+	"\rexpected_head\x18\t \x01(\v2\x15.reliant.v1.CelStringB\x7f\x82\xb5\x18{\n" +
+	"ZExact SHA expected after fetching fetch_branch; drift refuses creation before any checkout\x82\x01\x1c{{ nodes.pr.data.head.sha }}R\fexpectedHead\x1a?\n" +
 	"\x11BaseBranchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:f\x8a\xb5\x18b\n" +
