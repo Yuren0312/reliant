@@ -19,18 +19,28 @@ func TestCredentialFormatsFailClosedBeforeTailAndFailureMessage(t *testing.T) {
 		"client_secret: |\n  opaque-secret-value\n  more-private-data",
 		"client_secret: >\n  opaque-secret-value\n  more-private-data",
 		`{"client_secret":"opaque-secret-value"}`, `\"client_secret\":\"opaque-secret-value\"`,
+		`password="prefix\"opaque-secret-value"`,
+		`password='prefix'\''opaque-secret-value'`,
+		`password="prefix\\opaque-secret-value"`,
+		`password="prefix\\nopaque-secret-value"`,
+		`password="prefix;opaque-secret-value"`,
+		`password=[REDACTED]opaque-secret-value`,
+		`password="prefix""opaque-secret-value"`,
+		`Authorization: custom "prefix\"opaque-secret-value"`,
+		`password=opaque-secret-value`,
 		"-----BEGIN PRIVATE KEY-----\nopaque-secret-value\n-----END PRIVATE KEY-----",
 	} {
 		t.Run(text, func(t *testing.T) {
-			text = strings.Repeat("earlier\n", 45) + text + strings.Repeat("\nafter", 49)
-			raw, _ := json.Marshal(map[string]any{"stdout": text, "stderr": text})
-			rows := []*core.StepExecution{{StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: sql.NullInt64{Int64: 2, Valid: true}, OutputJSON: sql.NullString{String: string(raw), Valid: true}}}
-			nodes := Nodes(rows)
-			encoded, _ := json.Marshal(nodes)
-			require.NotContains(t, string(encoded), "opaque-secret-value")
-			require.NotContains(t, string(encoded), "more-private-data")
-			require.NotContains(t, Failure(rows), "opaque-secret-value")
-			require.NotContains(t, ErrorText(text), "opaque-secret-value")
+			for _, text := range []string{text, strings.Repeat("earlier\n", 45) + text + strings.Repeat("\nafter", 49)} {
+				raw, _ := json.Marshal(map[string]any{"stdout": text, "stderr": text})
+				rows := []*core.StepExecution{{StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: sql.NullInt64{Int64: 2, Valid: true}, OutputJSON: sql.NullString{String: string(raw), Valid: true}}}
+				nodes := Nodes(rows)
+				encoded, _ := json.Marshal(nodes)
+				require.NotContains(t, string(encoded), "opaque-secret-value")
+				require.NotContains(t, string(encoded), "more-private-data")
+				require.NotContains(t, Failure(rows), "opaque-secret-value")
+				require.NotContains(t, ErrorText(text), "opaque-secret-value")
+			}
 		})
 	}
 }

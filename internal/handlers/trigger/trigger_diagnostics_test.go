@@ -26,5 +26,5 @@ func TestTriggerProjectsMachineAndHistoricalLaunchNodeFailure(t *testing.T) {
 	require.Equal(t, "d", out.DaemonId)
 	require.Equal(t, "suspended", out.MachineState)
 	require.Equal(t, pb.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_DEGRADED, out.Health.Status)
-	require.Equal(t, "Node gate failed: build error api_key=[REDACTED]", out.Health.LastFailureDetail)
+	require.Equal(t, "Node gate failed: [REDACTED: credential-bearing diagnostic omitted]", out.Health.LastFailureDetail)
 }

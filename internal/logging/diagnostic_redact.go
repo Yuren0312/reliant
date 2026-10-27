@@ -15,23 +15,16 @@ var diagnosticSensitiveField = regexp.MustCompile(`(?i)(?:^|[\s"'\\{,;-])(?:[a-z
 
 // RedactDiagnosticText is for already byte-bounded complete values, NEVER a
 // prefix/tail cut at the storage boundary. RedactText is the shared log helper;
-// the additional policy omits a whole value if any sensitive field survives it.
+// the additional policy omits a complete value containing a recognized
+// sensitive field. This is not a detector for arbitrary secret values.
 func RedactDiagnosticText(s string) string {
-	// A multiline assignment could carry continuation lines that ordinary log
-	// patterns cannot associate with the key. Omit the complete stream, even
-	// when the first line would have been masked successfully.
-	if strings.ContainsAny(s, "\r\n") && diagnosticSensitiveField.MatchString(s) {
+	// Inspect ORIGINAL text, never text whose delimiters have already been
+	// partially masked. Even a single line can contain escaped quotes, shell
+	// concatenation or literal \\n. A marker is not evidence the whole value was
+	// consumed. Omit the entire stream (not only a guessed value/line), since
+	// multiline continuations can carry the rest of that credential.
+	if diagnosticSensitiveField.MatchString(s) || strings.Contains(s, "-----BEGIN ") {
 		return "[REDACTED: credential-bearing diagnostic omitted]"
 	}
-	scrubbed := RedactText(s)
-	// Existing scrubber output for simple assignments/JSON is safe. Remove its
-	// markers only for this detection pass so labels it already handled do not
-	// unnecessarily suppress otherwise useful diagnostics.
-	safe := regexpSafeMarkers.ReplaceAllString(scrubbed, "")
-	if diagnosticSensitiveField.MatchString(safe) || strings.Contains(safe, "-----BEGIN ") {
-		return "[REDACTED: credential-bearing diagnostic omitted]"
-	}
-	return scrubbed
+	return RedactText(s)
 }
-
-var regexpSafeMarkers = regexp.MustCompile(`(?i)(?:"[^"\n]+"\s*:\s*"\[REDACTED\]"|\b[a-z0-9_-]+=\[REDACTED\])`)

@@ -3,6 +3,8 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -56,6 +58,48 @@ func TestAutomationFailureFallbackAndDetail(t *testing.T) {
 				require.Zero(t, saved)
 			}
 		})
+	}
+}
+
+func TestAutomationFailureSuppressesAmbiguousSingleLineAssignments(t *testing.T) {
+	for _, text := range []string{
+		`password="prefix\"opaque-secret-value"`,
+		`password='prefix'\''opaque-secret-value'`,
+		`password="prefix\\opaque-secret-value"`,
+		`password="prefix\\nopaque-secret-value"`,
+		`password="prefix;opaque-secret-value"`,
+		`password=[REDACTED]opaque-secret-value`,
+		`password=opaque-secret-value`,
+	} {
+		for _, tail := range []bool{false, true} {
+			if tail {
+				text = strings.Repeat("before\n", 45) + text + strings.Repeat("\nafter", 49)
+			}
+			raw, _ := json.Marshal(map[string]string{"stderr": text})
+			tid := "trigger"
+			saved := false
+			repo := &MockWorkflowStatusStore{
+				GetChatFunc: func(context.Context, string) (*db.Chat, error) {
+					return &db.Chat{ID: "chat", LaunchKind: "schedule", TriggerID: &tid}, nil
+				},
+				ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
+					return []*db.StepExecution{{StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: sql.NullInt64{Int64: 2, Valid: true}, OutputJSON: sql.NullString{String: string(raw), Valid: true}}}, nil
+				},
+				SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, detail string) error {
+					require.NotContains(t, detail, "opaque-secret-value")
+					return nil
+				},
+				GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) { return nil, nil },
+				SaveMessageToThreadOnceFunc: func(_ context.Context, _, _ string, _ int32, content string, _ *string, _ []string, _ *int32, _ string) (*db.Message, bool, error) {
+					require.NotContains(t, content, "opaque-secret-value")
+					require.Contains(t, content, "credential-bearing diagnostic omitted")
+					saved = true
+					return nil, true, nil
+				},
+			}
+			NewWorkflowStatusActivity(repo).ensureAutomationFailureMessage(context.Background(), WorkflowStatusInput{ChatID: "chat", WorkflowID: "root"})
+			require.True(t, saved)
+		}
 	}
 }
 
