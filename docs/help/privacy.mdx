@@ -114,9 +114,13 @@ Telemetry goes to **our own telemetry store**: ClickStack (ClickHouse with OpenT
 | Toggle | Sent to | What's included |
 | --- | --- | --- |
 | **Analytics and Usage Data** | Our own telemetry store. During the move off Sentry, the app's interface also attaches recent activity to the error reports it sends Sentry, while crash reporting is on | Product-usage events such as message sent, model call completed (model, token counts, latency) and project opened, tied to your account ID. Events from the app also carry its session ID. Events record what you did, not what you wrote: a "message sent" event records the message's length, not its text. |
-| **Crash and Error Reporting** | Our own telemetry store. During the move off Sentry, the app's interface also sends Sentry | Crash and error reports: the error type, stack trace, app version and identifiers such as chat and run IDs. You're identified by an internal user ID, not your email or name. Error messages are cut to one short line with known credential formats redacted, and that short line can still contain a fragment of text. Request bodies and console output aren't sent. Stack traces from the desktop app's background process have your home folder and install location removed. In the web app, this also covers page-load and request timings (without query strings) and session replays, which mask all on-screen text and form inputs and block images, media and canvas. The desktop app doesn't record session replays. |
+| **Crash and Error Reporting** | Our own telemetry store. During the move off Sentry, the app's interface also sends Sentry | Crash and error reports: the error type, stack trace, app version and identifiers such as chat and run IDs. You're identified by an internal user ID, not your email or name. Error messages are cut to one short line with known credential formats redacted, and that short line can still contain a fragment of text. Request bodies and console output aren't sent. Stack traces from the desktop app's background process have your home folder and install location removed. In the web app and desktop window, this also covers page-load and request timings (without query strings) and sampled Sentry session replays during the transition. Sentry replay is configured to mask text and form inputs, block media and omit canvas recording; this is not a guarantee that every secret is removed from telemetry. Separately, our ClickStack recorder supports masked web replays, but replay is not enabled in the packaged desktop configuration. The desktop background process does not record session replays. |
 
 Crash reports contain error details and stack traces; we don't create or upload memory dumps.
+
+**During the Sentry transition:** **Crash and Error Reporting**, not the analytics switch, controls whether Sentry starts, including its replay recorder. Turning it off stops ClickStack telemetry and prevents Sentry error events from being sent, but does not stop an already-running Sentry replay recorder or its performance tracing. After the setting saves, reload the web page or quit and reopen the desktop app so Sentry starts with reporting disabled. Turning off analytics alone does not disable replays.
+
+For deployment administrators, the renderer runtime configuration can prevent Sentry initialization with `SENTRY_ENABLED="false"` or `TELEMETRY_SINKS="clickstack"`. An empty or unrecognized `TELEMETRY_SINKS` value falls back to including Sentry; it is not an opt-out. `OTEL_REPLAY` controls the separate ClickStack recorder, not Sentry replay. Setting only `SENTRY_REPLAYS_SESSION_SAMPLE_RATE="0"` is not a complete opt-out either: error-triggered replay has a separate rate, and prerelease desktop builds override the session rate. These configuration changes take effect on the next app initialization.
 
 Turning off analytics also stops the analytics events our servers record about your account. The switches don't cover:
 
@@ -164,8 +168,8 @@ Go to **Settings → Account → Delete account**, or email support@reliantlabs.
 | Server logs and metrics | 30 days |
 | Analytics events | Up to 14 days |
 | Crash and error data in our telemetry store | 30 days |
-| Web session replays | 14 days |
-| Crash and error data sent to Sentry during the move off it | According to Sentry's retention settings for our account |
+| Web session replays in our telemetry store | 14 days |
+| Crash and error data and session replays sent to Sentry (web app and desktop window) during the move off it | According to Sentry's retention settings for our account |
 | Billing records, including refunds made at deletion | As long as tax and accounting law requires, typically 7 years |
 
 The [Privacy Policy](https://reliantlabs.io/privacy#retention) has the complete list.
