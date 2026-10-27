@@ -12,7 +12,7 @@
  *   - background polls are the only reads marked as polls.
  */
 
-import { act, render, renderHook, screen } from "@testing-library/react";
+import { act, render, renderHook, screen, within } from "@testing-library/react";
 import { QueryClientProvider, focusManager, type QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,8 +25,11 @@ import { formatClock, quotaPausedError } from "@/services/controlPlane/observabi
 import { SOFT_POLL_FACTOR, isPollRead } from "@/services/controlPlane/observability/quotaStore";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 
-import { createFixtureApi } from "../__fixtures__/fixtureApi";
+import { createFixtureApi, FIXTURE_ENVS, FIXTURE_PROJECT } from "../__fixtures__/fixtureApi";
+import { ObservabilityHome, type ObservabilityHomeHrefs } from "../Home/ObservabilityHome";
 import { ObsAsOf, ObsQuotaBanner } from "../ObsStates";
+
+vi.mock("uplot", async () => (await import("./obsMocks")).obsMocks.uplot());
 
 const SCOPE: ObsScope = { orgId: "org-fixture", envIds: ["env-prod"], filters: [] };
 const START = Date.UTC(2026, 9, 26, 17, 51, 27);
@@ -148,6 +151,38 @@ describe("polling", () => {
 });
 
 describe("when the allowance runs out", () => {
+  it("retains main's process-health UI and error-log links with an as-of badge during the pause", async () => {
+    const r = rig();
+    const hrefs: ObservabilityHomeHrefs = {
+      logs: (search = {}) => `/logs?range=${search.range}&service=${search.service}&severity=${search.severity}`,
+      traces: () => "/traces",
+      profiles: () => "/profiles",
+      alerts: "/alerts",
+      dashboards: "/dashboards",
+      workload: (name) => `/workloads/${name}`,
+      release: (version) => `/releases/${version}`,
+      releases: "/releases",
+    };
+    render(
+      <ObservabilityHome project={FIXTURE_PROJECT} env="prod" environments={FIXTURE_ENVS} range="1h" onRange={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />,
+      { wrapper: r.wrapper }
+    );
+    await flush();
+    const table = screen.getByTestId("observability-services");
+    expect(within(table).getByRole("heading", { name: "Process health" })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Memory" })).toBeInTheDocument();
+    const rows = within(table).getAllByTestId(/^observability-service-/);
+    expect(within(table).queryByTestId("obs-as-of")).not.toBeInTheDocument();
+
+    r.mode.value = "quota";
+    await advance(POLL);
+    await flush();
+    expect(within(table).getAllByTestId(/^observability-service-/)).toEqual(rows);
+    expect(within(table).getByTitle("Error logs from api")).toHaveAttribute("href", "/logs?range=1h&service=api&severity=error,fatal");
+    expect(within(table).getByTestId("obs-as-of")).toHaveTextContent(`as of ${formatClock(START)}`);
+    expect(within(table).getByTestId("obs-as-of")).toHaveTextContent(`query budget resets at ${formatClock(RESET)}`);
+  });
+
   it("keeps the last good result, stops polling, and resumes on its own after the reset", async () => {
     const r = rig(() => 0.5);
     const view = renderHook(() => useOverview(SCOPE, "1h"), { wrapper: r.wrapper });
