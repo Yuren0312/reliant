@@ -133,7 +133,9 @@ vi.mock("@/hooks/apps-queries", () => ({
   useApps: () => ({ apps: [], loading: false, availability: "available", detail: "" }),
 }));
 
+vi.mock("@/hooks/observability-session-queries", () => ({ useSessions: () => ({ isSuccess: false }) }));
 vi.mock("@/hooks/observability-queries", () => ({
+  useServiceSignals: () => ({ isSuccess: false }),
   useObservabilityOrg: () => ({ orgId: "org-1", isLoading: false, error: null }),
   useAlerts: () => ({
     data: [
