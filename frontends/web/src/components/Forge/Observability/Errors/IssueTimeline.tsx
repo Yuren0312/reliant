@@ -13,7 +13,7 @@
  * box so nothing typed is lost.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { CheckCircle2, CircleDot, MessageSquare, MessageSquareText, Pencil, Trash2, UserRound } from "lucide-react";
 
@@ -27,6 +27,7 @@ import {
   useUpdateIssueComment,
 } from "@/hooks/observability-queries";
 import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { IssueComment, IssueTimelineEntry } from "@/services/controlPlane/observability/issuesTypes";
 import { loadRunContext } from "@/components/runs/loadRunContext";
 import { toast } from "@/lib/toast-manager";
@@ -57,7 +58,8 @@ export function IssueTimeline({ issueId }: { issueId: string }) {
   const timeline = useIssueTimeline(issueId);
   const me = useCurrentIssueUser();
   const members = useOrgMembers();
-  const pages = timeline.data?.pages;
+  const refused = !!timeline.error && !keepsLastResult(timeline.error, timeline.data);
+  const pages = refused ? undefined : timeline.data?.pages;
   const entries = useMemo(() => mergeTimelinePages(pages ?? []), [pages]);
   // The issue the timeline is of: the one asked for, or the issue it was merged into.
   const timelineIssueId = pages?.[0]?.issueId ?? issueId;
@@ -68,7 +70,7 @@ export function IssueTimeline({ issueId }: { issueId: string }) {
     <div data-testid="obs-issue-timeline" data-issue={timelineIssueId}>
       {timeline.isLoading ? (
         <ObsLoadingRows rows={3} testId="obs-issue-timeline-loading" />
-      ) : timeline.error && !timeline.data ? (
+      ) : refused ? (
         <div className="space-y-2 px-4 py-3" data-testid="obs-issue-timeline-error">
           <p className="text-xs text-destructive">
             {issuesErrorKind(timeline.error) === "not-configured" ? "This control plane doesn't keep an issue timeline yet." : "The timeline didn't load."}
@@ -96,14 +98,14 @@ export function IssueTimeline({ issueId }: { issueId: string }) {
           ))}
         </ol>
       )}
-      {timeline.hasNextPage && (
+      {!refused && timeline.hasNextPage && (
         <div className="border-t border-border/60 px-4 py-2">
           <Button variant="ghost" size="sm" onClick={() => void timeline.fetchNextPage()} loading={timeline.isFetchingNextPage} data-testid="obs-issue-timeline-more">
             Show later activity
           </Button>
         </div>
       )}
-      <CommentComposer issueId={timelineIssueId} />
+      <div hidden={refused}><CommentComposer key={timelineIssueId} issueId={timelineIssueId} disabled={refused} /></div>
     </div>
   );
 }
@@ -232,10 +234,14 @@ function CommentEntry({
   const [confirming, setConfirming] = useState(false);
   const who = comment.author?.name || actor;
 
+  const saving = useRef(false);
   const save = () => {
+    if (saving.current || !draft.trim() || draft === comment.body) return;
+    saving.current = true;
+    const sent = draft;
     update.mutate(
-      { issueId: comment.issueId, commentId: comment.id, body: draft },
-      { onSuccess: () => setEditing(false) }
+      { issueId: comment.issueId, commentId: comment.id, body: sent },
+      { onSuccess: () => setEditing(false), onSettled: () => { saving.current = false; } }
     );
   };
 
@@ -333,14 +339,21 @@ function CommentEntry({
   );
 }
 
-function CommentComposer({ issueId }: { issueId: string }) {
+function CommentComposer({ issueId, disabled }: { issueId: string; disabled: boolean }) {
   const add = useAddIssueComment();
   const [body, setBody] = useState("");
+  const sending = useRef(false);
   const empty = !body.trim();
   const submit = () => {
-    if (empty) return;
-    // The text is cleared only once the server has it: a refused comment stays to be fixed or copied.
-    add.mutate({ issueId, body }, { onSuccess: () => setBody("") });
+    if (empty || disabled || sending.current) return;
+    // Lock before mutate: a second keyboard/form event can arrive before React renders pending.
+    sending.current = true;
+    const sent = body;
+    add.mutate({ issueId, body: sent }, {
+      // Keep anything typed while this request was in flight, and keep the draft on refusal.
+      onSuccess: () => setBody((current) => current === sent ? "" : current),
+      onSettled: () => { sending.current = false; },
+    });
   };
   return (
     <form
@@ -371,7 +384,7 @@ function CommentComposer({ issueId }: { issueId: string }) {
         data-testid="obs-comment-box"
       />
       <div className="flex items-center gap-2">
-        <Button type="submit" size="sm" variant="primary" leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />} disabled={empty} loading={add.isPending} data-testid="obs-comment-submit">
+        <Button type="submit" size="sm" variant="primary" leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />} disabled={empty || disabled || add.isPending} loading={add.isPending} data-testid="obs-comment-submit">
           Comment
         </Button>
         <span className="text-2xs text-muted-foreground">⌘/Ctrl+Enter sends</span>

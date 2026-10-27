@@ -16,7 +16,7 @@ import { useEffect, useMemo } from "react";
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
-import { hashKey, useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { hashKey, useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
@@ -716,6 +716,35 @@ export const issueKeys = {
   timeline: (issueId: string) => [...issueKeys.timelines(), issueId] as const,
 };
 
+const issueRevocations = new WeakMap<QueryClient, Map<string, { generation: number; error: unknown }>>();
+
+/** A membership refusal revokes previously cached sensitive reads of this issue too. */
+async function readIssue<T>(client: QueryClient, issueId: string, key: QueryKey, read: () => Promise<T>): Promise<T> {
+  let revocations = issueRevocations.get(client);
+  if (!revocations) { revocations = new Map(); issueRevocations.set(client, revocations); }
+  const generation = revocations.get(issueId)?.generation ?? 0;
+  let result: T;
+  try {
+    result = await read();
+  } catch (error) {
+    if (error instanceof ConnectError && (error.code === Code.PermissionDenied || error.code === Code.Unauthenticated)) {
+      revocations.set(issueId, { generation: (revocations.get(issueId)?.generation ?? 0) + 1, error });
+      const queries = client.getQueryCache().findAll({ predicate: (query) => {
+        const k = query.queryKey;
+        return k[0] === "observability" && k[1] === "issues" && ["detail", "events", "timeline"].includes(String(k[2])) && k[3] === issueId;
+      } });
+      // Cancel siblings before scrubbing them: an older in-flight response must not restore revoked data.
+      await client.cancelQueries({ predicate: (query) => queries.includes(query) && hashKey(query.queryKey) !== hashKey(key) });
+      for (const query of queries) query.setState({ data: undefined, dataUpdatedAt: 0, error, status: "error" });
+    }
+    throw error;
+  }
+  const revoked = revocations.get(issueId);
+  // Some transports ignore cancellation. Never accept a response started before a refusal.
+  if (revoked && revoked.generation !== generation) throw revoked.error;
+  return result;
+}
+
 /** People change rarely; the roster and the reader are read once a while, not per issue. */
 export const peopleKeys = {
   members: () => ["observability", "people", "members"] as const,
@@ -754,9 +783,11 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
 /** One issue with its latest event, frames, versions and first release; counts over `range`. */
 export function useIssue(issueId: string | undefined, range: RangePreset) {
   const api = useObsReadApi();
+  const client = useQueryClient();
+  const key = issueKeys.detail(issueId ?? "", range);
   return useQuery({
-    queryKey: issueKeys.detail(issueId ?? "", range),
-    queryFn: () => api.getIssue({ issueId: issueId as string, window: resolveWindow(range) }),
+    queryKey: key,
+    queryFn: () => readIssue(client, issueId as string, key, () => api.getIssue({ issueId: issueId as string, window: resolveWindow(range) })),
     enabled: !!issueId,
     staleTime: 30_000,
     retry: issuesRetry,
@@ -768,10 +799,12 @@ export const ISSUE_EVENTS_PAGE_SIZE = 20;
 /** One issue's events, newest first. */
 export function useIssueEvents(issueId: string | undefined) {
   const api = useObsReadApi();
+  const client = useQueryClient();
+  const key = issueKeys.events(issueId ?? "");
   return useInfiniteQuery({
-    queryKey: issueKeys.events(issueId ?? ""),
+    queryKey: key,
     queryFn: ({ pageParam }): Promise<IssueEventList> =>
-      api.listIssueEvents({ issueId: issueId as string, pageSize: ISSUE_EVENTS_PAGE_SIZE, pageToken: pageParam ?? undefined }),
+      readIssue(client, issueId as string, key, () => api.listIssueEvents({ issueId: issueId as string, pageSize: ISSUE_EVENTS_PAGE_SIZE, pageToken: pageParam ?? undefined })),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextPageToken || undefined,
     enabled: !!issueId,
@@ -802,11 +835,13 @@ export const ISSUE_TIMELINE_PAGE_SIZE = 100;
 
 /** An issue's timeline, oldest first, a page at a time. A merged issue answers with the timeline of the issue it was merged into. */
 export function useIssueTimeline(issueId: string | undefined) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
+  const client = useQueryClient();
+  const key = issueKeys.timeline(issueId ?? "");
   return useInfiniteQuery({
-    queryKey: issueKeys.timeline(issueId ?? ""),
+    queryKey: key,
     queryFn: ({ pageParam }): Promise<IssueTimelineList> =>
-      api.listIssueTimeline({ issueId: issueId as string, pageSize: ISSUE_TIMELINE_PAGE_SIZE, pageToken: pageParam ?? undefined }),
+      readIssue(client, issueId as string, key, () => api.listIssueTimeline({ issueId: issueId as string, pageSize: ISSUE_TIMELINE_PAGE_SIZE, pageToken: pageParam ?? undefined })),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextPageToken || undefined,
     enabled: !!issueId,

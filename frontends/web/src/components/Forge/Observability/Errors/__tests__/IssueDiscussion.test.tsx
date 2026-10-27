@@ -27,7 +27,7 @@ describe("assigning", () => {
     renderPanel(createFixtureApi({ onCall }), { view: "errors", issue: "iss-worker-conns" }, ENV_PLACE);
     expect(await screen.findByTestId("obs-issue-assignee-name")).toHaveTextContent("Unassigned");
 
-    await user.click(screen.getByTestId("obs-issue-assign-me"));
+    await user.click(await screen.findByTestId("obs-issue-assign-me"));
     expect(calls(onCall, "AssignIssue")[0]).toEqual({ issueId: "iss-worker-conns", assigneeUserId: "user-ada", expectedVersion: 1 });
     await waitFor(() => expect(screen.getByTestId("obs-issue-assignee-name")).toHaveTextContent("ada@example.com (you)"));
     expect(screen.getByTestId("obs-issue-triage")).toHaveAttribute("data-version", "2");
@@ -177,7 +177,7 @@ describe("the timeline", () => {
     renderPanel(createFixtureApi({ mergedIssue: true }), { view: "errors", issue: "iss-checkout-total" }, ENV_PLACE);
     // The composer writes to the issue the timeline is of, which accepts it; the merged issue itself refuses.
     await screen.findByTestId("obs-issue-timeline-list");
-    await user.click(screen.getByTestId("obs-issue-assign-me"));
+    await user.click(await screen.findByTestId("obs-issue-assign-me"));
     expect(await screen.findByTestId("obs-issue-assignee-error")).toHaveTextContent("merged into iss-orders-deadline");
   });
 });
