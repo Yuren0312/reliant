@@ -106,6 +106,11 @@ vi.mock('@/hooks/observability-queries', async () => {
   }
 })
 
+vi.mock('@/hooks/observability-billing-queries', async () => {
+  const { ConnectError, Code } = await import('@connectrpc/connect')
+  return { useObsBillingUsage: () => ({ isPending: false, error: new ConnectError('Not deployed', Code.Unimplemented), refetch: vi.fn() }) }
+})
+
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
   // Real object, not a stub: `useRedeemCoupon` (from the OTHER hook module,
   // which is not mocked) dereferences these keys in its own onSuccess to
@@ -163,13 +168,15 @@ describe('BillingSection', () => {
       screen.getByRole('heading', { level: 1, name: /billing/i }),
     ).toBeInTheDocument()
 
-    // Exactly three, in order. An inclusion-only check would still pass if a
-    // fourth tab came back, and the whole point of the merge was that the
-    // strip stops being a filing cabinet.
+    // Exactly these, in order. An inclusion-only check would still pass if
+    // invoices came back as its own tab, and the whole point of that merge was
+    // that the strip stops being a filing cabinet. Reliant AI's keys and spend
+    // moved here from Settings → AI, where Reliant appeared three times.
     expect(screen.getAllByRole('tab').map((t) => t.textContent?.trim())).toEqual([
       'Overview',
       'Change plan',
       'Usage & invoices',
+      'Reliant AI',
     ])
   })
 
@@ -204,12 +211,12 @@ describe('BillingSection', () => {
     expect(section).toHaveTextContent('Customer metadata')
   })
 
-  it('shows no observability usage before an org exists', () => {
+  it('explains unavailable observability usage before an org exists', () => {
     renderSection()
 
     fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
 
-    expect(screen.queryByTestId('billing-observability-usage')).not.toBeInTheDocument()
+    expect(screen.getByTestId('billing-observability-usage')).toHaveTextContent('select an organization first')
   })
 
   it('shows the usage empty state on the merged tab', () => {

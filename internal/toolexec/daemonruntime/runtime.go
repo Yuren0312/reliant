@@ -41,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/netports"
+	"github.com/reliant-labs/reliant/internal/shellaudit"
 	"github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -231,6 +232,17 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// The data directory holds the daemon's identity and state; a command run
 	// with `credentials: none` does not see it (see daemonpolicy.ProtectedCredentials).
 	daemonpolicy.SetDaemonDataDir(opts.BootstrapConfig.DataDir)
+
+	// Every shell command the tool is asked to run is recorded beside the
+	// daemon's other logs, for investigations of shared-state damage. A log
+	// that cannot be opened is reported and skipped: auditing never stops work.
+	if auditLog, err := shellaudit.Open(filepath.Join(opts.BootstrapConfig.DataDir, "logs", shellaudit.FileName), shellaudit.Options{}); err != nil {
+		logging.Warn(logPrefix+" Shell audit log unavailable; shell commands are not being recorded", "error", err)
+	} else {
+		defer auditLog.Close() //nolint:errcheck
+		previous := shellaudit.SetDefault(auditLog)
+		defer shellaudit.SetDefault(previous)
+	}
 
 	// Claim the data directory before anything else, so a second daemon fails
 	// here rather than at the gateway. Two daemons on one host resolve to one

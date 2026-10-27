@@ -4,7 +4,7 @@
  */
 
 import Tooltip from "../../forge-ui/tooltip";
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useEffect, useRef } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
@@ -22,13 +22,32 @@ interface CopyButtonProps {
 
 function CopyButtonComponent({ content, resolveContent, className }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
+  const mounted = useRef(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (resetTimer.current !== null) clearTimeout(resetTimer.current);
+      resetTimer.current = null;
+    };
+  }, []);
 
   const handleCopy = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await navigator.clipboard.writeText(resolveContent ? await resolveContent() : content);
+      const text = resolveContent ? await resolveContent() : content;
+      if (!mounted.current) return;
+      await navigator.clipboard.writeText(text);
+      // An in-flight clipboard write can finish after the button unmounts.
+      if (!mounted.current) return;
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      if (resetTimer.current !== null) clearTimeout(resetTimer.current);
+      resetTimer.current = setTimeout(() => {
+        resetTimer.current = null;
+        setCopied(false);
+      }, 2000);
     } catch {
       // Clipboard API may fail in some contexts
     }

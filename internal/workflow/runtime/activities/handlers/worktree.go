@@ -169,12 +169,29 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		c := rtx.ChatID
 		chatIDPtr = &c
 	}
+	// Resolve only registered repos of THIS chat's project. ProjectPath is a
+	// tool working-directory override, never authority to create elsewhere.
+	bases, targetID, err := repoWorktreeBases(repos, model.CelStringValue(protoArgs.GetTargetRepo()), baseBranch, protoArgs.GetBaseBranches())
+	if err != nil {
+		return CreateWorktreeOutput{}, err
+	}
+	fetchBranch, expectedHead := model.CelStringValue(protoArgs.GetFetchBranch()), model.CelStringValue(protoArgs.GetExpectedHead())
+	if err := validateWorktreeFetch(targetID, fetchBranch, expectedHead); err != nil {
+		return CreateWorktreeOutput{}, err
+	}
+	if targetID != "" {
+		baseBranch = "" // siblings keep their own detected defaults
+	}
 	createReq := workspacecreate.Request{
 		Project:       project,
 		Repos:         repos,
 		Name:          name,
 		Branch:        branch,
 		BaseBranch:    baseBranch,
+		BaseBranches:  bases,
+		FetchRepoID:   targetID,
+		FetchBranch:   fetchBranch,
+		ExpectedHead:  expectedHead,
 		Force:         force,
 		CopyPaths:     copyPaths,
 		ChatID:        chatIDPtr,
