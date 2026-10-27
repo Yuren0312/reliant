@@ -104,6 +104,9 @@
     "frontends/web/src/hooks/run-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-22T21:38:55Z"
     },
+    "frontends/web/src/hooks/scenario-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-26T23:14:44Z"
+    },
     "frontends/web/src/hooks/settings-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-22T21:38:55Z"
     },
