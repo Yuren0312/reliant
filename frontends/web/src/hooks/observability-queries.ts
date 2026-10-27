@@ -835,7 +835,8 @@ export const ISSUE_TIMELINE_PAGE_SIZE = 100;
 
 /** An issue's timeline, oldest first, a page at a time. A merged issue answers with the timeline of the issue it was merged into. */
 export function useIssueTimeline(issueId: string | undefined) {
-  const api = useObsReadApi();
+  // Discussion reads Postgres, not ClickHouse: quota pauses must not block it.
+  const api = useObservabilityApi();
   const client = useQueryClient();
   const key = issueKeys.timeline(issueId ?? "");
   return useInfiniteQuery({
