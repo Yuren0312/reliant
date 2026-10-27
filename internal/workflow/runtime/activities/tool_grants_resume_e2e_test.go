@@ -208,6 +208,12 @@ func ptrTo[T any](v T) *T { return &v }
 // turns, at the next one.
 func newGrantsWorker(t *testing.T, env *testsuite.TestWorkflowEnvironment, repo *db.Repo, model *scriptedModel, executor toolexec.ToolExecutor, callLLMTurns int) {
 	t.Helper()
+	// This is a DB-backed integration, not an in-memory activity mock. The
+	// SDK's default 3s idle watchdog races real activities (notably SaveMessage)
+	// under host load and tears down their DB while they are still running.
+	// Match the harness's bounded workflow-task budget; this test asserts the
+	// durable result, not how quickly a database transaction finishes.
+	env.SetTestTimeout(temporaltest.DeadlockDetectionTimeout)
 	// The production data converter: activities return protos, which the
 	// workflow decodes into maps.
 	env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
