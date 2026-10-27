@@ -309,7 +309,7 @@ func (r *NATSDaemonRouter) awaitDaemonOrReply(ctx context.Context, inbox *replyI
 	defer stop()
 	probe := make(chan error, 1)
 	go func() {
-		err := r.awaitDaemon(waitCtx, userID, daemonID, by, false)
+		err := r.awaitDaemonSubject(waitCtx, userID, daemonID, by, false, toolRecoverySubject)
 		probe <- err
 		stop() // ends the inbox wait below
 	}()

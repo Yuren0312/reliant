@@ -31,10 +31,11 @@ import (
 // NATS subject patterns for tool execution and daemon routing.
 // Subjects now include {userID}.{daemonID} for multi-daemon routing.
 const (
-	toolRequestSubject = "tools.request"    // tools.request.{userID}.{daemonID}
-	toolCancelSubject  = "tools.cancel"     // tools.cancel.{userID}.{daemonID}
-	toolBackgroundSubj = "tools.background" // tools.background.{userID}.{daemonID}
-	toolOnlineSubject  = "tools.online"     // tools.online.{userID}.{daemonID}
+	toolRequestSubject  = "tools.request"    // tools.request.{userID}.{daemonID}
+	toolCancelSubject   = "tools.cancel"     // tools.cancel.{userID}.{daemonID}
+	toolBackgroundSubj  = "tools.background" // tools.background.{userID}.{daemonID}
+	toolOnlineSubject   = "tools.online"     // tools.online.{userID}.{daemonID}
+	toolRecoverySubject = "tools.recovery"   // recovery reachability, not new-work admission
 
 	daemonKillSubject      = "daemon.process.kill" // daemon.process.kill.{userID}.{daemonID}
 	daemonCommandSubject   = "daemon.command"      // daemon.command.{userID}.{daemonID}

@@ -74,7 +74,7 @@ func (d *daemonClient) restartProgressLocked() {
 	d.results.mu.Lock()
 	pending := len(d.results.running) + len(d.results.held)
 	d.results.mu.Unlock()
-	if pending != 0 || d.restartCommands != 0 {
+	if d.restartCommands != 0 || (pending != 0 && !d.restartStatus.TimedOut) {
 		return
 	}
 	d.restartStatus.Drained = true
@@ -109,7 +109,10 @@ func (d *daemonClient) restartExpired() {
 	// Cancel registered daemon commands too; an uncooperative command must
 	// not hold replacement indefinitely. Their stream reports interruption.
 	d.cancelAllRequests()
-	d.restartStatus.Drained = true
+	// Cancellation is not proof that an arbitrary command stopped. A command
+	// that ignores its context must finish before replacement is safe; its
+	// completion is fenced to an interrupted outcome, never late success.
+	d.restartProgressLocked()
 	d.publishRestartLocked()
 	// Sending held results may block on I/O backpressure, so let ack processing
 	// and the deadline lock proceed. The durable outbox also sends on reconnect.

@@ -452,6 +452,11 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		_ = msg.Respond([]byte("true"))
 	}))
 
+	// Recovery stays reachable while new-work availability is withdrawn.
+	addSub(b.nc.Subscribe(daemonSubject(toolRecoverySubject, userID, daemonID), func(msg *nats.Msg) {
+		_ = msg.Respond([]byte("true"))
+	}))
+
 	// 9. daemon.process.kill.{userID}.{daemonID}
 	addSub(b.nc.Subscribe(daemonSubject(daemonKillSubject, userID, daemonID), func(msg *nats.Msg) {
 		_, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.daemon.process.kill")
@@ -831,7 +836,7 @@ func (b *NATSToolBridge) stopRouting(userID, daemonID string, updating bool) {
 	b.subsMu.Lock()
 	var kept, dropped []*nats.Subscription
 	for _, sub := range b.daemonSubs[key] {
-		if sub.Subject == keepCancel || sub.Subject == keepBackground || (updating && sub.Subject == daemonSubject(daemonRestartSubject, userID, daemonID)) {
+		if sub.Subject == keepCancel || sub.Subject == keepBackground || (updating && (sub.Subject == daemonSubject(daemonRestartSubject, userID, daemonID) || sub.Subject == daemonSubject(daemonCommandSubject, userID, daemonID) || sub.Subject == daemonSubject(toolRecoverySubject, userID, daemonID))) {
 			kept = append(kept, sub)
 			continue
 		}

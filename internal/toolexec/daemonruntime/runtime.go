@@ -1461,15 +1461,25 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 	// After the response is queued (the deferred sends below run first):
 	// a draining stream is held open until then.
 	defer d.requestDone(s)
+	// Fence scheduler admission and cancellation registration against expiry.
+	// A goroutine queued before the restart may not begin work after it expires.
+	d.restartMu.Lock()
+	if req.CommandType != toolexec.ToolStatusCommand && d.restartStatus != nil && d.restartStatus.TimedOut {
+		d.restartMu.Unlock()
+		d.sendCommandFailure(s, req, errors.New("daemon restart deadline expired; command not executed"))
+		return
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	if req.TimeoutMs > 0 {
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutMs)*time.Millisecond)
+		cancel()
+		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(req.TimeoutMs)*time.Millisecond)
 	}
-	defer cancel()
 	if strings.TrimSpace(req.RequestId) != "" {
 		d.registerCancel(req.RequestId, cancel)
 		defer d.unregisterCancel(req.RequestId)
 	}
+	d.restartMu.Unlock()
+	defer cancel()
 
 	// Connector policy gate. Requests from third-party MCP clients carry a
 	// policy confining which commands they may run and which paths they may
@@ -1545,7 +1555,17 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 			"commandType", req.CommandType, "requestID", req.RequestId)
 	})
 
-	resultPayload, err := defaultRegistry.Handle(ctx, req.CommandType, req.Payload)
+	var resultPayload []byte
+	var err error
+	if err = ctx.Err(); err == nil {
+		resultPayload, err = defaultRegistry.Handle(ctx, req.CommandType, req.Payload)
+	}
+	d.restartMu.Lock()
+	expired := d.restartStatus != nil && d.restartStatus.TimedOut
+	d.restartMu.Unlock()
+	if expired {
+		resultPayload, err = nil, errors.New("daemon restart interrupted command; outcome unknown, verify effects before retrying")
+	}
 	if refusal := d.guard.commandVerdict(); refusal != nil {
 		// $HOME went away while this ran; its result describes the wrong disk.
 		resultPayload, err = nil, refusal

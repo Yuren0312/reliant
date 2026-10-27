@@ -113,8 +113,8 @@ func (s *Service) recordRestart(ctx context.Context, conn *daemonConnection, sta
 	if prev == nil || status == nil || status.DeadlineUnixMs != prev.DeadlineUnixMs {
 		return nil
 	}
-	if (prev.Drained && !status.Drained) || (prev.Drained == status.Drained && prev.TimedOut == status.TimedOut) {
-		return nil // repeated heartbeat or a delayed observation never regresses progress
+	if prev.Drained && !status.Drained {
+		status = prev // never regress, but re-persist after lease recreation
 	}
 	ctx, cancel := context.WithTimeout(ctx, inboundStateApplyTimeout)
 	defer cancel()
