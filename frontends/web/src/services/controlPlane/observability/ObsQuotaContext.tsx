@@ -67,18 +67,28 @@ export function ObsQuotaProvider({
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let scheduledReset: number | undefined;
+    let recoveredReset = -Infinity;
     const schedule = () => {
-      if (timer !== undefined) clearTimeout(timer);
-      timer = undefined;
       const state = store.getState();
-      if (state.kind === "ok") return;
+      // A successful explicit read may clear the banner during reset jitter.
+      // Recovery still owes every other refused view a refetch: keep that
+      // timer independent of the store's presentation state.
+      if (state.kind === "ok" || scheduledReset === state.resetsAtMs || state.resetsAtMs <= recoveredReset) return;
+      if (timer !== undefined) clearTimeout(timer);
+      scheduledReset = state.resetsAtMs;
       const wait = Math.max(0, state.resetsAtMs - now()) + Math.floor(random() * RESUME_JITTER_MS);
       timer = setTimeout(() => {
+        timer = undefined;
+        // A server still returning this expired interval gets one recovery
+        // attempt, not an invalidate/error/reschedule loop.
+        recoveredReset = state.resetsAtMs;
+        scheduledReset = undefined;
         store.clear();
         void client.invalidateQueries({
           queryKey: ["observability"],
           predicate: (query) => query.state.status === "error" && quotaOf(query.state.error) !== null,
-        });
+        }, { cancelRefetch: false });
       }, wait);
     };
     schedule();

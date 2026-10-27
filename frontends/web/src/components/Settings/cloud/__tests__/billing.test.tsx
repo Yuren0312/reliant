@@ -139,6 +139,14 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
 
 import { RedeemedCouponKind } from '@/gen/controlplane/services/billing/v1/billing_pb';
 import { BillingSection } from '@/components/Settings/cloud/billing'
+import { ObsQuotaBanner } from '@/components/Forge/Observability/ObsStates'
+import { ObsQuotaProvider, useObsQuota } from '@/services/controlPlane/observability/ObsQuotaContext'
+import { settingsSearchSchema } from '@/routeSchemas'
+
+function QuotaUsageLink() {
+  const { store } = useObsQuota()
+  return <><ObsQuotaBanner /><button onClick={() => store.report({ limit: 'queries', lane: 'interactive', resetsAtMs: Date.now() + 60_000, soft: false })}>Exhaust quota</button></>
+}
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -173,6 +181,21 @@ describe('BillingSection', () => {
       'Usage & invoices',
       'Reliant AI',
     ])
+  })
+
+  it('mounts observability usage directly at the real quota banner destination', () => {
+    obsState.orgId = 'org-fixture'
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const banner = render(<QueryClientProvider client={client}><ObsQuotaProvider><QuotaUsageLink /></ObsQuotaProvider></QueryClientProvider>)
+    fireEvent.click(screen.getByRole('button', { name: 'Exhaust quota' }))
+    const destination = new URL(screen.getByTestId('obs-quota-usage').getAttribute('href')!, 'https://app.example.test')
+    expect(destination.pathname).toBe('/settings/billing')
+    routerState.search = settingsSearchSchema.parse(Object.fromEntries(destination.searchParams))
+    banner.unmount()
+
+    renderSection()
+    expect(screen.getByRole('tab', { name: /usage & invoices/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('billing-observability-usage').id).toBe(destination.hash.slice(1))
   })
 
   it('shows the plans empty state when no plans are configured', () => {

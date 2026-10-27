@@ -13,11 +13,12 @@
  */
 
 import { act, render, renderHook, screen, within } from "@testing-library/react";
-import { QueryClientProvider, focusManager, type QueryClient } from "@tanstack/react-query";
+import { QueryClientProvider, focusManager, useQuery, type QueryClient } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
+import { resolveBillingTab, settingsSearchSchema } from "@/routeSchemas";
 import { obsKeys, useServiceOverview } from "@/hooks/observability-queries";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ObsQuotaProvider, RESUME_JITTER_MS, useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
@@ -151,6 +152,105 @@ describe("polling", () => {
 });
 
 describe("when the allowance runs out", () => {
+  it("recovers every refused non-polled panel once when a manual read succeeds during reset jitter", async () => {
+    const r = rig(() => 0.5);
+    const reads = [vi.fn(async () => "trace"), vi.fn(async () => "issue"), vi.fn(async () => "profile")];
+    let releaseManual!: (value: string) => void;
+    const manualRead = vi.fn(() => new Promise<string>((resolve) => { releaseManual = resolve; }));
+    const invalidate = vi.spyOn(r.client, "invalidateQueries");
+    const cancel = vi.spyOn(r.client, "cancelQueries");
+    const panel = (name: string, read: () => Promise<string>) => ({
+      queryKey: ["observability", "recovery-test", name],
+      queryFn: () => store.guard(read),
+      retry: false as const,
+      staleTime: Infinity,
+    });
+    let store!: ReturnType<typeof useObsQuota>["store"];
+    const view = renderHook(() => {
+      store = useObsQuota().store;
+      const trace = useQuery(panel("trace", reads[0]));
+      const issue = useQuery(panel("issue", reads[1]));
+      const profile = useQuery(panel("profile", reads[2]));
+      const manual = useQuery({ ...panel("manual", manualRead), enabled: false });
+      for (const query of [trace, issue, profile]) { void query.data; void query.error; }
+      return { trace, issue, profile, manual };
+    }, { wrapper: r.wrapper });
+    await flush();
+    // Refuse these distinct mounted keys locally, without any server reads.
+    await act(async () => {
+      store.report({ limit: "queries", lane: "interactive", resetsAtMs: RESET, soft: false });
+      await Promise.all([view.result.current.trace.refetch(), view.result.current.issue.refetch(), view.result.current.profile.refetch()]);
+    });
+    await flush();
+    expect(view.result.current.trace.error).not.toBeNull();
+    const before = reads.map((read) => read.mock.calls.length);
+
+    await advance(RESET - Date.now() + 1_000); // still inside the 15s jitter
+    const manual = view.result.current.manual.refetch();
+    await act(async () => { releaseManual("manual"); await manual; });
+    await flush();
+    await advance(RESUME_JITTER_MS);
+    await flush();
+    expect(view.result.current.trace.data).toBe("trace");
+    expect(view.result.current.issue.data).toBe("issue");
+    expect(view.result.current.profile.data).toBe("profile");
+    expect(view.result.current.trace.error).toBeNull();
+    expect(view.result.current.issue.error).toBeNull();
+    expect(view.result.current.profile.error).toBeNull();
+    reads.forEach((read, i) => expect(read).toHaveBeenCalledTimes(before[i] + 1));
+    expect(manualRead).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(cancel).not.toHaveBeenCalled();
+    await advance(RESUME_JITTER_MS * 2);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    reads.forEach((read, i) => expect(read).toHaveBeenCalledTimes(before[i] + 1));
+  });
+
+  it("does not cancel or restart an explicit read still in flight when recovery invalidates its error", async () => {
+    const r = rig(() => 0.5);
+    let finish!: (value: string) => void;
+    const read = vi.fn(async () => "loaded");
+    let store!: ReturnType<typeof useObsQuota>["store"];
+    const view = renderHook(() => {
+      store = useObsQuota().store;
+      const query = useQuery({ queryKey: ["observability", "in-flight"], queryFn: () => store.guard(read), retry: false });
+      void query.data; void query.error;
+      return query;
+    }, { wrapper: r.wrapper });
+    await flush();
+    await act(async () => {
+      store.report({ limit: "queries", lane: "interactive", resetsAtMs: RESET, soft: false });
+      await view.result.current.refetch();
+    });
+    await flush();
+    expect(view.result.current.error).not.toBeNull();
+    read.mockImplementationOnce(() => new Promise<string>((resolve) => { finish = resolve; }));
+    await advance(RESET - Date.now() + 1_000);
+    const pending = view.result.current.refetch();
+    await advance(RESUME_JITTER_MS);
+    expect(read).toHaveBeenCalledTimes(2); // initial + explicit; no restarted read
+    await act(async () => { finish("recovered"); await pending; });
+    await flush();
+    expect(view.result.current.data).toBe("recovered");
+    expect(view.result.current.error).toBeNull();
+  });
+
+  it("does not loop recovery when the server repeats an already recovered quota interval", async () => {
+    const r = rig(() => 0);
+    const invalidate = vi.spyOn(r.client, "invalidateQueries");
+    renderHook(() => useOverview(SCOPE, "1h"), { wrapper: r.wrapper });
+    await flush();
+    r.mode.value = "quota";
+    await advance(POLL);
+    await advance(RESET - Date.now());
+    await flush();
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    const attempts = r.calls.length;
+    await advance(RESUME_JITTER_MS * 2);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(r.calls).toHaveLength(attempts);
+  });
+
   it("retains main's process-health UI and error-log links with an as-of badge during the pause", async () => {
     const r = rig();
     const hrefs: ObservabilityHomeHrefs = {
@@ -302,6 +402,17 @@ function Reporter() {
 }
 
 describe("the banner and the badge", () => {
+  it("links the default usage destination to Billing's canonical Usage tab and mounted section", async () => {
+    const r = rig();
+    render(<><ObsQuotaBanner /><Reporter /></>, { wrapper: r.wrapper });
+    await act(async () => screen.getByTestId("report").click());
+    const destination = new URL(screen.getByTestId("obs-quota-usage").getAttribute("href")!, "https://app.example.test");
+    const search = settingsSearchSchema.parse(Object.fromEntries(destination.searchParams));
+    expect(destination.pathname).toBe("/settings/billing");
+    expect(resolveBillingTab(search.tab)).toBe("usage");
+    expect(destination.hash).toBe("#billing-observability-usage");
+  });
+
   it("says it once, whatever is watching, and goes away at the reset", async () => {
     const r = rig();
     const Wrapper = r.wrapper;

@@ -16,6 +16,7 @@ import { Activity, AlertTriangle, Boxes, Clock, Lock, PauseCircle, RefreshCw, Ro
 
 import Button from "@/components/forge-ui/button";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
+import type { BillingTab } from "@/routeSchemas";
 import {
   obsErrorKind,
   obsErrorMessage,
@@ -497,11 +498,14 @@ export function ObsAsOf({ updatedAt, className }: { updatedAt?: number; classNam
   );
 }
 
+const BILLING_USAGE_TAB = "usage" satisfies BillingTab;
+const BILLING_USAGE_HREF = `/settings/billing?${new URLSearchParams({ tab: BILLING_USAGE_TAB })}#billing-observability-usage`;
+
 /**
  * The one banner per page, said once instead of once per panel. Renders nothing
  * while reads run normally. `onOpenUsage` / `usageHref` link to the usage page.
  */
-export function ObsQuotaBanner({ usageHref = "/settings/billing#billing-observability-usage", onOpenUsage }: { usageHref?: string; onOpenUsage?: () => void }) {
+export function ObsQuotaBanner({ usageHref = BILLING_USAGE_HREF, onOpenUsage }: { usageHref?: string; onOpenUsage?: () => void }) {
   const state = useObsQuotaState();
   if (state.kind === "ok") return null;
   const resets = formatClock(state.resetsAtMs);
