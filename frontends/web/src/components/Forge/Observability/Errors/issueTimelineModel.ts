@@ -111,9 +111,9 @@ export function canEditComment(comment: IssueComment, me: IssueUser | null | und
 
 /**
  * The author, or an owner or admin of the org, deletes a comment. The role is
- * the reader's own as the member roster reports it; when the roster is closed
- * to them (it needs token:read) it is unknown, and only their own comments
- * offer a delete. The server decides either way.
+ * the reader's own membership in the explicit issue org. If membership lookup
+ * is refused or absent, only their own comments offer a delete.
+ * The server decides either way.
  */
 export function canDeleteComment(comment: IssueComment, me: IssueUser | null | undefined, myRole: string | undefined): boolean {
   if (canEditComment(comment, me)) return true;

@@ -186,14 +186,14 @@ function IssueBody({
       </header>
 
       <IssueTriage issue={issue} />
-      <IssueAssignee issue={issue} />
+      <IssueAssignee issue={issue} orgId={scope.orgId} />
       {issue.relatedCount > 0 && <Incident issue={issue} detail={detail} openIssue={openIssue} />}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-4">
           <Card padding="none" data-testid="obs-issue-discussion">
             <Section title="Discussion" note="Status changes, comments, assignments and chats, oldest first." />
-            <IssueTimeline issueId={issue.id} />
+            <IssueTimeline key={`${scope.orgId}:${issue.id}`} issueId={issue.id} orgId={scope.orgId} />
           </Card>
           <Card padding="none" data-testid="obs-issue-latest">
             <Section title="Latest event" note={detail.latestEvent ? formatTimestamp(detail.latestEvent.timeMs, now) : undefined} />

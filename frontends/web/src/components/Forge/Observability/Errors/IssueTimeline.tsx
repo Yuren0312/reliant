@@ -54,16 +54,16 @@ export const COMMENT_MAX_LENGTH = 10_000;
 const TEXTAREA =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-export function IssueTimeline({ issueId }: { issueId: string }) {
+export function IssueTimeline({ issueId, orgId }: { issueId: string; orgId: string }) {
   const timeline = useIssueTimeline(issueId);
   const me = useCurrentIssueUser();
-  const members = useOrgMembers();
+  const members = useOrgMembers(orgId);
   const refused = !!timeline.error && !keepsLastResult(timeline.error, timeline.data);
   const pages = refused ? undefined : timeline.data?.pages;
   const entries = useMemo(() => mergeTimelinePages(pages ?? []), [pages]);
   // The issue the timeline is of: the one asked for, or the issue it was merged into.
   const timelineIssueId = pages?.[0]?.issueId ?? issueId;
-  const myRole = members.data?.find((m) => m.id === me.data?.id)?.role;
+  const myRole = members.data?.callerRole ?? undefined;
   const now = Date.now();
 
   return (

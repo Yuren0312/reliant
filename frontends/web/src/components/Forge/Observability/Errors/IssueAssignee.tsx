@@ -9,9 +9,8 @@
  * The view then re-reads the issue and SAYS what changed; it never re-sends
  * the request over the other change.
  *
- * The roster (org members) needs token:read, so an ordinary member may not be
- * able to list it. The picker then offers what it can name without it: "me"
- * and the current assignee.
+ * The explicit issue org's assignable roster is open to its members. If the
+ * read is refused, the picker offers only "me" and the current assignee.
  */
 
 import { useState } from "react";
@@ -35,14 +34,14 @@ export function assigneeChoices(roster: readonly IssueUser[] | undefined, me: Is
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function IssueAssignee({ issue }: { issue: Issue }) {
+export function IssueAssignee({ issue, orgId }: { issue: Issue; orgId: string }) {
   const assign = useAssignIssue();
   const me = useCurrentIssueUser();
-  const members = useOrgMembers();
+  const members = useOrgMembers(orgId);
   const [readAtClick, setReadAtClick] = useState<Issue | null>(null);
 
   const meUser = me.data ?? null;
-  const choices = assigneeChoices(members.data, meUser, issue.assignee);
+  const choices = assigneeChoices(members.data?.users, meUser, issue.assignee);
   const errorKind = assign.error ? issuesErrorKind(assign.error) : null;
   const conflict = errorKind === "conflict" && readAtClick;
   const refreshed = conflict && (issue.version !== readAtClick.version || issue.assignee?.id !== readAtClick.assignee?.id);

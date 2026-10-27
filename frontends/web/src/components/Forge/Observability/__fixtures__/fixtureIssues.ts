@@ -671,10 +671,10 @@ export function createIssuesFixture(
         push(seed.id, link.linkedAtMs, actorOf(reader), { kind: "chat", link });
         return { link, created: true };
       }),
-    listOrgMembers: () =>
-      call("ListOrgMemberGrants", {}, () => {
-        if (options.rosterDenied) throw new ConnectError("listing members needs token:read", Code.PermissionDenied);
-        return Object.values(FIXTURE_USERS).map((u) => ({ id: u.id, name: u.name, role: u.role }));
+    listOrgMembers: (orgId) =>
+      call("ListAssignableUsers", { orgId }, () => {
+        if (!orgId || options.rosterDenied) throw new ConnectError("issue organization membership required", Code.PermissionDenied);
+        return { users: Object.values(FIXTURE_USERS).map((u) => ({ id: u.id, name: u.name })), callerRole: reader ? reader.role : null };
       }),
     getCurrentIssueUser: () => call("GetCurrentUser", {}, () => (reader ? userOf(reader) : null)),
     getReleaseHealth: (req) =>

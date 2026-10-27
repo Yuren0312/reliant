@@ -1,31 +1,34 @@
 // Copyright (c) 2025 Reliant Labs
 
-/**
- * Who can an issue be assigned to, and who is the reader. The issue console's
- * only two questions about people.
- *
- * There is no roster rpc open to every org member: the one that exists,
- * AccessTokenService.ListOrgMemberGrants, needs token:read and names a member
- * by email. So `listOrgMembers` can be refused (PermissionDenied) for an
- * ordinary member, and the assignee control then offers only "me" and the
- * current assignee, which it can name without the roster.
- */
+/** The issue org's assignable people and the reader's role in that org, never their default org. */
 
-import { AccessTokenService } from "@/gen/controlplane/services/access_token/v1/access_token_pb";
+import { IssuesService } from "@/gen/controlplane/services/issues/v1/issues_pb";
+import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
 import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
 
 import { getControlPlaneClient } from "../client";
 import type { IssueUser } from "./issuesTypes";
 
-/** An org member as the assignee picker lists them. `name` is their email: the roster carries no display name. */
-export interface OrgMember extends IssueUser {
-  /** owner, admin or member: which of them may delete another person's comment. */
-  role: string;
+export interface IssueRoster {
+  users: IssueUser[];
+  /** Only the CALLER's role, selected by the explicit org. Unknown/refused fails closed. */
+  callerRole: string | null;
 }
 
-export async function listOrgMembers(): Promise<OrgMember[]> {
-  const res = await getControlPlaneClient(AccessTokenService).listOrgMemberGrants({});
-  return res.members.map((m) => ({ id: m.userId, name: m.email || m.userId, role: m.role }));
+export async function listOrgMembers(orgId: string): Promise<IssueRoster> {
+  if (!orgId) throw new Error("An explicit issue organization is required");
+  // Membership lookup is a hint for admin controls, not a prerequisite for the roster.
+  // It rejects machine credentials; that must never hide otherwise assignable people.
+  const membership = getControlPlaneClient(OrganizationService).listMyOrganizations({})
+    .then((res) => res.organizations.find((org) => org.id === orgId)?.role ?? null, () => null);
+  const users = new Map<string, IssueUser>();
+  let pageToken = "";
+  do {
+    const page = await getControlPlaneClient(IssuesService).listAssignableUsers({ orgId, pageSize: 100, pageToken });
+    for (const user of page.users) users.set(user.id, { id: user.id, name: user.name || user.id });
+    pageToken = page.nextPageToken;
+  } while (pageToken);
+  return { users: [...users.values()], callerRole: await membership };
 }
 
 /** The signed-in person, as an issue would name them. Null when the server names nobody (a credential that acts for no person). */

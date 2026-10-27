@@ -166,10 +166,10 @@ function IssueToolbar({
   assignee: string | undefined;
   navigate: ObsNavigate;
 }) {
-  const members = useOrgMembers();
+  const members = useOrgMembers(scope.orgId);
   const me = useCurrentIssueUser();
   const filter = assigneeFilterOf(assignee);
-  const people = (members.data ?? []).filter((m) => m.id !== me.data?.id);
+  const people = (members.data?.users ?? []).filter((m) => m.id !== me.data?.id);
   // A person named in the URL who the roster does not list (or cannot be read) is still selectable.
   const named = filter.kind === "user" && !people.some((p) => p.id === filter.userId) && filter.userId !== me.data?.id;
   const [draft, setDraft] = useState(text);

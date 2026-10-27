@@ -747,7 +747,7 @@ async function readIssue<T>(client: QueryClient, issueId: string, key: QueryKey,
 
 /** People change rarely; the roster and the reader are read once a while, not per issue. */
 export const peopleKeys = {
-  members: () => ["observability", "people", "members"] as const,
+  members: (orgId: string) => ["observability", "people", "members", orgId] as const,
   me: () => ["observability", "people", "me"] as const,
 };
 
@@ -862,15 +862,18 @@ export function useCurrentIssueUser() {
   });
 }
 
-/** The org's members, for the assignee picker. Refused (denied) for a member without token:read; the picker copes. */
-export function useOrgMembers() {
+/** The explicit issue org's roster and caller role, independently cached across org switches. */
+export function useOrgMembers(orgId: string) {
   const api = useObservabilityApi();
-  return useQuery({
-    queryKey: peopleKeys.members(),
-    queryFn: () => api.listOrgMembers(),
+  const query = useQuery({
+    queryKey: peopleKeys.members(orgId),
+    queryFn: () => api.listOrgMembers(orgId),
+    enabled: !!orgId,
     staleTime: 5 * 60_000,
     retry: false,
   });
+  // Never offer cached people or admin controls after a membership refusal.
+  return { ...query, data: query.error ? undefined : query.data };
 }
 
 /** Every write below never retries and never re-sends; a refusal is shown, and the reads are re-fetched either way. */
