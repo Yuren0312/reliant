@@ -5,7 +5,8 @@
  * the code in the link is looked up and the prompt names the machine; the
  * answer goes to the control plane with the session JWT.
  */
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
+import { useActiveOrgStore } from "@/store/activeOrgStore";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -58,6 +59,22 @@ afterEach(() => {
 const ok = (body: unknown) => ({ ok: true, status: 200, json: async () => body });
 
 describe("DevicePairing", () => {
+  it("keeps the confirmed machine org across deferred session authentication", async () => {
+    listMyOrganizations.mockResolvedValue(TWO_ORGS);
+    getSession.mockResolvedValue({ data: { session: { access_token: "jwt" } } });
+    fetchMock.mockResolvedValueOnce(ok({ user_code: "BDFG-HJKL", hostname: "box", scopes: [] }))
+      .mockResolvedValueOnce(ok({ approved: true }));
+    renderWithQuery(<DevicePairing />);
+    await screen.findByText("Approve machine box?");
+    let finish!: (value: unknown) => void;
+    getSession.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await userEvent.click(screen.getByRole("button", { name: "Approve" }));
+    act(() => useActiveOrgStore.setState({ effectiveId: "org-b" }));
+    await act(async () => finish({ data: { session: { access_token: "jwt" } } }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).org_id).toBe("org-a");
+  });
+
   it("sends a signed-out person to sign in and back with the code", async () => {
     getSession.mockResolvedValue({ data: { session: null } });
     renderWithQuery(<DevicePairing />);

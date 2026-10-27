@@ -62,6 +62,63 @@ async function load(activeOrg: string | null) {
 }
 
 describe("orgInterceptor", () => {
+  it("pins grant writes before deferred auth and retains that org across 401 retry", async () => {
+    const { chooseActiveOrg } = await load("org-a");
+    const { setAuthTokenProvider } = await import("@/api/authProvider");
+    let release!: (token: string) => void;
+    const getToken = vi.fn(() => new Promise<string>((resolve) => { release = resolve; }));
+    setAuthTokenProvider({ getToken, hasSession: async () => true, refresh: async () => "fresh-token" });
+    // A canonical Connect endpoint model: one shared user, independent org
+    // grants. The first attempt is refused before any write, as a real 401 is.
+    const grants: Record<string, string[]> = { "org-a": ["deploy:read"], "org-b": ["secret:read"] };
+    const wire: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(new TextDecoder().decode(init?.body as Uint8Array));
+      wire.push(body);
+      if (wire.length === 1) return new Response(JSON.stringify({ code: "unauthenticated", message: "expired" }), {
+        status: 401, headers: { "content-type": "application/json" },
+      });
+      grants[body.orgId] = body.scopes;
+      return new Response(JSON.stringify({ member: { userId: body.userId, scopes: body.scopes } }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }));
+    const { updateMemberPermissions } = await import("@/services/controlPlane/memberPermissions");
+    const pending = updateMemberPermissions("shared-user", ["deploy:read", "deploy:write"], "org-a");
+    await vi.waitFor(() => expect(getToken).toHaveBeenCalledOnce());
+    chooseActiveOrg("org-b");
+    release("old-token");
+    await pending;
+    expect(wire.map((body) => body.orgId)).toEqual(["org-a", "org-a"]);
+    expect(grants["org-a"]).toEqual(["deploy:read", "deploy:write"]);
+    expect(grants["org-b"]).toEqual(["secret:read"]);
+  });
+
+  it("keeps a created secret's org and rotated/revoked resource identity through deferred auth", async () => {
+    const { chooseActiveOrg } = await load("org-a");
+    const { setAuthTokenProvider } = await import("@/api/authProvider");
+    let release!: (token: string) => void;
+    const token = new Promise<string>((resolve) => { release = resolve; });
+    const getToken = vi.fn(() => token);
+    setAuthTokenProvider({ getToken, hasSession: async () => true, refresh: async () => null });
+    const { createManagedLLMKey, rotateLLMKey, revokeLLMKey } = await import("@/services/controlPlane/reliantAI");
+    const pending = [
+      createManagedLLMKey({ orgId: "org-a", name: "App", models: [] }),
+      rotateLLMKey("org-a-key", "24h"),
+      revokeLLMKey("org-a-key"),
+    ];
+    await vi.waitFor(() => expect(getToken).toHaveBeenCalledTimes(3));
+    chooseActiveOrg("org-b");
+    release("token");
+    await Promise.all(pending);
+    expect(bodies.find((b) => b.url.endsWith("/CreateLLMKey"))?.body.orgId).toBe("org-a");
+    for (const method of ["RotateLLMKey", "RevokeLLMKey"]) {
+      const body = bodies.find((b) => b.url.endsWith(`/${method}`))?.body;
+      expect(body?.keyId).toBe("org-a-key");
+      expect(body).not.toHaveProperty("orgId"); // canonical resource-bound RPCs
+    }
+  });
+
   it("names the active org on a control-plane request that carries org_id", async () => {
     const { connectClient } = await load("org-b");
     await connectClient(DeployService).listEnvironments({});

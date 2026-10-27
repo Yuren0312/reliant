@@ -170,6 +170,8 @@ function OrgReliantAIPanel() {
 
 function ReliantAIPanel({ orgId }: { orgId: string }) {
   const live = useRef(true);
+  // A newer secret operation owns the reveal even inside the same org.
+  const secretOperation = useRef(0);
   useEffect(() => {
     live.current = true;
     return () => { live.current = false; };
@@ -246,8 +248,9 @@ function ReliantAIPanel({ orgId }: { orgId: string }) {
       )
     )
       return;
+    const operation = ++secretOperation.current;
     const res = await rotateMut.mutateAsync({ keyId: key.id });
-    if (!live.current || (getActiveOrgId() ?? "") !== orgId) return;
+    if (!live.current || (getActiveOrgId() ?? "") !== orgId || secretOperation.current !== operation) return;
     setRevealedKey({ name: key.name, secret: res.plaintextKey, kind: "rotated" });
   };
 
@@ -531,8 +534,9 @@ function ReliantAIPanel({ orgId }: { orgId: string }) {
             }
             creating={createMut.isPending}
             onCreate={async (args) => {
+              const operation = ++secretOperation.current;
               const res = await createMut.mutateAsync({ orgId, ...args });
-              if (!live.current || (getActiveOrgId() ?? "") !== orgId) return;
+              if (!live.current || (getActiveOrgId() ?? "") !== orgId || secretOperation.current !== operation) return;
               setCreateOpen(false);
               setRevealedKey({
                 name: args.name,

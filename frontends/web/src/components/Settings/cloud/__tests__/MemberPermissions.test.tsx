@@ -15,9 +15,9 @@ const listMemberPermissions = vi.fn();
 const updateMemberPermissions = vi.fn();
 
 vi.mock("../../../../services/controlPlane/memberPermissions", () => ({
-  listMemberPermissions: () => listMemberPermissions(),
-  updateMemberPermissions: (userId: string, scopes: string[]) =>
-    updateMemberPermissions(userId, scopes),
+  listMemberPermissions: (orgId: string) => listMemberPermissions(orgId),
+  updateMemberPermissions: (userId: string, scopes: string[], orgId: string) =>
+    updateMemberPermissions(userId, scopes, orgId),
 }));
 
 import { MemberPermissions } from "../MemberPermissions";
@@ -95,6 +95,25 @@ describe("MemberPermissions", () => {
     expect(screen.queryByText(/could not update/i)).toBeNull();
   });
 
+  it.each(["resolve", "reject"])("ignores an older same-org edit %s after a newer edit", async (outcome) => {
+    let finish!: (value: unknown) => void;
+    let fail!: (error: Error) => void;
+    updateMemberPermissions.mockImplementationOnce(() => new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
+    render(<MemberPermissions />);
+    await screen.findByText("dev@example.test");
+    fireEvent.click(screen.getByRole("checkbox", { name: /dev@example.test deploy:write/i }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /dev@example.test secret:read/i }));
+    await waitFor(() => expect(updateMemberPermissions).toHaveBeenCalledTimes(2));
+    expect(updateMemberPermissions.mock.calls[1][2]).toBe("org-a");
+    await act(async () => {
+      if (outcome === "resolve") finish({ scopes: ["deploy:read", "deploy:write"] });
+      else fail(new Error("old edit refused"));
+    });
+    expect(screen.getByRole("checkbox", { name: /dev@example.test secret:read/i })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /dev@example.test deploy:write/i })).toBeChecked();
+    expect(screen.queryByText(/could not update/i)).toBeNull();
+  });
+
   it("lists every member, including one holding almost nothing", async () => {
     render(<MemberPermissions />);
     expect(await screen.findByText("dev@example.test")).toBeInTheDocument();
@@ -111,7 +130,9 @@ describe("MemberPermissions", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /dev@example.test deploy:write/i }));
 
     await waitFor(() => expect(updateMemberPermissions).toHaveBeenCalledTimes(1));
-    const [userId, scopes] = updateMemberPermissions.mock.calls[0];
+    const [userId, scopes, orgId] = updateMemberPermissions.mock.calls[0];
+    expect(orgId).toBe("org-a");
+    expect(listMemberPermissions).toHaveBeenCalledWith("org-a");
     expect(userId).toBe("u-dev");
     expect(scopes).toContain("deploy:write");
     expect(scopes).toContain("deploy:read");

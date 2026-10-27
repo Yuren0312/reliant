@@ -93,7 +93,8 @@ function OrgMemberPermissions({ orgId }: { orgId: string | null }) {
   const fetchMembers = useCallback(async () => {
     try {
       setError(null);
-      const res = await listMemberPermissions();
+      if (!orgId) return;
+      const res = await listMemberPermissions(orgId);
       if (!isCurrent()) return;
       setMembers(res.members);
       setGrantable(res.grantable);
@@ -104,7 +105,7 @@ function OrgMemberPermissions({ orgId }: { orgId: string | null }) {
     } finally {
       if (isCurrent()) setLoading(false);
     }
-  }, [isCurrent]);
+  }, [isCurrent, orgId]);
 
   useEffect(() => {
     setMembers([]);
@@ -115,7 +116,12 @@ function OrgMemberPermissions({ orgId }: { orgId: string | null }) {
 
   const canAdminister = grantable.includes(ADMIN_PERMISSION);
 
+  const operations = useRef(new Map<string, number>());
   const toggle = async (member: Member, permission: string) => {
+    if (!orgId || !isCurrent()) return;
+    const operation = (operations.current.get(member.userId) ?? 0) + 1;
+    operations.current.set(member.userId, operation);
+    const isLatest = () => isCurrent() && operations.current.get(member.userId) === operation;
     const has = member.scopes.includes(permission);
     const next = has
       ? member.scopes.filter((s) => s !== permission)
@@ -128,15 +134,15 @@ function OrgMemberPermissions({ orgId }: { orgId: string | null }) {
     );
     setError(null);
     try {
-      const updated = await updateMemberPermissions(member.userId, next);
-      if (!isCurrent()) return;
+      const updated = await updateMemberPermissions(member.userId, next, orgId);
+      if (!isLatest()) return;
       setMembers((current) =>
         current.map((m) =>
           m.userId === member.userId ? { ...m, scopes: updated.scopes } : m
         )
       );
     } catch (err) {
-      if (!isCurrent()) return;
+      if (!isLatest()) return;
       console.error("Failed to update member permissions:", err);
       setMembers((current) =>
         current.map((m) =>

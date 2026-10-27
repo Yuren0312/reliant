@@ -53,6 +53,19 @@ it("does not reveal an old created key or clear the next org's draft", async () 
   expect(screen.getByPlaceholderText("e.g. production-agent")).toHaveValue("New org draft");
 });
 
+it("does not replace a newer same-org secret with an older operation", async () => {
+  let finish!: (value: unknown) => void;
+  mocks.rotate.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  mocks.rotate.mockResolvedValueOnce({ plaintextKey: "test-only-newer-secret" });
+  render(<QueryClientProvider client={new QueryClient()}><ReliantAISection /></QueryClientProvider>);
+  fireEvent.click(screen.getByRole("button", { name: /rotate/i }));
+  fireEvent.click(screen.getByRole("button", { name: /rotate/i }));
+  expect(await screen.findByText("test-only-newer-secret")).toBeInTheDocument();
+  await act(async () => finish({ plaintextKey: "test-only-older-secret" }));
+  expect(screen.queryByText("test-only-older-secret")).toBeNull();
+  expect(screen.getByText("test-only-newer-secret")).toBeInTheDocument();
+});
+
 it("never reveals a prior org's delayed rotated key after A → B → A", async () => {
   let finish!: (value: unknown) => void;
   mocks.rotate.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));

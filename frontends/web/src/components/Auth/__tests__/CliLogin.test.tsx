@@ -7,7 +7,8 @@
  * hands the browser to whatever loopback URL the server returns.
  */
 
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
+import { useActiveOrgStore } from "@/store/activeOrgStore";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -60,6 +61,24 @@ afterEach(() => {
 });
 
 describe("CliLogin", () => {
+  it("retains the approved org while session authentication waits across an app-org switch", async () => {
+    listMyOrganizations.mockResolvedValue(TWO_ORGS);
+    getSession.mockResolvedValue({ data: { session: { access_token: "jwt", user: { email: "a@test" } } } });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ redirect_to: "http://127.0.0.1/callback", scopes: [] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithQuery(<CliLogin />);
+    const approve = await screen.findByRole("button", { name: /approve/i });
+    await waitFor(() => expect(approve).toBeEnabled());
+    let finish!: (value: unknown) => void;
+    getSession.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    await userEvent.click(approve);
+    act(() => useActiveOrgStore.setState({ effectiveId: "org-b" }));
+    await act(async () => finish({ data: { session: { access_token: "jwt" } } }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).org_id).toBe("org-a");
+    vi.unstubAllGlobals();
+  });
+
   it("sends a signed-out user to /auth and back with the whole request", async () => {
     getSession.mockResolvedValue({ data: { session: null } });
     renderWithQuery(<CliLogin />);
