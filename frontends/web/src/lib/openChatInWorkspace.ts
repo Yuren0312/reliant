@@ -31,6 +31,10 @@ export interface OpenChatOptions {
   navigate?: boolean;
 }
 
+// Identity alone is insufficient when A is opened again before an older A
+// finishes. Only the newest open may commit selection-dependent state.
+let openEpoch = 0;
+
 /**
  * Resolves once the chat is selected AND its worktree context is current and
  * recorded. Selection itself happens before the first await.
@@ -39,28 +43,31 @@ export async function openChatInWorkspace(
   chat: Chat,
   options: OpenChatOptions = {}
 ): Promise<void> {
+  const epoch = ++openEpoch;
+  const projectId = useProjectStore.getState().currentProject?.id;
   useChatStore.getState().selectChat(chat, { deferPersist: true });
 
-  // Another chat was opened (or the chat view left) while the worktree
-  // resolved: that open owns the context now, and switching to this chat's
-  // worktree would put the user in the wrong workspace for the chat on screen.
-  const superseded = () => useChatStore.getState().activeChatId !== chat.id;
+  // Pass the fence into the switch too: it must recheck after its own import,
+  // BEFORE it writes viewer, navigation or workspace routing state.
+  const isCurrent = () =>
+    epoch === openEpoch &&
+    useChatStore.getState().activeChatId === chat.id &&
+    useProjectStore.getState().currentProject?.id === projectId;
 
-  const projectId = useProjectStore.getState().currentProject?.id;
   if (projectId) {
     const worktrees = useWorktreeStore.getState();
     if (chat.worktreeId) {
       const worktree = await resolveWorktree(chat.worktreeId);
-      if (superseded()) return;
+      if (!isCurrent()) return;
       if (worktree) {
-        await worktrees.switchWorktreeContext(projectId, worktree);
+        await worktrees.switchWorktreeContext(projectId, worktree, { isCurrent });
       }
     } else {
-      await worktrees.switchWorktreeContext(projectId, null);
+      await worktrees.switchWorktreeContext(projectId, null, { isCurrent });
     }
-    if (superseded()) return;
   }
 
+  if (!isCurrent()) return;
   useChatStore.getState().persistActiveChat(chat.id);
   if (options.navigate) {
     useChatNavigationStore.getState().navigateToChat(chat.id);

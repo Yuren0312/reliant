@@ -34,7 +34,11 @@ interface WorktreeStore {
   switchWorktreeContext: (
     projectId: string,
     worktree: { id: string; project_id?: string } | null,
-    options?: { openFreshNewChat?: boolean },
+    options?: {
+      openFreshNewChat?: boolean;
+      /** Rechecked after async preparation, before any context is committed. */
+      isCurrent?: () => boolean;
+    },
   ) => Promise<void>;
   setDeletingId: (id: string | null) => void;
   reset: () => void;
@@ -72,6 +76,7 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
   },
 
   switchWorktreeContext: async (projectId, worktree, options) => {
+    if (options?.isCurrent && !options.isCurrent()) return;
     const newWorktreeId = worktree?.id ?? null;
     const currentWorktreeId = get().currentWorktreeId;
 
@@ -90,9 +95,12 @@ export const useWorktreeStore = create<WorktreeStore>((set, get) => ({
       openFreshNewChat: options?.openFreshNewChat,
     });
 
-    // Import viewerStore dynamically to avoid circular dependency
-    // IMPORTANT: Must use sync import since we need this to complete before selectWorktree
+    // Import viewerStore dynamically to avoid circular dependency. Selection
+    // can change while this yields; check the caller's fence before ANY writes.
     const { useViewerStore } = await import('./viewerStore');
+    if (options?.isCurrent && !options.isCurrent()) return;
+
+    // Everything below commits synchronously, with no further async gap.
     // Save current viewer state and switch context
     useViewerStore.getState().switchWorktreeContext(projectId, newWorktreeId);
 

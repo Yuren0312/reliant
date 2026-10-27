@@ -115,7 +115,11 @@ describe("chatNavigationStore worktree-aware navigation", () => {
       switchWorktreeContextMock.mock.invocationCallOrder[0],
     );
     // ...but what is stored under a worktree is stored once that worktree is current.
-    expect(switchWorktreeContextMock).toHaveBeenCalledWith("project-1", expect.objectContaining({ id: "wt-1" }));
+    expect(switchWorktreeContextMock).toHaveBeenCalledWith(
+      "project-1",
+      expect.objectContaining({ id: "wt-1" }),
+      { isCurrent: expect.any(Function) },
+    );
     expect(persistActiveChatMock).toHaveBeenCalledWith("chat-2");
     expect(switchWorktreeContextMock.mock.invocationCallOrder[0]).toBeLessThan(
       persistActiveChatMock.mock.invocationCallOrder[0],

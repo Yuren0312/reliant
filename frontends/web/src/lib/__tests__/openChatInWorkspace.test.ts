@@ -156,6 +156,31 @@ describe("openChatInWorkspace", () => {
     expect(calls).not.toContain("navigateToChat:c1");
   });
 
+  it("does not switch or persist when the project changes during resolution", async () => {
+    gate();
+    const opened = openChatInWorkspace(chat("c1", "wt-1"), { navigate: true });
+    state.currentProjectId = "project-2";
+    worktreeGate.release();
+    await opened;
+
+    expect(state.activeChatId).toBe("c1");
+    expect(calls).not.toContain("switchWorktreeContext:project-1:wt-1");
+    expect(calls).not.toContain("persistActiveChat:c1");
+    expect(calls).not.toContain("navigateToChat:c1");
+  });
+
+  it("only persists the latest open when the same chat is reopened during resolution", async () => {
+    gate();
+    const old = openChatInWorkspace(chat("c1", "wt-1"), { navigate: true });
+    const fresh = openChatInWorkspace(chat("c1", "wt-1"));
+    worktreeGate.release();
+    await Promise.all([old, fresh]);
+
+    expect(calls.filter((call) => call === "switchWorktreeContext:project-1:wt-1")).toHaveLength(1);
+    expect(calls.filter((call) => call === "persistActiveChat:c1")).toHaveLength(1);
+    expect(calls).not.toContain("navigateToChat:c1");
+  });
+
   it("selects the chat even with no project", async () => {
     state.currentProjectId = undefined;
     await openChatInWorkspace(chat("c1", "wt-1"), { navigate: true });
