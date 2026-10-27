@@ -75,6 +75,9 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
     "/reset-password",
     "/verify-email",
     "/upgrade",
+    // A claim link is opened from wherever the agent's human reads their
+    // messages, often a phone, and its page is built to fit one.
+    "/claim",
     "/design-sandbox",
     "/forge",
     "/apps",
