@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/uptrace/bun"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
