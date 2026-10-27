@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -2735,7 +2736,16 @@ func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t == nil {
 		return fmt.Errorf("trigger cannot be nil")
 	}
-	return store.InsertTrigger(ctx, r.ORM(), t)
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.InsertTrigger(ctx, r.ORM(), t); err != nil {
+			return err
+		}
+		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
+		if err != nil {
+			return err
+		}
+		return store.RecordTriggerChange(ctx, r.ORM(), "create", nil, after)
+	})
 }
 
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
@@ -2771,7 +2781,26 @@ func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t.ID == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return store.ReplaceTrigger(ctx, r.ORM(), t)
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockTrigger(ctx, r.ORM(), t.ID); err != nil {
+			return err
+		}
+		before, err := store.GetTrigger(ctx, r.ORM(), t.ID)
+		if err != nil {
+			return err
+		}
+		if revision, ok := automationpolicy.Revision(ctx); ok && !before.UpdatedAt.Equal(revision) {
+			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
+		}
+		if err := store.ReplaceTrigger(ctx, r.ORM(), t); err != nil {
+			return err
+		}
+		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
+		if err != nil {
+			return err
+		}
+		return store.RecordTriggerChange(ctx, r.ORM(), "update", before, after)
+	})
 }
 
 func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
@@ -2785,7 +2814,34 @@ func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) e
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return store.SetTriggerEnabled(ctx, r.ORM(), id, enabled)
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
+			return err
+		}
+		before, err := store.GetTrigger(ctx, r.ORM(), id)
+		if err != nil {
+			return err
+		}
+		if revision, ok := automationpolicy.Revision(ctx); ok && !before.UpdatedAt.Equal(revision) {
+			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
+		}
+		if err := store.SetTriggerEnabled(ctx, r.ORM(), id, enabled); err != nil {
+			return err
+		}
+		after, err := store.GetTrigger(ctx, r.ORM(), id)
+		if err != nil {
+			return err
+		}
+		op := "pause"
+		if enabled {
+			op = "enable"
+		}
+		return store.RecordTriggerChange(ctx, r.ORM(), op, before, after)
+	})
+}
+
+func (r *Repo) ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error) {
+	return store.TriggerChanges(ctx, r.ORM(), userID, triggerID)
 }
 
 func (r *Repo) SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error {

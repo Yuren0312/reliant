@@ -11,16 +11,14 @@ import (
 )
 
 // A workflow declares WHEN it runs in its `triggers:` block. Declaring fires
-// nothing, and an agent cannot change that: enabling a workflow's triggers is
-// the user's act, done in the app (Workflows -> the workflow -> Enable), which
-// is where they choose the project, machine and connected accounts. An agent
-// writes and tests the workflow; list_triggers shows what the user has enabled.
-// fire_trigger runs an existing activation once without changing its configuration.
+// nothing. Activation management tools require per-call interactive approval;
+// unattended runs cannot create standing authority. list_triggers reads the
+// resulting activations; fire_trigger runs one without changing configuration.
 
 // TriggerLister lists the calling user's triggers. It is implemented over
 // TriggerService by internal/triggertools — this package cannot import the
-// gRPC services, which depend on it. There is deliberately no write method: no
-// agent tool creates, enables or re-points an activation.
+// gRPC services, which depend on it. Writes use the separate approval-backed
+// ActivationManager interface.
 type TriggerLister interface {
 	ListTriggers(ctx context.Context, userID string, f TriggerListFilter) ([]TriggerSummary, error)
 }
@@ -67,6 +65,7 @@ type TriggerSummary struct {
 	Enabled         bool
 	ProjectID       string
 	DaemonID        string
+	DaemonName      string
 	ConnectionID    string
 	WebhookURL      string
 	NextFireAt      string

@@ -169,9 +169,15 @@ func (s *Service) GetTrigger(
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&reliantv1.GetTriggerResponse{
-		Trigger: s.render(ctx, trigger),
-	}), nil
+	out := s.render(ctx, trigger)
+	changes, err := s.deps.Repo.ListTriggerChanges(ctx, trigger.UserID, trigger.ID)
+	if err != nil {
+		return nil, svcerr.Wrap(err)
+	}
+	for _, c := range changes {
+		out.Changes = append(out.Changes, &reliantv1.TriggerChange{Id: c.ID, UserId: c.UserID, ChatId: c.ChatID, RunId: c.RunID, ToolCallId: c.ToolCallID, Operation: c.Operation, BeforeState: c.BeforeState, AfterState: c.AfterState, CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339)})
+	}
+	return connect.NewResponse(&reliantv1.GetTriggerResponse{Trigger: out}), nil
 }
 
 // ListTriggers returns the caller's triggers.

@@ -24,6 +24,7 @@ type Repository interface {
 	// Trigger rows and their webhook credentials.
 	CreateTrigger(ctx context.Context, t *core.Trigger) error
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+	ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error)
 	UpdateTrigger(ctx context.Context, t *core.Trigger) error
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
