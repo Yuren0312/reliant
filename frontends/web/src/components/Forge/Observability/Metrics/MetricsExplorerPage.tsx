@@ -369,7 +369,7 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
           id="metrics-range"
           value={range}
           onChange={(event) => onSearch({ range: event.target.value === DEFAULT_RANGE ? undefined : event.target.value })}
-          className="h-8 rounded-md border border-border bg-background px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           data-testid="metrics-range"
         >
           {RANGE_PRESETS.map((preset) => (
@@ -634,7 +634,7 @@ function Tabs({ tab, onTab }: { tab: "chart" | "sql"; onTab: (tab: "chart" | "sq
     <div
       role="tablist"
       aria-label="Query or SQL"
-      className="inline-flex rounded-md border border-border bg-background p-0.5"
+      className="inline-flex rounded-md border border-border bg-surface-sunken p-0.5"
       onKeyDown={(event) => {
         if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
         event.preventDefault();
@@ -655,7 +655,7 @@ function Tabs({ tab, onTab }: { tab: "chart" | "sql"; onTab: (tab: "chart" | "sq
           onClick={() => onTab(t.id)}
           className={cn(
             "h-7 rounded px-3 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
-            tab === t.id ? "bg-card font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+            tab === t.id ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
           )}
           data-testid={`metrics-tab-${t.id}`}
         >
@@ -682,7 +682,7 @@ function ActionButton({ icon, children, onClick, disabled, title, testId }: { ic
  */
 function InFlight({ onRetry }: { onRetry: () => void }) {
   return (
-    <div role="status" className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-background px-4 py-5" data-testid="metrics-in-flight">
+    <div role="status" className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5" data-testid="metrics-in-flight">
       <Timer className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
       <div className="min-w-0 space-y-1.5">
         <p className="text-sm font-medium text-ink">Too many queries in flight</p>

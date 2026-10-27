@@ -101,7 +101,7 @@ export function Catalog({ metrics, selected, onPick, query, onQuery, truncated, 
             }
           }}
           placeholder="Search metrics"
-          className="h-8 w-full rounded-md border border-border bg-background pl-7 pr-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          className="h-8 w-full rounded-md border border-border bg-surface-sunken pl-7 pr-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           data-testid="metrics-catalog-search"
           aria-busy={isFetching || undefined}
         />

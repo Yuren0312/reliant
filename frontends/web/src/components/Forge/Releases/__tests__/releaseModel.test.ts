@@ -3,7 +3,7 @@
 /**
  * The Releases pages' rules, over the fixture ledger (releaseFixtures.ts):
  * live / partly live / ran before / never per environment, scoped deploys
- * never overstated as live (D5), rolled back worked out from cut order, the
+ * never overstated as live, rolled back worked out from cut order, the
  * pipeline's distance from prod, checks, filters, and what a release is
  * compared with by default.
  */
@@ -190,7 +190,7 @@ describe("rolled back, against dora.Classify", () => {
   });
 });
 
-describe("overlapping scoped deploys (D5)", () => {
+describe("overlapping scoped deploys", () => {
   it("counts only the newest scoped deploy per component as live", () => {
     const model = buildReleaseModel(NEWEST_FIRST, PROD_ONLY, ledgerOf([{ v: "v1" }, { v: "v2", targets: ["web"] }, { v: "v3", targets: ["web"] }]));
     const m = byVersion(model);

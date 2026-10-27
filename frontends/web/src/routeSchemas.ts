@@ -457,7 +457,7 @@ export const forgeResolveSearchSchema = z.object({
 });
 
 /**
- * The console's environment scope (decision D1, Console/envScope.ts): an
+ * The console's environment scope (Console/envScope.ts): an
  * environment name or `all`, on every console page. Absent, the console
  * resolves the remembered scope (default prod) and writes it back.
  */
@@ -484,11 +484,13 @@ export const forgeConsoleReleasesSearchSchema = z.object({
   author: textParam,
   status: z.enum(STATUS_FILTERS).optional().catch(undefined),
   every: z.boolean().optional().catch(undefined),
+  /** The deploy whose output is open in the Deploys section (the Overview's banner links here). */
+  deploy: textParam,
 });
 
 /**
  * Activity: the scope, and the target an object's History link pre-filters to
- * (`release:<version>`, PROPOSAL §4.5) — kept in the URL so the link means
+ * (`release:<version>`) — kept in the URL so the link means
  * the same thing once the Activity page reads it.
  */
 export const forgeConsoleActivitySearchSchema = z.object({
@@ -650,13 +652,14 @@ export const forgeConsoleDashboardSearchSchema = z.object({
 });
 
 /**
- * The retired URLs' view: a current view, or the retired `workloads` (the
+ * The retired URLs' view: a current view, the retired `workloads` (the
  * workloads are the Overview's now, with a page per workload) and the
- * workload it had open — read only so the redirect lands on the right page.
+ * workload it had open, or the retired `usage` (the app's Settings › Billing)
+ * — read only so the redirect lands on the right page.
  */
 const legacyObsShape = {
   ...obsSearchShape,
-  view: z.enum([...OBS_VIEWS, "workloads"]).optional().catch(undefined),
+  view: z.enum([...OBS_VIEWS, "workloads", "usage"]).optional().catch(undefined),
   workload: z.string().optional().catch(undefined),
 };
 

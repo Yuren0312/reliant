@@ -29,7 +29,7 @@ const BUTTON =
 export const BUTTON_PRIMARY = `${BUTTON} border border-accent bg-accent text-on-accent hover:bg-accent-hover`;
 export const BUTTON_SECONDARY = `${BUTTON} border border-border bg-surface text-ink hover:bg-ink/5`;
 /**
- * A link in running text: ink with a quiet underline, never the accent (D8 —
+ * A link in running text: ink with a quiet underline, never the accent (
  * the accent marks the primary action, focus and selection only). `no-color`
  * opts out of index.css's global `a:not(.no-color)` accent rule, which sits
  * in the utilities layer and would otherwise beat `text-ink`.
@@ -317,7 +317,7 @@ export function RowMenu({ label, items, testId }: { label: string; items: MenuIt
 
 /**
  * Where to promote a release: one radio per long-lived environment, each with
- * what it runs now. The confirm button names the environment (decision D1) —
+ * what it runs now. The confirm button names the environment —
  * and nothing is written here: it opens the plan, which shows the diff and
  * labels a move to an older release as a rollback before anything applies.
  */

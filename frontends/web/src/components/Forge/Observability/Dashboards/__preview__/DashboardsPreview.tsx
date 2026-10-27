@@ -1,17 +1,16 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * DEV-ONLY proving harness for the Observability home, the Dashboards index
- * and a dashboard. NOT a product surface.
+ * DEV-ONLY proving harness for the Dashboards index and a dashboard. NOT a
+ * product surface.
  *
- * The real ObservabilityHome, DashboardsList and DashboardView inside the
+ * The real DashboardsList and DashboardView inside the
  * real console chrome (ConsolePreviewShell), against the fixture app
  * (createFixtureApi: telemetry, the release ledger, alerting and an in-memory
  * DashboardService) — unauthenticated, no backend — so every state can be
  * looked at in every colour scheme and screenshotted. All state is in the URL:
  *
- *   /forge-dashboards-preview                                  the Observability home
- *   /forge-dashboards-preview?page=list                        Dashboards
+ *   /forge-dashboards-preview                                  Dashboards
  *   /forge-dashboards-preview?page=dashboard&dash=workspace/checkout-latency
  *   …&dash=release/frontend-web   (funnel, issues, sessions)    …&dash=release/overview
  *   …&compare=period|release  &range=24h  &service=api  &tv=1  &version=2
@@ -33,7 +32,6 @@ import type { Panel } from "@/services/controlPlane/observability/types";
 import { ConsolePreviewShell } from "../../../Console/ConsolePreviewShell";
 import { withSearch, type ConsolePage } from "../../../Console/paths";
 import { createFixtureApi, FIXTURE_ENVS, FIXTURE_PROJECT, type FixtureOptions } from "../../__fixtures__/fixtureApi";
-import { ObservabilityHome } from "../../Home/ObservabilityHome";
 import type { ObsSearch } from "../../obsSearch";
 import { compareParam, isDashboardPageKind, rangeParam, refreshParam, type DashboardSearch } from "../dashboardModel";
 import { DashboardsList, type DashboardsSearch } from "../DashboardsList";
@@ -131,7 +129,7 @@ export default function DashboardsPreview() {
   // The router parses `dark=1` as JSON, so it arrives as a number.
   const dark = !!search.dark && String(search.dark) !== "0" && String(search.dark) !== "false";
   const scheme = search.scheme ?? "professional-blue";
-  const page = search.page ?? "home";
+  const page = search.page ?? "list";
   const [dashKind, ...dashKey] = (search.dash ?? "workspace/checkout-latency").split("/");
   const dashRef: DashboardRef | null = isDashboardPageKind(dashKind) ? { kind: dashKind, projectId: FIXTURE_PROJECT, key: dashKey.join("/") } : null;
 
@@ -160,7 +158,7 @@ export default function DashboardsPreview() {
   };
 
   const consolePage: ConsolePage =
-    page === "list" ? { kind: "obs-view", view: "dashboards" } : page === "dashboard" && dashRef ? { kind: "dashboard", dashKind: dashRef.kind as "release" | "workspace", key: dashRef.key } : { kind: "observability" };
+    page === "dashboard" && dashRef ? { kind: "dashboard", dashKind: dashRef.kind as "release" | "workspace", key: dashRef.key } : { kind: "obs-view", view: "dashboards" };
 
   const hrefs = {
     logs: explore("logs"),
@@ -188,8 +186,7 @@ export default function DashboardsPreview() {
       dashboardTitle={page === "dashboard" ? dashRef?.key : undefined}
       controls={
         <>
-          <select data-testid="preview-page" value={page} onChange={(e) => go({ page: e.target.value === "home" ? undefined : e.target.value })} className={CONTROL}>
-            <option value="home">Observability home</option>
+          <select data-testid="preview-page" value={page} onChange={(e) => go({ page: e.target.value === "list" ? undefined : e.target.value })} className={CONTROL}>
             <option value="list">Dashboards</option>
             <option value="dashboard">A dashboard</option>
           </select>
@@ -215,7 +212,7 @@ export default function DashboardsPreview() {
     >
       <QueryClientProvider client={queryClient}>
         <ObservabilityApiProvider api={api}>
-          {page === "chart-correctness" ? <ChartCorrectnessPreview /> : page === "list" ? (
+          {page === "chart-correctness" ? <ChartCorrectnessPreview /> : page !== "dashboard" || !dashRef ? (
             <DashboardsList
               key={caseId}
               project={FIXTURE_PROJECT}
@@ -226,7 +223,7 @@ export default function DashboardsPreview() {
               hrefs={hrefs}
               navigateTo={navigateTo}
             />
-          ) : page === "dashboard" && dashRef ? (
+          ) : (
             <DashboardView
               key={`${caseId}-${search.dash}`}
               project={FIXTURE_PROJECT}
@@ -253,17 +250,6 @@ export default function DashboardsPreview() {
               }}
               onSearch={(next) => go(next as Partial<PreviewSearch>, false)}
               onEnvChange={(next) => go({ env: next })}
-              hrefs={hrefs}
-              navigateTo={navigateTo}
-            />
-          ) : (
-            <ObservabilityHome
-              key={caseId}
-              project={FIXTURE_PROJECT}
-              env={env}
-              environments={FIXTURE_ENVS}
-              range={rangeParam(search.range) ?? "1h"}
-              onRange={(range) => go({ range })}
               hrefs={hrefs}
               navigateTo={navigateTo}
             />

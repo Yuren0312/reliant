@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The release detail page's tabs (PROPOSAL §4.4):
+ * The release detail page's tabs:
  *
  *   Changes    compared with the release before it (changeable): the commits
  *              between them, the images whose digest moved, the Kubernetes
@@ -253,7 +253,7 @@ export function ChangesTab({ project, release, base, baseReason, baseOptions, on
   );
 }
 
-/** The deploy note: demoted to an unfilled, bordered panel (PROPOSAL §4.4). */
+/** The deploy note: demoted to an unfilled, bordered panel. */
 function NotePanel({ testId, children }: { testId?: string; children: ReactNode }) {
   return (
     <section data-testid={testId} className="rounded-lg border border-border bg-transparent p-4">

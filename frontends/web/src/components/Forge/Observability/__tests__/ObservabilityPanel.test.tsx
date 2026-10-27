@@ -65,31 +65,36 @@ describe("ObservabilityPanel", () => {
   });
 
   it("says ONCE that observability is not set up, in place of every view", async () => {
-    const user = userEvent.setup();
     renderPanel(createFixtureApi({ failWith: Code.FailedPrecondition }));
     expect(await screen.findByTestId("obs-not-set-up")).toHaveTextContent("isn't set up for this organization yet");
     // Not presented as an error, and nothing to retry.
     expect(screen.getByTestId("obs-not-set-up")).toHaveAttribute("role", "status");
     expect(screen.queryByTestId("obs-retry")).not.toBeInTheDocument();
-    await user.click(screen.getByTestId("obs-view-logs"));
+  });
+
+  it("says it once on another view too, in place of the view rather than beside it", async () => {
+    renderPanel(createFixtureApi({ failWith: Code.FailedPrecondition }), { view: "logs" });
+    expect(await screen.findByTestId("obs-not-set-up")).toBeInTheDocument();
     expect(screen.getAllByTestId("obs-not-set-up")).toHaveLength(1);
     expect(screen.queryByTestId("obs-logs")).not.toBeInTheDocument();
   });
 
   it("leads the not-set-up answer with what the view shows, then how to get started", async () => {
-    const user = userEvent.setup();
     renderPanel(createFixtureApi({ failWith: Code.FailedPrecondition }));
     const state = await screen.findByTestId("obs-not-set-up");
     expect(within(state).getByTestId("obs-not-set-up-about")).toHaveTextContent("requests, error rate and latency");
     // The pinned environment names itself in the command to copy.
     expect(within(state).getByText("forge env deploy prod")).toBeInTheDocument();
     expect(within(state).getByTestId("obs-not-set-up-docs")).toHaveAttribute("href", "https://docs.reliantlabs.io/forge/observability");
-    await user.click(screen.getByTestId("obs-view-traces"));
-    expect(screen.getByTestId("obs-not-set-up-about")).toHaveTextContent("Traces follows every request");
+  });
+
+  it("leads the not-set-up answer with what THAT view shows on another view", async () => {
+    // The console nav picks the view (the panel draws no tabs): open it by URL.
+    renderPanel(createFixtureApi({ failWith: Code.FailedPrecondition }), { view: "traces" });
+    expect(await screen.findByTestId("obs-not-set-up-about")).toHaveTextContent("Traces follows every request");
   });
 
   it("says once that nothing has arrived yet, with the commands that deploy and check", async () => {
-    const user = userEvent.setup();
     renderPanel(createFixtureApi({ empty: true, signals: { services: [], truncated: false } }));
     const state = await screen.findByTestId("obs-nothing-yet");
     expect(state).toHaveAttribute("role", "status");
@@ -98,8 +103,11 @@ describe("ObservabilityPanel", () => {
     expect(within(state).getByText("forge env deploy prod")).toBeInTheDocument();
     expect(within(state).getByText("forge obs status prod")).toBeInTheDocument();
     expect(screen.queryByTestId("obs-no-data")).not.toBeInTheDocument();
-    // Sessions says how ITS data arrives: replay is opt-in, in two places, and masked.
-    await user.click(screen.getByTestId("obs-view-sessions"));
+  });
+
+  it("says how a view's own data arrives when nothing has: Sessions' replay is opt-in, in two places, and masked", async () => {
+    // The console nav picks the view (the panel draws no tabs): open it by URL.
+    renderPanel(createFixtureApi({ empty: true, signals: { services: [], truncated: false } }), { view: "sessions" });
     const sessions = await screen.findByTestId("obs-nothing-yet");
     expect(within(sessions).getByTestId("obs-nothing-yet-about")).toHaveTextContent("real users' browser sessions");
     expect(sessions).toHaveTextContent("VITE_OTEL_REPLAY=true");
@@ -171,19 +179,6 @@ describe("ObservabilityPanel", () => {
     expect(error).toHaveAttribute("role", "alert");
     expect(error).toHaveTextContent("shorter time range");
     expect(within(error).getByTestId("obs-retry")).toBeInTheDocument();
-  });
-
-  it("moves between views with the arrow keys and clears the previous view's filters", async () => {
-    const user = userEvent.setup();
-    const harness = renderPanel(createFixtureApi(), { view: "logs", q: "timeout", service: "api" });
-    await screen.findByTestId("obs-logs");
-    screen.getByTestId("obs-view-logs").focus();
-    await user.keyboard("{ArrowRight}");
-    await waitFor(() => expect(screen.getByTestId("obs-panel")).toHaveAttribute("data-view", "traces"));
-    expect(screen.getByTestId("obs-view-traces")).toHaveFocus();
-    // The window and the service travel; the log query does not.
-    expect(harness.current()).toMatchObject({ view: "traces", service: "api" });
-    expect(harness.current().q).toBeUndefined();
   });
 
   it("re-reads the window on Refresh", async () => {

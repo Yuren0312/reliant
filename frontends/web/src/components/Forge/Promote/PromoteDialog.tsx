@@ -31,7 +31,7 @@ export interface PromoteDialogProps {
   release: string;
   projectName?: string;
   /**
-   * The dialog's title, naming the environment (decision D1). Defaults to
+   * The dialog's title, naming the environment. Defaults to
    * "Promote <env> to <release>"; the Releases pages say "Roll back prod to
    * …" for a move to an older release.
    */

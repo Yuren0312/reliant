@@ -365,7 +365,7 @@ export async function setEnvironmentRunState(environmentId: string, state: RunSt
 /**
  * Stop or start ONE hosted workload's deployment: its RUN STATE (running or
  * suspended), which DeployService.Scale carries. Not a replica count — forge's
- * tiers carry none, and replicas are declared in KCL (decision D6).
+ * tiers carry none, and replicas are declared in KCL.
  */
 export async function setWorkloadRunState(deploymentId: string, state: RunStateRequest): Promise<void> {
   await client().scale({ deploymentId, runState: runStateEnum(state) });
@@ -381,7 +381,7 @@ export interface RestartedWorkload {
 }
 
 /**
- * A rolling restart of one workload in one HOSTED environment (decision D6).
+ * A rolling restart of one workload in one HOSTED environment.
  * The release and declared spec do not change; the control plane audits it.
  * A self-managed or local environment answers FailedPrecondition.
  */

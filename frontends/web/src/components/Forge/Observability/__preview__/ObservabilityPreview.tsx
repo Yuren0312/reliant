@@ -9,11 +9,11 @@
  * driven by the Playwright smoke (e2e/observability.spec.ts). Dev builds only:
  * the route sits behind DevOnlyRoute in routes.tsx.
  *
- * Both places the panel lives are here: the project's area (every
- * environment, filterable and groupable) and one environment's tab (pinned to
- * prod). The URL state the pages keep in search params is held in component
+ * The panel as the console mounts it: one view per page (the console nav
+ * picks it; here the view picker does), every environment of the project in
+ * scope. The URL state the pages keep in search params is held in component
  * state, seeded from this page's own query string, so a screenshot of any
- * state is a link: `?place=project&view=traces&groupBy=deployment.environment.name`.
+ * state is a link: `?view=traces&groupBy=deployment.environment.name`.
  */
 
 import { useMemo, useState } from "react";
@@ -27,6 +27,7 @@ import PageHeader from "@/components/forge-ui/page_header";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
 import { ConsolePreviewShell } from "../../Console/ConsolePreviewShell";
+import { isObsNavView, OBS_NAV_LABELS, type ObsNavView } from "../../Console/paths";
 import ObservabilityPanel, { type ObsPlace } from "../ObservabilityPanel";
 import type { ObsNavigate, ObsSearch } from "../obsSearch";
 import { FIXTURE_DECLARED } from "../__fixtures__/fixtureAlerting";
@@ -54,13 +55,6 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "denied", label: "no permission", options: { failWith: Code.PermissionDenied } },
   { id: "unavailable", label: "service unavailable", options: { failWith: Code.Unavailable } },
   { id: "quota", label: "query quota hit", options: { failWith: Code.ResourceExhausted } },
-  // Usage states (view=usage): the allowance ladder as an org on each rung sees it.
-  { id: "usage-near", label: "usage: 85% of allowance", options: { usage: { usedBytes: 8.5 * 2 ** 30 } } },
-  { id: "usage-over", label: "usage: over, unfunded (dropping)", options: { usage: { usedBytes: 11 * 2 ** 30, state: "over_100", usageState: "over_100" } } },
-  { id: "usage-dropping", label: "usage: over 150% (most dropped)", options: { usage: { usedBytes: 16 * 2 ** 30, state: "over_150", usageState: "over_150" } } },
-  { id: "usage-billed", label: "usage: over, funded (billed)", options: { usage: { usedBytes: 14 * 2 ** 30, state: "ok", usageState: "over_100", funded: true, overageCents: 100, projectedOverageCents: 180 } } },
-  { id: "usage-cap", label: "usage: spend cap reached", options: { usage: { usedBytes: 230 * 2 ** 30, state: "over_100", usageState: "over_150", funded: true, spendCapReached: true, overageCents: 5000 } } },
-  { id: "usage-exempt", label: "usage: exempt org", options: { usage: { exempt: true, usedBytes: 40 * 2 ** 30, usageState: "over_150" } } },
   // Alerting states (view=alerts).
   { id: "alerting-not-configured", label: "alerting: not configured", options: { alerting: "not-configured" } },
   { id: "alerting-viewer", label: "alerting: member, not admin", options: { alerting: "viewer" } },
@@ -89,13 +83,16 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "health-unimplemented", label: "release health: older control plane (Unimplemented)", options: { health: "unimplemented" } },
 ];
 
+/** The views the panel hosts (Metrics and Dashboards are console pages of their own). */
+const PANEL_VIEWS: ObsNavView[] = ["errors", "sessions", "logs", "traces", "profiles", "alerts"];
+
 const LIST_KEYS = new Set(["envs", "f", "groupBy", "cursor"]);
 
 /** The preview's query string as ObsSearch: list keys repeat (`?f=a&f=b`), `edit` is JSON. */
 function searchFromUrl(params: URLSearchParams): ObsSearch {
   const out: Record<string, unknown> = {};
   for (const key of new Set(params.keys())) {
-    if (key === "case" || key === "place") continue;
+    if (key === "case") continue;
     if (LIST_KEYS.has(key)) out[key] = params.getAll(key);
     else if (key === "edit") {
       try {
@@ -115,8 +112,7 @@ export default function ObservabilityPreview() {
   const [scheme, setScheme] = useState(() => document.documentElement.getAttribute("data-color-scheme") ?? "professional-blue");
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
   const [caseId, setCaseId] = useState(() => initial.get("case") ?? CASES[0].id);
-  const [placeKind, setPlaceKind] = useState<"project" | "env">(() => (initial.get("place") === "project" ? "project" : "env"));
-  const [search, setSearch] = useState<ObsSearch>(() => searchFromUrl(initial));
+  const [search, setSearch] = useState<ObsSearch>(() => ({ view: "errors", ...searchFromUrl(initial) }));
 
   const active = CASES.find((c) => c.id === caseId) ?? CASES[0];
   // A fresh client per case, so one case's cached answers never leak into the next.
@@ -135,18 +131,8 @@ export default function ObservabilityPreview() {
     });
   };
 
-  const prod = ENVIRONMENTS[2];
-  const place: ObsPlace =
-    placeKind === "project"
-      ? { kind: "project", project: FIXTURE_PROJECT, environments: ENVIRONMENTS }
-      : {
-          kind: "env",
-          env: prod,
-          onWiden: (next) => {
-            setPlaceKind("project");
-            setSearch(next);
-          },
-        };
+  const place: ObsPlace = { kind: "project", project: FIXTURE_PROJECT, environments: ENVIRONMENTS };
+  const view = (isObsNavView(search.view) ? search.view : "errors") as ObsNavView;
 
   function applyScheme(next: string) {
     setScheme(next);
@@ -160,23 +146,26 @@ export default function ObservabilityPreview() {
 
   return (
     <ConsolePreviewShell
-      page={placeKind === "project" ? { kind: "observability" } : { kind: "environment", env: "prod" }}
+      page={{ kind: "obs-view", view }}
       controls={
         <>
           <select
-            data-testid="preview-place"
-            value={placeKind}
-            onChange={(e) => setPlaceKind(e.target.value as "project" | "env")}
-            className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+            data-testid="preview-view"
+            value={view}
+            onChange={(e) => navigate({ view: e.target.value as ObsSearch["view"] })}
+            className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-ink"
           >
-            <option value="env">env page tab (prod)</option>
-            <option value="project">project area (all environments)</option>
+            {PANEL_VIEWS.map((id) => (
+              <option key={id} value={id}>
+                {OBS_NAV_LABELS[id]}
+              </option>
+            ))}
           </select>
           <select
             data-testid="preview-case"
             value={caseId}
             onChange={(e) => setCaseId(e.target.value)}
-            className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+            className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-ink"
           >
             {CASES.map((c) => (
               <option key={c.id} value={c.id}>
@@ -188,7 +177,7 @@ export default function ObservabilityPreview() {
             data-testid="preview-scheme"
             value={scheme}
             onChange={(e) => applyScheme(e.target.value)}
-            className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+            className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-ink"
           >
             {SCHEMES.map((s) => (
               <option key={s} value={s}>
@@ -200,7 +189,7 @@ export default function ObservabilityPreview() {
             type="button"
             data-testid="preview-dark"
             onClick={() => applyDark(!dark)}
-            className="rounded-md border border-border bg-card px-3 py-1 text-sm text-foreground"
+            className="rounded-md border border-border bg-surface px-3 py-1 text-sm text-ink"
           >
             {dark ? "Dark" : "Light"}
           </button>
@@ -208,13 +197,11 @@ export default function ObservabilityPreview() {
       }
     >
       <div className="space-y-6">
-        {placeKind === "project" && (
-          <PageHeader title="Observability" meta={<span>{FIXTURE_PROJECT}</span>} className="mb-0" />
-        )}
+        <PageHeader title={OBS_NAV_LABELS[view]} meta={<span>All environments</span>} className="mb-0" />
         <QueryClientProvider client={queryClient}>
           <ObservabilityApiProvider api={api}>
             <ObservabilityBillingApiContext.Provider value={legacyBillingApi}>
-              <ObservabilityPanel key={`${caseId}-${placeKind}`} place={place} search={search} navigate={navigate} />
+              <ObservabilityPanel key={caseId} place={place} search={search} navigate={navigate} />
             </ObservabilityBillingApiContext.Provider>
           </ObservabilityApiProvider>
         </QueryClientProvider>

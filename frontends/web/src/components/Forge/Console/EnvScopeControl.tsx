@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The top bar's environment scope (decision D1): a segmented control of the
+ * The top bar's environment scope: a segmented control of the
  * long-lived environments, All, and the previews behind one menu.
  *
  * On a page that pins its own environment (one environment's settings) the

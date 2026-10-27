@@ -52,12 +52,12 @@ export interface EnvironmentTableProps {
 }
 
 const HEADER_CELL =
-  "whitespace-nowrap px-3 py-2 text-left text-2xs font-medium uppercase tracking-wide text-muted-foreground";
+  "whitespace-nowrap px-3 py-2 text-left text-2xs font-medium uppercase tracking-wide text-ink-muted";
 const CELL = "px-3 py-2.5 align-middle";
 
 export function EnvironmentTable({ rows, onOpen }: EnvironmentTableProps) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card" data-testid="forge-env-table">
+    <div className="overflow-x-auto rounded-lg border border-border bg-surface" data-testid="forge-env-table">
       <StackedTable className="w-full border-collapse text-sm">
         <caption className="sr-only">
           Every environment in this project: where it runs, its release, where that release came
@@ -101,7 +101,7 @@ export function EnvironmentTable({ rows, onOpen }: EnvironmentTableProps) {
                   onClick={() => onOpen(env.name)}
                   aria-label={`Open ${env.name}`}
                   data-testid={`env-open-${env.name}`}
-                  className="rounded-sm font-mono text-sm font-medium text-foreground hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="rounded-sm font-mono text-sm font-medium text-ink hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {env.name}
                 </button>
@@ -139,7 +139,7 @@ export function EnvironmentTable({ rows, onOpen }: EnvironmentTableProps) {
                   <Tooltip content="When this environment was PROMOTED to the release — not when it was deployed. Promotion writes a pointer; deployment moves bytes.">
                     <span
                       data-testid={`promoted-${env.name}`}
-                      className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                      className="inline-flex items-center gap-1 text-xs text-ink-muted"
                     >
                       <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />
                       <span className="sr-only">promoted </span>
@@ -177,7 +177,7 @@ export function EnvironmentTable({ rows, onOpen }: EnvironmentTableProps) {
 
 function ReleaseCell({ env }: { env: LiveEnv }) {
   if (env.kind === "local") {
-    return <span className="text-xs text-muted-foreground">working tree</span>;
+    return <span className="text-xs text-ink-muted">working tree</span>;
   }
   if (env.release === "") {
     return (
@@ -191,7 +191,7 @@ function ReleaseCell({ env }: { env: LiveEnv }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="flex items-center gap-2">
-        <span className="font-mono text-sm text-foreground">{env.release}</span>
+        <span className="font-mono text-sm text-ink">{env.release}</span>
         {/* The release is RECORDED but not rolling out: it waits on a person.
             Said here, on the release it is about, so a reader does not take
             the version for what is running. */}
@@ -209,7 +209,7 @@ function ReleaseCell({ env }: { env: LiveEnv }) {
       {env.provenance !== "" && (
         <span
           data-testid={`provenance-${env.name}`}
-          className="max-w-[22rem] truncate font-mono text-2xs text-muted-foreground"
+          className="max-w-[22rem] truncate font-mono text-2xs text-ink-muted"
           title={env.provenance}
         >
           {env.provenance}
@@ -221,7 +221,7 @@ function ReleaseCell({ env }: { env: LiveEnv }) {
 
 function Dash({ label }: { label: string }) {
   return (
-    <span className="text-xs text-muted-foreground">
+    <span className="text-xs text-ink-muted">
       <span aria-hidden="true">—</span>
       <span className="sr-only">{label}</span>
     </span>

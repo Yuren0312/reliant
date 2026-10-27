@@ -442,7 +442,7 @@ describe("workloads (customer metadata, contract K2)", () => {
   });
 });
 
-describe("workloads: the server's verdict, pods, jobs and the declaration (console v3)", () => {
+describe("workloads: the server's verdict, pods, jobs and the declaration", () => {
   const wire = (over: Record<string, unknown> = {}) => ({
     envId: "env-1",
     envName: "prod",

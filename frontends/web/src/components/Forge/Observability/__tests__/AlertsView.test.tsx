@@ -41,8 +41,7 @@ describe("firing", () => {
     const details = within(checkout).getByTestId("obs-alert-details");
     expect(within(details).getByRole("link", { name: /wiki\.example\.com/ })).toHaveAttribute("href", "https://wiki.example.com/runbooks/checkout");
 
-    // Attribute filters and group-by are telemetry concepts; the env picker stays.
-    expect(screen.getByTestId("obs-env-picker")).toBeInTheDocument();
+    // Attribute filters and group-by are telemetry concepts; the top bar picks the environment.
     expect(screen.queryByTestId("obs-add-filter")).not.toBeInTheDocument();
   });
 

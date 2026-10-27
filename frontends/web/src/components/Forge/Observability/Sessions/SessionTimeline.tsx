@@ -54,7 +54,7 @@ export function SessionTimeline({ entries, startMs, currentMs, hasMore, loadingM
 
   return (
     <div className="space-y-2" data-testid="session-timeline">
-      <div role="group" aria-label="Show" className="inline-flex flex-wrap rounded-lg border border-border bg-background p-0.5">
+      <div role="group" aria-label="Show" className="inline-flex flex-wrap rounded-lg border border-border bg-surface-sunken p-0.5">
         {TIMELINE_FILTERS.map((option) => (
           <button
             key={option.id}
@@ -63,7 +63,7 @@ export function SessionTimeline({ entries, startMs, currentMs, hasMore, loadingM
             onClick={() => setFilter(option.id)}
             className={cn(
               "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              filter === option.id ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              filter === option.id ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
             )}
             data-testid={`session-timeline-filter-${option.id}`}
           >
@@ -72,7 +72,7 @@ export function SessionTimeline({ entries, startMs, currentMs, hasMore, loadingM
         ))}
       </div>
       {shown.length === 0 ? (
-        <p className="px-1 py-3 text-xs text-muted-foreground" data-testid="session-timeline-empty">
+        <p className="px-1 py-3 text-xs text-ink-muted" data-testid="session-timeline-empty">
           {entries.length === 0 ? "Nothing was recorded for this session's timeline." : "Nothing of this kind in the session."}
         </p>
       ) : (
@@ -115,11 +115,11 @@ function TimelineRow({
   onTrace: (traceId: string, spanId?: string) => void;
 }) {
   const Icon = entry.kind ? KIND_ICON[entry.kind] : Sparkles;
-  const tone = entry.kind === "error" ? "text-destructive" : entry.kind === "request_failed" ? "text-warning-ink" : "text-muted-foreground";
+  const tone = entry.kind === "error" ? "text-danger-ink" : entry.kind === "request_failed" ? "text-warning-ink" : "text-ink-muted";
   const offset = formatOffset(entry.timeMs - startMs);
   return (
     <li
-      className={cn("flex gap-2 px-1 py-2 text-xs", current && "bg-muted")}
+      className={cn("flex gap-2 px-1 py-2 text-xs", current && "bg-surface-sunken")}
       aria-current={current ? "true" : undefined}
       data-testid={`session-entry-${entry.kind ?? "unknown"}`}
       data-time={entry.timeMs}
@@ -128,14 +128,14 @@ function TimelineRow({
         <button
           type="button"
           onClick={() => onSeek(entry.timeMs)}
-          className="w-12 shrink-0 text-left tabular-nums text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="w-12 shrink-0 text-left tabular-nums text-ink-muted underline-offset-2 hover:text-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           title="Play from here"
           data-testid="session-entry-seek"
         >
           {offset}
         </button>
       ) : (
-        <span className="w-12 shrink-0 tabular-nums text-muted-foreground">{offset}</span>
+        <span className="w-12 shrink-0 tabular-nums text-ink-muted">{offset}</span>
       )}
       <Icon className={cn("mt-0.5 h-3.5 w-3.5 shrink-0", tone)} aria-hidden="true" />
       <div className="min-w-0 flex-1 space-y-0.5">
@@ -151,14 +151,14 @@ function TimelineRow({
                 <button
                   type="button"
                   onClick={() => onIssue(entry.issueId)}
-                  className="inline-flex items-center gap-1 text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="inline-flex items-center gap-1 text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   data-testid={`session-entry-issue-${entry.issueId}`}
                 >
                   <ExternalLink className="h-3 w-3" aria-hidden="true" />
                   Open issue
                 </button>
               ) : (
-                <span className="text-muted-foreground" data-testid="session-entry-ungrouped">
+                <span className="text-ink-muted" data-testid="session-entry-ungrouped">
                   Not grouped into an issue yet
                 </span>
               ))}
@@ -166,7 +166,7 @@ function TimelineRow({
               <button
                 type="button"
                 onClick={() => onTrace(entry.traceId, entry.spanId || undefined)}
-                className="inline-flex items-center gap-1 text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex items-center gap-1 text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 data-testid={`session-entry-trace-${entry.traceId}`}
               >
                 <ExternalLink className="h-3 w-3" aria-hidden="true" />
@@ -185,61 +185,61 @@ function EntryHeadline({ entry }: { entry: TimelineEntry }) {
     case "navigation":
       return (
         <>
-          <span className="font-medium text-foreground">{navigationLabel(entry.name)}</span>
-          <span className="break-all font-mono text-foreground">{entry.path || "/"}</span>
+          <span className="font-medium text-ink">{navigationLabel(entry.name)}</span>
+          <span className="break-all font-mono text-ink">{entry.path || "/"}</span>
         </>
       );
     case "click":
       return (
         <>
-          <span className="font-medium text-foreground">Click</span>
-          {entry.element && <span className="font-mono text-foreground">&lt;{entry.element.toLowerCase()}&gt;</span>}
-          {entry.path && <span className="break-all font-mono text-muted-foreground">on {entry.path}</span>}
+          <span className="font-medium text-ink">Click</span>
+          {entry.element && <span className="font-mono text-ink">&lt;{entry.element.toLowerCase()}&gt;</span>}
+          {entry.path && <span className="break-all font-mono text-ink-muted">on {entry.path}</span>}
         </>
       );
     case "request_failed":
       return (
         <>
-          <span className="font-medium text-foreground">{entry.status > 0 ? entry.status : "Network error"}</span>
-          <span className="break-all font-mono text-foreground">
+          <span className="font-medium text-ink">{entry.status > 0 ? entry.status : "Network error"}</span>
+          <span className="break-all font-mono text-ink">
             {entry.method || entry.name} {entry.path}
           </span>
-          {entry.durationMs > 0 && <span className="text-muted-foreground">{formatDuration(entry.durationMs)}</span>}
+          {entry.durationMs > 0 && <span className="text-ink-muted">{formatDuration(entry.durationMs)}</span>}
         </>
       );
     case "error":
       return (
         <>
-          <span className="font-medium text-destructive">{entry.errorType || "Error"}</span>
-          {entry.path && <span className="break-all font-mono text-muted-foreground">on {entry.path}</span>}
+          <span className="font-medium text-danger-ink">{entry.errorType || "Error"}</span>
+          {entry.path && <span className="break-all font-mono text-ink-muted">on {entry.path}</span>}
         </>
       );
     case "event":
-      return <span className="font-medium text-foreground">{entry.name || "Event"}</span>;
+      return <span className="font-medium text-ink">{entry.name || "Event"}</span>;
     default:
-      return <span className="text-foreground">{entry.name || "Recorded entry"}</span>;
+      return <span className="text-ink">{entry.name || "Recorded entry"}</span>;
   }
 }
 
 function EntryDetail({ entry }: { entry: TimelineEntry }) {
   if (entry.kind === "navigation" && entry.props.from) {
-    return <p className="break-all font-mono text-muted-foreground">from {entry.props.from}</p>;
+    return <p className="break-all font-mono text-ink-muted">from {entry.props.from}</p>;
   }
   if (entry.kind === "click" && entry.selector) {
     return (
-      <p className="truncate font-mono text-muted-foreground" title={entry.selector}>
+      <p className="truncate font-mono text-ink-muted" title={entry.selector}>
         {entry.selector}
       </p>
     );
   }
   if ((entry.kind === "error" || entry.kind === "request_failed") && entry.message) {
-    return <p className="whitespace-pre-wrap break-words font-mono text-foreground">{entry.message}</p>;
+    return <p className="whitespace-pre-wrap break-words font-mono text-ink">{entry.message}</p>;
   }
   if (entry.kind === "event") {
     const props = Object.entries(entry.props);
     if (props.length === 0) return null;
     return (
-      <p className="flex flex-wrap gap-x-2 font-mono text-muted-foreground">
+      <p className="flex flex-wrap gap-x-2 font-mono text-ink-muted">
         {props.map(([key, value]) => (
           <span key={key}>
             {key}={value}

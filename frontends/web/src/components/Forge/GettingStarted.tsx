@@ -53,22 +53,22 @@ export interface GettingStartedProps {
 
 export function GettingStarted({ icon, title, about, children, steps = [], docs, actions, testId }: GettingStartedProps) {
   return (
-    <div role="status" data-testid={testId} className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-background px-4 py-5">
-      <span className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true">
+    <div role="status" data-testid={testId} className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5">
+      <span className="mt-0.5 shrink-0 text-ink-muted" aria-hidden="true">
         {icon}
       </span>
       <div className="min-w-0 flex-1 space-y-2">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <div className="space-y-1.5 text-xs text-muted-foreground">
+        <p className="text-sm font-medium text-ink">{title}</p>
+        <div className="space-y-1.5 text-xs text-ink-muted">
           <p data-testid={`${testId}-about`}>{about}</p>
           {children}
         </div>
         {steps.length > 0 && (
-          <ol className="max-w-2xl space-y-2 pt-1 text-xs text-muted-foreground" aria-label="Get started" data-testid={`${testId}-steps`}>
+          <ol className="max-w-2xl space-y-2 pt-1 text-xs text-ink-muted" aria-label="Get started" data-testid={`${testId}-steps`}>
             {steps.map((step, index) => (
               <li key={index} className="flex gap-2">
                 <span
-                  className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border text-2xs font-medium text-foreground"
+                  className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border text-2xs font-medium text-ink"
                   aria-hidden="true"
                 >
                   {index + 1}
@@ -121,14 +121,14 @@ export function CommandLine({ command }: { command: string }) {
   }
 
   return (
-    <div className="flex max-w-full items-center gap-1 rounded-md border border-border/60 bg-card py-0.5 pl-2 pr-0.5" data-testid="getting-started-command">
-      <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-xs text-foreground">{command}</code>
+    <div className="flex max-w-full items-center gap-1 rounded-md border border-border/60 bg-surface py-0.5 pl-2 pr-0.5" data-testid="getting-started-command">
+      <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-xs text-ink">{command}</code>
       <button
         type="button"
         onClick={() => void copy()}
         aria-label={copied ? `Copied ${command}` : `Copy ${command}`}
         title={copied ? "Copied" : "Copy"}
-        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {copied ? <Check className="h-3 w-3" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}
       </button>

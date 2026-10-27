@@ -191,9 +191,9 @@ export function TraceWaterfall({
   return (
     <div className="space-y-2" data-testid="trace-waterfall">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground" data-testid="trace-waterfall-summary">
+        <p className="text-xs text-ink-muted" data-testid="trace-waterfall-summary">
           {spans.length} span{spans.length === 1 ? "" : "s"} ·{" "}
-          <span className={errorCount > 0 ? "text-destructive" : undefined}>
+          <span className={errorCount > 0 ? "text-danger-ink" : undefined}>
             {errorCount} error{errorCount === 1 ? "" : "s"}
           </span>{" "}
           · Total {formatDuration(total)}
@@ -231,9 +231,9 @@ export function TraceWaterfall({
         )}
       </div>
 
-      <div className="overflow-hidden rounded-md border border-border/60 bg-background">
+      <div className="overflow-hidden rounded-md border border-border/60 bg-surface-sunken">
         {/* The time ruler. Decorative: every bar's row says its own offset and duration. */}
-        <div aria-hidden="true" className={cn("grid border-b border-border/60 text-2xs text-muted-foreground", narrow ? "grid-cols-1 px-3" : COLUMNS_WIDE)}>
+        <div aria-hidden="true" className={cn("grid border-b border-border/60 text-2xs text-ink-muted", narrow ? "grid-cols-1 px-3" : COLUMNS_WIDE)}>
           {!narrow && <div className="px-3 py-1">Span</div>}
           <div className="relative h-6">
             {ticks.map((tick) => (
@@ -279,10 +279,10 @@ export function TraceWaterfall({
                   }}
                   onFocus={() => setActive(item.index)}
                   className={cn(
-                    "absolute left-0 top-0 grid w-full cursor-pointer items-center text-xs hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    "absolute left-0 top-0 grid w-full cursor-pointer items-center text-xs hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                     columns,
                     narrow && "border-b border-border/40",
-                    isSelected && "bg-muted/60"
+                    isSelected && "bg-surface-sunken"
                   )}
                   style={{ height: rowHeight, transform: `translateY(${item.start}px)` }}
                 >
@@ -294,7 +294,7 @@ export function TraceWaterfall({
                         aria-label={isOpen ? "Collapse" : "Expand"}
                         title="Alt-click to toggle the whole subtree"
                         onClick={(event) => toggle(node.id, event)}
-                        className="shrink-0 rounded-sm text-muted-foreground hover:text-foreground touch-target touch:-my-2 touch:-ml-3 inline-flex items-center justify-center"
+                        className="shrink-0 rounded-sm text-ink-muted hover:text-ink touch-target touch:-my-2 touch:-ml-3 inline-flex items-center justify-center"
                       >
                         {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                       </button>
@@ -302,10 +302,10 @@ export function TraceWaterfall({
                       <span className="w-3 shrink-0" />
                     )}
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
-                    <span className="shrink-0 text-muted-foreground">{span.service}</span>
-                    <span className={cn("truncate font-mono", isError ? "text-destructive" : "text-foreground")}>{span.name}</span>
+                    <span className="shrink-0 text-ink-muted">{span.service}</span>
+                    <span className={cn("truncate font-mono", isError ? "text-danger-ink" : "text-ink")}>{span.name}</span>
                     {hasChildren && !isOpen && (
-                      <span className="shrink-0 text-muted-foreground">({node.children.length})</span>
+                      <span className="shrink-0 text-ink-muted">({node.children.length})</span>
                     )}
                   </div>
                   <div className={cn("relative h-full", narrow && "mx-3")} aria-hidden="true">
@@ -319,13 +319,13 @@ export function TraceWaterfall({
                         <span
                           key={`${event.name}-${index}`}
                           title={event.name}
-                          className="absolute top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground"
+                          className="absolute top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ink"
                           style={{ left: `${at}%` }}
                         />
                       );
                     })}
                     <span
-                      className="absolute top-1/2 -translate-y-1/2 whitespace-nowrap px-1 text-2xs tabular-nums text-muted-foreground"
+                      className="absolute top-1/2 -translate-y-1/2 whitespace-nowrap px-1 text-2xs tabular-nums text-ink-muted"
                       style={left + width > 80 ? { right: `${100 - left}%` } : { left: `${left + width}%` }}
                     >
                       {formatDuration(span.durationMs)}

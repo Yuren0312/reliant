@@ -288,27 +288,16 @@ describe("Sidebar forge nav entry", () => {
     expect(screen.getByTestId("sidebar-forge-button")).toHaveTextContent("Apps");
   });
 
-  // Observability is the project-level area of the same forge surface (console
-  // v2, owner decision 1: environment is a filter, not a place), so it sits
-  // directly under Apps and follows the same flag.
-  describe("the Observability entry", () => {
-    it("sits directly under Apps and opens the area", () => {
-      const onOpenObservability = vi.fn();
-      setProject(true);
-      renderSidebar({ onOpenObservability });
-      const text = Array.from(
-        screen.getByRole("navigation", { name: /chat sidebar navigation/i }).querySelectorAll("button")
-      ).map(navLabel);
-      expect(text).toEqual(["New chat", "Apps", "Observability", "Inbox", "Workflows", "Projects", "Search"]);
-      screen.getByTestId("sidebar-observability-button").click();
-      expect(onOpenObservability).toHaveBeenCalledTimes(1);
-    });
-
-    it("is hidden with the rest of forge when the flag is off", () => {
-      experimentalGate.enabled = false;
-      setProject(true);
-      renderSidebar({ onOpenObservability: vi.fn() });
-      expect(screen.queryByTestId("sidebar-observability-button")).not.toBeInTheDocument();
-    });
+  // Apps is the ONE entry into the forge surface: its observability is a
+  // section of it, not a second sidebar row.
+  it("has no separate Observability entry", () => {
+    setProject(true);
+    renderSidebar();
+    const text = Array.from(
+      screen.getByRole("navigation", { name: /chat sidebar navigation/i }).querySelectorAll("button")
+    ).map(navLabel);
+    expect(text).toEqual(["New chat", "Apps", "Inbox", "Workflows", "Projects", "Search"]);
+    expect(screen.queryByTestId("sidebar-observability-button")).not.toBeInTheDocument();
   });
 });
+

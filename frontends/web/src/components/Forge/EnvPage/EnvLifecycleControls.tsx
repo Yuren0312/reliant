@@ -84,7 +84,7 @@ export function EnvLifecycleControls({
             <button
               type="button"
               {...props}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-ink-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="env-danger-menu"
               aria-label="More actions"
             >
@@ -110,7 +110,7 @@ export function EnvLifecycleControls({
       {startError && (
         <p
           role="alert"
-          className="max-w-md text-right text-xs text-foreground"
+          className="max-w-md text-right text-xs text-ink"
           data-testid="env-start-refused"
         >
           Couldn&apos;t start {envName}: {cloudErrorDetail(startError)}
@@ -154,11 +154,11 @@ export function StopEnvironmentDialog({
   return (
     <Modal open={isOpen} onClose={onClose} size="sm" title={`Stop ${envName}?`}>
       <div className="space-y-4" data-testid="stop-environment-dialog">
-        <p className="text-sm text-foreground">
+        <p className="text-sm text-ink">
           Compute stops. Data and URLs are kept. Start brings it back.
         </p>
         {error && (
-          <p role="alert" className="text-xs text-foreground" data-testid="stop-environment-error">
+          <p role="alert" className="text-xs text-ink" data-testid="stop-environment-error">
             {error}
           </p>
         )}
@@ -208,7 +208,7 @@ export function DeleteEnvironmentDialog({
   return (
     <Modal open={isOpen} onClose={close} size="md" title={`Delete ${envName}?`}>
       <div className="space-y-4" data-testid="delete-environment-dialog">
-        <div className="space-y-2 text-sm text-foreground">
+        <div className="space-y-2 text-sm text-ink">
           <p>
             This tears down <span className="font-mono">{envName}</span>: every deployment in it, its
             running workloads, its URLs, and its namespaces.
@@ -233,7 +233,7 @@ export function DeleteEnvironmentDialog({
           />
         </FormField>
         {del.isError && (
-          <p role="alert" className="text-xs text-foreground" data-testid="delete-environment-error">
+          <p role="alert" className="text-xs text-ink" data-testid="delete-environment-error">
             {cloudErrorDetail(del.error)}
           </p>
         )}

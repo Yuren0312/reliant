@@ -26,9 +26,18 @@ import { formatClock, quotaPausedError } from "@/services/controlPlane/observabi
 import { SOFT_POLL_FACTOR, isPollRead } from "@/services/controlPlane/observability/quotaStore";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 
-import { createFixtureApi, FIXTURE_ENVS, FIXTURE_PROJECT } from "../__fixtures__/fixtureApi";
-import { ObservabilityHome, type ObservabilityHomeHrefs } from "../Home/ObservabilityHome";
+import { createFixtureApi } from "../__fixtures__/fixtureApi";
+import { OverviewHome } from "../../Workloads/OverviewHome";
+import { STRIP_ENVS, WORKLOADS_PROJECT, createRepoMetaFixture } from "../../Workloads/__fixtures__/workloadFixtures";
+import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
+import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
+import { RepoMetaProvider } from "@/services/forge/RepoMetaContext";
 import { ObsAsOf, ObsQuotaBanner } from "../ObsStates";
+
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@tanstack/react-router")>(),
+  useNavigate: () => vi.fn(),
+}));
 
 vi.mock("uplot", async () => (await import("./obsMocks")).obsMocks.uplot());
 
@@ -253,18 +262,14 @@ describe("when the allowance runs out", () => {
 
   it("retains main's process-health UI and error-log links with an as-of badge during the pause", async () => {
     const r = rig();
-    const hrefs: ObservabilityHomeHrefs = {
-      logs: (search = {}) => `/logs?range=${search.range}&service=${search.service}&severity=${search.severity}`,
-      traces: () => "/traces",
-      profiles: () => "/profiles",
-      alerts: "/alerts",
-      dashboards: "/dashboards",
-      workload: (name) => `/workloads/${name}`,
-      release: (version) => `/releases/${version}`,
-      releases: "/releases",
-    };
     render(
-      <ObservabilityHome project={FIXTURE_PROJECT} env="prod" environments={FIXTURE_ENVS} range="1h" onRange={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />,
+      <ReleasesApiProvider api={createReleasesFixtureApi()}>
+        <RepoMetaProvider api={createRepoMetaFixture()}>
+          <OverviewHome project={WORKLOADS_PROJECT} env="prod" envs={STRIP_ENVS} envsLoading={false}
+            search={{ range: "1h" }} onSearch={vi.fn()} navigateTo={vi.fn()}
+            hrefs={{ workload: (name) => `/workloads/${name}`, release: (version) => `/releases/${version}`, releases: "/releases", alerts: "/alerts", scoped: (env) => `/overview?env=${env}` }} />
+        </RepoMetaProvider>
+      </ReleasesApiProvider>,
       { wrapper: r.wrapper }
     );
     await flush();
@@ -278,7 +283,9 @@ describe("when the allowance runs out", () => {
     await advance(POLL);
     await flush();
     expect(within(table).getAllByTestId(/^observability-service-/)).toEqual(rows);
-    expect(within(table).getByTitle("Error logs from api")).toHaveAttribute("href", "/logs?range=1h&service=api&severity=error,fatal");
+    const errorLogs = new URL(within(table).getByTitle("Error logs from api").getAttribute("href")!, "https://app.example.test");
+    expect(errorLogs.pathname).toBe(`/forge/p/${WORKLOADS_PROJECT}/observability/logs`);
+    expect(Object.fromEntries(errorLogs.searchParams)).toMatchObject({ env: "prod", range: "1h", service: "api", severity: "error,fatal" });
     expect(within(table).getByTestId("obs-as-of")).toHaveTextContent(`as of ${formatClock(START)}`);
     expect(within(table).getByTestId("obs-as-of")).toHaveTextContent(`query budget resets at ${formatClock(RESET)}`);
   });
