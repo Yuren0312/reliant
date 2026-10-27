@@ -33,6 +33,15 @@ describe("actual CP graph contract", () => {
     expect(c.methods[0].authRequired).toBeUndefined();
     expect(c.methods[0].evidence).toBe("unknown");
   });
+  it("preserves all bounded artifacts, including a disagreeing 21st catalog", async () => {
+    client.getServiceGraphCatalog.mockResolvedValue(create(GetServiceGraphCatalogResponseSchema, { declaredCatalogStatus: "available",
+      declaredCatalogs: Array.from({ length: 21 }, (_, i) => ({ envId: `env-${i}`, bundleDigest: `bundle-${i}`, catalogJson: `catalog-${i}` })),
+    }));
+    const c = await getServiceGraphCatalog({ ...scope, rpcIds: ["shop.v1.Orders/Get201"] });
+    expect(c.declaredCatalogs).toHaveLength(21);
+    expect(c.declaredCatalogs[20].json).toBe("catalog-20");
+    expect(client.getServiceGraphCatalog).toHaveBeenCalledWith(expect.objectContaining({ rpcIds: ["shop.v1.Orders/Get201"], maxMethods: 200 }));
+  });
   it("does not convert authorization/backend failure into empty success", async () => {
     const error = new ConnectError("denied", Code.PermissionDenied);
     client.getServiceGraph.mockRejectedValue(error);

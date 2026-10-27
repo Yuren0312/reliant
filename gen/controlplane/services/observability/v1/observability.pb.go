@@ -2142,11 +2142,16 @@ func (x *GraphCompleteness) GetRequestedMinutes() uint32 {
 
 type GetServiceGraphCatalogRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Scope *QueryScope            `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
+	// scope.services is rejected: telemetry service.name has no verified mapping
+	// to declared process IDs. Use an environment scope; never guess by name.
+	Scope *QueryScope `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
 	// Optional exact full proto service name.
 	RpcService string `protobuf:"bytes,2,opt,name=rpc_service,json=rpcService,proto3" json:"rpc_service,omitempty"`
-	// 0 defaults to 200, maximum 500.
-	MaxMethods    uint32 `protobuf:"varint,3,opt,name=max_methods,json=maxMethods,proto3" json:"max_methods,omitempty"`
+	// Enumeration only: 0 defaults to 200, maximum 500.
+	MaxMethods uint32 `protobuf:"varint,3,opt,name=max_methods,json=maxMethods,proto3" json:"max_methods,omitempty"`
+	// Exact lookup, ANDed with rpc_service, applied before enumeration caps.
+	// Full case-sensitive proto service/method. Empty selects enumeration mode.
+	RpcIds        []string `protobuf:"bytes,4,rep,name=rpc_ids,json=rpcIds,proto3" json:"rpc_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2200,6 +2205,13 @@ func (x *GetServiceGraphCatalogRequest) GetMaxMethods() uint32 {
 		return x.MaxMethods
 	}
 	return 0
+}
+
+func (x *GetServiceGraphCatalogRequest) GetRpcIds() []string {
+	if x != nil {
+		return x.RpcIds
+	}
+	return nil
 }
 
 type GraphRPCMethod struct {
@@ -10661,13 +10673,14 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x12aggregated_through\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x11aggregatedThrough\x12\x1a\n" +
 	"\bwarnings\x18\f \x03(\tR\bwarnings\x12+\n" +
 	"\x11available_minutes\x18\r \x01(\rR\x10availableMinutes\x12+\n" +
-	"\x11requested_minutes\x18\x0e \x01(\rR\x10requestedMinutes\"\x94\x01\n" +
+	"\x11requested_minutes\x18\x0e \x01(\rR\x10requestedMinutes\"\xad\x01\n" +
 	"\x1dGetServiceGraphCatalogRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\x12\x1f\n" +
 	"\vrpc_service\x18\x02 \x01(\tR\n" +
 	"rpcService\x12\x1f\n" +
 	"\vmax_methods\x18\x03 \x01(\rR\n" +
-	"maxMethods\"\xcb\x04\n" +
+	"maxMethods\x12\x17\n" +
+	"\arpc_ids\x18\x04 \x03(\tR\x06rpcIds\"\xcb\x04\n" +
 	"\x0eGraphRPCMethod\x12\x15\n" +
 	"\x06rpc_id\x18\x01 \x01(\tR\x05rpcId\x12\x1f\n" +
 	"\vrpc_service\x18\x02 \x01(\tR\n" +

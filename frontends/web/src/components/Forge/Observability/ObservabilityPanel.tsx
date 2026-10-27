@@ -39,7 +39,7 @@
  * to get data onto it.
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
@@ -101,6 +101,7 @@ export interface ObservabilityPanelProps {
 export default function ObservabilityPanel({ place, search, navigate }: ObservabilityPanelProps) {
   const view = viewOf(search.view);
   const range = rangeOf(search.range);
+  const [graphRefresh, setGraphRefresh] = useState(0);
   const queryClient = useQueryClient();
   const org = useObservabilityOrg();
 
@@ -217,6 +218,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             variant="ghost"
             size="sm"
             onClick={() => {
+              if (view === "graph" || view === "rpc") setGraphRefresh((n) => n + 1);
               void queryClient.invalidateQueries({ queryKey: obsKeys.all(scope) });
               void queryClient.invalidateQueries({ queryKey: deliveryKeys.root() });
               void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
@@ -299,7 +301,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             navigate={navigate}
           />
         ) : view === "graph" || view === "rpc" ? (
-          <GraphView key={`${scope.orgId}/${scope.projectId}/${scope.envIds.join(",")}/${range}`} scope={scope} range={range} search={search} navigate={navigate} subject={subject} />
+          <GraphView key={`${scope.orgId}/${scope.projectId}/${scope.envIds.join(",")}/${range}/${graphRefresh}`} scope={scope} range={range} search={search} navigate={navigate} subject={subject} />
         ) : comparing ? (
           <ReleaseComparison
             scope={scope}

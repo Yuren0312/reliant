@@ -465,11 +465,16 @@ message GraphCompleteness {
   uint32 requested_minutes = 14;
 }
 message GetServiceGraphCatalogRequest {
+  // scope.services is rejected: telemetry service.name has no verified mapping
+  // to declared process IDs. Use an environment scope; never guess by name.
   QueryScope scope = 1 [(buf.validate.field).required = true];
   // Optional exact full proto service name.
   string rpc_service = 2;
-  // 0 defaults to 200, maximum 500.
+  // Enumeration only: 0 defaults to 200, maximum 500.
   uint32 max_methods = 3;
+  // Exact lookup, ANDed with rpc_service, applied before enumeration caps.
+  // Full case-sensitive proto service/method. Empty selects enumeration mode.
+  repeated string rpc_ids = 4 [(buf.validate.field).repeated.max_items = 50];
 }
 message GraphRPCMethod {
   string rpc_id = 1;

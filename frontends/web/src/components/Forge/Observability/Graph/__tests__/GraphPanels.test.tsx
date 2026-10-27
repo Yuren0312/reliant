@@ -43,6 +43,16 @@ describe("graph and explorer honest panel states", () => {
     expect(screen.queryByRole("link", { name: /source/i })).not.toBeInTheDocument();
     expect(screen.getByText(/No requests can be prepared or executed/)).toBeInTheDocument();
   });
+  it("retains the 21st artifact and exposes disagreements instead of silently dropping it", () => {
+    const c = fixtureCatalog();
+    c.declaredCatalogs = Array.from({ length: 21 }, (_, i) => ({ ...c.declaredCatalogs[0], envId: `env-${i}`, bundleDigest: `bundle-${i}` }));
+    const last = JSON.parse(c.declaredCatalogs[20].json);
+    last.services[0].descriptor.Schemas["shop.v1.GetOrderRequest"] = [{ name: "different_schema_in_21st", kind: "int64" }];
+    c.declaredCatalogs[20].json = JSON.stringify(last);
+    render(<RPCExplorer catalog={c} service="" rpcId={GRAPH_RPC} onSelect={vi.fn()} onGraph={vi.fn()} />);
+    expect(screen.getByText("Verified declared artifact · env-20")).toBeInTheDocument();
+    expect(screen.getAllByText(/different_schema_in_21st/).length).toBeGreaterThan(0);
+  });
   it("rejects malformed verified metadata without crashing catalog", () => {
     const c = fixtureCatalog(); c.declaredCatalogs[0].json = "{bad";
     render(<RPCExplorer catalog={c} service="" rpcId={GRAPH_RPC} onSelect={vi.fn()} onGraph={vi.fn()} />);

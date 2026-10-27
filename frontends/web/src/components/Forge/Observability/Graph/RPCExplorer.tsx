@@ -10,7 +10,7 @@ export function RPCExplorer({ catalog, service, rpcId, onSelect, onGraph }: {
 }) {
   const rows = useMemo(() => catalogMethods(catalog, service), [catalog, service]);
   const selected = rows.filter((m) => m.id === rpcId);
-  const artifacts = useMemo(() => catalog.declaredCatalogs.slice(0, 20).map((a) => ({ ...a, ...parseDeclaredCatalog(a.json) })), [catalog.declaredCatalogs]);
+  const artifacts = useMemo(() => catalog.declaredCatalogs.map((a) => ({ ...a, ...parseDeclaredCatalog(a.json) })), [catalog.declaredCatalogs]);
   return <div className="space-y-3" data-testid="rpc-explorer">
     <div className="rounded-lg border border-border bg-background p-3 text-sm"><strong>Browse only.</strong> No requests can be prepared or executed here. Registered methods are capabilities, not proof of use.</div>
     <GraphQuality quality={catalog.quality} />
@@ -44,7 +44,7 @@ export function RPCExplorer({ catalog, service, rpcId, onSelect, onGraph }: {
           <details><summary className="cursor-pointer text-sm font-medium">Related message / enum descriptor metadata</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border/60 bg-background p-3 text-xs">{JSON.stringify(svc.descriptor, null, 2).slice(0, 48000)}{JSON.stringify(svc.descriptor).length > 48000 ? "\n… descriptor display truncated" : ""}</pre></details>
           <details><summary className="cursor-pointer text-sm font-medium">Process contract / code metadata</summary><p className="mt-2 text-xs text-muted-foreground">Composition metadata for serving processes, not an observed per-RPC call path. Locations are supplied text, not invented source links.</p>
             {c.components.filter((component) => processComponentIds.has(component.id) || processComponentIds.has(component.name)).slice(0, 100).map((component) => <div key={component.id} className="mt-3 text-xs"><p className="font-medium">{component.name} · {component.kind} · {component.type} · {componentIds.has(component.id) || componentIds.has(component.name) ? "Declared handler for this service" : "Serving-process component; RPC mapping unavailable"}</p><p>{sourceLabel(component.source)}</p>{component.methods.slice(0, 100).map((m) => <p className="break-all font-mono" key={m.id}>{m.id} · {m.signature} · {sourceLabel(m.source)}</p>)}</div>)}
-            {c.bindings.slice(0, 100).map((binding, i) => <p key={i} className="mt-2 break-all text-xs">{binding.consumer}.{binding.field}: {binding.interface} · {binding.resolution} · providers {binding.providers.join(", ") || "unresolved"} · implementation candidates (not selected): {binding.candidates.join(", ") || "unavailable"}</p>)}
+            {c.bindings.filter((binding) => processComponentIds.has(binding.consumer)).slice(0, 100).map((binding, i) => <p key={i} className="mt-2 break-all text-xs">{binding.consumer}.{binding.field}: {binding.interface} · {binding.resolution} · providers {binding.providers.join(", ") || "unresolved"} · implementation candidates (not selected): {binding.candidates.join(", ") || "unavailable"}</p>)}
             {!c.components.length && !c.bindings.length && <p className="text-sm text-muted-foreground">No contract/code metadata supplied.</p>}
           </details>
         </div>;

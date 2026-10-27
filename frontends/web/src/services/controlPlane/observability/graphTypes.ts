@@ -88,4 +88,4 @@ export interface GraphRequest extends ObsScope {
   includeInternal: boolean;
   includeDeclared?: boolean;
 }
-export interface CatalogRequest extends ObsScope { window: TimeWindow; rpcService?: string; services?: string[] }
+export interface CatalogRequest extends ObsScope { window: TimeWindow; rpcService?: string; rpcIds?: string[]; services?: string[] }

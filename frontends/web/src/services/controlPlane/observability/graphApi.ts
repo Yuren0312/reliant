@@ -56,14 +56,14 @@ export async function getServiceGraph(req: GraphRequest): Promise<ServiceGraph> 
 
 export async function getServiceGraphCatalog(req: CatalogRequest): Promise<RPCCatalog> {
   const res = await getControlPlaneClient(ObservabilityService).getServiceGraphCatalog({
-    scope: wireScope(req, req.window, req.services), rpcService: req.rpcService ?? "", maxMethods: 200,
+    scope: wireScope(req, req.window, req.services), rpcService: req.rpcService ?? "", rpcIds: req.rpcIds ?? [], maxMethods: 200,
   });
   return {
     methods: res.methods.map((m) => ({ id: m.rpcId, service: m.rpcService, method: m.method,
       processIds: m.processNodeIds, evidence: graphEvidence(m.evidence), observedCount: m.observedCount,
       inputType: m.inputType, outputType: m.outputType, streaming: m.streamMode, sourceUnavailableReason: m.sourceUnavailableReason,
       idempotency: m.idempotency, authRequired: m.authRequired, servesProcessIds: m.servesProcessIds, canCallProcessIds: m.canCallProcessIds })),
-    declaredCatalogs: res.declaredCatalogs.slice(0, 20).map((c) => ({ envId: c.envId, releaseId: c.releaseId,
+    declaredCatalogs: res.declaredCatalogs.map((c) => ({ envId: c.envId, releaseId: c.releaseId,
       bundleDigest: c.bundleDigest, json: c.catalogJson, repository: c.repository, commit: c.commit })),
     quality: quality(res.completeness), declaredStatus: res.declaredCatalogStatus, unavailableReason: res.declaredCatalogUnavailableReason,
   };
