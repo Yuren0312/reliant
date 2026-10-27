@@ -236,7 +236,7 @@ export function ConsoleLayout() {
       {listed ? (
         <ForgeConsoleContext.Provider value={value}>
           <div className="empty:hidden [&:not(:empty)]:mb-4">
-            <ObsQuotaBanner usageHref={href({ kind: "settings" })} />
+            <ObsQuotaBanner />
           </div>
           <Outlet />
         </ForgeConsoleContext.Provider>

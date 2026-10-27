@@ -501,7 +501,7 @@ export function ObsAsOf({ updatedAt, className }: { updatedAt?: number; classNam
  * The one banner per page, said once instead of once per panel. Renders nothing
  * while reads run normally. `onOpenUsage` / `usageHref` link to the usage page.
  */
-export function ObsQuotaBanner({ usageHref, onOpenUsage }: { usageHref?: string; onOpenUsage?: () => void }) {
+export function ObsQuotaBanner({ usageHref = "/settings/billing#billing-observability-usage", onOpenUsage }: { usageHref?: string; onOpenUsage?: () => void }) {
   const state = useObsQuotaState();
   if (state.kind === "ok") return null;
   const resets = formatClock(state.resetsAtMs);
@@ -524,7 +524,7 @@ export function ObsQuotaBanner({ usageHref, onOpenUsage }: { usageHref?: string;
       role="status"
       data-testid="obs-quota-banner"
       data-state={state.kind}
-      className="flex items-start gap-3 rounded-lg border border-border bg-muted px-4 py-3 text-sm text-foreground"
+      className="flex items-start gap-3 rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground"
     >
       <PauseCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       <div className="min-w-0 space-y-1">

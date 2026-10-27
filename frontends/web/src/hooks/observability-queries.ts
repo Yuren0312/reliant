@@ -44,6 +44,13 @@ import type {
 } from "@/services/controlPlane/observability/types";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
 
+// Presentation never changes QueryPanel's computation: two dashboard tiles
+// with different ids/titles/layout but the same query share one in-flight read.
+function panelRequestKey(panel: Panel) {
+  const { id: _id, title: _title, description: _description, width: _width, height: _height, ...request } = panel;
+  return request;
+}
+
 /**
  * Every key starts with the whole scope — org, project, environments and
  * attribute filters — so Refresh (invalidate `all(scope)`) re-reads exactly
@@ -59,7 +66,7 @@ export const obsKeys = {
   traces: (scope: ObsScope | null, filters: TraceFilters) => [...obsKeys.all(scope), "traces", filters] as const,
   trace: (scope: ObsScope | null, traceId: string) => [...obsKeys.all(scope), "trace", traceId] as const,
   panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset = "") =>
-    [...obsKeys.all(scope), "panel", range, panel, services, groupBy, offset] as const,
+    [...obsKeys.all(scope), "panel", range, panelRequestKey(panel), services, groupBy, offset] as const,
   metrics: (scope: ObsScope | null) => [...obsKeys.all(scope), "metrics"] as const,
   flamegraph: (scope: ObsScope | null, filters: FlamegraphFilters) => [...obsKeys.all(scope), "flamegraph", filters] as const,
   serviceSignals: (scope: ObsScope | null, range: RangePreset) => [...obsKeys.all(scope), "service-signals", range] as const,
@@ -350,7 +357,7 @@ export function useFlamegraph(scope: ObsScope | null, filters: FlamegraphFilters
  * RPC): the caller treats an error as "unknown" and offers every view.
  */
 export function useServiceSignals(scope: ObsScope | null, range: RangePreset) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   const unfiltered = scope && scope.filters.length ? { ...scope, filters: [] } : scope;
   return useQuery({
     queryKey: obsKeys.serviceSignals(unfiltered, range),
@@ -438,7 +445,7 @@ function catalogRange(range: RangePreset): RangePreset {
  * server caches the answer a minute; the client keeps it as long.
  */
 export function useMetricCatalog(scope: ObsScope | null, range: RangePreset, name = "", limit = 0) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   const window = catalogRange(range);
   return useQuery({
     queryKey: metricKeys.catalog(scope, window, name, limit),
@@ -452,7 +459,7 @@ export function useMetricCatalog(scope: ObsScope | null, range: RangePreset, nam
 
 /** One metric's detail: attributes with cardinality, export interval and suggested breakdowns. */
 export function useMetric(scope: ObsScope | null, range: RangePreset, name: string | undefined, kind?: GetMetricRequest["kind"]) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   const window = catalogRange(range);
   return useQuery({
     queryKey: metricKeys.detail(scope, window, name ?? "", kind ?? ""),
@@ -469,7 +476,7 @@ export type ExemplarsQuery = ListMetricExemplarsRequest;
 
 /** Exemplars of one metric (a sampled observation and its trace), stored traces first. Maximum range 7 days. */
 export function useMetricExemplars(scope: ObsScope | null, range: RangePreset, request: ExemplarsQuery | null, options: { enabled?: boolean } = {}) {
-  const api = useObservabilityApi();
+  const api = useObsReadApi();
   return useQuery({
     queryKey: metricKeys.exemplars(scope, range, request ?? ({ name: "" } as ExemplarsQuery)),
     queryFn: () => api.listMetricExemplars({ ...(scope as ObsScope), window: resolveWindow(range), ...(request as ExemplarsQuery) }),

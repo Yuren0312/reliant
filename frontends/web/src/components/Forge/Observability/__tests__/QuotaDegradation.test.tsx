@@ -18,7 +18,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
-import { useServiceOverview } from "@/hooks/observability-queries";
+import { obsKeys, useServiceOverview } from "@/hooks/observability-queries";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ObsQuotaProvider, RESUME_JITTER_MS, useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import { formatClock, quotaPausedError } from "@/services/controlPlane/observability/quota";
@@ -77,7 +77,7 @@ function rig(random = () => 0.5): Rig {
   return { client, calls, api, mode, wrapper };
 }
 
-const flush = () => act(async () => void (await vi.advanceTimersByTimeAsync(0)));
+const flush = () => act(async () => void (await vi.advanceTimersByTimeAsync(1)));
 const advance = (ms: number) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
 
 /** Quota exhaustion is a soft-reporting error too; "soft" mode reuses the exhausted shape with the soft reason. */
@@ -92,6 +92,15 @@ afterEach(() => {
 });
 
 describe("polling", () => {
+  it("shares a query key across duplicate tiles despite different titles and layout", () => {
+    const panel = { id: "first", title: "Requests", kind: "line", signal: "traces", series: [{ label: "requests", agg: "count" }] } as const;
+    // The request is the same computation; presentation isn't part of its identity.
+    const a = { ...panel, series: [...panel.series] };
+    const b = { ...a, id: "second", title: "Another title", description: "Different layout", width: 12, height: 4 };
+    expect(obsKeys.panel(SCOPE, "1h", a, [], [])).toEqual(obsKeys.panel(SCOPE, "1h", b, [], []));
+    expect(obsKeys.panel(SCOPE, "1h", a, [], [])).not.toEqual(obsKeys.panel(SCOPE, "6h", b, [], []));
+  });
+
   it("polls on the interval, and marks only the polls as polls", async () => {
     const r = rig();
     renderHook(() => useOverview(SCOPE, "1h"), { wrapper: r.wrapper });
@@ -263,8 +272,7 @@ describe("the banner and the badge", () => {
     const Wrapper = r.wrapper;
     render(
       <Wrapper>
-        <ObsQuotaBanner usageHref="/forge/p/shop/settings" />
-        <ObsQuotaBanner usageHref="/forge/p/shop/settings" />
+        <ObsQuotaBanner usageHref="/settings/billing" />
         <Reporter />
       </Wrapper>
     );
@@ -272,12 +280,11 @@ describe("the banner and the badge", () => {
 
     await act(async () => screen.getByTestId("report").click());
     const banners = screen.getAllByTestId("obs-quota-banner");
-    // Two components asked; the reader should have been told once by the one the layout mounts.
-    expect(banners.length).toBe(2);
+    expect(banners).toHaveLength(1);
     expect(banners[0]).toHaveTextContent(`Live updates are paused until ${formatClock(RESET)}`);
     expect(banners[0]).toHaveTextContent("Telemetry keeps arriving and nothing is lost");
     expect(banners[0]).toHaveTextContent("Alerts keep running on their own allowance");
-    expect(screen.getAllByTestId("obs-quota-usage")[0]).toHaveAttribute("href", "/forge/p/shop/settings");
+    expect(screen.getAllByTestId("obs-quota-usage")[0]).toHaveAttribute("href", "/settings/billing");
 
     await advance(RESET - Date.now() + RESUME_JITTER_MS);
     expect(screen.queryByTestId("obs-quota-banner")).not.toBeInTheDocument();

@@ -17,7 +17,7 @@
  */
 
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { ObsPollRegistry } from "./pollRegistry";
 import { quotaOf } from "./quota";
@@ -33,8 +33,9 @@ function createObsQuota(now?: () => number): ObsQuota {
   return { store, polls: new ObsPollRegistry(store) };
 }
 
-/** Without a provider nothing reports, so the state stays "ok" and reads and polls run as usual. */
-const ObsQuotaContext = createContext<ObsQuota>(createObsQuota());
+/** Isolated by query client even in a preview/test that doesn't mount the provider. */
+const fallbackQuotas = new WeakMap<QueryClient, ObsQuota>();
+const ObsQuotaContext = createContext<ObsQuota | null>(null);
 
 /** The longest a tab waits after the reset before it resumes. */
 export const RESUME_JITTER_MS = 30_000;
@@ -92,7 +93,15 @@ export function ObsQuotaProvider({
 }
 
 export function useObsQuota(): ObsQuota {
-  return useContext(ObsQuotaContext);
+  const provided = useContext(ObsQuotaContext);
+  const client = useQueryClient();
+  if (provided) return provided;
+  let fallback = fallbackQuotas.get(client);
+  if (!fallback) {
+    fallback = createObsQuota();
+    fallbackQuotas.set(client, fallback);
+  }
+  return fallback;
 }
 
 /** The quota state, re-rendering the caller when it changes. */

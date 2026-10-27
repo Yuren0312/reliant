@@ -1388,7 +1388,7 @@ function UsageAndInvoicesTab() {
       </div>
       {/* The usage notices the gateway sends point here ("Settings → Billing"). */}
       {obsOrg.orgId && (
-        <div className="border-t border-border pt-6" data-testid="billing-observability-usage">
+        <div className="border-t border-border pt-6" id="billing-observability-usage" data-testid="billing-observability-usage">
           <UsageView orgId={obsOrg.orgId} />
         </div>
       )}

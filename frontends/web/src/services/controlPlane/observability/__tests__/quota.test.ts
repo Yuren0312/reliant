@@ -48,10 +48,9 @@ describe("quotaOf", () => {
     expect(quotaOf(quotaError({ reason: "obs_query_quota_soft" }), NOW)?.soft).toBe(true);
   });
 
-  it("falls back to Retry-After, then the top of the hour, for a control plane without the detail", () => {
+  it("falls back to the top of the hour for a control plane without the detail", () => {
     const bare = (meta: Record<string, string>, message = "this organization's hourly observability query quota is used up") =>
       new ConnectError(message, Code.ResourceExhausted, meta);
-    expect(quotaOf(bare({ [REASON]: "obs_query_quota", "retry-after": "513" }), NOW)?.resetsAtMs).toBe(NOW + 513_000);
     expect(quotaOf(bare({ [REASON]: "obs_query_quota" }), NOW)?.resetsAtMs).toBe(TOP_OF_HOUR);
     // Today's servers: only the message.
     expect(quotaOf(bare({}), NOW)?.resetsAtMs).toBe(TOP_OF_HOUR);

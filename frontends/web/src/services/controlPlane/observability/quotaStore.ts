@@ -20,7 +20,7 @@
  * it; React reads it through useSyncExternalStore.
  */
 
-import { quotaPausedError, type QuotaExhaustion, type QuotaLimit } from "./quota";
+import { quotaOf, quotaPausedError, type QuotaExhaustion, type QuotaLimit } from "./quota";
 
 export type ObsQuotaState =
   | { kind: "ok" }
@@ -80,13 +80,21 @@ export class ObsQuotaStore {
    */
   guard<T>(run: () => Promise<T>): Promise<T> {
     const s = this.state;
-    if (s.kind !== "exhausted") return run();
+    if (s.kind !== "exhausted") return this.read(run);
     if (this.now() < s.resetsAtMs) {
       return Promise.reject(quotaPausedError({ limit: s.limit, lane: s.lane, resetsAtMs: s.resetsAtMs, soft: false }));
     }
-    return run().then((value) => {
+    return this.read(run).then((value) => {
       this.clear();
       return value;
+    });
+  }
+
+  private read<T>(run: () => Promise<T>): Promise<T> {
+    return run().catch((error: unknown) => {
+      const quota = quotaOf(error, this.now());
+      if (quota) this.report(quota);
+      throw error;
     });
   }
 

@@ -50,7 +50,7 @@ import { ENV_ALL } from "../Console/envScope";
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatAgo, formatBytes, formatCores } from "../Observability/format";
 import { HealthStrip } from "../Observability/Home/HealthStrip";
-import { ObsError, ObsNotSetUp } from "../Observability/ObsStates";
+import { ObsAsOf, ObsError, ObsNotSetUp } from "../Observability/ObsStates";
 import { Ago, INK_BUTTON, INK_LINK, Panel } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import {
@@ -253,7 +253,7 @@ export function OverviewHome({
   return (
     <div className="space-y-8" data-testid="overview" data-state={loading ? "loading" : listed.error ? "error" : "ready"}>
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">{header}</div>
+        <div className="min-w-0 flex-1">{header}{listed.data && <ObsAsOf updatedAt={listed.dataUpdatedAt} />}</div>
         <div className="pt-1">{rangeControl}</div>
       </div>
 
@@ -272,7 +272,7 @@ export function OverviewHome({
 
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
-          <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={!!listed.error} onSelectEnv={onSelectEnv} />
+          <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={!!listed.error && !keepsLastResult(listed.error, listed.data)} onSelectEnv={onSelectEnv} />
           {unrecorded ? (
             <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-5 text-sm text-ink-muted" data-testid="overview-unrecorded-env">
               Reliant has no record of <span className="font-medium text-ink">{env}</span>, so nothing it runs is reported here. Once it is deployed through Reliant, its
@@ -284,7 +284,7 @@ export function OverviewHome({
               <NeedsAttention
                 items={attention}
                 loading={loading}
-                failed={!!listed.error}
+                failed={!!listed.error && !keepsLastResult(listed.error, listed.data)}
                 where={where}
                 showEnv={all}
                 hrefOf={(item) => (item.workload ? hrefs.workload(item.workload, item.envName) : hrefs.alerts)}

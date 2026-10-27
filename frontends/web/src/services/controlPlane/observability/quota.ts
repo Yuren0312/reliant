@@ -78,8 +78,9 @@ function wireLimit(limit: QuotaLimit): QueryQuotaLimit {
 
 /**
  * The exhaustion an error reports, or null when it is not the org's query
- * quota. The reset comes from the typed detail; failing that, from a
- * Retry-After header; failing that, the top of the next hour.
+ * quota. The reset comes from the typed detail; otherwise the fixed hourly
+ * quota resets at the top of the next hour. No cross-origin response header
+ * is needed to interpret it.
  */
 export function quotaOf(error: unknown, nowMs: number = Date.now()): QuotaExhaustion | null {
   if (!(error instanceof ConnectError) || error.code !== Code.ResourceExhausted) return null;
@@ -98,11 +99,10 @@ export function quotaOf(error: unknown, nowMs: number = Date.now()): QuotaExhaus
   const reason = errorReason(error);
   // A control plane from before the detail carried only the message.
   if (reason !== QUOTA_REASON && !soft && !/query quota/i.test(error.rawMessage)) return null;
-  const retryAfterSec = Number(error.metadata.get("retry-after"));
   return {
     limit: "unknown",
     lane: "",
-    resetsAtMs: Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? nowMs + retryAfterSec * 1000 : nextQuotaResetMs(nowMs),
+    resetsAtMs: nextQuotaResetMs(nowMs),
     soft,
   };
 }

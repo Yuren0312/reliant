@@ -55,7 +55,7 @@ import { unionTimestamps } from "../Observability/Dashboards/PanelBody";
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatAgo, formatBytes, formatCores, formatCount, formatPercent } from "../Observability/format";
 import { ratioSeries, redPanel, seriesValues } from "../Observability/Home/homeModel";
-import { ObsError, ObsNotSetUp } from "../Observability/ObsStates";
+import { ObsAsOf, ObsError, ObsNotSetUp } from "../Observability/ObsStates";
 import type { ObsNavigate, ObsSearch, ObsView } from "../Observability/obsSearch";
 import { useReleaseMarkers } from "../Observability/releaseMarkers";
 import { signalState, useSignalsIndex, type SignalState } from "../Observability/serviceSignals";
@@ -259,6 +259,7 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
 
   return (
     <div className="space-y-6" data-testid="workload-detail" data-state="ready" data-kind={summary?.kind ?? "job"}>
+      {detail.data && <ObsAsOf updatedAt={detail.dataUpdatedAt} />}
       <WorkloadHeader
         crumbs={crumbs}
         name={name}
