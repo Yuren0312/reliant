@@ -53,11 +53,18 @@ export function useObsLimitHistory(orgId: string) {
 export function useUpdateObsLimits(orgId: string) {
   const api = useObservabilityBillingApi();
   const cache = useQueryClient();
-  return useMutation({ mutationFn: (request: Parameters<typeof api.updateObservabilityLimits>[0]) => api.updateObservabilityLimits(request),
+  return useMutation({
+    // Changing organizations detaches this observer from the old pending write,
+    // without cancelling that organization's valid server-side save.
+    mutationKey: [...obsBillingKey(orgId), "update-limits"],
+    mutationFn: (request: Parameters<typeof api.updateObservabilityLimits>[0]) => api.updateObservabilityLimits(request),
     // Never retry a money-moving write, especially not after Aborted.
     retry: false,
-    onSuccess: async (response) => {
-      if (response.limits) cache.setQueryData([...obsBillingKey(orgId), "limits"], response.limits);
-      await cache.invalidateQueries({ queryKey: obsBillingKey(orgId) });
+    onSuccess: async (response, request) => {
+      // Mutation options can change while a request is in flight. Its immutable
+      // variables, never the current render's organization, own the result.
+      const key = obsBillingKey(request.orgId ?? null);
+      if (response.limits) cache.setQueryData([...key, "limits"], response.limits);
+      await cache.invalidateQueries({ queryKey: key });
     } });
 }

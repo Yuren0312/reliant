@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Reliant Labs
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { GetObservabilityLimitsResponse, UpdateObservabilityLimitsResponse } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import type { MessageInitShape } from "@bufbuild/protobuf";
@@ -29,6 +29,24 @@ export function ObservabilityLimits({ limits, orgId, save, reload, saving = fals
   const [onCap, setOnCap] = useState(limits.alertOnCap);
   const [message, setMessage] = useState("");
   const [conflict, setConflict] = useState(false);
+  // Invalidate async UI continuations on an org switch (even A → B → A) or
+  // unmount. The server write and original org's cache update still complete.
+  const epoch = useRef(0);
+  useLayoutEffect(() => {
+    setEditing(false); setMessage(""); setConflict(false);
+    return () => { epoch.current += 1; };
+  }, [orgId]);
+  const reloadLatest = async () => {
+    const requestEpoch = epoch.current;
+    try {
+      await reload();
+      if (epoch.current !== requestEpoch) return;
+      setEditing(false); setMessage("Latest limits reloaded. Review them before editing again."); setConflict(false);
+    } catch {
+      if (epoch.current !== requestEpoch) return;
+      setMessage("Reload failed. Your edits have not been saved; try reloading again.");
+    }
+  };
   const start = () => {
     setVersion(limits.version); setNoOverage(limits.spendCapCents === 0n);
     setCap((Number(limits.spendCapCents) / 100).toFixed(2));
@@ -38,12 +56,15 @@ export function ObservabilityLimits({ limits, orgId, save, reload, saving = fals
   const submit = async () => {
     // Local parsing only: the backend owns bounds and the already-charged floor.
     if (!noOverage && !/^\d+(\.\d{1,2})?$/.test(cap)) { setMessage("Enter a dollar amount with at most two decimal places."); return; }
+    const requestEpoch = epoch.current;
     try {
       const result = await save({ orgId, expectedVersion: version, spendCapCents: noOverage ? 0n : BigInt(Math.round(Number(cap) * 100)),
         setAlertThresholds: true, alertThresholdsPercent: thresholds, alertOnCap: onCap });
+      if (epoch.current !== requestEpoch) return;
       setEditing(false);
       setMessage(result.spendCapRaisedToCharged ? "Saved at the amount already charged this month. Lowering the cap cannot undo charges." : "Observability limits saved.");
     } catch (error) {
+      if (epoch.current !== requestEpoch) return;
       if (error instanceof ConnectError && error.code === Code.Aborted) {
         setConflict(true);
         setMessage("Someone changed these limits. Your edits were not saved. Reload the latest limits, review them, then edit again.");
@@ -76,7 +97,7 @@ export function ObservabilityLimits({ limits, orgId, save, reload, saving = fals
     </form>}
     <p className="mt-3 text-xs text-muted-foreground">Threshold preferences are saved only. Alert delivery and recipient routing are not yet connected here; saving does not enable email, Slack or webhook delivery.</p>
     {message && <p role="status" className="mt-3 text-sm">{message}</p>}
-    {conflict && <button type="button" className="mt-2 text-primary underline" onClick={() => void reload().then(() => { setEditing(false); setMessage("Latest limits reloaded. Review them before editing again."); setConflict(false); }).catch(() => setMessage("Reload failed. Your edits have not been saved; try reloading again."))}>Reload latest limits</button>}
+    {conflict && <button type="button" className="mt-2 text-primary underline" onClick={() => void reloadLatest()}>Reload latest limits</button>}
     {limits.updatedAt && <p className="mt-3 text-xs text-muted-foreground">Last changed {at(limits.updatedAt)} by {limits.updatedByEmail || "system"}.</p>}
   </Card>;
 }

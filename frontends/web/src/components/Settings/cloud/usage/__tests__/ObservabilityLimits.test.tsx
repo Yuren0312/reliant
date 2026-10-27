@@ -1,6 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { GetObservabilityLimitsResponseSchema, UpdateObservabilityLimitsResponseSchema, GetObservabilityStorageResponseSchema } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
@@ -45,6 +45,32 @@ describe("observability limits", () => {
     render(<ObservabilityLimits orgId="org" limits={limits()} save={vi.fn().mockRejectedValue(new ConnectError("Cap must be at most $1000", Code.InvalidArgument))} reload={vi.fn()} />);
     const user = userEvent.setup(); await user.click(screen.getByRole("button", { name: /edit observability/i })); await user.click(screen.getByRole("button", { name: /save observability/i }));
     expect(await screen.findByRole("status")).toHaveTextContent("at most $1000");
+  });
+  it.each(["success", "conflict"])("ignores a stale A %s after switching to B and back to A", async (outcome) => {
+    let resolve!: (value: ReturnType<typeof create<typeof UpdateObservabilityLimitsResponseSchema>>) => void;
+    let reject!: (reason: unknown) => void;
+    const pending = new Promise<ReturnType<typeof create<typeof UpdateObservabilityLimitsResponseSchema>>>((yes, no) => { resolve = yes; reject = no; });
+    const save = vi.fn(() => pending);
+    const props = { limits: limits(), save, reload: vi.fn() };
+    const view = render(<ObservabilityLimits {...props} orgId="A" />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /edit observability/i }));
+    await user.click(screen.getByRole("button", { name: /save observability/i }));
+    view.rerender(<ObservabilityLimits {...props} orgId="B" />);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    view.rerender(<ObservabilityLimits {...props} orgId="A" />);
+    await user.click(screen.getByRole("button", { name: /edit observability/i }));
+    fireEvent.change(screen.getByLabelText("Monthly cap (USD)"), { target: { value: "88" } });
+    await act(async () => {
+      if (outcome === "success") resolve(create(UpdateObservabilityLimitsResponseSchema));
+      else reject(new ConnectError("old conflict", Code.Aborted));
+      await pending.catch(() => undefined);
+    });
+    expect(screen.getByLabelText("Monthly cap (USD)")).toHaveValue(88);
+    expect(screen.getByRole("button", { name: /save observability/i })).toBeEnabled();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ orgId: "A" }));
   });
   it("does not show unknown query usage as zero", () => {
     render(<ObservabilityFairUse limits={limits()} />);
