@@ -62,13 +62,15 @@ func historyChars(history []message.Message) int {
 	return total
 }
 
-func TestSummaryPrefixEnd_PreservesEveryByteAtAllBudgets(t *testing.T) {
+func TestSummaryPrefixEnd_PreservesWholeMessagesAtAllBudgets(t *testing.T) {
 	t.Parallel()
-	text := "é界 original task and results"
+	history := []message.Message{textMsg(message.User, "é界 original task"), textMsg(message.Assistant, "results")}
+	text, boundaries := renderCompactionTranscript(history)
 	for budget := -1; budget <= len(text)+1; budget++ {
-		end := summaryPrefixEnd(text, budget)
+		end := summaryPrefixEnd(boundaries, budget)
 		assert.LessOrEqual(t, end, max(budget, 0))
 		assert.Equal(t, text, text[:end]+text[end:])
+		assert.True(t, end == 0 || end == boundaries[0] || end == boundaries[1])
 		assert.Equal(t, text[:end], strings.ToValidUTF8(text[:end], ""))
 		assert.Equal(t, text[end:], strings.ToValidUTF8(text[end:], ""))
 	}

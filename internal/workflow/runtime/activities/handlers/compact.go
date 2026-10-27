@@ -462,7 +462,7 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 	// context boundary makes anything omitted here invisible to later turns.
 	// Prefix-only recovery retains the exact unprocessed suffix in the same
 	// persisted handoff, with no new state or retrieval contract.
-	transcript := compactionTranscript(messages)
+	transcript, boundaries := renderCompactionTranscript(messages)
 	prefixEnd := len(transcript)
 	overhead := len(compactionMsg)
 	for _, prompt := range compactionPrompts {
@@ -493,14 +493,16 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 			return summary, nil
 		}
 		if overflow, ok := parseContextOverflow(err); ok {
-			next := nextSummaryPrefixBudget(prefixEnd, overhead, overflow)
-			if next == 0 {
-				return "", fmt.Errorf("%w: %v", errCompactionOverflow, err)
+			next := summaryPrefixEnd(boundaries, nextSummaryPrefixBudget(prefixEnd, overhead, overflow))
+			if next < minimumSummaryPrefixBytes {
+				// Never fracture a user instruction or tool call/result merely
+				// to fit. No useful complete prefix fits: keep the old window.
+				return "", fmt.Errorf("%w: no complete prefix fits: %v", errCompactionOverflow, err)
 			}
 			logging.WarnContext(ctx, "[COMPACTION] Summarizer overflow; retrying a smaller prefix and retaining the unprocessed continuation",
 				"chatID", chat.ID, "thread", thread, "attempt", attempt,
 				"prefixBytes", prefixEnd, "nextPrefixBytes", next)
-			prefixEnd = summaryPrefixEnd(transcript, next)
+			prefixEnd = next
 			continue
 		}
 		return "", a.routing.providerFailure(ctx, fmt.Errorf("failed to generate summary: %w", err), usageLimitContext{

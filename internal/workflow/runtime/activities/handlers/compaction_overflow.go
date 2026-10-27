@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
@@ -100,8 +99,52 @@ func parseContextOverflow(err error) (contextOverflow, bool) {
 // useful continuation, including results and still-pending tool calls. Unlike
 // prepareHistoryForLLM this read-only path never trims large tool results.
 func compactionTranscript(messages []message.Message) string {
+	text, _ := renderCompactionTranscript(messages)
+	return text
+}
+
+// renderCompactionTranscript records safe cuts while the typed provenance is
+// still available. A cut must end a whole message AND may not cross a call's
+// result interval. Multiple parallel calls, intervening messages and out-of-order
+// results therefore remain one contiguous unit. A pending call has no closing
+// result, so its entire remaining suffix is indivisible. Unknown/duplicate IDs
+// are treated conservatively, never inferred from text that looks like a header.
+func renderCompactionTranscript(messages []message.Message) (string, []int) {
+	type span struct {
+		end          int
+		call, result bool
+	}
+	spans := make(map[string]span)
+	for i, m := range messages {
+		for _, call := range m.ToolCalls() {
+			s := spans[call.ID]
+			s.end, s.call = i, true
+			spans[call.ID] = s
+		}
+		for _, result := range m.ToolResults() {
+			s := spans[result.ToolCallID]
+			s.end, s.result = i, true
+			spans[result.ToolCallID] = s
+		}
+	}
 	var out strings.Builder
-	for _, m := range messages {
+	var boundaries []int
+	blockedThrough := -1
+	block := func(id string) {
+		s := spans[id]
+		end := s.end
+		if id == "" || !s.call || !s.result {
+			end = len(messages) // unresolved identity: retain the whole suffix
+		}
+		blockedThrough = max(blockedThrough, end)
+	}
+	for i, m := range messages {
+		for _, call := range m.ToolCalls() {
+			block(call.ID)
+		}
+		for _, result := range m.ToolResults() {
+			block(result.ToolCallID)
+		}
 		fmt.Fprintf(&out, "\n[%s]\n", m.Role)
 		for _, text := range m.TextContents() {
 			out.WriteString(text.Text)
@@ -113,16 +156,22 @@ func compactionTranscript(messages []message.Message) string {
 		for _, result := range m.ToolResults() {
 			fmt.Fprintf(&out, "[Tool result %s %s error=%t: %s]\n", result.ToolCallID, result.Name, result.IsError, result.Content)
 		}
+		if i >= blockedThrough {
+			boundaries = append(boundaries, out.Len())
+		}
 	}
-	return out.String()
+	return out.String(), boundaries
 }
 
-// summaryPrefixEnd splits without losing even a byte of the unprocessed tail.
-// Budgets smaller than a rune yield an empty prefix, never an oversized marker.
-func summaryPrefixEnd(transcript string, budget int) int {
-	end := min(max(budget, 0), len(transcript))
-	for end > 0 && end < len(transcript) && !utf8.RuneStart(transcript[end]) {
-		end--
+// summaryPrefixEnd chooses only cuts proven safe during rendering. In
+// particular it returns zero rather than splitting an oversized first unit.
+func summaryPrefixEnd(boundaries []int, budget int) int {
+	end := 0
+	for _, boundary := range boundaries {
+		if boundary > budget {
+			break
+		}
+		end = boundary
 	}
 	return end
 }
