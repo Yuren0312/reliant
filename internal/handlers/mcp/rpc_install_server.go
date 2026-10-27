@@ -112,12 +112,14 @@ func (s *Service) InstallServer(
 		} else {
 			delete(mcpConfig.MCPServers, name)
 		}
-		if rollbackErr := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, scope, mcpConfig); rollbackErr != nil {
+		rollbackErr := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, scope, mcpConfig)
+		if rollbackErr != nil {
 			logging.ErrorContext(ctx, "Failed to rollback MCP config after skill bundle failure", "error", rollbackErr, "server", name)
 		}
-		if persistErr := s.persistStoredMCPConfigScopes(ctx, projectID, map[reliantv1.ConfigScope]*MCPConfigFile{
+		persistErr := s.persistStoredMCPConfigScopes(ctx, projectID, map[reliantv1.ConfigScope]*MCPConfigFile{
 			normalizeScope(scope): mcpConfig,
-		}); persistErr != nil {
+		})
+		if persistErr != nil {
 			logging.ErrorContext(ctx, "Failed to rollback stored MCP scope snapshot after skill bundle failure", "error", persistErr, "server", name)
 		}
 
@@ -127,10 +129,18 @@ func (s *Service) InstallServer(
 			"phase", "skill_bundle",
 			"error", bundleErr,
 		)
-		activity.Skip(ctx) // the config write was rolled back: nothing was installed
+		message := "Skill bundle installation failed; MCP install rolled back."
+		if rollbackErr == nil && persistErr == nil {
+			activity.Skip(ctx) // both the daemon config and stored snapshot were restored
+		} else {
+			// Keep the declared activity with success=false: configuration may
+			// remain changed. An RPC error would also suppress that activity.
+			// Do not expose rollback errors, which may contain storage/transport secrets.
+			message = "Skill bundle installation failed; MCP configuration rollback could not be confirmed. Configuration may remain changed on the machine or in the stored snapshot. Check the server configuration and retry when the machine is connected."
+		}
 		return connect.NewResponse(&reliantv1.InstallServerResponse{
 			Success: false,
-			Message: fmt.Sprintf("Skill bundle installation failed; MCP install rolled back. Error: %v", bundleErr),
+			Message: withDaemonText(message, bundleErr),
 			Name:    name,
 		}), nil
 	}
@@ -251,7 +261,7 @@ func (s *Service) installBundledSkillsForRecommended(ctx context.Context, projec
 			return "", fmt.Errorf("failed to parse bundle install response: %w", err)
 		}
 		if resp.Error != "" {
-			return "", fmt.Errorf("daemon bundle install failed: %s", resp.Error)
+			return "", fmt.Errorf("daemon bundle install failed: %w", daemonReported(resp.Error))
 		}
 
 		totalInstalled += resp.Installed
