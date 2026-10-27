@@ -23,6 +23,11 @@
 #   release-gate.sh show <rev>
 #       Print <rev>'s record.
 #
+# Everything the merge gate (scripts/merge-gate.sh) leaves out runs here:
+# golangci-lint and buf lint (lint), link errors (build), slow tests, the race
+# detector and every Go package and vitest file the merge tier deferred (test),
+# integration and e2e. dev-docs/merge-and-release-gates.md lists the split.
+#
 # Steps, in order (every step runs even after a failure; one table at the end):
 #   npm          npm ci wherever node_modules is stale (., frontends/web,
 #                electron, tools/protoc-gen-es)
@@ -31,6 +36,7 @@
 #   lint         forge lint --no-fix, UNSCOPED: golangci over the module, buf
 #                lint, every whole-project lane, the frontends
 #   build        go build ./...
+#   webbuild     task build:web:verify (lint, production renderer, artifact verification)
 #   typecheck    frontends/web's `npm run typecheck` (tsc -b, tests included)
 #   vet          go vet ./...
 #   test         task test  (Go -race -count=1 without -short: every slow
@@ -51,7 +57,7 @@
 #   FORGE_BIN          a prebuilt forge (must be the pin; check-forge-generate.sh refuses otherwise)
 set -uo pipefail
 
-STEPS=(npm generate docs lint build typecheck vet test integration e2e)
+STEPS=(npm generate docs lint build webbuild typecheck vet test integration e2e)
 NOTES_REF=refs/notes/release-gate
 die() { printf 'release-gate: %s\n' "$*" >&2; exit 2; }
 
@@ -79,7 +85,15 @@ recorded() {
     git notes --ref=release-gate-origin list 2>/dev/null | cut -d' ' -f2
   } | sort -u
 }
-result_of() { record_of "$1" | jq -r '.result // empty' 2>/dev/null | tail -1; }
+# A historical green without today's steps cannot certify today's release.
+# RG_ONLY never writes a record, and old greens must rerun with webbuild.
+result_of() {
+  local required
+  required=$(printf '%s\n' "${STEPS[@]}" | jq -R . | jq -s .)
+  record_of "$1" | jq -r --argjson required "$required" '
+    if .result == "PASS" and (($required - [.steps[] | select(.result == "PASS") | .name]) | length) > 0
+    then "INCOMPLETE" else (.result // empty) end' 2>/dev/null | tail -1
+}
 
 publish() {
   local sha=$1 json=$2 i
@@ -242,6 +256,7 @@ run_step() {
       if [ -n "${FORGE_BIN:-}" ]; then "$FORGE_BIN" lint --quiet --no-fix
       else env GOFLAGS=-trimpath go run "github.com/reliant-labs/forge/cmd/forge@$pin" lint --quiet --no-fix; fi ;;
     build) go build ./... ;;
+    webbuild) task build:web:verify ;;
     typecheck) npm --prefix frontends/web run --silent typecheck ;;
     vet) go vet ./... ;;
     test) task test ;;

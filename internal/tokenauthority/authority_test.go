@@ -88,10 +88,11 @@ func runConformance(t *testing.T, a Authority) {
 		narrow := mint(t, MintRequest{UserID: user, Name: "restricted", Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeObsRead}})
 		binding := &fat.Resource{Kind: fat.ResourceDaemon, ID: "daemon-full"}
 		wide := mint(t, MintRequest{UserID: user, Name: "full", Resource: binding,
-			Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeClusterManage, fat.ScopeTokenRead, fat.ScopeTokenWrite, fat.ScopeObsWrite}})
+			Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeClusterManage, fat.ScopeTokenRead, fat.ScopeTokenWrite, fat.ScopeObsWrite, fat.ScopeBillingRead}})
 		p, err := a.Introspect(ctx, wide.Plaintext)
 		require.NoError(t, err)
 		require.True(t, p.Scopes.Has(fat.ScopeObsWrite))
+		require.True(t, p.Scopes.Has(fat.ScopeBillingRead))
 		require.True(t, p.BoundTo(binding.Kind, binding.ID))
 		old, err := a.Introspect(ctx, narrow.Plaintext)
 		require.NoError(t, err)
