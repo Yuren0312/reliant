@@ -153,9 +153,13 @@ The platform keeps telemetry for these periods:
 | Profiles | 24 hours raw, 30 days aggregated |
 | Browser errors | 30 days |
 | Session replays | 14 days |
-| Product events (funnels) | 90 days |
+| Product events (funnels) | Up to 90 days without a paid compute subscription; up to 400 days with one, bounded by the environment's declaration |
 
-Each organization has an included monthly observability allowance, shared by all its projects. **Project settings → Usage** in Apps (and **Settings → Billing**) shows this month's stored telemetry against it, by signal, measured hourly. Past the allowance, an organization with a payment method keeps everything and pays per GB up to its spend cap; one without starts dropping debug logs and routine traces while keeping errors and metrics, and past 150% keeps only error logs, error spans and metrics until the month resets. The `ObservabilityQuotaOver100` and `ObservabilityQuotaOver150` alerts tell you when either threshold is crossed.
+Each organization includes **10 GiB of ingestion per UTC calendar month**, shared across its projects and environments, then **$0.25/GB** with retention included. The pricing label GB means GiB (2³⁰ bytes). Ingestion is measured uncompressed after sampling and filtering, not as compressed disk space. **Settings → Billing & usage → Usage & limits → Observability** separates cumulative monthly ingestion from a timestamped snapshot of what's stored now.
+
+Overage requires an in-force Stripe compute subscription, not just a saved card or wallet credit. The default $50 monthly observability cap limits the chargeable ledger even while gateway enforcement catches up. At a funded cap, the gateway keeps ERROR+ logs, error-status spans and metrics, and drops profiles and other logs/spans. Without a qualifying subscription, reduced collection starts at 10 GiB and becomes stricter at 15 GiB; no overage is charged.
+
+See [Observability billing & limits](/account/observability-billing) for the worked bill, browser billing ceiling, cap changes and conflicts, usage notices, meter lag and free query fair-use lanes.
 
 ### Profile volume
 
