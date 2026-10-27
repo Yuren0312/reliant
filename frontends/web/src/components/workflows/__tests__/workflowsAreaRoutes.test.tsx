@@ -14,7 +14,6 @@
  *     redirect.
  */
 
-import type { CSSProperties } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -227,14 +226,14 @@ describe("Workflows area routes render inside the shell with the right tab", () 
     await screen.findByTestId("page-library");
     const brand = screen.getByTestId("workflows-brand");
     expect(brand).toHaveStyle({ paddingLeft: "80px" });
-    expect(brand.style.getPropertyValue("-webkit-app-region") || (brand.style as CSSProperties).WebkitAppRegion).toBe("drag");
+    expect(brand.style.getPropertyValue("-webkit-app-region") || (brand.style as unknown as { WebkitAppRegion: string }).WebkitAppRegion).toBe("drag");
     const exit = within(brand).getByRole("button", { name: "Close workflows" });
-    expect((exit.style as CSSProperties).WebkitAppRegion).toBe("no-drag");
+    expect((exit.style as unknown as { WebkitAppRegion: string }).WebkitAppRegion).toBe("no-drag");
     fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }));
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
     expect(within(screen.getByTestId("workflows-brand-collapsed")).queryByTestId("workflows-close")).toBeNull();
     const headerExit = within(screen.getByRole("banner")).getByRole("button", { name: "Close workflows" });
-    expect((headerExit.style as CSSProperties).WebkitAppRegion).toBe("no-drag");
+    expect((headerExit.style as unknown as { WebkitAppRegion: string }).WebkitAppRegion).toBe("no-drag");
     fireEvent.click(headerExit);
     await waitFor(() => expect(router.state.location.pathname).toBe("/"));
   });
