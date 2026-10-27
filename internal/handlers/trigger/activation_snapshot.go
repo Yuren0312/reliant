@@ -262,6 +262,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 					}
 				}
 				for _, node := range w.GetNodes() {
+					snap.Summary = append(snap.Summary, nodePrivilegeDisclosure(node, values, k)...)
 					if router := node.GetRouter(); router != nil {
 						for _, candidate := range router.GetWorkflows() {
 							if len(candidate.GetPresets()) == 0 {
@@ -423,7 +424,17 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						if len(allowed) > 256 {
 							return svcerr.FailedPrecondition("Tool privilege display limit exceeded")
 						}
-						snap.Summary = append(snap.Summary, fmt.Sprintf("Agent tool privileges: %s (shell/MCP access and dynamic external content remain subject to runtime policy)", strings.Join(allowed, ", ")))
+						snap.Summary = append(snap.Summary, fmt.Sprintf("Agent tool privileges: %s; agent-chosen action target repositories/channels/environments: dynamic/unbounded unless a fixed binding below narrows them (runtime policy still applies)", strings.Join(allowed, ", ")))
+						boundTools := make([]string, 0, len(tc.GetTools()))
+						for name := range tc.GetTools() {
+							boundTools = append(boundTools, name)
+						}
+						sort.Strings(boundTools)
+						for _, name := range boundTools {
+							if known[name] {
+								snap.Summary = append(snap.Summary, "Fixed tool binding: "+name+"; "+targetDisclosure(tc.GetTools()[name].GetFields(), values, k))
+							}
+						}
 						entries := model.CelStringListValue(tc.GetSpawn())
 						if model.CelStringListIsExpr(tc.GetSpawn()) {
 							return svcerr.FailedPrecondition("Dynamic spawn declarations require explicit fixed choices before activation approval")

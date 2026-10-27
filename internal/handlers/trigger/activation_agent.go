@@ -233,7 +233,16 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 		return nil, tools.ActivationPreview{}, svcerr.FailedPrecondition("Activation approval snapshot size limit exceeded")
 	}
 	safe, _ := automationpolicy.SafeJSON(row)
-	title := fmt.Sprintf("Machine: %s (id %s)\nOperation: %s\nRun as user: %s; integration identity: %s\nActivation: %s\n%s", machineName, row.DaemonID, operation, user, def.ActingIdentity, safe, strings.Join(closure.Summary, "\n"))
+	connectionIdentity := "default/delegated at runtime (dynamic identity)"
+	if c, ok := closure.Connection.(*core.Connection); ok && c != nil {
+		connectionIdentity = fmt.Sprintf("id %s; integration %s; account %s", discloseScope(c.ID), discloseScope(c.IntegrationID), discloseScope(func() string {
+			if c.ExternalAccountID != nil {
+				return *c.ExternalAccountID
+			}
+			return "unknown"
+		}()))
+	}
+	title := fmt.Sprintf("Machine: %s (id %s)\nOperation: %s\nRun as user: %s; integration identity: %s\nConnection identity: %s\nActivation: %s\n%s\n%s", machineName, row.DaemonID, operation, user, def.ActingIdentity, connectionIdentity, safe, sourceDisclosure(row), strings.Join(closure.Summary, "\n"))
 	if len(title) > automationpolicy.MaxDisplayBytes {
 		return nil, tools.ActivationPreview{}, svcerr.FailedPrecondition("Activation approval display size limit exceeded")
 	}

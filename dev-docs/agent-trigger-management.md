@@ -13,8 +13,15 @@ Enable dialog reachability check. The workflow uses the existing
 ApprovalCreate/signal/ApprovalResolve flow, not an agent-authored question.
 The card displays a bounded safe projection: machine ID/name, acting user and
 identity, activation references, executable node categories and catalog tool
-privileges. Arbitrary input values, seed messages, source expressions, preset
-values and graph literals are withheld even without a schema secret marker.
+privileges. Integration action nodes name the concrete catalog action and read/
+mutation classification; invoked tools name the catalog tool. Semantic targets
+(owner/repository/channel/environment/URL origin+path) and trigger schedule/event/
+match scope are disclosed through a bounded identifier-only allowlist. Unknown,
+runtime-dependent or suspicious scope explicitly reads dynamic/unbounded. URL
+userinfo, query and fragments, arbitrary input values, seed messages, source
+expressions, preset values and graph literals are withheld even without a schema
+secret marker. Identifier rendering is not a universal arbitrary-secret detector;
+never put credentials into machine/connection names or target identifiers.
 The memory-only fingerprint covers the complete canonical workflow dependency
 closure, resolved presets/effective inputs, global tool bindings, connection
 configuration and previous activation revision. Capture uses the launch/runtime
