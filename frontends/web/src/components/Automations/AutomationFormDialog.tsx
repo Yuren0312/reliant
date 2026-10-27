@@ -20,9 +20,10 @@
 import { memo, useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { ChevronRight } from "lucide-react";
 
-import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import Modal from "../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { useProjectStore } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "../workflow/run/RunWorkflowForm";
 import { countRunInputs, type RunWorkflowValue } from "../workflow/run/runWorkflowValues";
@@ -36,13 +37,13 @@ import {
   type TriggerDefinitionInput,
   type TriggerSchedule,
   type TriggerSource,
-} from "@/api/trigger-grpc";
+} from "@/hooks/trigger-model";
 import {
   useCreateTrigger,
   useProjectDaemonInstalls,
-  useProjectWorkflowList,
   useUpdateTrigger,
 } from "@/hooks/trigger-queries";
+import { useProjectWorkflowList } from "@/hooks/workflow-queries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { describeSchedule } from "@/lib/cronText";
 import { cn } from "@/lib/utils";
@@ -176,13 +177,8 @@ function AutomationFormBody({
   const ids = useId();
   const fieldId = (name: string) => `${ids}-${name}`;
 
-  const projects = useProjectStore((state) => state.projects);
+  const { projects } = useProjects();
   const currentProjectId = useProjectStore((state) => state.currentProject?.id);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
-
-  useEffect(() => {
-    void loadProjects().catch(() => undefined);
-  }, [loadProjects]);
 
   // An edit starts from the trigger; a new automation from the prefill.
   const initialSchedule = trigger ? triggerSchedule(trigger) : prefill?.schedule;
@@ -457,7 +453,7 @@ function AutomationFormBody({
       const definition = buildDefinition();
       const saved = trigger
         ? await updateMutation.mutateAsync({ id: trigger.id, input: definition })
-        : await createMutation.mutateAsync(definition);
+        : (await createMutation.mutateAsync(definition)).trigger;
       onSaved?.(saved);
       onClose();
     } catch (error) {
@@ -511,7 +507,7 @@ function AutomationFormBody({
 
   return (
     <Modal
-      isOpen
+      open
       onClose={requestClose}
       title={isEdit ? "Edit automation" : "New automation"}
       size="lg"
@@ -951,7 +947,7 @@ function AutomationFormBody({
               >
                 Keep editing
               </Button>
-              <Button type="button" variant="destructive" onClick={onClose}>
+              <Button type="button" variant="danger" onClick={onClose}>
                 Discard
               </Button>
             </div>

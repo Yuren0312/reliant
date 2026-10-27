@@ -23,8 +23,8 @@ import { CalendarClock, Plus } from "lucide-react";
 
 import Card from "../forge-ui/card";
 import PageHeader from "../forge-ui/page_header";
-import { Button } from "../ui/Button";
-import { triggerErrorMessage } from "@/api/trigger-grpc";
+import Button from "@/components/forge-ui/button";
+import { triggerErrorMessage } from "@/hooks/trigger-model";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { AutomationFormDialog } from "./AutomationFormDialog";

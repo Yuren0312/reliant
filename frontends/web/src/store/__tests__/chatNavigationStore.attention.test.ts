@@ -14,6 +14,7 @@ import { useWorktreeStore } from "../worktreeStore";
 import { useActivityStore, ChatActivity } from "../activityStore";
 import { chatKeys } from "../../hooks/chat-queries";
 import { queryClient } from "../../lib/query-client";
+import { setWorktreesForTest } from "../../test/worktreeCache";
 
 const selectChatMock = vi.fn();
 const chatStoreGetStateMock = vi.hoisted(() => vi.fn());
@@ -76,15 +77,14 @@ describe("navigateToNextAttention", () => {
         name: "Project",
         path: "/tmp/project",
         is_git_repo: true,
-        worktree_count: 1,
+        is_forge: false,
         last_active: TIMESTAMP,
         created_at: TIMESTAMP,
         updated_at: TIMESTAMP,
       },
     });
 
-    useWorktreeStore.setState((state) => ({
-      ...state,
+    setWorktreesForTest({
       worktrees: [
         {
           id: "wt-1",
@@ -101,8 +101,8 @@ describe("navigateToNextAttention", () => {
         },
       ],
       currentWorktree: null,
-      switchWorktreeContext: vi.fn().mockResolvedValue(undefined),
-    }));
+    });
+    useWorktreeStore.setState({ switchWorktreeContext: vi.fn().mockResolvedValue(undefined) });
   });
 
   afterEach(() => {

@@ -34,7 +34,10 @@ class FakeWebSocket {
   closeCalls = 0;
   sent: string[] = [];
 
-  constructor(public url: string) {
+  url: string;
+
+  constructor(url: string) {
+    this.url = url;
     sockets.push(this);
   }
 
@@ -117,8 +120,9 @@ vi.mock("../../../lib/supabase", () => ({
   supabase: { auth: { getSession: async () => ({ data: { session: { access_token: "t" } } }) } },
 }));
 
-vi.mock("../../../api/grpc-client", () => ({
-  getGRPCBaseURLPublic: () => "http://localhost:8080",
+vi.mock("@/lib/connect", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/connect")>()),
+  reliantApiBaseUrl: () => "http://localhost:8080",
 }));
 
 // The store selections must return STABLE identities across renders. The main

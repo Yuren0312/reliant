@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import {
   Loader2,
   AlertCircle,
@@ -14,11 +14,12 @@ import {
   XCircle,
 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { Toggle } from "../ui/Toggle";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import { cn } from "../../lib/utils";
 import { api } from "../../api/client";
 import { useGlobalDataStore } from "../../store/globalDataStore";
 import { ModelPreferences } from "./ModelPreferences";
+import { usePreferences, useUpdatePreferences } from "../../hooks/settings-queries";
 import {
   useApiKeySetupStore,
   resetApiKeySetupDismissed,
@@ -387,12 +388,27 @@ export function CombinedGeneralSettings({
     valid: boolean;
     message: string;
   } | null>(null);
+  // A success message clears itself after 3s. The timer is cleared on
+  // unmount: left running, it set state on an unmounted component (and, in
+  // a test, after the DOM was torn down).
+  const clearMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearValidationMessageLater = () => {
+    if (clearMessageTimer.current) clearTimeout(clearMessageTimer.current);
+    clearMessageTimer.current = setTimeout(() => setValidationMessage(null), 3000);
+  };
+  useEffect(
+    () => () => {
+      if (clearMessageTimer.current) clearTimeout(clearMessageTimer.current);
+    },
+    [],
+  );
 
   const [deletingProvider, setDeletingProvider] = useState<string | null>(null);
 
   // Streaming preference state
-  const [streamingEnabled, setStreamingEnabled] = useState<boolean>(false);
-  const [loadingPreferences, setLoadingPreferences] = useState<boolean>(true);
+  const { data: userPreferences, isPending: loadingPreferences } = usePreferences();
+  const streamingEnabled = userPreferences.streamingEnabled;
+  const updatePreferences = useUpdatePreferences();
   // Per-tag model tuning (model/thinking/temperature/compaction) is power-user
   // detail that all defaults to Auto — keep it collapsed so it doesn't lead.
   const [showModelTuning, setShowModelTuning] = useState<boolean>(false);
@@ -454,7 +470,7 @@ export function CombinedGeneralSettings({
       await useGlobalDataStore.getState().refetchModels();
       getEventBus().emit("api-key:saved", { provider: "reliant" });
       setValidationMessage({ valid: true, message: "Reliant enabled." });
-      setTimeout(() => setValidationMessage(null), 3000);
+      clearValidationMessageLater();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to enable Reliant";
       setValidationMessage({ valid: false, message });
@@ -539,7 +555,7 @@ export function CombinedGeneralSettings({
         valid: true,
         message: "API key saved successfully",
       });
-      setTimeout(() => setValidationMessage(null), 3000);
+      clearValidationMessageLater();
     } catch (error) {
       console.error("Failed to save API key:", error);
       const errorText =
@@ -558,29 +574,10 @@ export function CombinedGeneralSettings({
   };
 
 
-  // Load streaming and notification preferences on mount
-  useEffect(() => {
-    const loadPreferences = async () => {
-      try {
-        const data = await api.settings.getPreferences();
-        setStreamingEnabled((data.streaming_enabled as boolean) ?? false);
-        // Convert backend settings to interaction mode
-      } catch (error) {
-        console.error("Failed to load preferences:", error);
-      } finally {
-        setLoadingPreferences(false);
-      }
-    };
-    loadPreferences();
-  }, []);
-
-  // Handle streaming toggle
+  // Handle streaming toggle: it flips at once and back if the server refuses.
   const handleStreamingToggle = async (enabled: boolean) => {
     try {
-      await api.settings.updatePreferences({
-        streaming_enabled: enabled,
-      });
-      setStreamingEnabled(enabled);
+      await updatePreferences.mutateAsync({ streamingEnabled: enabled });
     } catch (error) {
       console.error("Failed to update streaming preference:", error);
     }
@@ -663,7 +660,7 @@ export function CombinedGeneralSettings({
         valid: true,
         message: result.message || `Connected to ${displayName} successfully!`,
       });
-      setTimeout(() => setValidationMessage(null), 3000);
+      clearValidationMessageLater();
     } catch (error) {
       console.error(`Failed to connect ${displayName}:`, error);
       const errorMessage = error instanceof Error ? error.message : "Connection failed";
@@ -1068,14 +1065,16 @@ export function CombinedGeneralSettings({
                 Disable for faster complete responses.
               </p>
             </div>
-            <Toggle
+            <ToggleSwitch
               id="streaming-toggle"
               checked={streamingEnabled}
               onChange={handleStreamingToggle}
               disabled={loadingPreferences}
-              label={`${
+              ariaLabel={`${
                 streamingEnabled ? "Disable" : "Enable"
               } response streaming`}
+              size="lg"
+              className="forge-ui"
             />
           </div>
 

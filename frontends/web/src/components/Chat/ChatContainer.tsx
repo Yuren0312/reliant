@@ -5,7 +5,7 @@
  * Passes all data as props to ChatPresenter for rendering.
  */
 
-import { useMemo, useCallback, useState, useEffect } from "react";
+import { useMemo, useCallback, useEffect } from "react";
 import { MessageRole } from "../../gen/reliant/v1/chat_pb";
 import { sendOnExistingChat } from "../../lib/chatSendRouting";
 import { sortMessagesForDisplay } from "../../lib/messageOrder";
@@ -18,6 +18,7 @@ import {
   useRunOutputs,
   useStreamingMessages,
   useHasOlderMessages,
+  useIsLoadingOlderMessages,
 } from "../../store/chatStoreHooks";
 import {
   usePendingApprovals,
@@ -37,6 +38,11 @@ import { isDaemonConnectingError } from "../../lib/daemon-errors";
 import { sendWithDaemonWait } from "../../lib/daemon-retry";
 import { newClientMessageId } from "../../lib/pendingSends";
 
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
+
+/** One empty list, so a chat with no approvals keeps a stable reference. */
+const NO_APPROVALS: Approval[] = [];
+
 // Stable empty references
 const EMPTY_ARRAY: never[] = [];
 
@@ -53,9 +59,7 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
   const chatId = tabId;
 
   // Get worktree and project IDs
-  const currentWorktreeId = useWorktreeStore(
-    (state) => state.currentWorktree?.id || null,
-  );
+  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktreeId);
   const currentProjectId = useProjectStore(
     (state) => state.currentProject?.id || null,
   );
@@ -84,14 +88,14 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
     return msgs;
   }, [storeMessages, streamingMessages]);
 
-  const { data: approvals = [] } = useApprovals(chatId);
+  const approvals = useApprovals(chatId).data?.approvals ?? NO_APPROVALS;
   const errorEvents = useErrorEvents(chatId);
   const infoEvents = useInfoEvents(chatId);
   const runOutputs = useRunOutputs(chatId);
   const currentChat = useChat(chatId);
   const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
   const isChatBusy = useIsChatRunning(chatId);
-  const { data: pendingApprovals = [] } = usePendingApprovals(chatId);
+  const pendingApprovals = usePendingApprovals(chatId).data?.approvals ?? NO_APPROVALS;
 
   // Self-healing subscription invariant: this component renders the active
   // chat, so it's the natural place to assert "the rendered chat is the
@@ -253,22 +257,16 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
 
   // --- Scroll-back paging ---
   // The initial snapshot is bounded to the newest messages, so older history is
-  // fetched on demand when the user scrolls to the top of the timeline.
-  // hasOlderMessages comes from the server (via the message envelope); the
-  // in-flight flag is local because loadOlderMessages is an imperative store
-  // action rather than a query. The store guards against duplicate concurrent
-  // fetches independently — this flag exists to drive the spinner.
+  // fetched on demand when the user nears the top of the timeline. Both flags
+  // are reactive store state: hasMore rides the message envelope and the
+  // in-flight flag is the store's own (a duplicate call that the store's guard
+  // turns away cannot clear it).
   const hasOlderMessages = useHasOlderMessages(chatId);
-  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
+  const isLoadingOlderMessages = useIsLoadingOlderMessages(chatId);
 
-  const handleLoadOlderMessages = useCallback(async () => {
+  const handleLoadOlderMessages = useCallback(() => {
     if (!chatId) return;
-    setIsLoadingOlderMessages(true);
-    try {
-      await useChatStore.getState().loadOlderMessages(chatId);
-    } finally {
-      setIsLoadingOlderMessages(false);
-    }
+    void useChatStore.getState().loadOlderMessages(chatId);
   }, [chatId]);
 
   // Fetch workflow executions for sidebar/header metadata

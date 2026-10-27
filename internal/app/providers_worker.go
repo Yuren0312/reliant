@@ -15,10 +15,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
+	"github.com/reliant-labs/reliant/internal/hosteduse"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
@@ -29,6 +32,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -44,9 +48,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
+	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 )
 
 // The Temporal worker's providers (the worker root, roots_worker.go).
@@ -82,7 +88,7 @@ func NewWorkerDaemonRouter(d WorkerDaemonRouterDeps) (*WorkerDaemonRouter, error
 	repo := d.DB
 	opts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
 	if cp := ControlPlaneEndpoint(d.ControlPlane); cp.Hosted() {
-		cpDeps := controlplane.Deps{BaseURL: cp.URL}
+		cpDeps := controlplane.Deps{ControlPlane: d.ControlPlane}
 		if secret := cp.InternalServiceSecret; secret != "" {
 			cpDeps.Sign = func() (string, error) { return auth.SignInternalServiceToken(secret) }
 		}
@@ -132,7 +138,7 @@ func NewWorkerIntegrationCredentials(d WorkerIntegrationCredentialsDeps) (*Worke
 	if err := checkExecutors(); err != nil {
 		return nil, err
 	}
-	src, err := newWorkerIntegrationCredentials(resolver, ControlPlaneEndpoint(d.ControlPlane))
+	src, err := newWorkerIntegrationCredentials(resolver, d.ControlPlane)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +173,7 @@ func newWorkerConnectionResolver(repo *db.Repo, keys vault.Service, clients conn
 // newWorkerIntegrationCredentials is the credential source integration
 // actions authenticate with: saved connections plus the delegated brokers
 // this deployment registers (see credwire).
-func newWorkerIntegrationCredentials(resolver *connections.Resolver, cp controlplane.Endpoint) (httpaction.CredentialSource, error) {
+func newWorkerIntegrationCredentials(resolver *connections.Resolver, cp *configv1.ControlPlaneConfig) (httpaction.CredentialSource, error) {
 	return credwire.New(resolver, cp)
 }
 
@@ -269,12 +275,17 @@ type RunLauncherDeps struct {
 	DB       *db.Repo
 	Temporal *TemporalClient
 	Runs     *runs.Service
+	// Router places a run's chat on a machine before it starts, so a trigger
+	// or scheduled run is pinned like an interactive one.
+	Router *WorkerDaemonRouter
 }
 
 // NewRunLauncher launches runs on the shared task queue: the launcher the
 // run tools and scheduled trigger fires launch through.
 func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
-	return launch.NewLauncher(d.DB, threads.NewService(d.DB), d.Temporal.Client, d.Runs, v2workflow.SharedTaskQueue), nil
+	pinner := daemonplacement.NewPinner(d.DB, d.Router.NATSDaemonRouter)
+	return launch.NewLauncher(d.DB, threads.NewService(d.DB), d.Temporal.Client, d.Runs, v2workflow.SharedTaskQueue,
+		launch.WithChatPinner(pinner)), nil
 }
 
 // WorkerChat is the chat service as the run tools reach it on the worker.
@@ -296,13 +307,13 @@ type WorkerChatDeps struct {
 //forge:root-only worker
 func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 	svc, err := chat.New(chat.Deps{
-		Logger:    d.Logger,
-		Config:    d.Config,
-		Repo:      d.DB,
-		Temporal:  d.Temporal.Client,
-		Pause:     d.Pause,
-		TaskQueue: v2workflow.SharedTaskQueue,
-		Router:    d.Router,
+		Logger:      d.Logger,
+		Config:      d.Config,
+		Repo:        d.DB,
+		Temporal:    d.Temporal.Client,
+		Pause:       d.Pause,
+		Router:      d.Router,
+		LocalModels: local.NewRepoDirectory(d.DB),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("chat service: %w", err)
@@ -378,14 +389,14 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	syncer, fires := trigger.TemporalBackend(temporalClient, repo, v2workflow.SharedTaskQueue, d.Pollers.IsPolled)
 	svc, err := trigger.New(trigger.Deps{
-		Logger:    d.Logger,
-		Config:    d.Config,
-		Repo:      repo,
-		Syncer:    syncer,
-		Fires:     fires,
-		PublicURL: d.Integrations.PublicURL,
-		Sealer:    d.Vault,
-		Catalog:   d.Pollers,
+		Logger:       d.Logger,
+		Config:       d.Config,
+		Repo:         repo,
+		Syncer:       syncer,
+		Fires:        fires,
+		Integrations: d.Integrations.Config,
+		Sealer:       d.Vault,
+		Catalog:      d.Pollers,
 		Intake: triggers.NewIntake(repo, temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
@@ -404,7 +415,7 @@ type WorkerToolsFactory struct{ *tools.ToolsFactory }
 // reaches.
 type WorkerToolsFactoryDeps struct {
 	DB            *db.Repo
-	ControlPlane  *configv1.ControlPlaneConfig
+	Network       *configv1.NetworkConfig
 	Temporal      *TemporalClient
 	AgentRuns     *agentruns.Runs
 	Triggers      *WorkerTrigger
@@ -421,8 +432,8 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 	repo, temporalClient := d.DB, d.Temporal.Client
 	runMachine := toolexec.NewRunMachine(d.Router)
 	return &WorkerToolsFactory{tools.NewToolsFactory(&tools.ToolsOptions{
-		Repo:            repo,
-		ControlPlaneURL: ControlPlaneEndpoint(d.ControlPlane).URL,
+		Repo:               repo,
+		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// The worker is where spawn_send actually executes (inside the
 		// ExecuteTools activity), so this is the wiring that matters most for
 		// agent-to-agent delivery.
@@ -447,8 +458,10 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		RunStarter:   d.AgentRuns,
 		RunLifecycle: d.AgentRuns,
 		RunMessenger: d.AgentRuns,
-		// list_triggers executes here too.
-		TriggerLister: triggertools.New(d.Triggers.Service),
+		// Trigger tools execute here through the owner-authorized service.
+		TriggerLister:      triggertools.New(d.Triggers.Service),
+		TriggerFirer:       triggertools.New(d.Triggers.Service),
+		TriggerEventLister: triggertools.New(d.Triggers.Service),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens
@@ -489,6 +502,9 @@ func resolveVideoGenerator(ctx context.Context, userID string, selector models.M
 type RemoteExecutorDeps struct {
 	Router *WorkerDaemonRouter
 	Tools  *WorkerToolsFactory
+	// Egress bounds the egress tools the executor runs in this process.
+	// compose.go builds it from WorkerConfig's RELIANT_WORKER_EGRESS_*.
+	Egress egresslimit.Limits
 }
 
 // NewRemoteExecutor is the worker's tool executor: daemon-placed tools go to
@@ -504,6 +520,15 @@ func NewRemoteExecutor(d RemoteExecutorDeps) (*toolexec.RemoteExecutor, error) {
 	server.SetMCPContextBinder(toolexec.NewDaemonMCPContextBinder(d.Router))
 	executor.SetServerExecutor(server)
 	executor.SetDaemonClientFactory(toolexec.RemoteDaemonClients(d.Router))
+	// Fetch, websearch, sourcegraph and the integration actions leave through
+	// one shared NAT address; bound what one user, org, host and turn may
+	// push through it. In-process state, budgets divided by Replicas: see
+	// internal/egresslimit.
+	limiter, err := egresslimit.NewInstrumented(egresslimit.Deps{Logger: slog.Default(), Limits: d.Egress})
+	if err != nil {
+		return nil, fmt.Errorf("egress limiter: %w", err)
+	}
+	executor.SetEgressLimiter(limiter)
 	return executor, nil
 }
 
@@ -546,12 +571,54 @@ type TemporalWorkerDeps struct {
 	WriteLedger    writeledger.Service
 	Pollers        *webhook.Registry
 	ControlPlane   *configv1.ControlPlaneConfig
+	Network        *configv1.NetworkConfig
 	Recorder       *AccountRecorder
 	// WorkflowTaskSlots and WorkflowTaskPollers are WorkerConfig's
 	// RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS and
 	// RELIANT_WORKER_WORKFLOW_TASK_POLLERS (0: workersetup's default).
 	WorkflowTaskSlots   int32
 	WorkflowTaskPollers int32
+	// Worker carries the hosted-action controller's endpoint and trust
+	// bundle (hosted_actions_url, hosted_actions_ca_file); see HostedActions.
+	Worker *configv1.WorkerConfig
+}
+
+// HostedActions is the worker's hosted HTTP action executor: a separate
+// fixed-node execution path, never installed in WorkerIntegrationCredentials
+// or the tool factory. nil when there is no control plane (each hosted action
+// fails closed with "hosted HTTP execution is not configured").
+//
+// The dedicated hosted-action URL requires verified TLS outside loopback.
+// It never falls back to the unrelated general control-plane API URL. A bad
+// optional executor degrades explicitly without stopping ordinary chats.
+func HostedActions(log *slog.Logger, store hosteduse.Store, cfg *configv1.ControlPlaneConfig, worker *configv1.WorkerConfig) handlers.HostedActionExecutor {
+	if worker.GetHostedActionsUrl() == "" {
+		return nil
+	}
+	cp := ControlPlaneEndpoint(cfg)
+	if cp.InternalServiceSecret == "" {
+		log.Warn("hosted HTTP actions are DISABLED: internal service signer is missing")
+		return disabledHostedActions{reason: "internal service signer is missing"}
+	}
+	secret := cp.InternalServiceSecret
+	client, err := hosteduse.NewInstrumented(hosteduse.Deps{
+		Store: store, Worker: worker,
+		Sign: func() (string, error) { return auth.SignInternalServiceToken(secret) },
+	})
+	if err != nil {
+		reason := "control-plane URL is refused: " + err.Error()
+		log.Warn("hosted HTTP actions are DISABLED on this worker; every hosted action will fail until the control-plane URL is accepted", "reason", reason, "error", err)
+		return disabledHostedActions{reason: reason}
+	}
+	return client
+}
+
+// disabledHostedActions refuses every hosted action with its configuration
+// reason, which executeHosted publishes as the action's error.
+type disabledHostedActions struct{ reason string }
+
+func (d disabledHostedActions) ExecuteAction(context.Context, string, string, string, hostedhttp.Request) (*hostedhttp.Result, error) {
+	return nil, &handlers.HostedDisabledError{Reason: d.reason}
 }
 
 // NewTemporalWorker is the Temporal worker on the shared task queue
@@ -562,6 +629,7 @@ type TemporalWorkerDeps struct {
 //forge:root-only worker
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
+	hostedActions := HostedActions(slog.Default(), d.DB, d.ControlPlane, d.Worker)
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,
@@ -574,10 +642,11 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		ConfigProvider:         d.ConfigProvider,
 		TriggerLauncher:        d.Launcher,
 		IntegrationCredentials: creds,
+		HostedActions:          hostedActions,
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerCredentials:     triggerCredentials(creds),
-		ControlPlaneURL:        ControlPlaneEndpoint(d.ControlPlane).URL,
+		AllowPrivateEgress:     AllowPrivateEgress(d.Network),
 		WorkflowTaskSlots:      int(d.WorkflowTaskSlots),
 		WorkflowTaskPollers:    int(d.WorkflowTaskPollers),
 	})

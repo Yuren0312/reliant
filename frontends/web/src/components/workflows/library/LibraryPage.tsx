@@ -21,7 +21,7 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { AlertTriangle, BookOpen, FolderOpen, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
 
-import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
+import type { InvalidWorkflow, WorkflowResponse } from "@/hooks/workflow-queries";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useLastRunPerWorkflow } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
@@ -37,16 +37,17 @@ import {
   useSetWorkflowVisibility,
   useWorkflowLibrary,
 } from "@/hooks/workflow-library-queries";
-import { usePreferencesStore } from "@/store/preferencesStore";
+import { useHiddenItems, useScopePreferences, useToggleHiddenItem, useUpdateScopePreferences } from "@/hooks/settings-queries";
 import { useProjectStore } from "@/store/projectStore";
-import { workflowGrpc } from "@/api/workflow-grpc";
+import { useProjects } from "@/hooks/project-queries";
+import { downloadWorkflow } from "@/hooks/workflow-queries";
 import Card from "../../forge-ui/card";
 import ConfirmationDialog from "../../forge-ui/confirmation_dialog";
 import DataTable from "../../forge-ui/data_table";
 import EmptyState from "../../forge-ui/empty_state";
 import PageHeader from "../../forge-ui/page_header";
-import { Button } from "../../ui/Button";
-import { Modal } from "../../ui/Modal";
+import Modal from "../../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { RunNowDialog } from "../../workflow/run/RunNowDialog";
 import { workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
@@ -55,7 +56,7 @@ import { FilterSearch, SelectFilter } from "../FilterMenu";
 import { WORKFLOW_SOURCE_LABEL } from "../WorkflowSourceBadge";
 import { libraryColumns, type LibraryTableRow, type WorkflowRowAction, type WorkflowRowItem } from "./WorkflowRow";
 import { automationsDeletedWith, deletedAutomationsSentence, libraryView, turnedOnSummary } from "./libraryView";
-import type { Trigger } from "@/api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 
 type SourceChoice = LibrarySourceKey | "all";
 
@@ -91,7 +92,7 @@ function useLibrarySearch(): [LibrarySearch, (next: LibrarySearch) => void] {
 export function LibraryPage() {
   const currentProject = useProjectStore((state) => state.currentProject);
   const projectId = currentProject?.id;
-  const projectsLoading = useProjectStore((state) => state.isLoading);
+  const projectsLoading = useProjects().isLoading;
 
   return (
     <div className="space-y-4">
@@ -237,7 +238,7 @@ function ImportConflictModal({
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Workflow already exists" size="md">
+    <Modal open onClose={onClose} title="Workflow already exists" size="md">
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
           A workflow named <span className="font-mono font-semibold text-foreground">"{slug}"</span> already exists.
@@ -265,7 +266,7 @@ function ImportConflictModal({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={replace} disabled={importWorkflow.isPending}>
+          <Button variant="danger" onClick={replace} disabled={importWorkflow.isPending}>
             Replace existing
           </Button>
         </div>
@@ -305,10 +306,12 @@ function LibraryBody({ projectId }: { projectId: string }) {
   }, [deleting, allTriggers.data, triggers.data]);
   const copyWorkflow = useCopyWorkflow(projectId);
   const setVisibility = useSetWorkflowVisibility(projectId);
-  const defaultWorkflow = usePreferencesStore((state) => state.preferences?.defaultWorkflow);
-  const updatePreferences = usePreferencesStore((state) => state.updatePreferences);
-  const isWorkflowHidden = usePreferencesStore((state) => state.isWorkflowHidden);
-  const toggleWorkflowVisibility = usePreferencesStore((state) => state.toggleWorkflowVisibility);
+  const scopePreferences = useScopePreferences();
+  // Unknown until the answer arrives: no "default" badge rather than a guess.
+  const defaultWorkflow = scopePreferences.isPending ? undefined : scopePreferences.data.defaultWorkflow;
+  const { mutateAsync: updatePreferences } = useUpdateScopePreferences();
+  const { isWorkflowHidden } = useHiddenItems();
+  const { toggleWorkflowVisibility } = useToggleHiddenItem();
 
   const view = useMemo(
     () =>
@@ -412,8 +415,7 @@ function LibraryBody({ projectId }: { projectId: string }) {
       actions.push({
         label: "Export",
         onSelect: () =>
-          void workflowGrpc
-            .downloadWorkflow(projectId, workflow.filename)
+          void downloadWorkflow(projectId, workflow.filename)
             .then(() => toast.success("Exported successfully"))
             .catch((error: unknown) => toast.error(error instanceof Error ? error.message : "Failed to export")),
       });

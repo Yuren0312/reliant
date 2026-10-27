@@ -91,6 +91,8 @@ const ConsolePrimitivesPreview = lazyRoute(
   () => import('./components/Forge/__preview__/ConsolePrimitivesPreview'), 'default')
 const DashboardsPreview = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/__preview__/DashboardsPreview'), 'default')
+const MetricsExplorerPreview = lazyRoute(
+  () => import('./components/Forge/Observability/Metrics/__preview__/MetricsExplorerPreview'), 'default')
 const ReleasesPreview = lazyRoute(
   () => import('./components/Forge/Releases/__preview__/ReleasesPreview'), 'default')
 const WorkloadsPreview = lazyRoute(
@@ -117,6 +119,8 @@ const WorkflowDetailPage = lazyRoute(
   () => import('./components/workflows/detail/WorkflowDetailPage'), 'WorkflowDetailPage')
 const InboxPage = lazyRoute(
   () => import('./components/inbox/InboxPage'), 'InboxPage')
+const AppsPage = lazyRoute(
+  () => import('./components/Apps/AppsPage'), 'AppsPage')
 const OnboardingRoute = lazyRoute(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
 const MobileShell = lazyRoute(
@@ -189,8 +193,10 @@ const ForgeLandingRoute = lazyRoute(
   () => import('./components/Forge/Console/ForgeEntryRoutes'), 'ForgeLandingRoute')
 const ForgeLegacyEnvRoute = lazyRoute(
   () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyEnvRoute')
-const ForgeLegacyObservabilityRoute = lazyRoute(
-  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyObservabilityRoute')
+const ForgeOrgObservabilityRoute = lazyRoute(
+  () => import('./components/Forge/Console/ForgeEntryRoutes'), 'OrgObservabilityRoute')
+const ForgeOrgLayout = lazyRoute(
+  () => import('./components/Forge/Org'), 'OrgConsoleLayout')
 const ForgeLegacyDomainsRoute = lazyRoute(
   () => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyDomainsRoute')
 const ForgeLegacyCommandRoute = lazyRoute(
@@ -366,6 +372,15 @@ const cliLoginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/oauth/cli',
   component: lazyRoute(() => import('./components/Auth/CliLogin'), 'CliLogin'),
+})
+
+// Self-hosted machine pairing (`reliant daemon start` prints this link with
+// its code). Root-level and unguarded like /oauth/cli: the page signs the user
+// in itself and keeps the code across that detour.
+const devicePairingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/oauth/device',
+  component: lazyRoute(() => import('./components/Auth/DevicePairing'), 'DevicePairing'),
 })
 
 const proxyAuthRoute = createRoute({
@@ -562,6 +577,14 @@ const forgeDashboardsPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><DashboardsPreview /></DevOnlyRoute>,
 })
 
+// The metrics explorer, inside the real console chrome, against the explorer's
+// fixture app — every state in every scheme, no backend.
+const forgeMetricsPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-metrics-preview',
+  component: () => <DevOnlyRoute><MetricsExplorerPreview /></DevOnlyRoute>,
+})
+
 // (`/checkout/embed` removed with the embedded-checkout path. It existed to
 // host Stripe's hosted checkout page in a bare Electron BrowserWindow, because
 // payment-method domains are registered by HOSTNAME and app://bundle cannot be
@@ -691,9 +714,10 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   monitoring: gated(ForgeConsoleMonitoringPage),
   settings: gated(ForgeConsoleSettingsPage),
   activity: gated(ForgeConsoleActivityPage),
+  orgLayout: gated(ForgeOrgLayout),
+  orgObservability: gated(ForgeOrgObservabilityRoute),
   landing: gated(ForgeLandingRoute),
   legacyEnv: gated(ForgeLegacyEnvRoute),
-  legacyObservability: gated(ForgeLegacyObservabilityRoute),
   legacyDomains: gated(ForgeLegacyDomainsRoute),
   legacyCommand: gated(ForgeLegacyCommandRoute),
 })
@@ -704,6 +728,16 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
 // without the conditional. /onboarding owns: reset-onboarding signal, GitHub
 // OAuth return at the onboarding context, and the "done — leave for /" hop.
 // See OnboardingRoute.tsx.
+// Apps: everything the user has built and deployed, with its live links
+// (components/Apps/AppsPage.tsx). The sidebar's Apps entry, and the bare
+// /forge, land here. Behind ForgeGate like every forge surface: it is the way
+// into the console, and the Developer off-switch has to turn it off too.
+const appsRoute = createRoute({
+  getParentRoute: () => authenticatedLayoutRoute,
+  path: '/apps',
+  component: gated(AppsPage),
+})
+
 const onboardingRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
   path: '/onboarding',
@@ -851,6 +885,7 @@ const routeTree = rootRoute.addChildren([
   connectionOAuthCallbackRoute,
   oauthConsentRoute,
   cliLoginRoute,
+  devicePairingRoute,
   proxyAuthRoute,
   resetPasswordRoute,
   verifyEmailRoute,
@@ -864,6 +899,7 @@ const routeTree = rootRoute.addChildren([
   forgeReleasesPreviewRoute,
   forgeWorkloadsPreviewRoute,
   forgeDashboardsPreviewRoute,
+  forgeMetricsPreviewRoute,
   projectPickerRedirectRoute,
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([
@@ -893,6 +929,7 @@ const routeTree = rootRoute.addChildren([
     workflowBuilderRoute,
     ...workflowsAreaRoutes,
     inboxRoute,
+    appsRoute,
   ]),
   appLayoutRoute.addChildren([indexRoute, projectRoute]),
 ])

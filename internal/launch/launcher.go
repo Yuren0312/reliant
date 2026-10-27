@@ -54,6 +54,30 @@ type Launcher struct {
 	runs      RunRecorder
 	threads   ThreadCreator
 	taskQueue string
+	pinner    ChatPinner
+}
+
+// ChatPinner decides which machine a chat that names none runs on, so the
+// choice is made once and stored instead of re-made by default resolution on
+// every tool call (research/CHAT_MACHINE_PLACEMENT.md). *daemonplacement.Pinner
+// implements it.
+type ChatPinner interface {
+	// Target is the machine chat should be pinned to, or "" to leave it
+	// unpinned. It writes nothing.
+	Target(ctx context.Context, chat *db.Chat) string
+	// Pin stores that choice on the chat row and on chat itself, leaving an
+	// existing pin alone. It never fails a launch.
+	Pin(ctx context.Context, chat *db.Chat)
+}
+
+// LauncherOption configures a Launcher.
+type LauncherOption func(*Launcher)
+
+// WithChatPinner makes every run this launcher starts pin an unpinned chat
+// first. Without it a launch pins nothing: the chat runs wherever default
+// resolution points on each call.
+func WithChatPinner(p ChatPinner) LauncherOption {
+	return func(l *Launcher) { l.pinner = p }
 }
 
 // NewLauncher builds a launcher over the store, the thread creator, Temporal and the task
@@ -64,14 +88,19 @@ func NewLauncher(
 	temporal TemporalStarter,
 	runRecorder RunRecorder,
 	taskQueue string,
+	opts ...LauncherOption,
 ) *Launcher {
-	return &Launcher{
+	l := &Launcher{
 		repo:      repo,
 		temporal:  temporal,
 		runs:      runRecorder,
 		threads:   threadCreator,
 		taskQueue: taskQueue,
 	}
+	for _, opt := range opts {
+		opt(l)
+	}
+	return l
 }
 
 // errEventExists aborts the session transaction when another launch recorded
@@ -301,6 +330,13 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	chat.WorktreeID = worktreeID
 	if spec.DaemonID != "" {
 		chat.ActiveDaemonID = &spec.DaemonID
+	} else if l.pinner != nil && !chat.NoMachine {
+		// No machine chosen: the chat still lands on exactly one, decided now
+		// and stored with the row, not left to default resolution on every
+		// tool call (which moves it when another machine connects).
+		if target := l.pinner.Target(ctx, chat); target != "" {
+			chat.ActiveDaemonID = &target
+		}
 	}
 
 	// Build and validate workflow inputs BEFORE creating chat
@@ -374,7 +410,37 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// twice. Group them in one transaction so any failure leaves nothing
 	// behind (no orphan chat, no thread-less chat, no announcement for a
 	// chat that doesn't exist).
-	if err := l.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	//
+	// READ COMMITTED, because what must hold here is atomicity, and nothing in
+	// a launch is a read-check-write that only SERIALIZABLE would keep
+	// correct:
+	//   - two launches of one event: the (kind, dedupe_key) unique constraint
+	//     on the insert, and the outcome predicate on the claim's UPDATE,
+	//     which READ COMMITTED re-checks against the row it waited for;
+	//   - the selection merge: its advisory lock (MutateChatSelection);
+	//   - the chat_created sequence number: the user's counter row, raised
+	//     by one UPDATE … RETURNING;
+	//   - the thread's ordinals, seqs and context window: the chat and its
+	//     thread are new and invisible to every other transaction until this
+	//     one commits, so nothing else can number them;
+	//   - a trigger's overlap guard (Spec.Guard): it row-locks the trigger
+	//     first, so a fire queued behind another reads only after that one
+	//     committed, and READ COMMITTED's next statement sees its rows. What
+	//     it reads there is unambiguous: a predecessor's root is PENDING with
+	//     no failed start while its start is in flight (blocks), and the one
+	//     write it makes, abandoning a predecessor whose start failed, is a
+	//     single conditional UPDATE that a concurrent retry of that start
+	//     (ClaimWorkflowStart) serializes with on the row lock.
+	// SERIALIZABLE bought none of that and cost every launch its predicate
+	// locks: on the young index pages of chats, workflows, threads,
+	// context_windows, messages and chat_selections (foreign-key checks and
+	// ON CONFLICT probes included), so concurrent launches for DIFFERENT
+	// users aborted one another with SQLSTATE 40001 at whichever insert
+	// closed the cycle — "failed to create workflow" when it was the root
+	// workflow's — until one ran out of attempts
+	// (TestConcurrentStartChatsTakeNoPredicateLocks).
+	launchTx := orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
+	if err := l.repo.RunTx(ctx, launchTx, func(txCtx context.Context) error {
 		if spec.Guard != nil {
 			reason, err := spec.Guard(txCtx)
 			if err != nil {
@@ -769,6 +835,20 @@ func (l *Launcher) startRecorded(ctx context.Context, recorded *core.TriggerEven
 		return nil, err
 	}
 
+	// This may be the retry of a start that failed, so the root may carry a
+	// failed-start stamp, which a trigger's next fire reads as "stranded" and
+	// abandons. Clearing it is how this start says it is in flight again, and
+	// it is conditional on the root still being PENDING: if a later fire
+	// abandoned it first, this fire's slot is spent and must not start a run
+	// beside the one that replaced it.
+	stillPending, err := l.repo.ClaimWorkflowStart(ctx, chat.ID)
+	if err != nil {
+		return nil, &InternalError{Reason: "failed to claim the start", Err: err}
+	}
+	if !stillPending {
+		return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: recorded.ID}
+	}
+
 	return l.start(ctx, startParams{
 		chat:          chat,
 		workflowName:  workflowName,
@@ -1055,7 +1135,12 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		WorkflowTaskTimeout:      workflow.DynamicWorkflowTaskTimeout,
 	}
 
-	// Inject session daemon if set on chat
+	// Inject session daemon if set on chat. A chat that reaches here still
+	// unpinned (a branch's first send, a trigger-recorded chat) is pinned
+	// first; an existing pin is never overwritten.
+	if l.pinner != nil {
+		l.pinner.Pin(ctx, chat)
+	}
 	InjectSessionDaemonID(initialData, chat)
 
 	// An unattended run has nobody to answer an ask_user or ask_question; the
@@ -1112,6 +1197,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	workflowRun, err := l.temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to start workflow", "error", err, "chatID", chatID)
+		l.recordFailedStart(ctx, workflowID)
 		return nil, &InternalError{Reason: "failed to start workflow", Err: err}
 	}
 
@@ -1140,6 +1226,37 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		RunID:      runID,
 		EventID:    p.eventID,
 	}, nil
+}
+
+// failedStartMarkBudget bounds recording a failed start. The write runs on a
+// context detached from the caller's, because the commonest failed start is
+// the caller's own deadline expiring, and that is exactly when the record
+// matters.
+const failedStartMarkBudget = 5 * time.Second
+
+// recordFailedStart stamps the root PENDING-with-a-failed-start, which is
+// what lets a trigger's next fire tell this stranded launch from one whose
+// start is still in flight (the overlap guard blocks only on the latter).
+//
+// Best-effort: if the write is lost too, the root stays PENDING with no stamp
+// and reads as in flight, and the reconciler records the failure once the
+// start has been missing from Temporal for its bound
+// (reconciliation.strandedStartBound). That is the trade-off of a lost write:
+// a trigger's later fires skip until then, rather than risk a second run
+// beside one that may yet start.
+//
+// A failed call does not always mean Temporal has no run: one that timed out
+// after the server accepted it did start. A retry of this launch claims the
+// start again and re-issues it with USE_EXISTING, which attaches to that run;
+// only a later fire that abandons this one in the window before that retry
+// can leave the row failed while its run executes, and the run's own status
+// writes repair the row once it executes.
+func (l *Launcher) recordFailedStart(ctx context.Context, workflowID string) {
+	markCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), failedStartMarkBudget)
+	defer cancel()
+	if _, err := l.repo.MarkWorkflowStartFailed(markCtx, workflowID); err != nil {
+		logging.WarnContext(ctx, "Failed to record a failed workflow start; the reconciler will", "error", err, "workflowID", workflowID)
+	}
 }
 
 // startTitleGeneration starts GenerateTitleWorkflow in the background when the

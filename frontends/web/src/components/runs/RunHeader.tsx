@@ -20,16 +20,16 @@ import { Link } from "@tanstack/react-router";
 import { CalendarClock, MessageSquarePlus, Pause, Play, RotateCcw, Square, Workflow } from "lucide-react";
 
 import type { Chat } from "@/api/client";
-import type { LaunchEvent } from "@/api/run-grpc";
+import type { LaunchEvent } from "@/hooks/run-queries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { isLiveRunStatus, launchKindDisplay, runStatus, type LaunchKindDisplay } from "@/lib/runStatus";
 import { formatAbsoluteTime } from "@/lib/relativeTime";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { RunStatusBadge } from "./RunStatusIndicator";
 import { daemonLabel } from "../Automations/daemonChoices";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { launchContextOf } from "./launchContext";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { RunDuration } from "./RunRow";
 
 export interface RunHeaderActions {

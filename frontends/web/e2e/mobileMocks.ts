@@ -82,7 +82,6 @@ export const MESSAGES = [
         toolCallId: 'tc_1',
         input: JSON.stringify({ command: 'for i in $(seq 1 20); do npm test -- src/auth/login.test.ts --reporter=dot || break; done' }),
         toolCallStatus: 3,
-        matchedResult: { toolCallId: 'tc_1', type: 'tool_result', content: `${LONG_LINE}\n`.repeat(6) },
       },
       {
         id: 'b4',
@@ -92,7 +91,6 @@ export const MESSAGES = [
         toolCallId: 'tc_2',
         input: JSON.stringify({ file_path: 'src/auth/providers/identity/retryingIdentityProviderClient.ts' }),
         toolCallStatus: 3,
-        matchedResult: { toolCallId: 'tc_2', type: 'tool_result', content: 'export const RETRIES = 3;\n'.repeat(12) },
       },
       {
         // An async ask_user (the default): the timeline renders AskUserCard
@@ -104,8 +102,22 @@ export const MESSAGES = [
         toolCallId: 'tc_ask',
         input: JSON.stringify({ questions: ASK_USER_QUESTIONS }),
         toolCallStatus: 3,
-        matchedResult: { toolCallId: 'tc_ask', type: 'tool_result', content: 'Question posted; carrying on.' },
       },
+    ],
+  },
+  {
+    // The calls' results, as the server sends them: their own TOOL message,
+    // joined to each call by tool_call_id.
+    id: 'msg_3',
+    seq: '3',
+    thread: 'main',
+    role: 4,
+    createdAt: minutesAgo(18),
+    updatedAt: minutesAgo(18),
+    contentBlocks: [
+      { id: 'r1', index: 0, type: 3, toolCallId: 'tc_1', content: `${LONG_LINE}\n`.repeat(6) },
+      { id: 'r2', index: 1, type: 3, toolCallId: 'tc_2', content: 'export const RETRIES = 3;\n'.repeat(12) },
+      { id: 'r3', index: 2, type: 3, toolCallId: 'tc_ask', content: 'Question posted; carrying on.' },
     ],
   },
 ];
@@ -192,6 +204,12 @@ export const INBOX_ITEMS = [
 export interface MobileMockOptions {
   /** Inbox items ListInbox answers with. Default INBOX_ITEMS. */
   inbox?: unknown[];
+  /**
+   * How the update stream (StreamingService) answers: `ends` (default) ends
+   * it at once, cleanly; `unavailable` ends it with a Connect `unavailable`
+   * error, as a server that refuses or drops it does.
+   */
+  stream?: 'ends' | 'unavailable';
 }
 
 export interface MobileMock {
@@ -210,6 +228,22 @@ const emptyStream = (route: Route) =>
     body: Buffer.from([0x02, 0, 0, 0, 2, 0x7b, 0x7d]),
   });
 
+/** The message a failing stream's end-stream error carries. */
+export const STREAM_ERROR_MESSAGE = 'update stream unavailable (mocked)';
+
+/** A Connect server-stream that fails: an end-stream envelope carrying an `unavailable` error. */
+const failingStream = (route: Route) => {
+  const end = Buffer.from(JSON.stringify({ error: { code: 'unavailable', message: STREAM_ERROR_MESSAGE } }));
+  const envelope = Buffer.alloc(5);
+  envelope[0] = 0x02; // end-stream flag
+  envelope.writeUInt32BE(end.length, 1);
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/connect+proto',
+    body: Buffer.concat([envelope, end]),
+  });
+};
+
 export async function mockMobileBackend(page: Page, options: MobileMockOptions = {}): Promise<MobileMock> {
   const mock: MobileMock = { answered: [] };
   let inbox = [...(options.inbox ?? INBOX_ITEMS)];
@@ -218,7 +252,7 @@ export async function mockMobileBackend(page: Page, options: MobileMockOptions =
 
   await page.route('**/reliant.v1.**', (route) => json(route, {}));
   await page.route('**/controlplane.v1.**', (route) => json(route, {}));
-  await page.route('**/reliant.v1.StreamingService/**', emptyStream);
+  await page.route('**/reliant.v1.StreamingService/**', options.stream === 'unavailable' ? failingStream : emptyStream);
   await page.route('**/health', (route) => json(route, { auth_mode: 'apikey' }));
 
   await page.route('**/controlplane.v1.UserService/GetCurrentUser', (route) =>

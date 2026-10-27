@@ -23,7 +23,7 @@
  */
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "./Sidebar";
@@ -31,21 +31,14 @@ import { ChatActivity } from "../../gen/reliant/v1/chat_pb";
 import { useChatStore } from "../../store/chatStore";
 import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 
-vi.mock("../ui/Tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+vi.mock("../forge-ui/tooltip", () => ({
+  default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("../ui/Button", () => ({
-  Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
-  ),
-}));
-
-vi.mock("../ui/ContextMenu", () => ({ ContextMenu: () => null }));
+vi.mock("../forge-ui/context_menu", () => ({ default: () => null }));
 vi.mock("../../hooks/useDebounce", () => ({ useDebounce: <T,>(value: T) => value }));
 
 vi.mock("../../hooks/chat-queries", () => ({
@@ -144,14 +137,10 @@ describe("Sidebar forge nav entry", () => {
     } as Partial<ReturnType<typeof useActivityStore.getState>>);
 
     useWorktreeStore.setState({
-      worktrees: [],
-      currentWorktree: null,
+      currentWorktreeId: null,
+      currentWorktreeProjectId: null,
       switchWorktreeContext: vi.fn(async () => undefined),
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
-
-    useProcessStore.setState({
-      fetchProcesses: vi.fn(),
-    } as Partial<ReturnType<typeof useProcessStore.getState>>);
 
     useChatListPreferencesStore.setState({
       sortOrder: "recent_activity",

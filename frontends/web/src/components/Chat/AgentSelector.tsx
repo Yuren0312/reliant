@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { Users, ChevronDown, Check, Workflow } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
-import { useWorkflows } from "../../store/globalDataStore";
+import Tooltip from "../forge-ui/tooltip";
+import { useWorkflows } from "../../hooks/workflow-queries";
 import { isRunnable } from "../workflow/workflowDraftStatus";
-import { isOfferedInChatPicker } from "../../api/workflow-grpc";
+import { isOfferedInChatPicker } from "../../hooks/workflow-queries";
 
 interface AgentSelectorProps {
   // Current selection (agent name or workflow name)
@@ -75,7 +75,7 @@ export function AgentSelector({
   return (
     <div className={`relative ${className}`} ref={dropdownRef} data-dropdown-open={isOpen}>
       {/* Selector Button */}
-      <Tooltip content={getTooltipContent()} placement="top">
+      <Tooltip content={getTooltipContent()} side="top">
         <button
           // Compact mode is icon-only, so the label must come from here.
           aria-label={getTooltipContent()}

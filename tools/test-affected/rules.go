@@ -19,9 +19,13 @@ const (
 	// laneDocGen is not a test runner either: it runs every docs generator
 	// and fails if that changes anything (task generate:docs:check).
 	laneDocGen lane = "docs-generate"
+	// laneMigOrder is not a test runner either: it fails a migration added on
+	// this branch whose version is at or below origin/main's newest
+	// (migrationorder.go).
+	laneMigOrder lane = "migration-order"
 )
 
-var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen}
+var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen, laneMigOrder}
 
 // forgeInputs are the paths `forge generate` reads (protos, migrations,
 // contract.go interfaces, package directives in doc.go, handler packages, the
@@ -41,7 +45,13 @@ var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen}
 var forgeInputs = []string{
 	"forge.yaml", "go.mod", "go.sum", "buf.yaml", "buf.gen.yaml",
 	"proto/**", "db/**",
-	"**/contract.go", "**/doc.go", "**/*_gen.go", "internal/handlers/**",
+	"**/contract.go", "**/doc.go", "internal/handlers/**",
+	// Every forge output, as the merge gate's gen_re names them: a changed
+	// generated file runs generate, which re-renders it before build and
+	// test judge it (a merge with main can leave one a step behind, and
+	// frontends/web/src/hooks/*_gen.ts sits outside every directory below).
+	"**/*_gen.go", "**/*_gen_test.go", "**/*_gen.ts", "**/*_gen_test.ts", "**/*_gen.test.ts",
+	"**/*_gen.json", "**/*_gen.ndjson", "**/*_gen.k",
 	"gen/**", "frontends/web/src/gen/**", "pkg/config/**", "deploy/**",
 	".forge/hashes.json", ".forge/scaffolded.json", ".forge/disowned.json",
 	// generate.hooks: controlplane-client.
@@ -68,6 +78,16 @@ var forgeHookGenerators = []string{
 	"internal/llm/tools/cmd/toolconfiggen",
 	"internal/integrations/manifest/schema/cmd/schemagen",
 	"tools/integrationgen",
+}
+
+// forgeHookOf names the forge.yaml hook that runs each generator
+// (ForgeGenPlan.Hooks). TestForgeHookGeneratorsMatchForgeYAML holds it to
+// forge.yaml too.
+var forgeHookOf = map[string]string{
+	"internal/workflow/yaml/cmd/yamlbindingsgen":          "yaml-bindings",
+	"internal/llm/tools/cmd/toolconfiggen":                "tool-catalog",
+	"internal/integrations/manifest/schema/cmd/schemagen": "manifest-schema",
+	"tools/integrationgen":                                "integrations",
 }
 
 func isForgeInput(p string) bool {
@@ -203,11 +223,22 @@ var rules = []rule{
 	{
 		id: "global-config",
 		patterns: []string{
-			"Taskfile.yml", "Makefile", "buf.yaml", "buf.gen.yaml",
-			"buf.gen.controlplane.yaml",
+			"buf.yaml", "buf.gen.yaml", "buf.gen.controlplane.yaml",
 		},
 		full:   allLanes,
 		reason: "build or generation configuration changed (a subset cannot judge it)",
+	},
+	{
+		// The Taskfile is what the codegen lanes run: `task generate:forge`
+		// and `task generate:docs`. The Go, web and electron lanes do not go through it
+		// (they run go test, vitest and npm test themselves), so a Taskfile
+		// edit no longer runs the whole module, every vitest file and
+		// electron before a merge (17+ minutes); `task test` itself is
+		// judged by the release gate (dev-docs/merge-and-release-gates.md).
+		id:       "task-runner",
+		patterns: []string{"Taskfile.yml"},
+		full:     []lane{laneForgeGen, laneDocGen},
+		reason:   "the task runner the codegen lanes run changed",
 	},
 	{
 		// The forge pin (forge_version) and forge's own config reach the Go
@@ -313,3 +344,7 @@ func matchSegments(pat, segs []string) bool {
 	}
 	return len(segs) == 0
 }
+
+// isMigrationPath reports whether p is under db/migrations/, the directory the
+// migration-order lane judges.
+func isMigrationPath(p string) bool { return matchGlob("db/migrations/**", p) }

@@ -83,6 +83,9 @@ type APIHTTPRoutesDeps struct {
 	// ControlPlaneURL wakes a suspended workspace for a connector request;
 	// empty reports it as one that cannot be started.
 	ControlPlaneURL string
+	// HostedHTTPRedeem is the internally authenticated controller ticket route.
+	// Optional on deployments without hosted execution; no public auth fallback.
+	HostedHTTPRedeem http.Handler
 }
 
 // APIHTTPRoutesStore is what the routes read from the database. The routes
@@ -121,6 +124,9 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	// Inbound trigger receivers: authenticated by the trigger's own token or
 	// the provider's signature rather than a user's JWT.
 	deps.Inbound.Register(handle)
+	if deps.HostedHTTPRedeem != nil {
+		handle("/internal/hosted-http/redeem", deps.HostedHTTPRedeem)
+	}
 
 	// Connector MCP endpoint: third-party MCP clients (ChatGPT, Claude, and
 	// their mobile apps) driving a cloud daemon under a connector grant.
@@ -228,11 +234,6 @@ var corsExposedHeaders = []string{
 	// The scopes a scope_missing refusal names (errorReasons.ts errorScopes),
 	// so the deploy panel says which grant to ask for without parsing prose.
 	"X-Forge-Error-Scopes",
-	// The pre-svcerr reason header (forge_api_disabled here; the billing and
-	// daemon-gate reasons on the control plane). Read as a fallback until
-	// both servers send X-Forge-Error-Reason (P9 R3, expand/contract), then
-	// deleted with the web's fallback.
-	"X-Reliant-Reason",
 }
 
 // newCORSHandler builds the CORS middleware that wraps the entire mux. An

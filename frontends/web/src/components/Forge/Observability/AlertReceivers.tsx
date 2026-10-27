@@ -19,8 +19,8 @@ import { useId, useMemo, useState } from "react";
 import { AlertTriangle, Bell, Globe, Lock, Mail, MessageSquare, Pencil, Plus, Send, Siren, Trash2 } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
+import Modal from "@/components/forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { useAlertingMutation, useReceivers } from "@/hooks/observability-queries";
 import type {
   CreateReceiverInput,
@@ -383,7 +383,7 @@ function ReceiverRow({
               </Button>
               {confirming ? (
                 <Button
-                  variant="destructive"
+                  variant="danger"
                   size="sm"
                   disabled={remove.isPending}
                   loading={remove.isPending}
@@ -505,7 +505,7 @@ function ReceiverDialog({
   };
 
   return (
-    <Modal isOpen onClose={onClose} title={current ? `Edit ${current.name}` : "New receiver"} size="md">
+    <Modal open onClose={onClose} title={current ? `Edit ${current.name}` : "New receiver"} size="md">
       <form
         className="space-y-4"
         data-testid="obs-receiver-dialog"

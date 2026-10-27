@@ -24,12 +24,12 @@
  *   longer describes what would happen.
  *
  * The facts here are read off the structured error detail, never parsed from the
- * message string. See promoteRefusalOf in api/forge-grpc.ts.
+ * message string. See promoteRefusalOf in hooks/forge-model.ts.
  */
 
 import { ShieldAlert } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { describeActualBinding, type PromoteRefusal } from "@/services/forge/promote";
 
 export interface PromoteRefusalNoticeProps {

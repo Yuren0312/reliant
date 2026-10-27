@@ -33,6 +33,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskguard"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -227,6 +228,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 		return fmt.Errorf("daemon runtime bootstrap config invalid: %w", err)
 	}
 	setOAuthHelperOrigins(opts.OAuthHelperOrigins)
+	// The data directory holds the daemon's identity and state; a command run
+	// with `credentials: none` does not see it (see daemonpolicy.ProtectedCredentials).
+	daemonpolicy.SetDaemonDataDir(opts.BootstrapConfig.DataDir)
 
 	// Claim the data directory before anything else, so a second daemon fails
 	// here rather than at the gateway. Two daemons on one host resolve to one
@@ -258,6 +262,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	ctx, stopRuntime := context.WithCancel(ctx)
 	defer stopRuntime()
 	client.armWorkspaceGuard(ctx, stopRuntime)
+	initializeWorktreeActivity(ctx, opts.BootstrapConfig.DataDir)
 
 	// Publish the runtime record before the first dial. Until the gateway acks
 	// registration the record says so, which is what makes `reliant daemon
@@ -438,9 +443,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// This process IS the machine that runs shell commands, so its own GOOS is
 	// the right answer here — unlike on the server, where reading runtime.GOOS
 	// would describe the wrong machine entirely.
-	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
-		ShellPlatform: tools.ShellPlatformFromGOOS(runtime.GOOS),
-	})
+	toolsFactory := newDaemonToolsFactory(host)
 
 	caps := toolsFactory.ListAvailableToolsForPlacement(tools.PlacementDaemon)
 	sort.Strings(caps)
@@ -477,6 +480,11 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	SetHeavyGate(heavyGate)
 
 	localExec := toolexec.NewLocalToolExecutor(toolsFactory)
+	egressLimiter, err := egresslimit.New(egresslimit.Deps{Limits: daemonEgressLimits(host)})
+	if err != nil {
+		return nil, fmt.Errorf("creating egress limiter: %w", err)
+	}
+	localExec.SetEgressLimiter(egressLimiter)
 	localExec.SetMCPContextBinder(toolexec.NewLocalMCPContextBinder(mcpManager))
 	// The daemon runtime IS the local machine, so give the executor a
 	// LocalClient so filesystem tools (glob, view, etc.) can operate.
@@ -519,7 +527,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		return nil, fmt.Errorf("creating daemon HTTP client: %w", err)
 	}
 
-	return &daemonClient{
+	client := &daemonClient{
 		daemonID:   bootCfg.DaemonID,
 		daemonName: daemonName,
 		// userID is set later from RegistrationAck (gateway-derived from PAT).
@@ -544,7 +552,27 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		memWatcher:        cgroupmem.NewWatcher(memReader, cgroupmem.DefaultPollInterval),
 		diskWatcher:       diskWatcher,
 		diskGuard:         diskGuard,
-	}, nil
+	}
+	client.restoreResultOutbox()
+	return client, nil
+}
+
+// restoreResultOutbox gives the result outbox its home in the instance's data
+// directory and reloads what the previous process left there, so a tool
+// result survives a daemon restart. A daemon with no data directory (an
+// embedded runtime), or one whose outbox directory cannot be used, runs with
+// the in-memory outbox: it never fails to start over this.
+func (d *daemonClient) restoreResultOutbox() {
+	dataDir := strings.TrimSpace(d.bootCfg.DataDir)
+	if dataDir == "" {
+		return
+	}
+	store, err := openOutboxStore(filepath.Join(dataDir, outboxDirName))
+	if err != nil {
+		logging.Warn(logPrefix+" Tool results will not survive a daemon restart", "error", err)
+		return
+	}
+	d.results.restore(store)
 }
 
 // persistDaemonID writes the server-assigned daemon id into THIS INSTANCE's
@@ -996,6 +1024,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			MovesOnDrain: true,
 		}},
 	}
+	stampBuildIdentity(register.GetRegister())
 	if err := sendRegistration(stream, register); err != nil {
 		close(sessionOver)
 		return fmt.Errorf("sending daemon registration to %s: %w", baseURL, err)
@@ -1404,6 +1433,13 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 	}
 	ctx = daemonpolicy.NewContext(ctx, policy)
 
+	releaseRecovery, admissionErr := beginRecoveryCommand(req.CommandType, req.Payload)
+	if admissionErr != nil {
+		d.sendCommandFailure(s, req, admissionErr)
+		return
+	}
+	defer releaseRecovery()
+
 	// What became of a tool call is the daemon's own bookkeeping, not the
 	// disk's, so it is answered even while the guard below refuses work.
 	if req.CommandType == toolexec.ToolStatusCommand {
@@ -1735,6 +1771,19 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	if req == nil {
 		return
 	}
+
+	// Before the tool can do anything a restart would cut short.
+	d.results.persistRunning(req.RequestId)
+
+	releaseRecovery, admissionErr := beginRecoveryWork()
+	if admissionErr != nil {
+		d.sendToolResult(s, req.RequestId, &toolexec.ExecutionResult{
+			Success: false, IsError: true, Content: admissionErr.Error(),
+			ErrorMessage: admissionErr.Error(), ErrorCode: "RECOVERY_FINALIZING",
+		})
+		return
+	}
+	defer releaseRecovery()
 
 	execCtx, cancel := context.WithCancel(dispatchContext(req))
 	// Registered under both ids. request_id is the transport's correlation key

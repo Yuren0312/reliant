@@ -29,7 +29,7 @@ import { AlertTriangle, Plus, Webhook, Zap } from "lucide-react";
 
 import { ConfigurationPanel } from "../ConfigurationPanel";
 import { ConfigPanelTabBar } from "./ConfigPanelTabBar";
-import { Toggle } from "../../ui/Toggle";
+import ToggleSwitch from "../../forge-ui/toggle_switch";
 import { useSetTriggerEnabled } from "../../../hooks/trigger-queries";
 import { CELInput } from "../CELInput";
 import { OnlyFromControl } from "./OnlyFromControl";
@@ -60,9 +60,9 @@ import {
   type DeclaredTrigger,
   type TriggerFinding,
 } from "../../../lib/declaredTriggers";
-import type { Trigger } from "../../../api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import type { JsonSchema } from "../../../lib/jsonSchema";
-import { useCatalogEntry, useDeclaredTriggerRef } from "../../../hooks/connection-queries";
+import { useCatalogEntry, useDeclaredTriggerRef } from "../../../hooks/catalog-queries";
 import type { Workflow } from "../../../types/workflow";
 import { getInputDefault, getInputDescription, isInternalInput, type InputDef } from "../../../lib/inputHelpers";
 import { formatInputDefault } from "../../../lib/inputDefaultDisplay";
@@ -621,11 +621,12 @@ function ActivationsSection({ trigger, activations, canActivate, unsaved, onActi
                   <HealthIndicator health={automationHealth(activation)} />
                 </span>
               </button>
-              <Toggle
+              <ToggleSwitch
                 checked={activation.enabled}
                 onChange={(enabled) => setEnabled.mutate({ id: activation.id, enabled })}
-                srLabel={`${activation.name} enabled`}
-                className="h-5 w-9 flex-shrink-0 scale-90"
+                ariaLabel={`${activation.name} enabled`}
+                size="md"
+                className="forge-ui flex-shrink-0"
               />
             </li>
           ))}

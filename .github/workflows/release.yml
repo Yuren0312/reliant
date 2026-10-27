@@ -141,10 +141,11 @@ jobs:
         working-directory: frontends/web
         run: npm ci --legacy-peer-deps --prefer-offline
 
-      # NO CODE GENERATION HERE. Generated code is committed, and PR CI's
-      # "Generated code is up to date" job runs `make generate-all` on every
-      # PR and every push to main and fails on any diff — so the tagged commit
-      # already holds exactly what the generators produce, and a release
+      # NO CODE GENERATION HERE. Generated code is committed, and the gates
+      # fail on any diff a regenerate makes: the merge gate whenever a change
+      # reaches a generator's input, and the release gate (`task generate:check`,
+      # `task generate:docs:check`) on the commit a release tags — so the tagged
+      # commit already holds exactly what the generators produce, and a release
       # builds what was reviewed.
       #
       # This job used to regenerate anyway, which could only ever ship
@@ -164,45 +165,18 @@ jobs:
       # "Control plane API URL not configured" on the desktop app.
       #
       # electron/release.config.json is GENERATED from control-plane's
-      # deploy/kcl/lib/env.k by .github/scripts/sync-release-config.mjs, and it
-      # carries the SAME VITE_* list the hosted app is built with. The step
-      # below verifies it has not drifted, then exports it.
-      #
-      # No .env file is written. `vite build` reads VITE_* straight from the
-      # process environment, so $GITHUB_ENV is sufficient and there is no
-      # generated dotfile to leak into an artifact or fall out of date.
+      # deploy/kcl/lib/env.k by .github/scripts/sync-release-config.mjs, and its
+      # `renderer` block carries the SAME runtime_config keys the hosted app is
+      # served. The step below verifies it has not drifted.
       - name: Verify release config matches control-plane KCL
         run: node .github/scripts/sync-release-config.mjs --check
 
-      - name: Export renderer build config
-        env:
-          # Secrets are NOT in KCL and never in this repo. They are merged in
-          # here, on top of the KCL-sourced public values.
-          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-          VITE_STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
-          VITE_SENTRY_REPLAY_CANVAS: ${{ vars.VITE_SENTRY_REPLAY_CANVAS }}
-        run: |
-          set -euo pipefail
-
-          # KCL-sourced public config (endpoints, auth mode, Supabase URL +
-          # publishable key, Sentry enable flags). jq -e fails if `.vite` is
-          # missing rather than exporting an empty set.
-          jq -er '.vite | to_entries[] | "\(.key)=\(.value)"' \
-            electron/release.config.json >> "$GITHUB_ENV"
-
-          # Secret-backed and CI-tunable values layered on top.
-          {
-            echo "VITE_SENTRY_DSN=${VITE_SENTRY_DSN}"
-            echo "VITE_STATSIG_CLIENT_KEY=${VITE_STATSIG_CLIENT_KEY}"
-            echo "VITE_SENTRY_TRACES_SAMPLE_RATE=0.1"
-            echo "VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE=0.1"
-            echo "VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE=1.0"
-            echo "VITE_SENTRY_REPLAY_CANVAS=${VITE_SENTRY_REPLAY_CANVAS}"
-          } >> "$GITHUB_ENV"
-
-          echo "Renderer config exported from KCL:"
-          jq -r '.vite | "  VITE_CONTROL_PLANE_API_URL = \(.VITE_CONTROL_PLANE_API_URL)\n  VITE_GATEWAY_URL           = \(.VITE_GATEWAY_URL)"' \
-            electron/release.config.json
+      # No renderer build config is exported: the bundle reads every
+      # per-environment value from config.js at runtime (R2a), and the
+      # packaged app's config.js is answered by its main process from
+      # release.config.json's `renderer` block (electron/src/runtime-config.js,
+      # written by generate-build-config.mjs in each platform job). The one
+      # build-time value is VITE_APP_VERSION, from scripts/release-identity.sh.
 
       # `build`, not `build:alpha` — the difference is `tsc -b`.
       #
@@ -254,8 +228,9 @@ jobs:
       # Cost is a grep over dist/assets: sub-second, on a build already paid
       # for.
       #
-      # PR CI's `web` job runs this same build and this same check on every PR
-      # and every push to main (pinned by .github/scripts/verify-bundle.test.mjs),
+      # ci.yml's `web-bundle` job (`task build:web:verify`) runs this same build
+      # and this same check on every PR that can alter the bundle and every
+      # push to main (pinned by .github/scripts/verify-bundle.test.mjs),
       # so a failure that first shows up here means the two have diverged. If
       # this run fails anyway, release-health.yml opens a `release:failed`
       # issue for the tag.
@@ -433,8 +408,9 @@ jobs:
           else
             IDENTITY="$(bash scripts/release-identity.sh --commit "$COMMIT")"
           fi
-          echo "Stamping version=${IDENTITY} commit=${COMMIT}"
-          LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${IDENTITY} -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT}"
+          COMMIT_TIME="$(bash scripts/release-identity.sh --commit-time --commit "$COMMIT")"
+          echo "Stamping version=${IDENTITY} commit=${COMMIT} commit_time=${COMMIT_TIME}"
+          LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${IDENTITY} -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT} -X github.com/reliant-labs/reliant/internal/version.CommitTime=${COMMIT_TIME}"
 
           # Build-time defaults: the release's hosted endpoints, stamped into
           # pkg/config.BuildDefaults (forge's build-defaults layer, between the
@@ -611,8 +587,6 @@ jobs:
       - name: Generate runtime build config
         uses: ./.github/actions/generate-build-config
         with:
-          statsig-client-key: ${{ secrets.STATSIG_CLIENT_KEY }}
-          sentry-dsn: ${{ secrets.SENTRY_DSN }}
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
           supabase-anon-key: ${{ secrets.SUPABASE_ANON_KEY }}
           reliant-server-url: ${{ env.RELIANT_SERVER_URL }}
@@ -801,8 +775,6 @@ jobs:
       - name: Generate runtime build config
         uses: ./.github/actions/generate-build-config
         with:
-          statsig-client-key: ${{ secrets.STATSIG_CLIENT_KEY }}
-          sentry-dsn: ${{ secrets.SENTRY_DSN }}
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
           supabase-anon-key: ${{ secrets.SUPABASE_ANON_KEY }}
           reliant-server-url: ${{ env.RELIANT_SERVER_URL }}
@@ -950,8 +922,6 @@ jobs:
       - name: Generate runtime build config
         uses: ./.github/actions/generate-build-config
         with:
-          statsig-client-key: ${{ secrets.STATSIG_CLIENT_KEY }}
-          sentry-dsn: ${{ secrets.SENTRY_DSN }}
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
           supabase-anon-key: ${{ secrets.SUPABASE_ANON_KEY }}
           reliant-server-url: ${{ env.RELIANT_SERVER_URL }}
@@ -1047,7 +1017,7 @@ jobs:
   #
   # The release notes themselves are still authored HERE, in
   # docs/data/releases/<version>.yaml — that directory renders docs/changelog.mdx
-  # via `make generate-changelog` for the Mintlify docs site. control-plane
+  # via `task generate:docs:changelog` for the Mintlify docs site. control-plane
   # fetches the file at send time; nothing about authoring changes.
   # ============================================================================
 

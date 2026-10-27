@@ -23,16 +23,38 @@
  *
  * A marker is a moment on the time axis — a version first seen, or a release
  * promoted, from control-plane DeliveryInsightsService.ListReleases.
- * Each is drawn as a dashed vertical rule with a short label, and named in the
+ * Each is drawn as a dashed vertical rule, summarized below the plot, and named in the
  * caption. A chart takes them from its `markers` prop or, absent that, from
  * the nearest ObsChartMarkersProvider — the seam that lets one provider put
  * release markers on every time-series chart of the area at once.
+ *
+ * ── AREA (opt-in) ───────────────────────────────────────────────────────────
+ *
+ * `area="fill"` tints under every solid series (overlapping, translucent);
+ * `area="stacked"` stacks the solid series, so the top edge is their sum and
+ * each band is one series' share. Stacking only means something for additive
+ * values (counts, rates, sums) — the caller decides, the chart does not guess.
+ * A dashed (comparison) series is never stacked or filled, and the caption and
+ * the cursor read each series' own value, not the running total.
+ *
+ * ── EXEMPLARS (opt-in) ──────────────────────────────────────────────────────
+ *
+ * An exemplar is one sampled observation: a time and the value it had. With
+ * `exemplars`, the chart places each at its true (time, value) on the plot,
+ * using the chart's own scales (`valToPos`), as a button — a canvas dot could
+ * not be focused or clicked, and uPlot's scales are internal. The buttons live
+ * in a layer over the plot, outside the aria-hidden canvas. One whose time or
+ * value lies outside the axis is not drawn (the axis follows the series, never
+ * the exemplars); `onExemplarsPlaced` reports which were, so the caller can show
+ * the rest elsewhere.
  */
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 
+
+import { cn } from "@/lib/utils";
 
 import { formatValue, type ValueUnit } from "../format";
 
@@ -49,9 +71,39 @@ export interface ChartSeries {
   dashed?: boolean;
 }
 
+/** One sampled observation, placed on the plot at its time and value. */
+export interface ChartExemplar {
+  /** Epoch seconds. */
+  timeSec: number;
+  /** In the axis' unit. */
+  value: number;
+  /** A solid dot (it has something to open) or a hollow one. */
+  solid?: boolean;
+  /** The dot's accessible name. */
+  label: string;
+}
+
+/** Where a placed exemplar sits, in CSS pixels from the plot's top-left. */
+export interface PlacedExemplar {
+  index: number;
+  x: number;
+  y: number;
+}
+
+interface ExemplarLayout {
+  /** The plot area within the chart, CSS pixels. */
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  dots: PlacedExemplar[];
+}
+
+const NO_LAYOUT: ExemplarLayout = { left: 0, top: 0, width: 0, height: 0, dots: [] };
+
 /**
  * A stretch of the time axis to shade: an alert firing. Drawn as a tinted
- * band behind the series with its label at the top, and named in the caption.
+ * band behind the series, summarized below the plot and named in the caption.
  */
 export interface ChartBand {
   /** Epoch seconds. */
@@ -77,7 +129,7 @@ const TONE_VAR: Record<ChartTone, string> = {
 export interface ChartMarker {
   /** Epoch seconds. */
   timeSec: number;
-  /** Short, drawn beside the rule ("v1.8.2"). */
+  /** Short, included in the annotation summary ("v1.8.2"). */
   label: string;
   /** Longer, for the caption ("prod promoted v1.8.2"). Defaults to `label`. */
   description?: string;
@@ -116,12 +168,39 @@ export interface UPlotChartProps {
   bands?: readonly ChartBand[];
   /** uPlot's own legend (series and the value under the cursor). Default: every chart but a sparkline. */
   legend?: boolean;
+  /** Fill under the series, or stack them. Absent: today's look (a fill only under a lone series). */
+  area?: "fill" | "stacked";
+  /** Observations to place on the plot at their value. */
+  exemplars?: readonly ChartExemplar[];
+  /** A dot was activated; `at` is its bottom-left in viewport pixels, for anchoring a popover. */
+  onExemplarOpen?: (index: number, at: { x: number; y: number }) => void;
+  /** After each layout: the indexes of the exemplars drawn on the plot. Every other one lies outside the axes. */
+  onExemplarsPlaced?: (placed: readonly number[]) => void;
 }
 
 const NO_BANDS: readonly ChartBand[] = [];
 
-export function UPlotChart({ timestamps, series, unit, height, label, compact = false, className, markers: own, bands = NO_BANDS, legend }: UPlotChartProps) {
+export function UPlotChart({
+  timestamps,
+  series,
+  unit,
+  height,
+  label,
+  compact = false,
+  className,
+  markers: own,
+  bands = NO_BANDS,
+  legend,
+  area,
+  exemplars,
+  onExemplarOpen,
+  onExemplarsPlaced,
+}: UPlotChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const [layout, setLayout] = useState<ExemplarLayout | null>(null);
+  const layoutKey = useRef("");
+  const placedCallback = useRef(onExemplarsPlaced);
+  placedCallback.current = onExemplarsPlaced;
   const themeVersion = useThemeVersion();
   const inherited = useContext(ObsChartMarkersContext);
   const markers = useMemo(
@@ -129,11 +208,20 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
     [compact, own, inherited, timestamps]
   );
   const shown = useMemo(() => visibleBands(bands, timestamps), [bands, timestamps]);
+  const extent = useMemo(() => timeExtent(timestamps, markers), [timestamps, markers]);
+  const annotationCounts = [
+    markers.length ? `${markers.length} release${markers.length === 1 ? "" : "s"}` : "",
+    shown.length ? `${shown.length} alert${shown.length === 1 ? "" : "s"}` : "",
+  ].filter(Boolean).join(" · ");
+  const annotationSummary = annotationCounts
+    ? `${annotationCounts}: ${[...markers.map((m) => m.label), ...shown.map((b) => b.label)].join(", ")}`
+    : "";
 
   // uPlot wants columns: x, then one array per series.
+  const stacked = area === "stacked" && !compact;
   const data = useMemo<uPlot.AlignedData>(
-    () => [timestamps, ...series.map((s) => s.values)] as uPlot.AlignedData,
-    [timestamps, series]
+    () => [timestamps, ...(stacked ? stackValues(series) : series.map((s) => s.values))] as uPlot.AlignedData,
+    [timestamps, series, stacked]
   );
 
   useEffect(() => {
@@ -142,6 +230,14 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
     const palette = readPalette();
     const width = Math.max(host.clientWidth, 40);
     const tones = series.map((s, index) => s.tone ?? CATEGORICAL[index % CATEGORICAL.length]);
+    const layoutExemplars = (u: uPlot) => {
+      if (!exemplars) return;
+      const next = layoutOf(u, exemplars);
+      const key = JSON.stringify(next);
+      if (key === layoutKey.current) return;
+      layoutKey.current = key;
+      setLayout(next);
+    };
 
     const opts: uPlot.Options = {
       width,
@@ -155,19 +251,27 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
       scales: {
         x: {
           time: true,
-          range: (_u, min, max) => [
-            Math.min(min, ...markers.map((m) => m.timeSec)),
-            Math.max(max, ...markers.map((m) => m.timeSec)),
-          ],
+          // uPlot 1.6.32 expands a singleton by 1000 days BEFORE this
+          // callback. Never trust its min/max; use the actual observations.
+          range: () => extent,
         },
+        // An area is read against its baseline: start at zero, with headroom above.
+        ...(area && !compact
+          ? { y: { range: (_u: uPlot, min: number, max: number): [number, number] => [Math.min(0, min), max + Math.abs(max) * 0.1 || 1] } }
+          : {}),
       },
+      bands: stacked ? stackBands(series, tones, palette) : undefined,
       hooks:
-        markers.length || shown.length
+        markers.length || shown.length || exemplars
           ? {
               // Bands go under the series (drawAxes runs before the series
               // paint); markers over them.
-              drawAxes: shown.length ? [(u: uPlot) => drawBands(u, shown, palette, compact)] : [],
-              draw: markers.length ? [(u: uPlot) => drawMarkers(u, markers, palette, compact)] : [],
+              drawAxes: shown.length ? [(u: uPlot) => drawBands(u, shown, palette)] : [],
+              draw: [
+                ...(markers.length ? [(u: uPlot) => drawMarkers(u, markers, palette)] : []),
+                ...(exemplars ? [layoutExemplars] : []),
+              ],
+              ready: exemplars ? [layoutExemplars] : [],
             }
           : undefined,
       axes: compact
@@ -192,10 +296,19 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
             stroke: s.dashed ? withAlpha(stroke, 0.7) : stroke,
             width: compact ? 1.25 : 1.5,
             dash: s.dashed ? [4, 3] : undefined,
-            fill: !s.dashed && (compact || solid === 1) ? withAlpha(stroke, 0.12) : undefined,
-            points: { show: false },
+            fill: seriesFill(s, index, series, stroke, { area, compact, stacked, solid }),
+            // A line cannot show a singleton or an observation surrounded
+            // by nulls. Draw just those glyphs, never connect across a gap.
+            points: {
+              show: false,
+              size: compact ? 4 : 6,
+              filter: (u: uPlot, seriesIdx: number) => isolatedIndexes(u.data[seriesIdx]),
+            },
             spanGaps: false,
-            value: (_u: uPlot, value: number | null) => formatValue(value, unit),
+            // A stacked column holds the running total; the cursor reads the series' own value.
+            value: stacked
+              ? (_u: uPlot, _value: number | null, _seriesIdx: number, idx: number | null) => formatValue(idx === null ? null : (s.values[idx] ?? null), unit)
+              : (_u: uPlot, value: number | null) => formatValue(value, unit),
           };
         }),
       ],
@@ -207,8 +320,11 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
     } catch {
       // No 2D context (a headless renderer, a GPU process that died): the
       // caption still carries the numbers, so draw nothing rather than throw.
+      if (exemplars) setLayout(NO_LAYOUT);
       return;
     }
+    // uPlot fires `ready` once drawn; lay out here too in case a build does not.
+    if (exemplars) layoutExemplars(chart);
 
     const observer = typeof ResizeObserver === "undefined"
       ? null
@@ -221,16 +337,157 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
       observer?.disconnect();
       chart?.destroy();
     };
-  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown, legend]);
+  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown, legend, area, stacked, exemplars, extent]);
+
+  useEffect(() => {
+    if (exemplars && layout) placedCallback.current?.(layout.dots.map((dot) => dot.index));
+  }, [layout, exemplars]);
 
   const caption = [describeSeries(series, unit), describeMarkers(markers), describeBands(shown)].filter(Boolean).join(" ");
 
   return (
-    <figure className={className} aria-label={label} role="group">
+    <figure className={exemplars ? cn("relative", className) : className} aria-label={label} role="group">
       <div ref={hostRef} aria-hidden="true" style={{ minHeight: height }} />
+      {exemplars && layout && layout.dots.length > 0 && (
+        <div
+          className="pointer-events-none absolute"
+          style={{ left: layout.left, top: layout.top, width: layout.width, height: layout.height }}
+          data-testid="chart-exemplar-layer"
+        >
+          {layout.dots.map((dot) => {
+            const exemplar = exemplars[dot.index];
+            if (!exemplar) return null;
+            return (
+              <button
+                key={dot.index}
+                type="button"
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  onExemplarOpen?.(dot.index, { x: rect.left, y: rect.bottom });
+                }}
+                style={{ left: dot.x, top: dot.y }}
+                className={cn(
+                  "pointer-events-auto absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                  exemplar.solid ? "bg-primary" : "bg-background"
+                )}
+                aria-label={exemplar.label}
+                data-testid="chart-exemplar-dot"
+                data-solid={exemplar.solid || undefined}
+              />
+            );
+          })}
+        </div>
+      )}
+      {!compact && annotationSummary && (
+        <p className="min-w-0 truncate text-xs text-muted-foreground" title={`${describeMarkers(markers)} ${describeBands(shown)}`} data-testid="chart-annotations" aria-hidden="true">
+          {annotationSummary}
+        </p>
+      )}
       <figcaption className="sr-only">{caption}</figcaption>
     </figure>
   );
+}
+
+/**
+ * The data columns of a stacked chart: each solid series' running total, in
+ * order, so a column's top edge is the sum of it and every solid series before
+ * it. A null point is a gap in that series (the total carries on without it);
+ * a dashed series is left as it is.
+ */
+export function stackValues(series: readonly ChartSeries[]): (number | null)[][] {
+  const length = Math.max(0, ...series.map((s) => s.values.length));
+  const running = new Array<number>(length).fill(0);
+  return series.map((s) => {
+    if (s.dashed) return s.values;
+    return s.values.map((value, i) => {
+      if (value === null || !Number.isFinite(value)) return null;
+      running[i] += value;
+      return running[i];
+    });
+  });
+}
+
+/** One band per solid series after the first: between its running total and the one below. */
+function stackBands(series: readonly ChartSeries[], tones: readonly ChartTone[], palette: Palette): uPlot.Band[] {
+  const solid = series.map((s, index) => ({ s, index })).filter(({ s }) => !s.dashed);
+  return solid.slice(1).map(({ index }, k) => ({
+    // uPlot series are 1-based (0 is x).
+    series: [index + 1, solid[k].index + 1] as [number, number],
+    fill: withAlpha(palette.tones[tones[index]], STACK_ALPHA),
+  }));
+}
+
+const STACK_ALPHA = 0.35;
+const OVERLAP_ALPHA = 0.18;
+
+function seriesFill(
+  s: ChartSeries,
+  index: number,
+  all: readonly ChartSeries[],
+  stroke: string,
+  mode: { area: UPlotChartProps["area"]; compact: boolean; stacked: boolean; solid: number }
+): string | undefined {
+  if (s.dashed) return undefined;
+  if (mode.stacked) {
+    // The first solid series fills to the baseline; the rest are bands (stackBands).
+    return all.findIndex((candidate) => !candidate.dashed) === index ? withAlpha(stroke, STACK_ALPHA) : undefined;
+  }
+  if (mode.area === "fill" && !mode.compact) return withAlpha(stroke, mode.solid === 1 ? 0.12 : OVERLAP_ALPHA);
+  return mode.compact || mode.solid === 1 ? withAlpha(stroke, 0.12) : undefined;
+}
+
+/**
+ * Where each exemplar sits on the plot, from the chart's own scales. An
+ * exemplar outside the x or y axis is left out: the axis follows the series, so
+ * a value above it has no honest position here.
+ */
+export function placeExemplars(u: Pick<uPlot, "valToPos" | "scales">, exemplars: readonly ChartExemplar[]): PlacedExemplar[] {
+  const x = u.scales?.x;
+  const y = u.scales?.y;
+  if (x?.min == null || x.max == null || y?.min == null || y.max == null) return [];
+  const placed: PlacedExemplar[] = [];
+  exemplars.forEach((e, index) => {
+    if (!Number.isFinite(e.value) || e.timeSec < x.min! || e.timeSec > x.max! || e.value < y.min! || e.value > y.max!) return;
+    placed.push({ index, x: u.valToPos(e.timeSec, "x", false), y: u.valToPos(e.value, "y", false) });
+  });
+  return placed;
+}
+
+function layoutOf(u: uPlot, exemplars: readonly ChartExemplar[]): ExemplarLayout {
+  if (!u.bbox) return NO_LAYOUT;
+  const ratio = uPlot.pxRatio || 1;
+  return {
+    left: u.bbox.left / ratio,
+    top: u.bbox.top / ratio,
+    width: u.bbox.width / ratio,
+    height: u.bbox.height / ratio,
+    dots: placeExemplars(u, exemplars),
+  };
+}
+
+/**
+ * Bounds come from observations, never uPlot's pre-expanded singleton range.
+ * With no second timestamp there is no known bucket cadence: use a one-minute
+ * viewport centered on the observation, not a fabricated daily history.
+ * Markers have already been filtered to the observed bucket span.
+ */
+export function timeExtent(timestamps: readonly number[], markers: readonly ChartMarker[] = []): [number, number] {
+  const first = timestamps[0];
+  const last = timestamps[timestamps.length - 1];
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return [0, 60];
+  const min = Math.min(first, ...markers.map((m) => m.timeSec));
+  const max = Math.max(last, ...markers.map((m) => m.timeSec));
+  return min === max ? [min - 30, max + 30] : [min, max];
+}
+
+/** Only observations with no adjacent measured neighbour need a glyph. */
+export function isolatedIndexes(values: ArrayLike<number | null | undefined>): number[] {
+  const present = (i: number) => values[i] != null && Number.isFinite(values[i]);
+  const indexes: number[] = [];
+  for (let i = 0; i < values.length; i++) {
+    if (present(i) && !present(i - 1) && !present(i + 1)) indexes.push(i);
+  }
+  return indexes;
 }
 
 /** "Requests: latest 12/s, between 3/s and 40/s. Errors: no data." */
@@ -286,13 +543,11 @@ export function describeBands(bands: readonly ChartBand[]): string {
   return `Shaded: ${bands.map((b) => `${b.label} from ${at(b.startSec)} to ${at(b.endSec)}`).join("; ")}.`;
 }
 
-function drawBands(u: uPlot, bands: readonly ChartBand[], palette: Palette, compact: boolean) {
+function drawBands(u: uPlot, bands: readonly ChartBand[], palette: Palette) {
   const { ctx } = u;
   const { top, height } = u.bbox;
   const ratio = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
   ctx.save();
-  ctx.font = `${11 * ratio}px ui-sans-serif, system-ui, sans-serif`;
-  ctx.textBaseline = "bottom";
   for (const band of bands) {
     const x0 = u.valToPos(band.startSec, "x", true);
     const x1 = Math.max(u.valToPos(band.endSec, "x", true), x0 + 2 * ratio);
@@ -301,21 +556,15 @@ function drawBands(u: uPlot, bands: readonly ChartBand[], palette: Palette, comp
     ctx.fillRect(x0, top, x1 - x0, height);
     ctx.fillStyle = withAlpha(color, 0.55);
     ctx.fillRect(x0, top, x1 - x0, 2 * ratio);
-    if (!compact) {
-      ctx.fillStyle = color;
-      ctx.fillText(band.label, x0 + 3 * ratio, top + height - 2 * ratio);
-    }
   }
   ctx.restore();
 }
 
-function drawMarkers(u: uPlot, markers: readonly ChartMarker[], palette: Palette, compact = false) {
+function drawMarkers(u: uPlot, markers: readonly ChartMarker[], palette: Palette) {
   const { ctx } = u;
   const { top, height } = u.bbox;
   const ratio = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
   ctx.save();
-  ctx.font = `${11 * ratio}px ui-sans-serif, system-ui, sans-serif`;
-  ctx.textBaseline = "top";
   for (const marker of markers) {
     const x = Math.round(u.valToPos(marker.timeSec, "x", true));
     const color = marker.tone ? palette.tones[marker.tone] : palette.axis;
@@ -327,7 +576,6 @@ function drawMarkers(u: uPlot, markers: readonly ChartMarker[], palette: Palette
     ctx.moveTo(x, top);
     ctx.lineTo(x, top + height);
     ctx.stroke();
-    if (!compact) ctx.fillText(marker.label, x + 3 * ratio, top + 2 * ratio);
   }
   ctx.restore();
 }

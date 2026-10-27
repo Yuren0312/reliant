@@ -1,6 +1,6 @@
 import { logger } from "../../lib/logger";
 import { useState, useEffect, useRef, type ReactNode } from "react";
-import { ConnectDaemonModal } from "../Layout/ConnectDaemonModal";
+import { AddMachineSheet } from "../Machines/AddMachineSheet";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
@@ -19,9 +19,11 @@ import {
   defaultChatMachine,
   defaultMachineDaemon,
   hasMachine,
+  installedDaemonIds,
   startOptionsForMachine,
   type ChatMachineChoice,
 } from "@/lib/chatMachine";
+import { useProjectDaemonInstalls } from "@/hooks/project-queries";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { MachinePicker } from "./MachinePicker";
 import { capabilities } from "@/services/controlPlane/capabilities";
@@ -43,9 +45,10 @@ import { OomKillBanner } from "./OomKillBanner";
 import { DiskPressureBanner } from "./DiskPressureBanner";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { trackEvent } from "../../lib/analytics";
 import { PendingFirstMessage } from "./PendingFirstMessage";
+import { useCurrentWorktree, useCachedWorktrees, getCachedWorktree } from "../../hooks/worktree-queries";
 
 // Text handed back after a failed start goes through the composer's prefill.
 // Its ids count up from here, so they can never equal a host's prefill id
@@ -64,6 +67,13 @@ interface NewChatViewProps {
    */
   emptyState?: (context: { noMachine: boolean }) => ReactNode;
   composerPrefill?: ComposerPrefill;
+  /**
+   * The home host's additions to the welcome block, for a pane with no host
+   * empty state: a heading under the mark, and a panel under the workspace
+   * controls (the app shell puts the project's apps there — Apps/HomeNewChat).
+   */
+  heading?: ReactNode;
+  welcomePanel?: ReactNode;
 }
 
 export function NewChatView({
@@ -72,6 +82,8 @@ export function NewChatView({
   onChatCreated,
   emptyState,
   composerPrefill,
+  heading,
+  welcomePanel,
 }: NewChatViewProps) {
   const [isCreating, setIsCreating] = useState(false);
   // The message being sent while StartChat is in flight (PendingFirstMessage).
@@ -85,7 +97,7 @@ export function NewChatView({
   useEffect(() => {
     setRestoredPrefill(null);
   }, [composerPrefill?.id]);
-  const [showConnectDaemonModal, setShowConnectDaemonModal] = useState(false);
+  const [showAddMachine, setShowAddMachine] = useState(false);
   const [showCreateWorktreeModal, setShowCreateWorktreeModal] = useState(false);
   const [showDiscoverWorktreeModal, setShowDiscoverWorktreeModal] = useState(false);
   const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
@@ -95,13 +107,14 @@ export function NewChatView({
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const workspaceDropdownRef = useRef<HTMLDivElement>(null);
 
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
+  const currentWorktree = useCurrentWorktree();
+  const currentProject = useProjectStore((state) => state.currentProject);
+  // The workspaces the app already holds (main, the selection, whatever a
+  // picker has paged in); opening the picker loads the list itself.
+  const worktrees = useCachedWorktrees(currentProject?.id);
   const switchWorktreeContext = useWorktreeStore(
     (state) => state.switchWorktreeContext
   );
-  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
-  const currentProject = useProjectStore((state) => state.currentProject);
   const ensureApiKeyOrShowModal = useApiKeySetupStore(
     (state) => state.ensureApiKeyOrShowModal
   );
@@ -123,6 +136,9 @@ export function NewChatView({
   const canPickMachine = useCapability("chatDaemonSelection");
   const [machineChoice, setMachineChoice] = useState<ChatMachineChoice | null>(null);
   const awaitingBundledDaemon = useBundledDaemonPending(hasMachine(daemons));
+  // The machine a new chat lands on is the one the project is installed on
+  // (research/CHAT_MACHINE_PLACEMENT.md), so the picker names that one.
+  const installs = useProjectDaemonInstalls();
   // Until the registry has answered, nothing is known about the user's
   // machines — including when the first read failed (a tab waking with a dead
   // connection). An empty list then is not "no machine", and No machine is a
@@ -314,18 +330,14 @@ export function NewChatView({
     await handleWorkspaceSelect(worktreeId);
   };
 
-  const handleWorktreesImported = (_importedWorktreeIds?: string[]) => {
-    if (currentProject) {
-      loadWorktrees(currentProject.id);
-    }
-  };
+  // importWorktree refreshes the workspace lists itself.
+  const handleWorktreesImported = (_importedWorktreeIds?: string[]) => {};
 
   const handleWorkspaceSelect = async (worktreeId: string | null) => {
-    // Read from the store rather than the render closure: a workspace created
-    // moments ago is already in the store but not yet in this render's list.
-    const latestWorktrees = useWorktreeStore.getState().worktrees;
+    // Read from the cache rather than the render closure: a workspace created
+    // moments ago is already cached but not yet in this render's list.
     if (worktreeId && currentProject) {
-      const worktree = latestWorktrees.find((w) => w.id === worktreeId);
+      const worktree = getCachedWorktree(worktreeId);
       if (worktree) {
         await switchWorktreeContext(currentProject.id, worktree);
         setSelectedWorkspaceId(worktreeId);
@@ -384,6 +396,7 @@ export function NewChatView({
                   <ReliantIcon className="h-10 w-10" />
                 </div>
               )}
+              {!emptyState && heading}
 
               {/* Workspace controls */}
               <div
@@ -395,7 +408,7 @@ export function NewChatView({
                     value={machine}
                     onChange={setMachineChoice}
                     daemons={daemons}
-                    defaultDaemon={defaultMachineDaemon(daemons)}
+                    defaultDaemon={defaultMachineDaemon(daemons, installedDaemonIds(installs.data ?? [], currentProject?.id))}
                     disabled={isCreating}
                   />
                 )}
@@ -408,7 +421,7 @@ export function NewChatView({
                 <div className="relative" ref={workspaceDropdownRef}>
                   <Tooltip
                     content="Workspaces are isolated copies of your codebase, powered by git worktrees — run multiple agents in parallel without conflicts."
-                    placement="top"
+                    side="top"
                   >
                     <button
                       onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
@@ -507,7 +520,7 @@ export function NewChatView({
                 {/* Quick create workspace */}
                 <Tooltip
                   content="Create an isolated copy of your codebase (a git worktree) so another agent can work in parallel without conflicts."
-                  placement="top"
+                  side="top"
                 >
                   <button
                     onClick={() => setShowCreateWorktreeModal(true)}
@@ -521,6 +534,7 @@ export function NewChatView({
                 )}
               </div>
 
+              {!emptyState && welcomePanel && <div className="w-full pt-3">{welcomePanel}</div>}
             </div>
           </div>
 
@@ -549,7 +563,7 @@ export function NewChatView({
             onRetry={
               capabilities.cloudDaemons
                 ? daemonWait.retryNow
-                : () => setShowConnectDaemonModal(true)
+                : () => setShowAddMachine(true)
             }
           />
           {/* The machine is unavailable; the chat does not have to wait for it. */}
@@ -612,10 +626,9 @@ export function NewChatView({
         </>
       )}
 
-      <ConnectDaemonModal
-        isOpen={showConnectDaemonModal}
-        onClose={() => setShowConnectDaemonModal(false)}
-      />
+      {showAddMachine && (
+        <AddMachineSheet open onClose={() => setShowAddMachine(false)} onReady={() => refreshDaemons()} />
+      )}
     </div>
   );
 }

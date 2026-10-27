@@ -7,9 +7,8 @@
  * The BODIES are the components the console already had, mounted unchanged
  * where the new IA puts them — Activity gets its own design in a later PR
  * (the Overview, Releases and Dashboards have theirs: ../Workloads,
- * ../Releases, ../Observability/Dashboards). A
- * page shows a placeholder only where nothing existed (Metrics, Monitoring
- * settings).
+ * ../Releases, ../Observability/Dashboards, ../Observability/Metrics). A
+ * page shows a placeholder only where nothing existed (Monitoring settings).
  *
  * Every list page honours the top-bar scope (useForgeConsole().env): one
  * environment, or all of them.
@@ -17,10 +16,10 @@
 
 import { useCallback, useMemo, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Rocket } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
-import EmptyState from "@/components/forge-ui/empty_state";
+import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import Link from "@/components/forge-ui/link";
 import PageHeader, { type PageHeaderAction } from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
@@ -37,6 +36,7 @@ import { CloudNotice } from "../SourceNotices";
 import { useForgeConsole } from "./consoleContext";
 import { ENV_ALL, envsInScope } from "./envScope";
 import { DashboardsPage, ObservabilityHomePage } from "../Observability/Dashboards/DashboardsPages";
+import { MetricsExplorerPage } from "../Observability/Metrics/MetricsExplorerPage";
 import { ObservabilityHost } from "./ObservabilityHost";
 import { OBS_NAV_LABELS } from "./paths";
 
@@ -133,12 +133,26 @@ function ScopedEnvNote({ scoped, what }: { scoped: RosterEnv | null; what: strin
 
 // Releases and a release are their own pages (../Releases/ReleasesPages).
 
-function NothingDeployed({ what }: { what: string }) {
+function NothingDeployed({ what, about }: { what: string; about: string }) {
   return (
-    <EmptyState
+    <GettingStarted
+      testId="console-nothing-deployed"
+      icon={<Rocket className="h-4 w-4" />}
       title="Nothing deployed yet"
-      description={`An environment has ${what} once a release is promoted to it. Run forge env deploy <env> to deploy one through Reliant.`}
-    />
+      about={about}
+      steps={[
+        {
+          text: "Deploy an environment through Reliant from your checkout. It builds, cuts a release and deploys it.",
+          command: "forge env deploy <env>",
+        },
+      ]}
+      docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
+    >
+      <p>
+        An environment has {what} once a release is promoted to it. A local environment (forge env up) runs your working tree and
+        records none.
+      </p>
+    </GettingStarted>
   );
 }
 
@@ -148,28 +162,20 @@ function NothingDeployed({ what }: { what: string }) {
 export const ObservabilityOverviewPage = ObservabilityHomePage;
 
 /**
- * Logs, Traces, Profiles, Alerts — and Metrics, which has no view yet.
- * Dashboards has a route of its own (observability/dashboards), which wins.
+ * Logs, Traces, Profiles, Alerts — and Metrics, the explorer
+ * (../Observability/Metrics). Dashboards has a route of its own
+ * (observability/dashboards), which wins.
  */
 export function ObservabilityViewPage() {
-  const { page, href } = useForgeConsole();
+  const { page } = useForgeConsole();
   if (page.kind !== "obs-view") return null;
   if (page.view === "dashboards") return <DashboardsPage />;
   if (page.view === "metrics") {
     return (
-      <Placeholder
-        testId="console-metrics"
-        title="Metrics"
-        line={
-          <>
-            A metrics explorer — any metric, filtered and grouped — lands here. Until then, metric panels live in{" "}
-            <Link href={href({ kind: "obs-view", view: "dashboards" })} className="text-ink underline-offset-2 hover:underline">
-              Dashboards
-            </Link>
-            .
-          </>
-        }
-      />
+      <Page testId="console-metrics">
+        <Header title={OBS_NAV_LABELS.metrics} />
+        <MetricsExplorerPage />
+      </Page>
     );
   }
   return (
@@ -296,7 +302,12 @@ export function ActivityPage() {
           {envs.map((candidate) => (
             <EnvActivity key={candidate.name} env={candidate.live} />
           ))}
-          {envs.length === 0 && !scoped && <NothingDeployed what="activity" />}
+          {envs.length === 0 && !scoped && (
+            <NothingDeployed
+              what="activity"
+              about="Activity is everything that changed in this project: each promotion and rollback, what the platform observed after it, and what people and agents did."
+            />
+          )}
         </>
       )}
     </Page>

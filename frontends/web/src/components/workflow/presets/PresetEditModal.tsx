@@ -8,15 +8,14 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Modal } from '../../ui/Modal'
-import { Button } from '../../ui/Button'
+import Modal from '../../forge-ui/modal'
+import Button from '@/components/forge-ui/button';
 import { ModelSelector } from '../../Chat/ModelSelector'
 import { ToolsSelector } from '../ToolsSelector'
 import { AgentSelector } from '../../Chat/AgentSelector'
-import { MultiSelectDropdown } from '../../ui/MultiSelectDropdown'
-import type { Preset } from '../../../store/globalDataStore'
-import { presetGrpc } from '../../../api/preset-grpc'
-import { workflowGrpc, type WorkflowResponse } from '../../../api/workflow-grpc'
+import Combobox from '../../forge-ui/combobox'
+import { createPreset, updatePreset, type Preset } from '../../../hooks/preset-queries'
+import { fetchWorkflowList, fetchWorkflow, type WorkflowResponse } from '../../../hooks/workflow-queries'
 import { formatValueForDisplay } from '../../../lib/paramUtils'
 import { ProtoFieldRenderer } from '../ProtoFieldRenderer'
 import { inputDefToSchema } from '../../../lib/nodeFieldAdapter'
@@ -137,7 +136,9 @@ function ParamField({
             )}
           </div>
         ) : (
-          <MultiSelectDropdown
+          <Combobox
+            multiple
+            aria-label={label}
             options={options}
             value={Array.isArray(value) ? value : []}
             onChange={onChange}
@@ -344,7 +345,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
     const fetchSchemas = async () => {
       try {
         // List workflows to find available params
-        const workflows = await workflowGrpc.listWorkflows(projectId)
+        const { workflows } = await fetchWorkflowList(projectId)
         if (!mounted || !workflows.length) return
 
         // Prioritize builtin workflows as they're most likely to define standard params
@@ -361,7 +362,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
         
         await Promise.all(workflowsToFetch.map(async (wf: WorkflowResponse) => {
           try {
-            const details = await workflowGrpc.getWorkflow(projectId, { name: wf.name })
+            const details = await fetchWorkflow(projectId, { name: wf.name })
             const workflowInputs = details.workflow?.inputs
             if (workflowInputs) {
               // Merge inputs into schema
@@ -398,7 +399,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
     setIsSaving(true)
     try {
       // Use preset.name for the API call (works for both user and project presets)
-      const result = await presetGrpc.updatePreset(projectId, preset.name, {
+      const result = await updatePreset(projectId, preset.name, {
         newName: name !== preset.name ? name : undefined,
         newDescription: description !== preset.description ? description : undefined,
         newTag: tag !== (preset.tag || '') ? tag : undefined,
@@ -429,7 +430,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
     setIsCopying(true)
     try {
       // Create new preset with same params/description
-      const result = await presetGrpc.createPreset(projectId, {
+      const result = await createPreset(projectId, {
         name: copyName,
         description: preset.description,
         params: preset.params || {},
@@ -489,7 +490,7 @@ export function PresetEditModal({ preset, projectId, availablePresets = [], onSa
 
   return (
     <Modal
-      isOpen={true}
+      open={true}
       onClose={onClose}
       title={isEditable ? `Edit Preset: ${preset.name}` : `View Preset: ${preset.name}`}
       size="lg"

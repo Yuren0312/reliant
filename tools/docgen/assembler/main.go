@@ -248,9 +248,11 @@ tools_config:
     shell: {credentials: none}
 ` + "```" + `
 
-It is **not containment**: the command still runs as the daemon's Unix user and can read that user's files
-(` + "`~/.config/gh/hosts.yml`, `~/.git-credentials`, `~/.ssh`" + `). It stops an accidental push, not a command that goes
-looking. Never tell an agent to look elsewhere for a token; publish with a ` + "`git_publish`" + ` node.
+On Linux (every Reliant cloud machine) the command also runs in a sandbox where the daemon's credential files are
+absent (` + "`~/.reliant/daemon.json`, `~/.config/forge`, `~/.git-credentials`, `~/.ssh`, `~/.config/gh`" + `, kubeconfig and cloud files, the
+container engine's socket), sees only its own processes, and has no capabilities. It shares the network and can
+write its working directory, and on macOS and Windows only the environment is scrubbed. Never tell an agent to look
+elsewhere for a token; publish with a ` + "`git_publish`" + ` node.
 
 ### Threading
 
@@ -633,6 +635,8 @@ the discovery/reference tools (` + "`list_workflows`" + `, ` + "`list_presets`" 
 | ` + "`search_integrations`" + ` | Find an integration action ref (GitHub, Slack, HTTP, ...) for a ` + "`type: action`" + ` node's ` + "`uses:`" + ` |
 | ` + "`get_integration_schema`" + ` | Read one integration action's params (` + "`with:`" + `) and output (` + "`nodes.<id>.data`" + `) schemas |
 | ` + "`list_triggers`" + ` | List the triggers the user has enabled (optionally one workflow's) with health; read-only. BROKEN means the declaration it activates is gone or changed |
+| ` + "`fire_trigger`" + ` | Manually fire an existing activation once, including a paused one; never creates, enables or changes it. Orchestrator-tier; returns an asynchronous fire_workflow_id, not a successful run |
+| ` + "`list_trigger_events`" + ` | Read firing history without source payloads. Match fire_workflow_id exactly, then inspect the launched chat_id with get_run; paginate with next_page_token |
 | ` + "`list_workflows`" + ` | Browse existing workflows for examples and patterns |
 | ` + "`list_presets`" + ` | Discover available agent presets |
 | ` + "`get_preset`" + ` | View a preset's full configuration |
@@ -856,7 +860,7 @@ func generateInputTypesSummary() string {
 func extractTopLevelSchema(schemaPath string) (string, error) {
 	content, err := os.ReadFile(schemaPath)
 	if err != nil {
-		return "", fmt.Errorf("reading workflow schema: %w (run 'make generate-schema' first)", err)
+		return "", fmt.Errorf("reading workflow schema: %w (run 'task generate:docs:schema' first)", err)
 	}
 
 	text := cleanMarkdown(string(content))
@@ -883,7 +887,7 @@ func extractTopLevelSchema(schemaPath string) (string, error) {
 func extractScenarioEssentials(scenarioPath string) (string, error) {
 	content, err := os.ReadFile(scenarioPath)
 	if err != nil {
-		return "", fmt.Errorf("reading scenario schema: %w (run 'make generate-scenario-schema' first)", err)
+		return "", fmt.Errorf("reading scenario schema: %w (run 'task generate:docs:scenario-schema' first)", err)
 	}
 
 	text := cleanMarkdown(string(content))
@@ -1225,7 +1229,7 @@ func resolveReferenceFile(docsDir, filename string) (string, error) {
 			return candidate, nil
 		}
 	}
-	return "", fmt.Errorf("could not find %s under %s or %s (run 'make generate-schema generate-scenario-schema' first)", filename, candidates[0], candidates[1])
+	return "", fmt.Errorf("could not find %s under %s or %s (run 'task generate:docs:schema generate:docs:scenario-schema' first)", filename, candidates[0], candidates[1])
 }
 
 func extractSection(text, startMarker, endMarker string) string {

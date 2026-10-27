@@ -14,6 +14,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { mockTransport } from "@/lib/test-utils";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
@@ -33,7 +36,7 @@ import {
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ProjectDaemonSchema, ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import { ListConnectionsResponseSchema } from "@/gen/reliant/v1/connection_pb";
-import { InputOptionSchema, InputOptionsConnectionState, ListInputOptionsResponseSchema, type ListInputOptionsRequest } from "@/gen/reliant/v1/catalog_pb";
+import { InputOptionSchema, InputOptionsConnectionState, ListInputOptionsResponseSchema, SearchCatalogResponseSchema, type ListInputOptionsRequest } from "@/gen/reliant/v1/catalog_pb";
 import { GetWorkflowResponseSchema } from "@/gen/reliant/v1/workflow_pb";
 import { InputBaseSchema, InputSchema, IntegrationInputConfigSchema, StringInputConfigSchema, WorkflowSchema } from "@/gen/reliant/v1/workflow_v2_pb";
 import { jsToProtoValue } from "@/api/proto-utils";
@@ -55,26 +58,46 @@ const getCatalogEntry = vi.fn();
 const listInputOptions = vi.fn();
 const listRepos = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    connection: () => ({ listConnections }),
-    catalog: () => ({ searchCatalog, getCatalogEntry, listInputOptions }),
-    trigger: () => ({ enableWorkflow, listTriggers }),
-    workflow: () => ({ getWorkflow, listWorkflows }),
-    preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
-    worktree: () => ({ listWorktrees }),
-    daemonRegistry: () => ({ listDaemons }),
-    project: () => ({ listProjectDaemons }),
-    repo: () => ({ listRepos }),
-  },
-  getGRPCBaseURLPublic: () => "https://api.example.com",
+vi.mock("@/lib/connect", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/connect")>()),
+  reliantApiBaseUrl: () => "https://api.example.com",
+}));
+
+// RepoService, CatalogService and ConnectionService are on their generated
+// hooks, so they are answered at the transport. PresetService is reached
+// through connectClient (hooks/preset-queries).
+setTransport(
+  mockTransport({
+    // The daemon list is read through connectClient(DaemonRegistryService).
+    ...serviceHandlers("DaemonRegistryService", { listDaemons }),
+    ...serviceHandlers("TriggerService", { enableWorkflow, listTriggers }),
+    // The run form lists workspaces through the generated WorktreeService hooks.
+    ...serviceHandlers("WorktreeService", { listWorktrees }),
+    ...serviceHandlers("WorkflowService", { getWorkflow, listWorkflows }),
+    "RepoService.ListRepos": (req) => listRepos(req),
+    "CatalogService.SearchCatalog": (req) => searchCatalog(req),
+    "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
+    "CatalogService.ListInputOptions": (req) => listInputOptions(req),
+    "ConnectionService.ListConnections": (req) => listConnections(req),
+    ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
+    ...serviceHandlers("ProjectService", { listProjectDaemons }),
+  }),
+);
+
+// The project list the dialog names projects from (ListProjects, through useProjects).
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjects: () => ({
+    projects: [{ id: "proj-1", name: "Reliant" }],
+    isLoading: false,
+    error: null,
+    refetch: () => undefined,
+  }),
 }));
 
 vi.mock("@/store/projectStore", () => {
   const snapshot = () => ({
-    projects: [{ id: "proj-1", name: "Reliant" }],
     currentProject: { id: "proj-1", name: "Reliant" },
-    loadProjects: vi.fn(async () => undefined),
   });
   const useProjectStore = Object.assign(
     (selector?: (s: ReturnType<typeof snapshot>) => unknown) => (selector ? selector(snapshot()) : snapshot()),
@@ -191,7 +214,7 @@ beforeEach(() => {
     projectDaemons: [create(ProjectDaemonSchema, { projectId: "proj-1", daemonId: "daemon-1", installState: ProjectInstallState.INSTALLED })],
   });
   listConnections.mockResolvedValue(create(ListConnectionsResponseSchema, { connections: [] }));
-  searchCatalog.mockResolvedValue({ entries: [], nextPageToken: "", totalSize: 0, categoryFacets: [] });
+  searchCatalog.mockResolvedValue(create(SearchCatalogResponseSchema));
   getCatalogEntry.mockRejectedValue(new Error("not in this test's catalog"));
   listInputOptions.mockImplementation(async (req: ListInputOptionsRequest) => {
     if (req.resolve.length > 0) return create(ListInputOptionsResponseSchema, {});

@@ -1,10 +1,9 @@
+import { uniqueMachineName } from "@/lib/uniqueMachineName";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { create } from "@bufbuild/protobuf";
+import { useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, ShieldAlert, Plus, Github } from "lucide-react";
-import { grpcClient } from "../../api/grpc-client";
 import {
-  ListConnectorsRequestSchema,
-  ListAvailableToolsRequestSchema,
   AuthorizeClientRequestSchema,
   CreateConnectorRequestSchema,
   ConnectorExecMode,
@@ -13,14 +12,19 @@ import type {
   Connector,
   ConnectorTool,
 } from "../../gen/reliant/v1/connector_pb";
-import { ListDaemonsRequestSchema } from "../../gen/reliant/v1/daemon_registry_pb";
 import type { DaemonInfo } from "../../gen/reliant/v1/daemon_registry_pb";
+import {
+  connectorServiceQueries,
+  useAuthorizeClient,
+} from "../../hooks/connector-service-hooks_gen";
+import { fetchDaemonList } from "../../hooks/daemon-registry-queries";
 import { RepoSelector } from "../Projects/RepoSelector";
 import type { GitRepo } from "../../services/controlPlane/git";
-import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
+import Input from "../forge-ui/input";
+import Button from "@/components/forge-ui/button";
 import Badge from "../forge-ui/badge";
 import { cn } from "../../lib/utils";
+import { connectGitHub } from "../../lib/github-connect";
 import { useAccountGate } from "@/hooks/useAccountGate";
 import { machineDisplayName } from "@/lib/machineName";
 
@@ -50,14 +54,6 @@ import { machineDisplayName } from "@/lib/machineName";
  */
 function isPersonalMachine(d: DaemonInfo): boolean {
   return d.daemonType !== "managed";
-}
-
-/** The machines this user can bind a connector to, from reliant's registry. */
-async function fetchDaemons(): Promise<DaemonInfo[]> {
-  const res = await grpcClient
-    .daemonRegistry()
-    .listDaemons(create(ListDaemonsRequestSchema, {}));
-  return res.daemons;
 }
 
 /**
@@ -112,6 +108,8 @@ export function ConnectorConsent({
    */
   busy?: boolean;
 }) {
+  const queryClient = useQueryClient();
+  const authorizeClient = useAuthorizeClient();
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [tools, setTools] = useState<ConnectorTool[]>([]);
   const [daemons, setDaemons] = useState<DaemonInfo[]>([]);
@@ -156,10 +154,12 @@ export function ConnectorConsent({
   const load = useCallback(async () => {
     try {
       setError(null);
-      const client = grpcClient.connector();
+      // Through the generated entries, so the Machines page's grant list and
+      // this screen share one cache. The grant list is always read fresh: the
+      // choice of which grant to bind is made from it.
       const [connectorsRes, toolsRes] = await Promise.all([
-        client.listConnectors(create(ListConnectorsRequestSchema, {})),
-        client.listAvailableTools(create(ListAvailableToolsRequestSchema, {})),
+        queryClient.fetchQuery(connectorServiceQueries.listConnectors({}, { staleTime: 0 })),
+        queryClient.fetchQuery(connectorServiceQueries.listAvailableTools({})),
       ]);
 
       const live = connectorsRes.connectors.filter((c) => !c.revokedAt);
@@ -176,8 +176,10 @@ export function ConnectorConsent({
         setMode("new");
       }
 
+      // The machines this user can bind a connector to: a fresh read of the
+      // one daemon list (hooks/daemon-registry-queries).
       try {
-        setDaemons(await fetchDaemons());
+        setDaemons(await fetchDaemonList(queryClient));
       } catch {
         setDaemons([]);
       }
@@ -187,7 +189,7 @@ export function ConnectorConsent({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     load();
@@ -251,8 +253,10 @@ export function ConnectorConsent({
       const known = new Set(daemons.map((d) => d.daemonId));
 
       const { createDaemon } = await import("../../services/controlPlane/daemon");
+      // A valid, unused name: the server refuses one already in use, and
+      // "<App> workspace" (a space, capitals) was never a valid name at all.
       const createdID = await createDaemon({
-        name: clientName ? `${clientName} workspace` : "connector workspace",
+        name: uniqueMachineName(`${clientName || "connector"}-workspace`, daemons.map((d) => d.name)),
         daemonType: DAEMON_TYPE_MANAGED_ENUM,
         size: DAEMON_SIZE_SMALL_ENUM,
       });
@@ -267,7 +271,7 @@ export function ConnectorConsent({
 
         let current: DaemonInfo[] = [];
         try {
-          current = await fetchDaemons();
+          current = await fetchDaemonList(queryClient);
         } catch {
           // A transient list failure during provisioning is not fatal; the
           // next tick retries until the deadline.
@@ -345,36 +349,11 @@ export function ConnectorConsent({
    */
   const handleConnectGitHub = async () => {
     setError(null);
-    try {
-      const [{ gitService }, { supabase }] = await Promise.all([
-        import("../../services/controlPlane/git"),
-        import("../../lib/supabase"),
-      ]);
-
-      const oauthURL = gitService.getOAuthURL();
-      if (!oauthURL) {
-        setError("GitHub connections are not available in this deployment.");
-        return;
-      }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        setError("You need to be signed in to connect GitHub.");
-        return;
-      }
-
-      const returnTo = `${window.location.pathname}${window.location.search}`;
-      const params = new URLSearchParams({
-        token: session.access_token,
-        returnTo,
-      });
-      window.location.href = `${oauthURL}?${params.toString()}`;
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not start the GitHub connection."
-      );
+    const outcome = await connectGitHub();
+    if (outcome.kind === "error") {
+      setError(outcome.message);
+    } else if (outcome.kind === "connected") {
+      setGithubConnected(true);
     }
   };
 
@@ -471,7 +450,9 @@ export function ConnectorConsent({
               }),
             });
 
-      await grpcClient.connector().authorizeClient(req);
+      // A generated write: it refetches every ConnectorService read, so the
+      // Machines page shows a grant created here.
+      await authorizeClient.mutateAsync(req);
       // The grant and binding now exist. Inside the OAuth flow the caller
       // takes over from here (approve, then redirect), so the "connected"
       // screen below would be a dead end shown over a live flow — leave the
@@ -606,6 +587,7 @@ export function ConnectorConsent({
             <Input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="forge-ui"
             />
           </div>
 
@@ -761,7 +743,7 @@ export function ConnectorConsent({
             <Input
               value={form.pathRoot}
               onChange={(e) => setForm({ ...form, pathRoot: e.target.value })}
-              className="font-mono text-sm"
+              className="forge-ui font-mono text-sm"
               placeholder="/Users/you/code/project"
             />
             {(suggestedRoots.length > 0 || form.daemonId) && (
@@ -863,7 +845,7 @@ export function ConnectorConsent({
                   setForm({ ...form, execAllowlist: e.target.value })
                 }
                 placeholder="git, go, npm"
-                className="font-mono text-sm"
+                className="forge-ui font-mono text-sm"
               />
             )}
 

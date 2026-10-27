@@ -63,8 +63,8 @@ export function obsRetry(failureCount: number, error: unknown): boolean {
  * What an AlertingService failure means. Alerting adds two answers the query
  * service does not give:
  *
- *   not-configured  Unavailable "alerting is not configured on this server":
- *                   this control plane runs no Alertmanager yet (hosted
+ *   not-configured  reason observability_not_configured: this control
+ *                   plane runs no Alertmanager yet (hosted
  *                   observability is off). Explained, never retried.
  *   in-use          FailedPrecondition on a receiver delete: a route in the
  *                   code still names it.
@@ -93,8 +93,8 @@ export function alertingRetry(failureCount: number, error: unknown): boolean {
  * What a DeliveryInsightsService failure means. Both of its refusals are
  * PermissionDenied, and they ask for different things of the reader:
  *
- *   not-member       "not a member of this organization": the org itself is
- *                    closed to the caller; no narrowing helps.
+ *   not-member       reason not_org_member: the org itself is closed to the
+ *                    caller; no narrowing helps.
  *   env-unavailable  "one or more environments are not available to this
  *                    organization": an env id in scope is missing, deleted or
  *                    another org's (the server words all three the same, so
@@ -171,5 +171,30 @@ export function releaseHealthErrorKind(error: unknown): ReleaseHealthErrorKind {
 
 export function releaseHealthRetry(failureCount: number, error: unknown): boolean {
   if (releaseHealthErrorKind(error) !== "unavailable") return false;
+  return failureCount < 1;
+}
+
+/**
+ * What a RumService failure means. Sessions add two answers:
+ *
+ *   not-configured  Unimplemented (a control plane from before sessions) or
+ *                   Unavailable "sessions are not configured on this server".
+ *                   Explained in place, never retried.
+ *   not-found       NotFound: no such session in the scope — none at all, or
+ *                   one of another environment or service (the server words
+ *                   them the same).
+ *
+ * Everything else reads as obsErrorKind does.
+ */
+export type RumErrorKind = ObsErrorKind | "not-configured" | "not-found";
+
+export function rumErrorKind(error: unknown): RumErrorKind {
+  if (notOnThisServer(error)) return "not-configured";
+  if (error instanceof ConnectError && error.code === Code.NotFound) return "not-found";
+  return obsErrorKind(error);
+}
+
+export function rumRetry(failureCount: number, error: unknown): boolean {
+  if (rumErrorKind(error) !== "unavailable") return false;
   return failureCount < 1;
 }

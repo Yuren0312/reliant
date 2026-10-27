@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The automations list, against the real data layer (trigger-grpc +
+ * The automations list, against the real data layer (trigger-model +
  * trigger-queries) with only the RPC client mocked: grouped rows with the
  * server's health, the launched run's own status, names straight off the
  * trigger, the "Needs attention" group, the "Coming up" strip, and an enabled
@@ -11,7 +11,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 
 import {
   ScheduleSourceSchema,
@@ -25,18 +25,24 @@ import {
 } from "@/gen/reliant/v1/trigger_pb";
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { HOUR, isoFromNow, renderAtRoute } from "./automationTestUtils";
+import { setTransport } from "@/lib/connect";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { mockTransport } from "@/lib/test-utils";
 
 const listTriggers = vi.fn();
 const setTriggerEnabled = vi.fn();
 const listDaemons = vi.fn(async () => ({ daemons: [] }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    trigger: () => ({ listTriggers, setTriggerEnabled }),
-    daemonRegistry: () => ({ listDaemons }),
-    workflow: () => ({ listWorkflows: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })) }),
-  },
-}));
+// TriggerService is on its generated hooks, so it is answered at the transport.
+// Integration events are named from the catalog's trigger types; none here.
+setTransport(
+  mockTransport({
+    ...serviceHandlers("WorkflowService", { listWorkflows: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })) }),
+    ...serviceHandlers("TriggerService", { listTriggers, setTriggerEnabled }),
+    ...serviceHandlers("DaemonRegistryService", { listDaemons }),
+    "CatalogService.SearchCatalog": { response: {} },
+  }),
+);
 
 vi.mock("@/hooks/useTitleBarChrome", () => ({
   useTitleBarChrome: () => ({
@@ -70,7 +76,8 @@ vi.mock("@/store/projectStore", () => {
 
 import { AutomationsListPage } from "../AutomationsListPage";
 
-type TriggerInit = Parameters<typeof create<typeof TriggerSchema>>[1];
+/** A fixture's overrides: any init fields but the message's own type tag. */
+type TriggerInit = Omit<MessageInitShape<typeof TriggerSchema>, "$typeName">;
 
 function protoTrigger(overrides: Partial<TriggerInit> = {}) {
   return create(TriggerSchema, {

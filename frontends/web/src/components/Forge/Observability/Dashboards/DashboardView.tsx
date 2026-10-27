@@ -88,7 +88,10 @@ import {
   type RefreshInterval,
 } from "./dashboardModel";
 import { AlertFromPanelDialog, CREATE_ALERT_LABEL } from "./AlertFromPanelDialog";
+import { useAskReliant } from "../AskReliant/AskReliant";
 import { PromoteDialog, SaveCopyDialog, envScopeOf, writeErrorMessage } from "./dialogs";
+import { useUnmountSafeTimeout } from "@/hooks/useUnmountSafeTimeout";
+import { dashboardPivot, useExploreHref } from "../Metrics/pivots";
 import { drillSearches, type ExploreHrefs } from "./drill";
 import { duplicatePanel, starterPanel, upsertPanel } from "./panelBuilder";
 import { PanelBody, type DrillTarget } from "./PanelBody";
@@ -99,6 +102,8 @@ export interface DashboardHrefs extends ExploreHrefs {
   list: string;
   release: (version: string) => string;
   trace: (traceId: string) => string;
+  /** One browser session (a sessions panel's row). Absent: rows are not links. */
+  session?: (sessionId: string) => string;
   dashboard: (ref: DashboardRef, search?: DashboardSearch) => string;
 }
 
@@ -126,6 +131,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const range: RangePreset = search.range ?? DEFAULT_RANGE;
   const compare: CompareMode = search.compare ?? "off";
   const refresh: RefreshInterval = search.refresh ?? "off";
+  const exploreLink = useExploreHref();
 
   const envId = env === ENV_ALL ? null : (environments.find((candidate) => candidate.name === env)?.id ?? null);
   const unrecorded = env !== ENV_ALL && !envId;
@@ -196,6 +202,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const [layout, setLayout] = useState<Dashboard | null>(null);
   const [drawer, setDrawer] = useState<{ mode: DrawerMode; panel: Panel } | null>(null);
   const [alertPanel, setAlertPanel] = useState<Panel | null>(null);
+  const { ask: askReliant, dialog: askReliantDialog } = useAskReliant({ forgeProject: project, envChoices: environments.map((candidate) => candidate.name) });
   const [removing, setRemoving] = useState<Panel | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
 
@@ -239,8 +246,11 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
     : "all environments";
   const services = search.service ? [search.service] : [];
   const refreshEvery = refreshMs(refresh);
+  const exploreHref = (panel: Panel): string | null =>
+    exploreLink?.(dashboardPivot(panel, { service: search.service, compare }), { range: search.range ? range : undefined }) ?? null;
   const links = {
     traceHref: hrefs.trace,
+    sessionHref: hrefs.session,
     searchHref: (panel: Panel) => {
       const { logs, traces } = drillSearches(panel, {}, { range, service: search.service });
       return panel.signal === "logs" ? hrefs.logs(logs) : hrefs.traces(traces);
@@ -280,8 +290,17 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
                   ]
                 : []),
               ...(!editable ? [{ label: "View spec", onSelect: () => setDrawer({ mode: "view" as const, panel }), testId: `dashboard-panel-view-${panel.id}` }] : []),
+              ...(exploreHref(panel)
+                ? [{ label: "Explore in Metrics", detail: "this query, editable", href: exploreHref(panel)!, testId: `dashboard-panel-explore-${panel.id}` }]
+                : []),
               { label: panel.signal === "logs" ? "Explore in Logs" : "Explore in Traces", detail: "with this panel's service", href: links.searchHref(panel) },
               { label: CREATE_ALERT_LABEL, detail: "as KCL", onSelect: () => setAlertPanel(panel), separated: true, testId: `dashboard-panel-alert-${panel.id}` },
+              {
+                label: "Ask Reliant",
+                detail: "in a new chat",
+                onSelect: () => void askReliant({ kind: "panel", panel, dashboard: summary.title, window: range, env: env === ENV_ALL ? null : env }),
+                testId: `dashboard-panel-ask-${panel.id}`,
+              },
               ...(editable && !layout
                 ? [{ label: "Remove panel", onSelect: () => setRemoving(panel), separated: true, testId: `dashboard-panel-remove-${panel.id}` }]
                 : []),
@@ -571,6 +590,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
           }
         />
       )}
+      {askReliantDialog}
       {alertPanel && (
         <AlertFromPanelDialog panel={alertPanel} dashboardTitle={summary.title} environments={environments} env={env} services={services} onClose={() => setAlertPanel(null)} />
       )}
@@ -788,13 +808,14 @@ function VariablesBar({
     return [...new Set(known)];
   }, [overview.data, service]);
   const [copied, setCopied] = useState(false);
+  const later = useUnmountSafeTimeout();
 
   const share = () => {
     const url = new URL(window.location.href);
     url.searchParams.delete("tv");
     void navigator.clipboard?.writeText(url.toString()).then(() => {
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      later(() => setCopied(false), 2000);
     });
   };
 

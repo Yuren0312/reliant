@@ -23,17 +23,17 @@
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, Play } from "lucide-react";
 
-import type { RunSummary } from "@/api/run-grpc";
+import type { RunSummary } from "@/hooks/run-queries";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { RunStatusDot } from "../../runs/RunStatusIndicator";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { DraftStatusBadge } from "../../workflow/DraftStatusBadge";
 import { stripWorkflowRefPrefix, workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { RowMenu, type RowMenuAction } from "../RowMenu";
 import { WORKFLOW_SOURCE_LABEL, WorkflowBadge, WorkflowSourceBadge, type WorkflowSource } from "../WorkflowSourceBadge";
 import type { AutomationCtaSpec } from "@/lib/automationHealth";
-import type { Trigger } from "@/api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import { AutomationCta } from "../../Automations/AutomationCta";
 
 export type WorkflowRowAction = RowMenuAction;
@@ -160,7 +160,7 @@ function TurnedOnCell({ row }: { row: LibraryTableRow }) {
   if (!row.turnedOn) {
     return (
       <span data-testid="workflow-row-turned-on" className="text-xs text-muted-foreground">
-        <Tooltip content="It declares no triggers, and nothing runs it by itself" placement="top" delay={300} wrapperClassName="inline-flex">
+        <Tooltip content="It declares no triggers, and nothing runs it by itself" side="top" delay={300} triggerClassName="inline-flex">
           <span aria-hidden="true">—</span>
         </Tooltip>
         <span className="sr-only">Not applicable</span>

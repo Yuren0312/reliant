@@ -1,11 +1,13 @@
 import { useState, useMemo } from "react";
 import { AlertTriangle, FolderSync, FolderGit2 } from "lucide-react";
-import { Modal } from "../ui/Modal";
-import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
+import { useWorktreeStore } from "../../store/worktreeStore";
 import { useChatStore } from "../../store/chatStore";
 import { useBranchChat } from "../../hooks/message-queries";
 import { logger } from "../../lib/logger";
 import { cn } from "../../lib/utils";
+import { type Worktree, useWorktreeList } from "../../hooks/worktree-queries";
 
 interface BranchToExistingWorktreeModalProps {
   isOpen: boolean;
@@ -26,7 +28,7 @@ export function BranchToExistingWorktreeModal({
 }: BranchToExistingWorktreeModalProps) {
   const branchChat = useBranchChat();
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
+  const { worktrees } = useWorktreeList(projectId, { enabled: isOpen });
   
   const [selectedWorktreeId, setSelectedWorktreeId] = useState<string | null>(null);
   const [isBranching, setIsBranching] = useState(false);
@@ -110,7 +112,8 @@ export function BranchToExistingWorktreeModal({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
+      fallbackFocus={focusChatInput}
       onClose={onClose}
       title="Branch to Existing Workspace"
       size="md"

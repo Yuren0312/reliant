@@ -9,13 +9,14 @@ import {
   Fragment,
   type JSX,
 } from "react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
 import { GitBranch, FolderSync, Copy, Check, ChevronDown } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { tabSwitchProfiler } from "../../lib/tabSwitchProfiler";
 import { ToolExecution, type ToolResultData } from "./ToolExecution";
 import { ToolExecutionGroup } from "./ToolExecutionGroup";
+import { fetchFullToolResult } from "../../hooks/tool-result-queries";
 import { ToolExecutionCollapsibleGroup } from "./ToolExecutionCollapsibleGroup";
 import { isReadOnlyTool, isRequestMachineTool } from "../../lib/toolFormatters";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
@@ -32,7 +33,8 @@ import { MessageActionsSheet, type MessageActionsSheetAction } from "./MessageAc
 import { CodeContextPill } from "./CodeContextPill";
 import { FailedSendStatus } from "./FailedSendStatus";
 import { clientIdOfFailedSend } from "../../lib/pendingSends";
-import type { Message, ToolApprovalRequest } from "../../api/client";
+import type { Message } from "../../api/client";
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
 import {
   useActiveChatId,
@@ -45,7 +47,6 @@ import { LONG_PRESS_SURFACE_CLASS, useLongPress } from "../../hooks/useLongPress
 // import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useProjectStore } from "../../store/projectStore";
 import { logger } from "../../lib/logger";
-import { api } from "../../api/client";
 import { toast } from "../../lib/toast-manager";
 import {
   getProcessedMessage,
@@ -53,6 +54,7 @@ import {
   type ToolResultData as ProcessedToolResultData,
   type MessageSegment,
 } from "../../lib/messageProcessor";
+import * as chatActions from "../../hooks/chat-actions";
 
 export type ChatTimelineVariant = "compact" | "card" | "minimal";
 
@@ -77,7 +79,7 @@ const COLLAPSED_FADE_MASK = "linear-gradient(to bottom, #000 60%, transparent 10
 
 interface ChatMessageProps {
   message: Message;
-  approvals?: ToolApprovalRequest[];
+  approvals?: Approval[];
   hideToolExecutions?: boolean;
   isLatestMessage?: boolean;
   isStreaming?: boolean;
@@ -101,7 +103,7 @@ interface ParsedContent {
   toolExecutions?: Array<{
     call: ToolCallData;
     result?: LocalToolResultData;
-    approval?: ToolApprovalRequest;
+    approval?: Approval;
   }>;
   // Ordered text/tool timeline — the canonical render order. Empty for older
   // pre-processed store entries that predate segments (handled at render).
@@ -151,7 +153,7 @@ function renderTextWithContextPills(
 interface EnhancedToolExecution {
   call: ToolCallData;
   result?: ToolResultData;
-  approval?: ToolApprovalRequest;
+  approval?: Approval;
   status?:
     | "pending" // Queued but not started
     | "preparing" // LLM is writing the tool request
@@ -272,10 +274,10 @@ function ChatMessageComponent({
 
   // OPTIMIZED: Memoize approvals by content_block_id to avoid re-filtering on every render
   const approvalsByContentBlockId = useMemo(() => {
-    const map = new Map<string, ToolApprovalRequest>();
+    const map = new Map<string, Approval>();
     for (const approval of approvals) {
-      if (approval.content_block_id) {
-        map.set(approval.content_block_id, approval);
+      if (approval.entityId) {
+        map.set(approval.entityId, approval);
       }
     }
     return map;
@@ -284,7 +286,7 @@ function ChatMessageComponent({
   // Helper to find approval - matches by content_block_id (unique identifier for each content block)
   // This handles both: 1) approvals embedded by backend, 2) approvals that arrive via WebSocket after message
   const getApprovalStatus = useCallback(
-    (contentBlockId: string): ToolApprovalRequest | undefined => {
+    (contentBlockId: string): Approval | undefined => {
       return approvalsByContentBlockId.get(contentBlockId);
     },
     [approvalsByContentBlockId],
@@ -339,6 +341,14 @@ function ChatMessageComponent({
       }
 
       if (parsed.toolExecutions && parsed.toolExecutions.length > 0) {
+        // A large result is held as a preview: copy the full output instead.
+        const resultContents = await Promise.all(
+          parsed.toolExecutions.map((execution) =>
+            execution.result?.truncated && chatId
+              ? fetchFullToolResult(chatId, execution.call.id)
+              : Promise.resolve(execution.result?.content),
+          ),
+        );
         parsed.toolExecutions.forEach((execution, index) => {
           // Format tool call with parameters like Claude does
           let toolCallText = `Tool: ${execution.call.name}`;
@@ -382,8 +392,9 @@ function ChatMessageComponent({
           }
 
           contentToCopy += `${toolCallText}\n`;
-          if (execution.result && execution.result.content) {
-            contentToCopy += execution.result.content + "\n";
+          const resultContent = resultContents[index];
+          if (resultContent) {
+            contentToCopy += resultContent + "\n";
           } else {
             contentToCopy += "No output available\n";
           }
@@ -518,7 +529,7 @@ function ChatMessageComponent({
           },
           onConvertToBackground: async (toolCallId: string) => {
             if (chatId) {
-              await api.toolCalls.convertToBackground(toolCallId);
+              await chatActions.convertToolCallToBackground(toolCallId);
             }
           },
         };
@@ -741,7 +752,7 @@ function ChatMessageComponent({
       )}
       {/* Separates the timestamp (information) from the buttons (actions). */}
       {timestampText && <span aria-hidden className="h-3 w-px bg-border" />}
-      <Tooltip content={copied ? "Copied" : "Copy message"} placement="top" delay={300} wrapperClassName="inline-flex">
+      <Tooltip content={copied ? "Copied" : "Copy message"} side="top" delay={300} triggerClassName="inline-flex">
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -766,9 +777,9 @@ function ChatMessageComponent({
               ? "Waiting for message to save"
               : "Branch from this message"
         }
-        placement="top"
+        side="top"
         delay={300}
-        wrapperClassName="inline-flex"
+        triggerClassName="inline-flex"
       >
       <button
         onClick={(e) => {

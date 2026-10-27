@@ -18,7 +18,7 @@
  */
 
 import { screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 
@@ -28,11 +28,6 @@ const HUMAN = 5;
 
 const { listQueuedAgentMessagesMock } = vi.hoisted(() => ({
   listQueuedAgentMessagesMock: vi.fn(),
-}));
-
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: { listQueuedAgentMessages: listQueuedAgentMessagesMock },
-  QUEUED_SENDER_KIND_HUMAN: 5,
 }));
 
 // chat.workflowId is the chat's main thread id — the mailbox the composer
@@ -56,11 +51,11 @@ vi.mock("../../../hooks/chat-queries", async () => {
 const { pendingQuestions } = vi.hoisted(() => ({
   pendingQuestions: { current: [] as unknown[] },
 }));
-vi.mock("../../../hooks/approval-queries", async () => {
+vi.mock("../../../hooks/question-queries", async () => {
   const actual = await vi.importActual<
-    typeof import("../../../hooks/approval-queries")
-  >("../../../hooks/approval-queries");
-  return { ...actual, usePendingQuestions: () => ({ data: pendingQuestions.current }) };
+    typeof import("../../../hooks/question-queries")
+  >("../../../hooks/question-queries");
+  return { ...actual, usePendingQuestions: () => ({ data: { questions: pendingQuestions.current } }) };
 });
 
 // While the agent works, ChatPresenter reads the machine registry to say
@@ -105,7 +100,19 @@ vi.mock("../../workflow/WorkflowViewerPanel", () => ({
 }));
 
 import { useThreadActivityStore } from "../../../store/threadActivityStore";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 import { ChatPresenter } from "../ChatPresenter";
+import { emptyChatPullReads, queuedAgentMessagesAnswer } from "@/test/chatPullReads";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), ...queuedAgentMessagesAnswer(listQueuedAgentMessagesMock) })));
+afterEach(() => setTransport(null));
+
+// The background-work pill lists the daemon's processes (BackgroundService,
+// on its generated hooks); none are running here.
+setTransport(mockTransport({ "BackgroundService.ListProcesses": { response: {} } }));
 
 const baseProps = {
   messages: [],
@@ -245,7 +252,7 @@ describe("the interrupt affordance tracks work in flight, not chat busy-ness", (
   it("withholds interrupt while a question waits on the user, but still shows the queue", async () => {
     // A question on the thread in view (the main thread).
     pendingQuestions.current = [
-      { question_id: "q1", chat_id: CHAT_ID, workflow_id: "", thread_id: CHAT_ID, step_id: "ask", status: "pending", created_at: "" },
+      { questionId: "q1", chatId: CHAT_ID, workflowId: "", threadId: CHAT_ID, stepId: "ask", status: "pending", createdAt: "" },
     ];
     renderWithQuery(
       <SurfaceProvider surface="desktop">

@@ -2,8 +2,8 @@ import { useEffect, useRef } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { useGlobalDataStore } from "@/store/globalDataStore";
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
-import { usePrivacyStore } from "@/store/privacyStore";
-import { useProjectStore } from "@/store/projectStore";
+import { loadPrivacySettings } from "@/hooks/privacy-queries";
+import { fetchProjects } from "@/hooks/project-queries";
 import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
 import { initSentry } from "@/lib/sentry";
@@ -66,7 +66,6 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
   const prefetch = useGlobalDataStore((state) => state.prefetch);
   const checkApiKeys = useApiKeySetupStore((state) => state.checkApiKeys);
   const resetApiKeyCheck = useApiKeySetupStore((state) => state.reset);
-  const initializePrivacy = usePrivacyStore((state) => state.initialize);
   const hasPrefetched = useRef(false);
   const hasInitializedAuthenticatedStartup = useRef(false);
 
@@ -147,14 +146,11 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
 
       try {
         await Promise.all([
-          initializePrivacy(),
+          loadPrivacySettings(),
           settingsSync.initialize(),
-          useProjectStore
-            .getState()
-            .loadProjects()
-            .catch((err) => {
-              logger.warn("[AuthInitializer] loadProjects failed (will retry in ModernApp):", err);
-            }),
+          fetchProjects().catch((err: unknown) => {
+            logger.warn("[AuthInitializer] fetchProjects failed (will retry in ModernApp):", err);
+          }),
         ]);
 
         logger.info("[AuthInitializer] Applying appearance settings to DOM...");
@@ -169,13 +165,13 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         logger.warn("[AuthInitializer] Sentry initialization failed:", error);
       }
 
-      // After initializePrivacy(): telemetry only starts with crash-reporting
-      // consent, so the loaded setting must be in the store first.
+      // After loadPrivacySettings(): telemetry only starts with crash-reporting
+      // consent, so the loaded setting must be in the cache first.
       void initTelemetry();
     };
 
     void initializeAuthenticatedStartup();
-  }, [initialized, loading, user, session, initializePrivacy]);
+  }, [initialized, loading, user, session]);
 
   // Prefetch global data ONCE after auth is ready
   // Using ref to prevent any possibility of double-prefetch

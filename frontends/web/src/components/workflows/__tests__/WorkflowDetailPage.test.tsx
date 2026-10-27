@@ -9,7 +9,11 @@
  * automation form prefilled with this workflow.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { queryClient as presetQueryClient } from "@/lib/query-client";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -36,21 +40,32 @@ const mocks = vi.hoisted(() => ({
   listProjectDaemons: vi.fn(),
 }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    workflow: () => ({ listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow }),
-    run: () => ({ listRuns: mocks.listRuns }),
-    trigger: () => ({ listTriggers: mocks.listTriggers, disableWorkflow: mocks.disableWorkflow }),
-    preset: () => ({
+// PresetService and RunService are reached through connectClient (the
+// generated hooks), so they are answered at the transport by the same fakes. Integration events are
+// named from the catalog's trigger types; none here.
+beforeEach(() => {
+  setTransport(mockTransport({
+      ...serviceHandlers("TriggerService", { listTriggers: mocks.listTriggers, disableWorkflow: mocks.disableWorkflow }),
+      // The run form lists workspaces through the generated WorktreeService hooks.
+      ...serviceHandlers("WorktreeService", { listWorktrees: mocks.listWorktrees }),
+      ...serviceHandlers("WorkflowService", { listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow }),
+      ...serviceHandlers("PresetService", {
       listPresetsForWorkflow: mocks.listPresetsForWorkflow,
       getDefaultPresetsBatch: mocks.getDefaultPresetsBatch,
       getDefaultPresets: mocks.getDefaultPresets,
     }),
-    worktree: () => ({ listWorktrees: mocks.listWorktrees }),
-    daemonRegistry: () => ({ listDaemons: mocks.listDaemons }),
-    project: () => ({ listProjectDaemons: mocks.listProjectDaemons }),
-  },
-}));
+      ...serviceHandlers("RunService", { listRuns: mocks.listRuns }),
+      "CatalogService.SearchCatalog": { response: {} },
+      ...serviceHandlers("ProjectService", { listProjectDaemons: mocks.listProjectDaemons }),
+      ...serviceHandlers("DaemonRegistryService", { listDaemons: mocks.listDaemons }),
+    }));
+});
+afterEach(() => {
+  setTransport(null);
+  // The preset reads are cached in the app's query client; no test may see
+  // another's answers.
+  presetQueryClient.clear();
+});
 
 vi.mock("@/store/projectStore", () => {
   const state = {

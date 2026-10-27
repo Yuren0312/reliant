@@ -20,9 +20,9 @@
  *     section, never listed twice, as on the Automations tab.
  */
 
-import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
-import type { RunSummary } from "@/api/run-grpc";
-import type { Trigger } from "@/api/trigger-grpc";
+import type { InvalidWorkflow, WorkflowResponse } from "@/hooks/workflow-queries";
+import type { RunSummary } from "@/hooks/run-queries";
+import type { Trigger } from "@/hooks/trigger-model";
 import { automationHealth, worstHealth, type AutomationHealthDisplay } from "@/lib/automationHealth";
 import type { LibrarySortKey, LibrarySourceKey } from "@/routeSchemas";
 import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";

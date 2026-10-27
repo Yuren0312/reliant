@@ -8,7 +8,11 @@
  * client is the only mock.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { queryClient as presetQueryClient } from "@/lib/query-client";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
@@ -41,18 +45,9 @@ const listConnections = vi.fn();
 const searchCatalog = vi.fn();
 const getCatalogEntry = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    connection: () => ({ listConnections }),
-    catalog: () => ({ searchCatalog, getCatalogEntry }),
-    trigger: () => ({ createTrigger, rotateWebhookToken }),
-    workflow: () => ({ getWorkflow, listWorkflows }),
-    preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
-    worktree: () => ({ listWorktrees }),
-    daemonRegistry: () => ({ listDaemons }),
-    project: () => ({ listProjectDaemons }),
-  },
-  getGRPCBaseURLPublic: () => "https://api.example.com",
+vi.mock("@/lib/connect", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/connect")>()),
+  reliantApiBaseUrl: () => "https://api.example.com",
 }));
 
 vi.mock("@/store/projectStore", () => {
@@ -87,6 +82,23 @@ const webhookDeclared = {
 } as unknown as DeclaredTrigger;
 
 beforeEach(() => {
+  // PresetService (connectClient), CatalogService and ConnectionService
+  // (generated hooks) are answered at the transport.
+  setTransport(
+    mockTransport({
+      // The daemon list is read through connectClient(DaemonRegistryService).
+      ...serviceHandlers("DaemonRegistryService", { listDaemons }),
+      ...serviceHandlers("TriggerService", { createTrigger, rotateWebhookToken }),
+      // The run form lists workspaces through the generated WorktreeService hooks.
+      ...serviceHandlers("WorktreeService", { listWorktrees }),
+      ...serviceHandlers("WorkflowService", { getWorkflow, listWorkflows }),
+      ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
+      "CatalogService.SearchCatalog": (req) => searchCatalog(req),
+      "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
+      "ConnectionService.ListConnections": (req) => listConnections(req),
+      ...serviceHandlers("ProjectService", { listProjectDaemons }),
+    }),
+  );
   createTrigger.mockReset();
   rotateWebhookToken.mockReset();
   getWorkflow.mockReset();
@@ -98,6 +110,13 @@ beforeEach(() => {
   listProjectDaemons.mockResolvedValue({
     projectDaemons: [create(ProjectDaemonSchema, { projectId: "proj-1", daemonId: "daemon-1", installState: ProjectInstallState.INSTALLED })],
   });
+});
+
+afterEach(() => {
+  setTransport(null);
+  // The preset reads are cached in the app's query client; no test may see
+  // another's answers.
+  presetQueryClient.clear();
 });
 
 function render(declared: DeclaredTrigger) {

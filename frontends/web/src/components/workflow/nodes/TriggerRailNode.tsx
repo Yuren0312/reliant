@@ -28,25 +28,25 @@
  * In-graph event types (message_created, pre_tool_use, …) stay EventNode.
  */
 
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { memo, type MouseEvent, type ReactNode } from "react";
 import { Handle, Position, useNodeConnections } from "@xyflow/react";
 import { AlertOctagon, AlertTriangle, CalendarClock, Clock, MessageCircle, Plug, Plus, Webhook, Workflow, Zap } from "lucide-react";
 import type { NodeExecutionStatus } from "../../../lib/workflow-flow";
 import { declaredRailLines, triggerRailLines, type DeclaredRailLine, type TriggerRailLine } from "../../../lib/triggerRail";
 import { describeDeclaredSource, findingFieldLabel, integrationOf, sourceCase, type TriggerFinding } from "../../../lib/declaredTriggers";
-import { useIntegrationEventNaming } from "../../../hooks/connection-queries";
+import { useIntegrationEventNaming } from "../../../hooks/catalog-queries";
 import { describeSchedule } from "../../../lib/cronText";
 import { useTriggers } from "../../../hooks/trigger-queries";
-import type { Trigger } from "../../../api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import { cn } from "../../../lib/utils";
 import { useTriggerRailContext, type TriggerRailContextValue } from "../TriggerRailContext";
 import { buildHandleClassName } from "./NodeStatusWrapper";
 import { IntegrationLogo } from "../../icons/IntegrationLogo";
 import { NODE_DIMENSIONS } from "../../../lib/workflow-node-dimensions";
-import { Toggle } from "../../ui/Toggle";
+import ToggleSwitch from "../../forge-ui/toggle_switch";
 
-interface TriggerRailNodeProps {
+export interface TriggerRailNodeProps {
   data: {
     eventType: string;
     label: string;
@@ -137,12 +137,13 @@ function ChatCard({ rail, compact, hasOtherTriggers }: { rail: TriggerRailContex
           // A wrapper, so the switch's click neither drags the canvas nor
           // selects the node underneath.
           <span className={cn(nodeControlClass, "inline-flex")} onClick={(event) => event.stopPropagation()}>
-            <Toggle
+            <ToggleSwitch
               checked={enabled}
               onChange={(next) => rail.onSetChatEnabled(next)}
               disabled={!canEdit}
-              srLabel="Start from chat"
-              className="h-5 w-9 scale-90"
+              ariaLabel="Start from chat"
+              size="md"
+              className="forge-ui"
             />
           </span>
         )}
@@ -265,7 +266,7 @@ function DeclaredCard({ rail, line, compact }: { rail: TriggerRailContextValue; 
 function PersonalCard({ rail, line, compact }: { rail: TriggerRailContextValue | null; line: TriggerRailLine; compact: boolean }) {
   const { trigger, scheduleText, health, paused, failing } = line;
   return (
-    <Tooltip content={health.detail ?? health.label} placement="bottom" delay={300} wrapperClassName="flex w-full">
+    <Tooltip content={health.detail ?? health.label} side="bottom" delay={300} triggerClassName="flex w-full">
       <button
         type="button"
         onClick={stop(() => rail?.onEditTrigger(trigger))}
@@ -292,7 +293,7 @@ function PersonalCard({ rail, line, compact }: { rail: TriggerRailContextValue |
 
 function OrphanCard({ rail, orphan, compact }: { rail: TriggerRailContextValue | null; orphan: Trigger; compact: boolean }) {
   return (
-    <Tooltip content={orphan.health.lastFailureDetail || "Its trigger is gone"} placement="bottom" delay={300} wrapperClassName="flex w-full">
+    <Tooltip content={orphan.health.lastFailureDetail || "Its trigger is gone"} side="bottom" delay={300} triggerClassName="flex w-full">
       <button
         type="button"
         onClick={stop(() => rail?.onEditTrigger(orphan))}

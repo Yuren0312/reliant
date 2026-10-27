@@ -20,14 +20,14 @@ import { AlertOctagon, CalendarClock, CircleHelp, Plug, Webhook, Workflow } from
 import { toast } from "sonner";
 
 import Status from "../forge-ui/status";
-import { Toggle } from "../ui/Toggle";
-import { Tooltip } from "../ui/Tooltip";
+import ToggleSwitch from "../forge-ui/toggle_switch";
+import Tooltip from "../forge-ui/tooltip";
 import { RunStatusBadge } from "../runs/RunStatusIndicator";
-import { sourceKindLabel, triggerErrorMessage, type Trigger, type TriggerSource } from "@/api/trigger-grpc";
+import { sourceKindLabel, triggerErrorMessage, type Trigger, type TriggerSource } from "@/hooks/trigger-model";
 import { useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import { automationHealth, type AutomationHealthDisplay } from "@/lib/automationHealth";
 import { describeTriggerSource } from "@/lib/cronText";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
@@ -133,12 +133,14 @@ export function AutomationRow({ trigger }: { trigger: Trigger }) {
       </div>
 
       <div className="flex items-center justify-end">
-        <Toggle
+        <ToggleSwitch
           checked={trigger.enabled}
           onChange={onToggle}
           disabled={setEnabled.isPending}
           // A switch's name is stable; aria-checked carries on/off.
-          srLabel={`${trigger.name} enabled`}
+          ariaLabel={`${trigger.name} enabled`}
+          size="lg"
+          className="forge-ui"
         />
       </div>
     </li>
@@ -184,7 +186,7 @@ export function HealthIndicator({ health }: { health: AutomationHealthDisplay })
   );
   if (!health.detail) return indicator;
   return (
-    <Tooltip content={health.detail} placement="top" delay={200} wrapperClassName="inline-flex">
+    <Tooltip content={health.detail} side="top" delay={200} triggerClassName="inline-flex">
       {indicator}
       <span className="sr-only">: {health.detail}</span>
     </Tooltip>
@@ -210,7 +212,7 @@ export function LastRun({ event }: { event: Trigger["lastEvent"] }) {
   return (
     <>
       {event.outcomeDetail && event.outcome !== "launched" ? (
-        <Tooltip content={event.outcomeDetail} placement="top" delay={200} wrapperClassName="inline-flex">
+        <Tooltip content={event.outcomeDetail} side="top" delay={200} triggerClassName="inline-flex">
           {badge}
         </Tooltip>
       ) : (

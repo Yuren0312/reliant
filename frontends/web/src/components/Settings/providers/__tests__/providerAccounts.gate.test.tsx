@@ -9,26 +9,21 @@
 
 import { screen, waitFor } from "@testing-library/react";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../../test/renderWithQuery";
-import type { ProviderAccount } from "../../../../api/provider-account-grpc";
+import type { ProviderAccount } from "../../../../types/providerAccount";
+import { setTransport } from "../../../../lib/connect";
+import { mockTransport } from "../../../../lib/test-utils";
+import { providerAccountHandlers } from "../../../../test/providerAccountTransport";
 
 const mocks = vi.hoisted(() => ({
   listAccounts: vi.fn(),
-  getPreferences: vi.fn(),
   updateProvider: vi.fn(),
 }));
-
-vi.mock("../../../../api/provider-account-grpc", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../../api/provider-account-grpc")>();
-  return { ...actual, providerAccountGrpc: { listAccounts: mocks.listAccounts } };
-});
 
 vi.mock("../../../../api/client", () => ({
   api: {
     settings: {
-      getPreferences: mocks.getPreferences,
-      updatePreferences: vi.fn(),
       updateProvider: mocks.updateProvider,
       validateProviderAPIKey: vi.fn(),
     },
@@ -102,9 +97,16 @@ const statuses = [
 
 beforeEach(() => {
   Object.values(mocks).forEach((m) => m.mockReset());
-  mocks.getPreferences.mockResolvedValue({});
   useAuthStore.setState({ session: { access_token: "t" } as never });
+  setTransport(
+    mockTransport({
+      ...providerAccountHandlers({ listAccounts: mocks.listAccounts }),
+      "SettingsService.GetPreferences": () => ({}),
+    }),
+  );
 });
+
+afterEach(() => setTransport(null));
 
 describe("desktop Settings → Providers", () => {
   it("keeps today's connect/disconnect view while the account RPCs are Unimplemented", async () => {

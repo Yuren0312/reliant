@@ -12,33 +12,49 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 
-type MockService = {
+type MockUserService = {
   isConnected: () => boolean;
-  getSubscribedChatId: () => string | undefined;
-  subscribeToChatDetails: ReturnType<typeof vi.fn>;
-  unsubscribeFromChatDetails: ReturnType<typeof vi.fn>;
   start: ReturnType<typeof vi.fn>;
+  stop: ReturnType<typeof vi.fn>;
+};
+
+type MockChatService = {
+  isConnected: () => boolean;
+  getChatId: () => string | undefined;
+  subscribeToChat: ReturnType<typeof vi.fn>;
+  unsubscribe: ReturnType<typeof vi.fn>;
+  setProjectScope: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
   subscribed: string | undefined;
 };
 
-const services: MockService[] = [];
+const services: MockUserService[] = [];
+const chatServices: MockChatService[] = [];
 
 vi.mock("../../../api/streaming-grpc", () => ({
-  UserStreamingService: class implements MockService {
-    subscribed: string | undefined = undefined;
+  UserStreamingService: class implements MockUserService {
     isConnected = () => false;
-    getSubscribedChatId = () => this.subscribed;
-    subscribeToChatDetails = vi.fn((chatId: string) => {
-      this.subscribed = chatId;
-    });
-    unsubscribeFromChatDetails = vi.fn();
-    start = vi.fn((_seq: number, chatId?: string) => {
-      this.subscribed = chatId;
-    });
+    start = vi.fn();
     stop = vi.fn();
     constructor() {
       services.push(this);
+    }
+  },
+}));
+
+vi.mock("../../../api/chat-streaming-grpc", () => ({
+  ChatStreamingService: class implements MockChatService {
+    subscribed: string | undefined = undefined;
+    isConnected = () => false;
+    getChatId = () => this.subscribed;
+    subscribeToChat = vi.fn((chatId: string) => {
+      this.subscribed = chatId;
+    });
+    unsubscribe = vi.fn();
+    setProjectScope = vi.fn();
+    stop = vi.fn();
+    constructor() {
+      chatServices.push(this);
     }
   },
 }));
@@ -65,12 +81,15 @@ vi.mock("../MobileNavDrawer", () => ({ MobileNavDrawer: () => null }));
 vi.mock("../MobileNavigationFeedback", () => ({ MobileNavigationFeedback: () => null }));
 vi.mock("../MobileInboxBadgeSync", () => ({ MobileInboxBadgeSync: () => null }));
 
+import { QueryClientProvider } from "@tanstack/react-query";
 import { MobileShell } from "../MobileShell";
+import { queryClient } from "../../../lib/query-client";
+import { seedProjects } from "../../../test/projectList";
 import { useChatStore } from "../../../store/chatStore";
 import { useGlobalUpdatesStore } from "../../../store/globalUpdatesStore";
 import { useProjectStore } from "../../../store/projectStore";
 import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
-import type { Project } from "../../../types";
+import type { Project } from "../../../store/projectStore";
 
 const CHAT_ID = "aaaaaaaa-1111-2222-3333-444444444444";
 const project = { id: "proj-1", name: "shopfront", path: "/p" } as unknown as Project;
@@ -86,9 +105,11 @@ function ChatScreen() {
 
 beforeEach(() => {
   services.length = 0;
+  chatServices.length = 0;
   screen = () => null;
   useGlobalUpdatesStore.setState({
     wsService: null,
+    chatStream: null,
     subscribedChatId: null,
     connectionStatus: "disconnected",
     lastSequence: 0,
@@ -96,12 +117,23 @@ beforeEach(() => {
   useChatStore.setState({ hasLoaded: false });
   // A project is already selected, so the shell's first-project fallback
   // (selectProject → loadChats) does not run; the tests load chats by hand.
-  useProjectStore.setState({ projects: [project], currentProject: project });
+  seedProjects(queryClient, [project]);
+  useProjectStore.setState({ currentProject: project });
 });
 
 afterEach(() => {
   cleanup();
+  queryClient.clear();
 });
+
+/** The shell as the app mounts it: under the app's query client. */
+function renderShell() {
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MobileShell />
+    </QueryClientProvider>,
+  );
+}
 
 /** What loadChats leaves behind: the list is loaded, the resume point known. */
 function chatsLoad() {
@@ -114,7 +146,7 @@ describe("MobileShell update stream", () => {
     screen = () => <div>chat list</div>;
 
     await act(async () => {
-      render(<MobileShell />);
+      renderShell();
     });
     // Nothing to resume from yet: connecting now would replay from zero.
     expect(services).toHaveLength(0);
@@ -124,18 +156,22 @@ describe("MobileShell update stream", () => {
     });
 
     expect(services).toHaveLength(1);
-    expect(services[0]!.start).toHaveBeenCalledWith(42, undefined, 0, "proj-1");
+    expect(services[0]!.start).toHaveBeenCalledWith(42, "proj-1");
+    expect(chatServices).toHaveLength(0);
   });
 
-  it("connects a chat opened directly by URL, with its subscription on the first request", async () => {
-    // The chat screen mounts before the chat list has loaded, so its
-    // subscription is recorded but the stream it asks for is deferred.
+  it("streams a chat opened directly by URL at once, and connects the user stream once chats have loaded", async () => {
+    // The chat screen mounts before the chat list has loaded. Its chat
+    // stream needs nothing from the list, so it opens now; the user stream
+    // waits for the resume point the list brings.
     screen = () => <ChatScreen />;
 
     await act(async () => {
-      render(<MobileShell />);
+      renderShell();
     });
     expect(services).toHaveLength(0);
+    expect(chatServices).toHaveLength(1);
+    expect(chatServices[0]!.subscribeToChat).toHaveBeenCalledWith(CHAT_ID);
     expect(useGlobalUpdatesStore.getState().subscribedChatId).toBe(CHAT_ID);
 
     await act(async () => {
@@ -143,14 +179,18 @@ describe("MobileShell update stream", () => {
     });
 
     expect(services).toHaveLength(1);
-    expect(services[0]!.start).toHaveBeenCalledWith(42, CHAT_ID, 0, "proj-1");
+    expect(services[0]!.start).toHaveBeenCalledWith(42, "proj-1");
+    // The chat stream learns the user stream's project scope.
+    expect(chatServices[0]!.setProjectScope).toHaveBeenCalledWith("proj-1");
+    // Connecting the user stream did not reopen the chat stream.
+    expect(chatServices[0]!.subscribeToChat).toHaveBeenCalledTimes(1);
   });
 
   it("disconnects the stream when the shell goes away", async () => {
     chatsLoad();
     let unmount = () => {};
     await act(async () => {
-      ({ unmount } = render(<MobileShell />));
+      ({ unmount } = renderShell());
     });
     expect(services).toHaveLength(1);
 
@@ -160,6 +200,7 @@ describe("MobileShell update stream", () => {
 
     expect(services[0]!.stop).toHaveBeenCalled();
     expect(useGlobalUpdatesStore.getState().wsService).toBeNull();
+    expect(useGlobalUpdatesStore.getState().chatStream).toBeNull();
   });
 });
 
@@ -167,7 +208,8 @@ describe("MobileShell initial project", () => {
   const other = { id: "proj-2", name: "backoffice", path: "/q" } as unknown as Project;
 
   beforeEach(() => {
-    useProjectStore.setState({ projects: [project, other], currentProject: null });
+    seedProjects(queryClient, [project, other]);
+    useProjectStore.setState({ currentProject: null });
     useWorkspaceStateStore.setState({ lastProjectId: null });
   });
 
@@ -177,12 +219,12 @@ describe("MobileShell initial project", () => {
     useProjectStore.setState({ selectProject });
 
     await act(async () => {
-      render(<MobileShell />);
+      renderShell();
     });
 
     await waitFor(() => expect(useProjectStore.getState().currentProject?.id).toBe("proj-2"));
     expect(selectProject).toHaveBeenCalledTimes(1);
-    expect(selectProject).toHaveBeenCalledWith(other, { skipWorkspaceStateSave: true });
+    expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "proj-2" }), { skipWorkspaceStateSave: true, restoreWorkspace: false });
   });
 
   it("falls back to the first project without remembering it as the user's choice", async () => {
@@ -190,10 +232,10 @@ describe("MobileShell initial project", () => {
     useProjectStore.setState({ selectProject });
 
     await act(async () => {
-      render(<MobileShell />);
+      renderShell();
     });
 
     await waitFor(() => expect(useProjectStore.getState().currentProject?.id).toBe("proj-1"));
-    expect(selectProject).toHaveBeenCalledWith(project, { skipWorkspaceStateSave: true });
+    expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "proj-1" }), { skipWorkspaceStateSave: true, restoreWorkspace: false });
   });
 });

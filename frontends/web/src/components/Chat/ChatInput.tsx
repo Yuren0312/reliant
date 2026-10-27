@@ -13,11 +13,7 @@ import { Settings2, ChevronDown } from "lucide-react";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
-import {
-  usePresetsForWorkflow,
-  useModels,
-  type Preset,
-} from "../../store/globalDataStore";
+import { useModels } from "../../store/globalDataStore";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { WorkflowSelector } from "./WorkflowSelector";
@@ -33,20 +29,19 @@ import { ChatActionButtons } from "./ChatActionButtons";
 import { useChatInputState } from "./useChatInputState";
 import { useDragAndDrop } from "../../hooks/useDragAndDrop";
 import { DragDropOverlay } from "./DragDropOverlay";
-import { api } from "../../api/client";
 import type { ConnectionStatus } from "../../types/streaming";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { getAcceptedMimeTypes } from "../../lib/filetypes";
 import { type WorkflowInputs } from "../workflow/WorkflowParamsPanel";
 import { ChatSettingsPopover } from "./settings";
 import { InlineParamInput } from "../workflow/InlineParamInput";
 import { InlinePresetPicker } from "../workflow/InlinePresetPicker";
 import type { InputDef } from "../../lib/inputHelpers";
-import { workflowGrpc } from "../../api/workflow-grpc";
-import { chatGrpc, QUEUED_SENDER_KIND_HUMAN } from "../../api/chat-grpc";
+import { fetchWorkflow, useWorkflowDefinitionQuery } from "../../hooks/workflow-queries";
+import { QUEUED_SENDER_KIND_HUMAN } from "../../hooks/chat-model";
 import { useProjectStore } from "../../store/projectStore";
-import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
+import { useDefaultWorkflow, useHiddenItems } from "../../hooks/settings-queries";
 import { useChatStore } from "../../store/chatStore";
 import {
   useChat,
@@ -58,7 +53,7 @@ import {
 import { clearLegacyChatParams, peekLegacyChatParams } from "../../lib/legacyChatParams";
 import { pushChatParams } from "../../lib/chatSelection";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { answerQuestion, usePendingQuestions } from "../../hooks/approval-queries";
+import { answerQuestion, usePendingQuestions } from "../../hooks/question-queries";
 import { questionForThread } from "../../lib/pendingQuestions";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
@@ -78,10 +73,8 @@ import {
 import { askUserQuestionItems } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
-import {
-  fetchDefaultPresets,
-  useWorkflowDefinitionQuery,
-} from "../../hooks/workflow-config-queries";
+import { fetchThreadWorkflowInputs } from "../../hooks/chat-pull-queries";
+import { fetchDefaultPresets, usePresetsForWorkflow, type Preset } from "../../hooks/preset-queries";
 
 /** Workflow tag metadata for preset matching. */
 interface WorkflowTagInfo {
@@ -103,6 +96,7 @@ import {
   type QueuedRow,
 } from "../../lib/pendingSends";
 import { initEventBus } from "../../lib/events";
+import * as chatActions from "../../hooks/chat-actions";
 
 /** Extract WorkflowInputs schema from a proto Workflow's inputs.
  *  Returns { inputs, groupTags, groupUIs } for use with WorkflowParamsPanel. */
@@ -340,7 +334,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const pendingQuestion = useMemo(
       () =>
         questionForThread(
-          pendingQuestionsQuery.data,
+          pendingQuestionsQuery.data?.questions,
           chatId,
           selectedThreadId,
           questionMainThreadId
@@ -395,9 +389,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const [isSyncing, setIsSyncing] = useState(false);
 
     // Get user's default workflow preference
-    const userDefaultWorkflow = usePreferencesStore(
-      (state) => state.preferences?.defaultWorkflow
-    ) || DEFAULT_WORKFLOW;
+    const userDefaultWorkflow = useDefaultWorkflow();
 
     // Compute the effective workflow name
     // selectedWorkflow is the user's selection (null = use user's default)
@@ -432,7 +424,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     );
 
     // Get hidden preset check function
-    const isPresetHidden = usePreferencesStore((state) => state.isPresetHidden);
+    const { isPresetHidden } = useHiddenItems();
 
     // Fetch compatible presets for the selected workflow
     const { presets, loading: presetsLoading } = usePresetsForWorkflow(
@@ -514,12 +506,12 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       const fetchThreadParams = async () => {
         try {
           // Fetch the thread's workflow inputs from the backend
-          const result = await chatGrpc.getThreadWorkflowInputs(chatId, selectedThreadId);
+          const result = await fetchThreadWorkflowInputs(chatId, selectedThreadId);
 
           if (cancelled) return;
 
           // Load the workflow schema for the thread's workflow name
-          const schemaResult = await workflowGrpc.getWorkflow(
+          const schemaResult = await fetchWorkflow(
             currentProjectFromStore!.id,
             { name: result.workflowName }
           );
@@ -1062,7 +1054,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           threadId: selectedThreadId,
           changedParams,
         });
-        await api.chatsV2.updateWorkflowParams(chatId, changedParams, selectedThreadId);
+        await chatActions.updateWorkflowParams(chatId, changedParams, selectedThreadId);
         // Update the baseline to include synced values so the sync button clears.
         // Also clear threadParamValues so UI falls back to the updated baseline.
         if (threadParamsOverride) {
@@ -1229,7 +1221,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     const handleQuestionSubmit = useCallback(async (answer: { answers: Array<{ question: string; selected: string[]; freetext?: string }> }) => {
       if (!chatId || !pendingQuestion) return;
-      await answerQuestion(chatId, pendingQuestion.question_id, answer);
+      await answerQuestion(chatId, pendingQuestion.questionId, answer);
     }, [chatId, pendingQuestion]);
 
     const handleSend = async () => {
@@ -1261,9 +1253,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           // Read file content for each marker and format it in the message
           try {
             const { getFileContent, getFilePreviewInfo } = await import('../../api/fileSystem');
-            const { useWorktreeStore } = await import('../../store/worktreeStore');
-            const worktreeStore = useWorktreeStore.getState();
-            const currentWorktree = worktreeStore.currentWorktree;
+            const { getCurrentWorktree } = await import('../../hooks/worktree-queries');
+            const currentWorktree = getCurrentWorktree();
             
             const contextSections: string[] = [];
             
@@ -1434,7 +1425,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           message: row,
         });
         handleClearInput();
-        const response = await chatGrpc.sendAgentMessage(
+        const response = await chatActions.sendAgentMessage(
           chatId,
           targetThreadId,
           message,
@@ -1567,7 +1558,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           try {
             // Empty threadId targets the main thread, which is what "compact
             // this conversation" means from the composer.
-            await api.chatsV2.compact(chatId, selectedThreadId ?? "");
+            await chatActions.compactChat(chatId, selectedThreadId ?? "");
             toast.success("Compacting conversation…");
           } catch (error) {
             logger.error("[ChatInput] Compaction failed", error);
@@ -1933,7 +1924,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         const currentModelProvider = resolvedModel?.driverId || (modelValue?.driver_id as string) || undefined;
                         return (
                           <div className="relative">
-                            <Tooltip content="Model settings" placement="top" delay={300} wrapperClassName="inline-flex">
+                            <Tooltip content="Model settings" side="top" delay={300} triggerClassName="inline-flex">
 <button
                               className={cn(
                                 "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5 touch:h-[44px] touch:px-3.5 touch:text-xs",
@@ -1963,7 +1954,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                                 ? "Hide settings"
                                 : "Show all settings"
                             }
-                            placement="top"
+                            side="top"
                           >
                             <button
                               data-contextual-tip="params-toggle"

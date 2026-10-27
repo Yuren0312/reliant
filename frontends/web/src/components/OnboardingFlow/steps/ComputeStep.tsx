@@ -38,7 +38,7 @@ import type {
   OnboardingIntent,
   StepProps,
 } from "../types";
-import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonConnect";
+import { PairMachinePanel } from "@/components/Machines/PairMachinePanel";
 import { StepFooterAction } from "../StepFooter";
 import { trackEvent } from "@/lib/analytics";
 import { capabilities } from "@/services/controlPlane/capabilities";
@@ -367,8 +367,8 @@ export function ComputeStep({
   //      may also have one from a prior session).
   //   2. User clicked "I'll connect my own", followed the instructions,
   //      and their newly-started daemon just connected.
-  //   3. The cloud-dev `make dev-electron` pairing: the Electron-spawned
-  //      local daemon registers with the control-plane right after sign-in.
+  //   3. The dev stack's Electron pairing (control-plane's `forge env up
+  //      dev`): the Electron-spawned local daemon registers with the control-plane right after sign-in.
   //      Its lifecycle status flips ACTIVE the moment the NATS connect
   //      event lands; in the gap between registration and that flip it
   //      sits at IDLE — we still treat it as "user has a daemon" so the
@@ -890,10 +890,10 @@ export function ComputeStep({
             {/* Self-hosted connect instructions are shared with the
                 ProjectPicker's in-place "Connect a new daemon" flow. The
                 onboarding-specific auto-advance still happens via the
-                hasUsableDaemon effect above; SelfHostedDaemonConnect just owns
+                hasUsableDaemon effect above; PairMachinePanel just owns
                 the download/token/start UI and the "waiting to connect"
                 state. */}
-            <SelfHostedDaemonConnect onConnected={handleLocalContinue} />
+            <PairMachinePanel mode="bootstrap" onConnected={handleLocalContinue} />
           </div>
         )}
 

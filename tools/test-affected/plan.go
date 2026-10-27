@@ -36,7 +36,20 @@ type GoPlan struct {
 	// Packages are the packages to test, as ./relative paths.
 	Packages []string          `json:"packages"`
 	Why      map[string]string `json:"why,omitempty"`
+	// Reach is how far a code change fans out: "all" (every package whose
+	// test binary contains it, the default) or "direct" (the changed
+	// packages and the packages that import one by name: the merge tier).
+	// Deferred are the packages "all" would add, left to the full lane
+	// (the release gate).
+	Reach    string   `json:"reach"`
+	Deferred []string `json:"deferred,omitempty"`
 }
+
+// Reach modes (GoPlan.Reach).
+const (
+	ReachAll    = "all"
+	ReachDirect = "direct"
+)
 
 // WebPlan is the vitest lane: `vitest run <Tests...>`.
 type WebPlan struct {
@@ -53,13 +66,29 @@ type ElectronPlan struct {
 
 // ForgeGenPlan is the forge-generate lane (all or nothing): the pinned
 // `forge generate` must leave the tree as it found it.
+//
+// HooksOnly says every reason is Go code that a forge.yaml generate hook's
+// generator compiles, and nothing forge itself reads: then only Hooks (their
+// forge.yaml names) can write anything different, and running just those
+// hooks' commands is the same check as the whole `forge generate`, in seconds
+// instead of minutes. HookCommands is each hook's forge.yaml command (filled
+// in by plan, which reads forge.yaml; Classify stays a pure function).
 type ForgeGenPlan struct {
 	LaneFull
+	HooksOnly    bool                `json:"hooks_only,omitempty"`
+	Hooks        []string            `json:"hooks,omitempty"`
+	HookCommands map[string][]string `json:"hook_commands,omitempty"`
 }
 
 // DocGenPlan is the docs-generate lane (all or nothing): every docs
 // generator (Taskfile.yml's generate:docs) must leave the tree as it found it.
 type DocGenPlan struct {
+	LaneFull
+}
+
+// MigOrderPlan is the migration-order lane (all or nothing): a migration added
+// under db/migrations must be versioned above origin/main's newest.
+type MigOrderPlan struct {
 	LaneFull
 }
 
@@ -73,6 +102,7 @@ type Plan struct {
 	Electron ElectronPlan `json:"electron"`
 	ForgeGen ForgeGenPlan `json:"forge_generate"`
 	DocGen   DocGenPlan   `json:"docs_generate"`
+	MigOrder MigOrderPlan `json:"migration_order"`
 	// Lockfiles are the npm projects whose manifest or lockfile changed: the
 	// runner checks each still installs with `npm ci` before any test runs.
 	Lockfiles []LockfileCheck `json:"npm_lockfiles,omitempty"`
@@ -149,8 +179,9 @@ func (r *reasons) why(key string) string {
 }
 
 type classifier struct {
-	g  *Graph
-	pl *Plan
+	g         *Graph
+	reachMode string
+	pl        *Plan
 
 	full map[lane][]string
 
@@ -167,22 +198,36 @@ type classifier struct {
 	// hookGenDeps is the same for forge.yaml's generate hooks
 	// (forgeHookGenerators).
 	hookGenDeps map[string]string
+	// hookGens maps a package to EVERY hook generator that compiles it;
+	// hooks and hookWhy collect the hooks the diff reaches and the reasons
+	// that were only that (ForgeGenPlan.HooksOnly).
+	hookGens map[string][]string
+	hooks    map[string]bool
+	hookWhy  map[string]bool
 
 	web       *reasons // web test file (relative to frontends/web/) -> why
 	webTouch  bool     // a non-test web module changed
 	elecReads []string // why the electron lane runs, from tests naming a changed file
 }
 
-// Classify is the whole decision, as a pure function of the diff and the graph.
-func Classify(changes []Change, g *Graph) *Plan {
+// Classify is the whole decision, as a pure function of the diff and the graph,
+// fanning code changes out to every reverse dependency (ReachAll).
+func Classify(changes []Change, g *Graph) *Plan { return ClassifyReach(changes, g, ReachAll) }
+
+// ClassifyReach is Classify with the Go lane's reach chosen (ReachAll or
+// ReachDirect).
+func ClassifyReach(changes []Change, g *Graph, reachMode string) *Plan {
 	c := &classifier{
-		g:    g,
-		pl:   &Plan{},
-		full: map[lane][]string{},
-		code: newReasons(), embed: newReasons(), testOnly: newReasons(), dbSel: newReasons(),
+		reachMode: reachMode,
+		g:         g,
+		pl:        &Plan{},
+		full:      map[lane][]string{},
+		code:      newReasons(), embed: newReasons(), testOnly: newReasons(), dbSel: newReasons(),
 		web:         newReasons(),
 		docGenDeps:  generatorDeps(g, func(dir string) bool { return strings.HasPrefix(dir+"/", docGenDir) }),
 		hookGenDeps: generatorDeps(g, func(dir string) bool { return slices.Contains(forgeHookGenerators, dir) }),
+		hookGens:    generatorSets(g, func(dir string) bool { return slices.Contains(forgeHookGenerators, dir) }),
+		hooks:       map[string]bool{}, hookWhy: map[string]bool{},
 	}
 	for _, ch := range changes {
 		c.attribute(ch)
@@ -192,7 +237,17 @@ func Classify(changes []Change, g *Graph) *Plan {
 	c.selectWeb()
 	c.selectElectron()
 	c.pl.ForgeGen.LaneFull = laneFull(c.full[laneForgeGen])
+	if c.pl.ForgeGen.Full {
+		only := true
+		for _, r := range c.pl.ForgeGen.Reasons {
+			only = only && c.hookWhy[r]
+		}
+		if only && len(c.hooks) > 0 {
+			c.pl.ForgeGen.HooksOnly, c.pl.ForgeGen.Hooks = true, sortedKeys(c.hooks)
+		}
+	}
 	c.pl.DocGen.LaneFull = laneFull(c.full[laneDocGen])
+	c.pl.MigOrder.LaneFull = laneFull(c.full[laneMigOrder])
 	return c.pl
 }
 
@@ -224,17 +279,27 @@ func (c *classifier) attribute(ch Change) {
 		}
 	}
 	c.attributeToReaders(ch)
-	if why, ok := c.forgeGenInput(ch); ok {
+	if why, hook, ok := c.forgeGenInput(ch); ok {
 		rep.Rules = append(rep.Rules, "forge-input")
 		c.full[laneForgeGen] = append(c.full[laneForgeGen], ch.Path+": "+why)
+		if hook {
+			c.hookWhy[ch.Path+": "+why] = true
+		}
 	}
 	if why, ok := c.docGenInput(ch); ok {
 		rep.Rules = append(rep.Rules, "docgen-input")
 		c.full[laneDocGen] = append(c.full[laneDocGen], ch.Path+": "+why)
 	}
+	if !ch.Deleted && isMigrationPath(ch.Path) {
+		rep.Rules = append(rep.Rules, "migration-order")
+		c.full[laneMigOrder] = append(c.full[laneMigOrder], ch.Path+": a migration must be versioned above origin/main's newest")
+	}
 	if len(matched) == 0 && !owned {
 		why := fmt.Sprintf("%s: claimed by no rule and no Go package (fail-safe)", ch.Path)
 		for _, l := range allLanes {
+			if l == laneMigOrder {
+				continue // judged by path alone: an unclaimed file is no migration
+			}
 			c.full[l] = append(c.full[l], why)
 		}
 		rep.Note = "UNCLAIMED"
@@ -280,6 +345,25 @@ func generatorDeps(g *Graph, isGen func(dir string) bool) map[string]string {
 	return deps
 }
 
+// generatorSets is generatorDeps keeping EVERY generator that compiles a
+// package, not only the first.
+func generatorSets(g *Graph, isGen func(dir string) bool) map[string][]string {
+	sets := map[string][]string{}
+	for _, dir := range sortedKeys(g.DirPkg) {
+		if !isGen(dir) {
+			continue
+		}
+		gen := g.DirPkg[dir]
+		sets[gen] = append(sets[gen], dir)
+		for _, p := range sortedKeys(g.BuildDeps[gen]) {
+			if !slices.Contains(sets[p], dir) {
+				sets[p] = append(sets[p], dir)
+			}
+		}
+	}
+	return sets
+}
+
 // docGenInput reports whether a docs generator reads or writes the file, and
 // why: a path in docGenPaths, built code (or an embedded file) of a package a
 // generator compiles, or a .proto whose generated package one compiles.
@@ -291,40 +375,55 @@ func (c *classifier) docGenInput(ch Change) (string, bool) {
 }
 
 // forgeGenInput is docGenInput for the forge-generate lane: a path in
-// forgeInputs, or code a forge.yaml generate hook's generator compiles.
-func (c *classifier) forgeGenInput(ch Change) (string, bool) {
+// forgeInputs, or code a forge.yaml generate hook's generator compiles (hook
+// is true then, and every such hook is recorded in c.hooks).
+func (c *classifier) forgeGenInput(ch Change) (why string, hook, ok bool) {
 	if isForgeInput(ch.Path) {
-		return "forge generate reads or writes it", true
+		return "forge generate reads or writes it", false, true
 	}
-	return c.compiledBy(ch, c.hookGenDeps, "the forge.yaml generate hook ")
+	why, ok = c.compiledBy(ch, c.hookGenDeps, "the forge.yaml generate hook ")
+	if !ok {
+		return "", false, false
+	}
+	pkg, _ := c.compiledPkg(ch)
+	for _, gen := range c.hookGens[pkg] {
+		c.hooks[forgeHookOf[gen]] = true
+	}
+	return why, true, true
 }
 
 // compiledBy reports whether ch is built code (or an embedded file) of a
 // package in deps, or a .proto whose generated package is, naming the
 // generator that compiles it.
 func (c *classifier) compiledBy(ch Change, deps map[string]string, label string) (string, bool) {
-	compiled := func(pkg string) (string, bool) {
-		gen, ok := deps[pkg]
-		if !ok {
-			return "", false
-		}
-		return fmt.Sprintf("%s%s compiles %s", label, gen, rel(c.g.Module, pkg)), true
+	pkg, ok := c.compiledPkg(ch)
+	if !ok {
+		return "", false
 	}
+	gen, ok := deps[pkg]
+	if !ok {
+		return "", false
+	}
+	return fmt.Sprintf("%s%s compiles %s", label, gen, rel(c.g.Module, pkg)), true
+}
+
+// compiledPkg is the package whose BUILT code ch is: a code (or embedded)
+// file's package, a .proto's generated package, or the owner of a deleted Go
+// file's directory. A test or build-tagged file is in no generator's build.
+func (c *classifier) compiledPkg(ch Change) (string, bool) {
 	if fi, ok := c.g.Files[ch.Path]; ok {
 		if fi.Kind != KindCode {
-			return "", false // a test or a build-tagged file is not in a generator's build
+			return "", false
 		}
-		return compiled(fi.Pkg)
+		return fi.Pkg, true
 	}
 	if pkg, ok := protoToGen(c.g, ch.Path); ok {
-		return compiled(pkg)
+		return pkg, true
 	}
 	// A Go file the graph no longer lists (deleted or renamed) was code of the
 	// package owning its directory.
 	if strings.HasSuffix(ch.Path, ".go") && !strings.HasSuffix(ch.Path, "_test.go") {
-		if pkg, ok := ownerByDir(c.g, ch.Path); ok {
-			return compiled(pkg)
-		}
+		return ownerByDir(c.g, ch.Path)
 	}
 	return "", false
 }
@@ -472,23 +571,41 @@ func (c *classifier) selectGo() {
 	}
 	gp := &c.pl.Go
 	gp.Why = map[string]string{}
-	sel := map[string]string{}
+	sel, deferred := map[string]string{}, []string{}
 	for _, p := range sortedKeys(g.TestDeps) {
 		if c.testOnly.has(p) {
 			sel[p] = c.testOnly.why(p)
 		} else if r := reach(g.TestDeps[p], c.code, c.embed); r != "" {
-			sel[p] = r
+			if c.reachMode != ReachDirect {
+				sel[p] = r
+			} else if d := reachDirect(p, g.DirectImports[p], c.code, c.embed); d != "" {
+				sel[p] = d
+			} else if c.dbSel.has(p) {
+				sel[p] = c.dbSel.why(p)
+			} else {
+				deferred = append(deferred, p)
+			}
 		} else if c.dbSel.has(p) {
 			sel[p] = c.dbSel.why(p)
 		}
 	}
-	for _, p := range sortedKeys(sel) {
-		rp := "./" + rel(g.Module, p)
+	dot := func(p string) string {
 		if p == g.Module {
-			rp = "."
+			return "."
 		}
+		return "./" + rel(g.Module, p)
+	}
+	for _, p := range sortedKeys(sel) {
+		rp := dot(p)
 		gp.Packages = append(gp.Packages, rp)
 		gp.Why[rp] = sel[p]
+	}
+	gp.Reach = ReachAll
+	if c.reachMode == ReachDirect {
+		gp.Reach = ReachDirect
+		for _, p := range deferred {
+			gp.Deferred = append(gp.Deferred, dot(p))
+		}
 	}
 	gp.LaneFull = laneFull(c.full[laneGo])
 }
@@ -515,6 +632,24 @@ func (c *classifier) selectElectron() {
 func laneFull(rs []string) LaneFull {
 	rs = dedupe(rs)
 	return LaneFull{Full: len(rs) > 0, Reasons: rs}
+}
+
+// reachDirect is reach for ReachDirect: p is itself a changed package, or one
+// of its files or tests imports one by name.
+func reachDirect(p string, imports map[string]bool, sets ...*reasons) string {
+	for _, s := range sets {
+		if s.has(p) {
+			return fmt.Sprintf("changed (%s)", s.why(p))
+		}
+	}
+	for _, s := range sets {
+		for _, q := range s.order {
+			if imports[q] {
+				return fmt.Sprintf("imports %s (%s)", lastTwo(q), s.why(q))
+			}
+		}
+	}
+	return ""
 }
 
 // reach returns why a test binary with these deps contains a changed package,

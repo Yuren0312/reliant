@@ -25,9 +25,9 @@ import { toast } from "sonner";
 
 import Card, { CardHeader, CardInset } from "../forge-ui/card";
 import ConfirmationDialog from "../forge-ui/confirmation_dialog";
-import { Button } from "../ui/Button";
-import { Toggle } from "../ui/Toggle";
-import { useProjectStore } from "@/store/projectStore";
+import ToggleSwitch from "../forge-ui/toggle_switch";
+import Button from "@/components/forge-ui/button";
+import { useProjects } from "@/hooks/project-queries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import {
@@ -36,16 +36,16 @@ import {
   triggerSchedule,
   type Trigger,
   type TriggerEvent,
-} from "@/api/trigger-grpc";
+} from "@/hooks/trigger-model";
 import {
   useDeleteTrigger,
-  useFireTrigger,
   useSetTriggerEnabled,
   useTrigger,
   useTriggerEvents,
 } from "@/hooks/trigger-queries";
+import { useFireTrigger } from "@/hooks/trigger-service-hooks_gen";
 import { describeSchedule, describeTriggerSource } from "@/lib/cronText";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { AutomationFormDialog } from "./AutomationFormDialog";
 import { OutcomeBadge } from "./OutcomeBadge";
@@ -96,12 +96,8 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const eventCountAtFire = useRef<number | null>(null);
 
-  const projects = useProjectStore((state) => state.projects);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
+  const { projects } = useProjects();
   const { daemons } = useDaemonStatus();
-  useEffect(() => {
-    void loadProjects().catch(() => undefined);
-  }, [loadProjects]);
 
   // Stop polling once the fire's event has arrived, or the window has passed.
   const eventCount = eventsQuery.data?.length ?? 0;
@@ -150,7 +146,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
 
   const onRunNow = () => {
     eventCountAtFire.current = eventCount;
-    fire.mutate(trigger.id, {
+    fire.mutate({ id: trigger.id }, {
       onSuccess: () => {
         toast.success(`${trigger.name} started`, {
           description: "The run will appear in the history below in a moment.",
@@ -175,7 +171,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
   };
 
   const onDelete = () => {
-    deleteTrigger.mutate(trigger.id, {
+    deleteTrigger.mutate({ id: trigger.id }, {
       onSuccess: () => {
         setConfirmingDelete(false);
         toast.success(`Deleted ${trigger.name}`);
@@ -238,7 +234,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
           )}
           {(!activation || health.key === "broken") && (
             <Button
-              variant="destructive"
+              variant="danger"
               leftIcon={<Trash2 className="h-4 w-4" />}
               onClick={() => setConfirmingDelete(true)}
             >
@@ -275,11 +271,13 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
           actions={
             <div className="flex items-center gap-3 text-sm text-foreground">
               <span aria-hidden="true">{trigger.enabled ? "Enabled" : "Paused"}</span>
-              <Toggle
+              <ToggleSwitch
                 checked={trigger.enabled}
                 onChange={onToggle}
                 disabled={setEnabled.isPending}
-                srLabel="Automation enabled"
+                ariaLabel="Automation enabled"
+                size="lg"
+                className="forge-ui"
               />
             </div>
           }

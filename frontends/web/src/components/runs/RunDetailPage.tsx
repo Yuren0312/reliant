@@ -15,12 +15,12 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 import type { Chat } from "@/api/client";
-import { runErrorMessage } from "@/api/run-grpc";
+import { runErrorMessage } from "@/hooks/run-queries";
 import { useChat } from "@/hooks/chat-queries";
 import { useAdoptRun, useRunControl } from "@/hooks/run-queries";
-import { useProjectStore } from "@/store/projectStore";
+import { useProject } from "@/hooks/project-queries";
 import Card from "../forge-ui/card";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { ChatContainer } from "../Chat/ChatContainer";
 import { RunHeader } from "./RunHeader";
 import { RunNodes } from "./RunNodes";
@@ -61,9 +61,7 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
   // The detail cache is kept live by the update stream; the loaded chat only
   // covers the first render.
   const chat = useChat(initialChat.id).data ?? initialChat;
-  const projectName = useProjectStore(
-    (state) => state.projects.find((p) => p.id === chat.projectId)?.name,
-  );
+  const projectName = useProject(chat.projectId)?.name;
   const launch = useRunLaunch(chat);
   const triggerName = launch.triggerName;
   const rerun = useRerun(chat, launch.event, triggerName);
@@ -85,7 +83,7 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
       openInProject();
       return;
     }
-    adopt.mutate(chat.id, {
+    adopt.mutate({ chatId: chat.id }, {
       onSuccess: () => {
         toast.success("Added to your chats", { description: "It stays in the chat list from now on." });
         openInProject();

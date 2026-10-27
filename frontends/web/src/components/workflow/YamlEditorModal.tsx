@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Modal } from '../ui/Modal'
-import { Button } from '../ui/Button'
+import Modal from '../forge-ui/modal'
+import Button from '@/components/forge-ui/button';
 import { LightweightCodeViewer } from '../Chat/LightweightCodeViewer'
 import { Pencil, Eye, Copy, Check, AlertTriangle } from 'lucide-react'
 import type { Workflow } from '../../types/workflow'
-import { workflowGrpc } from '../../api/workflow-grpc'
+import { importWorkflow } from '../../hooks/workflow-queries'
 import { toast } from 'sonner'
 
 interface YamlEditorModalProps {
@@ -60,7 +60,7 @@ export function YamlEditorModal({
   const handleApply = useCallback(async () => {
     try {
       setParseError(null)
-      const result = await workflowGrpc.importWorkflow(projectId, editedContent, true)
+      const result = await importWorkflow(projectId, editedContent, true)
       if (!result.success || !result.workflow) {
         const errMsg = result.validationErrors?.length
           ? result.validationErrors.map(e => e.message).join('; ')
@@ -97,7 +97,7 @@ export function YamlEditorModal({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
       onClose={onClose}
       title="Workflow YAML"
       size="xl"
