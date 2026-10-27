@@ -17,9 +17,9 @@ export function BillingUnavailable({ label, error, retry }: { label: string; err
 }
 
 /** Drafts are tied to the version read, not reset by background refreshes. */
-export function ObservabilityLimits({ limits, orgId, save, reload, saving = false }: {
+export function ObservabilityLimits({ limits, orgId, save, reload }: {
   limits: GetObservabilityLimitsResponse; orgId: string; save: SaveLimits;
-  reload: () => Promise<unknown>; saving?: boolean;
+  reload: () => Promise<unknown>;
 }) {
   const [editing, setEditing] = useState(false);
   const [version, setVersion] = useState(limits.version);
@@ -29,15 +29,22 @@ export function ObservabilityLimits({ limits, orgId, save, reload, saving = fals
   const [onCap, setOnCap] = useState(limits.alertOnCap);
   const [message, setMessage] = useState("");
   const [conflict, setConflict] = useState(false);
-  // Invalidate async UI continuations on an org switch (even A → B → A) or
-  // unmount. The server write and original org's cache update still complete.
+  // Each draft/operation owns its UI continuations, including pending state.
+  // Superseding one never cancels its valid server write or cache completion.
   const epoch = useRef(0);
+  const [pending, setPending] = useState<"save" | "reload" | null>(null);
+  const saving = pending === "save";
   useLayoutEffect(() => {
-    setEditing(false); setMessage(""); setConflict(false);
+    setEditing(false); setMessage(""); setConflict(false); setPending(null);
     return () => { epoch.current += 1; };
   }, [orgId]);
+  const cancel = () => {
+    epoch.current += 1;
+    setEditing(false); setMessage(""); setConflict(false); setPending(null);
+  };
   const reloadLatest = async () => {
-    const requestEpoch = epoch.current;
+    const requestEpoch = ++epoch.current;
+    setPending("reload");
     try {
       await reload();
       if (epoch.current !== requestEpoch) return;
@@ -45,18 +52,23 @@ export function ObservabilityLimits({ limits, orgId, save, reload, saving = fals
     } catch {
       if (epoch.current !== requestEpoch) return;
       setMessage("Reload failed. Your edits have not been saved; try reloading again.");
+    } finally {
+      if (epoch.current === requestEpoch) setPending(null);
     }
   };
   const start = () => {
+    epoch.current += 1; setPending(null);
     setVersion(limits.version); setNoOverage(limits.spendCapCents === 0n);
     setCap((Number(limits.spendCapCents) / 100).toFixed(2));
     setThresholds([...limits.alertThresholdsPercent]); setOnCap(limits.alertOnCap);
     setConflict(false); setMessage(""); setEditing(true);
   };
   const submit = async () => {
+    const requestEpoch = ++epoch.current;
+    setPending(null); setMessage("");
     // Local parsing only: the backend owns bounds and the already-charged floor.
     if (!noOverage && !/^\d+(\.\d{1,2})?$/.test(cap)) { setMessage("Enter a dollar amount with at most two decimal places."); return; }
-    const requestEpoch = epoch.current;
+    setPending("save");
     try {
       const result = await save({ orgId, expectedVersion: version, spendCapCents: noOverage ? 0n : BigInt(Math.round(Number(cap) * 100)),
         setAlertThresholds: true, alertThresholdsPercent: thresholds, alertOnCap: onCap });
@@ -69,6 +81,8 @@ export function ObservabilityLimits({ limits, orgId, save, reload, saving = fals
         setConflict(true);
         setMessage("Someone changed these limits. Your edits were not saved. Reload the latest limits, review them, then edit again.");
       } else setMessage(error instanceof ConnectError ? error.rawMessage : "Could not save limits. Check your connection and try again.");
+    } finally {
+      if (epoch.current === requestEpoch) setPending(null);
     }
   };
   return <Card>
@@ -93,11 +107,11 @@ export function ObservabilityLimits({ limits, orgId, save, reload, saving = fals
         </div>
         <button type="submit" className="rounded border border-border px-3 py-2 text-sm">{saving ? "Saving…" : "Save observability limits"}</button>
       </fieldset>
-      <button type="button" className="text-sm text-primary underline" disabled={saving} onClick={() => { setEditing(false); setMessage(""); }}>Cancel</button>
+      <button type="button" className="text-sm text-primary underline" onClick={cancel}>Cancel</button>
     </form>}
     <p className="mt-3 text-xs text-muted-foreground">Threshold preferences are saved only. Alert delivery and recipient routing are not yet connected here; saving does not enable email, Slack or webhook delivery.</p>
     {message && <p role="status" className="mt-3 text-sm">{message}</p>}
-    {conflict && <button type="button" className="mt-2 text-primary underline" onClick={() => void reloadLatest()}>Reload latest limits</button>}
+    {conflict && <button type="button" className="mt-2 text-primary underline" disabled={pending === "reload"} onClick={() => void reloadLatest()}>Reload latest limits</button>}
     {limits.updatedAt && <p className="mt-3 text-xs text-muted-foreground">Last changed {at(limits.updatedAt)} by {limits.updatedByEmail || "system"}.</p>}
   </Card>;
 }

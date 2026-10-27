@@ -16,7 +16,7 @@ export function ObservabilityUsageDetails({ orgId }: { orgId: string }) {
     <DailyUsage orgId={orgId} />
     {storage.isPending ? <Loading label="Loading stored-now snapshot…" /> : storage.error || !storage.data ? <BillingUnavailable label="Stored-now snapshot" error={storage.error} retry={() => void storage.refetch()} /> : <StorageSnapshot storage={storage.data} />}
     {limits.isPending ? <Loading label="Loading observability limits…" /> : limits.error || !limits.data ? <BillingUnavailable label="Observability limits" error={limits.error} retry={() => void limits.refetch()} /> : <>
-      <ObservabilityLimits key={orgId} orgId={orgId} limits={limits.data} save={request => update.mutateAsync(request)} saving={update.isPending} reload={async () => { const result = await limits.refetch(); if (result.error) throw result.error; }} />
+      <ObservabilityLimits key={orgId} orgId={orgId} limits={limits.data} save={request => update.mutateAsync(request)} reload={async () => { const result = await limits.refetch(); if (result.error) throw result.error; }} />
       <ObservabilityCollectionPolicy orgId={orgId} />
       <ObservabilityFairUse limits={limits.data} />
     </>}
