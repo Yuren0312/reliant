@@ -10,7 +10,7 @@
  *
  * The chain composes forge's web runtime (`@reliantlabs/forge-web-runtime`)
  * with reliant's own interceptors. The order is:
- *   error-normalize → timeout → auth → missing-token → daemon-last-seen → trace
+ *   error-normalize → org-snapshot → timeout → auth → missing-token → daemon-last-seen → trace
  *     → error-logging → upgrade-modal → machine-wake → 401-signout
  * (error-normalize and auth are the runtime's; daemon-last-seen only on reliant
  * api-server transports — see TransportBackend; trace is the runtime's).
@@ -23,11 +23,13 @@
  *     intact, so the `instanceof ConnectError` call sites keep working; it adds
  *     `.reason` / `.codeName` / `.status` / `.retryable` / `.traceId`, and its
  *     `.message` drops connect's "[code] " prefix (`rawMessage` is unchanged);
- *   - timeout next so the full request lifecycle (incl. retries through
- *     inner interceptors) is bounded;
+ *   - org snapshots synchronously before any auth await or timeout replacement:
+ *     an operation started in A cannot become a write in B after a switch.
+ *     Explicit caller orgs win; no selection stays unset across retries.
+ *     Authed routes only, since an unauthenticated call has no org;
+ *   - timeout bounds the remaining lifecycle (incl. retries through inner
+ *     interceptors) without recapturing the operation's org;
  *   - auth attaches the bearer before the trace stage;
- *   - org (orgInterceptor) names the active org on requests that carry an
- *     `org_id` field; authed routes only, since an unauthenticated call has no org;
  *   - daemon-last-seen header is independent of auth ordering but cheap to
  *     leave just after auth;
  *   - trace stamps the W3C traceparent; the span it names is the HyperDX
@@ -690,8 +692,9 @@ export function buildInterceptors(
 
   const chain: Interceptor[] = [
     normalizeInterceptor,
+    ...(withAuth ? [orgInterceptor] : []),
     timeoutInterceptor,
-    ...(withAuth ? [authInterceptor, missingTokenInterceptor, orgInterceptor] : []),
+    ...(withAuth ? [authInterceptor, missingTokenInterceptor] : []),
     backend === "reliant-api" ? daemonLastSeenInterceptor : forgeViaInterceptor,
     traceStage,
     errorInterceptor,

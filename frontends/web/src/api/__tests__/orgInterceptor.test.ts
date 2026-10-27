@@ -62,6 +62,58 @@ async function load(activeOrg: string | null) {
 }
 
 describe("orgInterceptor", () => {
+  it.each([
+    ["SetCurrentUserWalletAutoRecharge", (client: ReturnType<typeof import("@/lib/connect").connectClient<typeof BillingService>>) => client.setCurrentUserWalletAutoRecharge({ enabled: true, thresholdCents: 1000n, amountCents: 2500n, maxPerMonthCents: 10000n })],
+    ["CreateCurrentUserWalletTopupSession", (client: ReturnType<typeof import("@/lib/connect").connectClient<typeof BillingService>>) => client.createCurrentUserWalletTopupSession({ amountCents: 2500n, successUrl: "https://app.test/done", cancelUrl: "https://app.test/cancel" })],
+    ["RedeemCoupon", (client: ReturnType<typeof import("@/lib/connect").connectClient<typeof BillingService>>) => client.redeemCoupon({ code: "TEST" })],
+  ] as const)("pins implicit %s before deferred auth and a 401 retry", async (_method, invoke) => {
+    const { connectClient, chooseActiveOrg } = await load("org-a");
+    const { setAuthTokenProvider } = await import("@/api/authProvider");
+    let release!: (token: string) => void;
+    const getToken = vi.fn(() => new Promise<string>((resolve) => { release = resolve; }));
+    setAuthTokenProvider({ getToken, hasSession: async () => true, refresh: async () => "fresh-token" });
+    const spending: Record<string, unknown> = { "org-a": "unchanged-a", "org-b": "unchanged-b" };
+    const wire: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_input: unknown, init?: RequestInit) => {
+      const body = JSON.parse(new TextDecoder().decode(init?.body as Uint8Array));
+      wire.push(body);
+      if (wire.length === 1) return new Response(JSON.stringify({ code: "unauthenticated", message: "expired" }), {
+        status: 401, headers: { "content-type": "application/json" },
+      });
+      spending[body.orgId] = body;
+      return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+    }));
+    const pending = invoke(connectClient(BillingService));
+    await vi.waitFor(() => expect(getToken).toHaveBeenCalledOnce());
+    chooseActiveOrg("org-b");
+    release("old-token");
+    await pending;
+    expect(wire.map((body) => body.orgId)).toEqual(["org-a", "org-a"]);
+    expect(spending["org-a"]).not.toBe("unchanged-a");
+    expect(spending["org-b"]).toBe("unchanged-b");
+  });
+
+  it.each([null, "org-explicit"])("retains initial org %s through deferred auth and retry", async (explicit) => {
+    const { connectClient, chooseActiveOrg } = await load(null);
+    const { setAuthTokenProvider } = await import("@/api/authProvider");
+    let release!: (token: string) => void;
+    const getToken = vi.fn(() => new Promise<string>((resolve) => { release = resolve; }));
+    setAuthTokenProvider({ getToken, hasSession: async () => true, refresh: async () => "fresh-token" });
+    const wire: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_input: unknown, init?: RequestInit) => {
+      wire.push(JSON.parse(new TextDecoder().decode(init?.body as Uint8Array)));
+      return wire.length === 1
+        ? new Response(JSON.stringify({ code: "unauthenticated", message: "expired" }), { status: 401, headers: { "content-type": "application/json" } })
+        : new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+    }));
+    const pending = connectClient(BillingService).redeemCoupon({ code: "TEST", ...(explicit ? { orgId: explicit } : {}) });
+    await vi.waitFor(() => expect(getToken).toHaveBeenCalledOnce());
+    chooseActiveOrg("org-b");
+    release("old-token");
+    await pending;
+    expect(wire.map((body) => body.orgId)).toEqual([explicit ?? undefined, explicit ?? undefined]);
+  });
+
   it("pins grant writes before deferred auth and retains that org across 401 retry", async () => {
     const { chooseActiveOrg } = await load("org-a");
     const { setAuthTokenProvider } = await import("@/api/authProvider");

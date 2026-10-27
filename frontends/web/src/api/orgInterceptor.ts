@@ -15,6 +15,10 @@ import { getActiveOrgId } from "@/store/activeOrgStore";
  * active org (still loading, a machine credential, a signup mid-provisioning)
  * names none, so the server resolves the person's default.
  *
+ * This runs synchronously before timeout and asynchronous authentication in
+ * the canonical chain. It runs once per logical call, not per retry, so a later
+ * selection cannot retarget either a named org or an initially unset one.
+ *
  * Streaming requests are left alone: their request is an async iterable, and
  * no org-scoped control-plane rpc the web calls streams.
  */
