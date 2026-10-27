@@ -2311,10 +2311,10 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 	globalMemory, _ := readOptionalFile(globalMemoryPath)
 	projectMemory := readProjectMemory(projectPath)
 
-	layout, workflowsDir := readWorkflowLayout(projectPath)
-	workflows, workflowBytes := indexWorkflows(layout, workflowsDir)
+	workflowSources := readWorkflowSources(projectPath)
+	workflows, workflowBytes := indexWorkflows(workflowSources)
 	presets, presetBytes := indexPresets(projectPath)
-	scenarios, scenarioBytes := indexScenarios(layout, workflowsDir)
+	scenarios, scenarioBytes := indexScenarios(workflowSources)
 	skills, skillBytes := indexSkills(projectPath)
 	repoMemories, repoMemoriesBytes := collectRepoMemories(projectPath)
 
@@ -2620,49 +2620,79 @@ func buildSkillsIndex(projectPath string) ([]*reliantv1.IndexedSkill, []byte) {
 	return results, []byte(acc.String())
 }
 
-// readWorkflowLayout reads the project's .reliant/workflows with the one
-// locator the CLI uses too (workflowref.ReadLayout), so the server indexes
-// exactly the workflows and scenarios `reliant workflow` sees on disk.
-func readWorkflowLayout(projectPath string) (*workflowref.Layout, string) {
-	baseDir := filepath.Join(projectPath, filepath.FromSlash(workflowref.Dir))
+// workflowSource is one workflows directory a project syncs: the project
+// root's .reliant/workflows, or one nested repo's.
+type workflowSource struct {
+	// repo is the nested repo's slash-separated path relative to the project
+	// root, "" for the project root itself.
+	repo    string
+	layout  *workflowref.Layout
+	baseDir string
+}
+
+// readWorkflowSources reads the project's workflows directories — the project
+// root's .reliant/workflows, then each nested repo's (the same repos
+// reliant.md and skills are discovered in) — with the one locator the CLI
+// uses too (workflowref.ReadLayout), so the server indexes exactly the
+// workflows and scenarios `reliant workflow` sees on disk. The project root's
+// source is always first; nested repos follow in path order. Which of them a
+// bare name resolves to is the server's to decide (workflowref.Index).
+func readWorkflowSources(projectPath string) []workflowSource {
+	sources := []workflowSource{readWorkflowSource(projectPath, "")}
+	repos := append([]string(nil), discoverRepoSources(context.Background(), projectPath)...)
+	sort.Strings(repos)
+	for _, rel := range repos {
+		rel = filepath.ToSlash(filepath.Clean(rel))
+		if rel == "" || rel == "." {
+			continue
+		}
+		sources = append(sources, readWorkflowSource(projectPath, rel))
+	}
+	return sources
+}
+
+func readWorkflowSource(projectPath, repo string) workflowSource {
+	baseDir := filepath.Join(projectPath, filepath.FromSlash(repo), filepath.FromSlash(workflowref.Dir))
 	layout, err := workflowref.ReadLayout(os.DirFS(baseDir))
 	if err != nil {
 		logging.Warn("Failed to read project workflows", "dir", baseDir, "error", err)
-		return workflowref.NewLayout(nil), baseDir
+		layout = workflowref.NewLayout(nil)
 	}
 	// Misplaced scenarios are reported by the surfaces that read them
 	// (`reliant workflow scenario`), not here: this runs on every 2s poll.
-	return layout, baseDir
+	return workflowSource{repo: repo, layout: layout, baseDir: baseDir}
 }
 
-// indexWorkflows syncs every project workflow file with its path and
-// content. Problems (no name:, a name two files share) are not resolved here:
-// the server indexes the files with workflowref, as the CLI does, and reports
-// them where a ref or the workflow list meets them.
-func indexWorkflows(layout *workflowref.Layout, baseDir string) ([]*reliantv1.IndexedWorkflow, []byte) {
-	entries := layout.Workflows.Entries()
-	results := make([]*reliantv1.IndexedWorkflow, 0, len(entries))
+// indexWorkflows syncs every project workflow file of every source with its
+// project-relative path and content. Problems (no name:, a name two files
+// share, a name two repos share) are not resolved here: the server indexes the
+// files with workflowref, as the CLI does, and reports them where a ref or the
+// workflow list meets them.
+func indexWorkflows(sources []workflowSource) ([]*reliantv1.IndexedWorkflow, []byte) {
+	var results []*reliantv1.IndexedWorkflow
 	acc := strings.Builder{}
 
-	for _, e := range entries {
-		rel := filepath.ToSlash(filepath.Join(workflowref.Dir, e.Path))
-		st, err := os.Stat(filepath.Join(baseDir, filepath.FromSlash(e.Path)))
-		if err != nil {
-			continue
+	for _, src := range sources {
+		for _, e := range src.layout.Workflows.Entries() {
+			rel := workflowref.RelativePath(src.repo, e.Path)
+			st, err := os.Stat(filepath.Join(src.baseDir, filepath.FromSlash(e.Path)))
+			if err != nil {
+				continue
+			}
+			h := hashBytes(e.Content)
+			results = append(results, &reliantv1.IndexedWorkflow{
+				Slug:         e.Slug,
+				Name:         e.Name,
+				RelativePath: rel,
+				ContentHash:  h,
+				MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
+				YamlContent:  e.Content,
+			})
+			acc.WriteString(rel)
+			acc.WriteString(":")
+			acc.WriteString(h)
+			acc.WriteString(";")
 		}
-		h := hashBytes(e.Content)
-		results = append(results, &reliantv1.IndexedWorkflow{
-			Slug:         e.Slug,
-			Name:         e.Name,
-			RelativePath: rel,
-			ContentHash:  h,
-			MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
-			YamlContent:  e.Content,
-		})
-		acc.WriteString(rel)
-		acc.WriteString(":")
-		acc.WriteString(h)
-		acc.WriteString(";")
 	}
 	return results, []byte(acc.String())
 }
@@ -2701,15 +2731,22 @@ func indexPresets(projectPath string) ([]*reliantv1.IndexedPreset, []byte) {
 	return results, []byte(acc.String())
 }
 
-// indexScenarios syncs the scenarios in .reliant/workflows/<slug>/scenarios/,
-// located by workflowref — the locator `reliant workflow scenario` uses.
-func indexScenarios(layout *workflowref.Layout, baseDir string) ([]*reliantv1.IndexedScenario, []byte) {
+// indexScenarios syncs scenarios under the same address as their workflow.
+// A cross-repo collision must not attach one repo's scenarios to another's.
+func indexScenarios(sources []workflowSource) ([]*reliantv1.IndexedScenario, []byte) {
+	root := sources[0]
+	repos := map[string]*workflowref.Layout{}
+	for _, src := range sources[1:] {
+		repos[src.repo] = src.layout
+	}
+	layout := workflowref.MergeLayouts(root.layout, repos)
+	baseDir := root.baseDir
 	results := make([]*reliantv1.IndexedScenario, 0, len(layout.Scenarios))
 	acc := strings.Builder{}
 
 	for _, sc := range layout.Scenarios {
-		rel := filepath.ToSlash(filepath.Join(workflowref.Dir, sc.Path))
-		st, err := os.Stat(filepath.Join(baseDir, filepath.FromSlash(sc.Path)))
+		rel := workflowref.RelativePath(sc.Repo, sc.Path)
+		st, err := os.Stat(filepath.Join(baseDir, filepath.FromSlash(workflowref.FilePath(sc.Repo, sc.Path))))
 		if err != nil {
 			continue
 		}

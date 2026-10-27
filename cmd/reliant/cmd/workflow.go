@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,6 +18,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/preset"
+	"github.com/reliant-labs/reliant/internal/repo"
 	skillscatalog "github.com/reliant-labs/reliant/internal/skills/catalog"
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
@@ -614,6 +616,28 @@ func readWorkflowLayout(dir string) (*workflowref.Layout, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", dir, err)
 	}
+	// An explicit arbitrary --dir remains one directory. The conventional
+	// project workflows path also includes the same nested repos the daemon
+	// discovers for memories, skills and workflow sync.
+	if filepath.Base(filepath.Dir(filepath.Clean(dir))) == ".reliant" && filepath.Base(filepath.Clean(dir)) == "workflows" {
+		projectPath := filepath.Dir(filepath.Dir(filepath.Clean(dir)))
+		found, err := repo.Discover(context.Background(), projectPath, 0)
+		if err != nil {
+			return nil, err
+		}
+		nested := map[string]*workflowref.Layout{}
+		for _, r := range found {
+			if r.RelativePath == "" || r.RelativePath == "." {
+				continue
+			}
+			l, err := workflowref.ReadLayout(os.DirFS(filepath.Join(projectPath, r.RelativePath, filepath.FromSlash(workflowref.Dir))))
+			if err != nil {
+				return nil, err
+			}
+			nested[filepath.ToSlash(r.RelativePath)] = l
+		}
+		layout = workflowref.MergeLayouts(layout, nested)
+	}
 	return layout, nil
 }
 
@@ -626,7 +650,7 @@ func workflowFilesIn(dir string) ([]string, error) {
 	}
 	var files []string
 	for _, e := range layout.Workflows.Entries() {
-		files = append(files, filepath.Join(dir, filepath.FromSlash(e.Path)))
+		files = append(files, filepath.Join(dir, filepath.FromSlash(workflowref.FilePath(e.Repo, e.Path))))
 	}
 	return files, nil
 }
@@ -721,7 +745,11 @@ func validateWorkflowFileIn(path, workflowDir string, layout *workflowref.Layout
 	// it would. (A missing name: is the validator's own "name is required".)
 	var addressProblem error
 	if rel, relErr := filepath.Rel(workflowDir, path); relErr == nil {
-		if entry := layout.Workflows.EntryAt(filepath.ToSlash(rel)); entry != nil && entry.Name != "" && entry.Problem != nil {
+		location := filepath.ToSlash(rel)
+		if strings.HasPrefix(location, "../../") {
+			location = strings.TrimPrefix(location, "../../")
+		}
+		if entry := layout.Workflows.EntryAt(location); entry != nil && entry.Name != "" && entry.Problem != nil {
 			addressProblem = entry.Problem
 		}
 	}
@@ -1448,7 +1476,7 @@ func layoutScenarios(layout *workflowref.Layout, source, dir, onlyFile string) (
 		if onlyFile != "" && entry.Path != onlyFile {
 			continue
 		}
-		files := layout.ScenariosFor(entry.Slug)
+		files := layout.ScenariosFor(entry.Address)
 		if entry.Slug == "" || len(files) == 0 {
 			continue
 		}
@@ -1456,7 +1484,7 @@ func layoutScenarios(layout *workflowref.Layout, source, dir, onlyFile string) (
 		for _, f := range files {
 			sc, err := wfscenario.ParseScenarioFile(f.Content, f.Name)
 			if err != nil {
-				return nil, fmt.Errorf("%s: %w", filepath.Join(dir, filepath.FromSlash(f.Path)), err)
+				return nil, fmt.Errorf("%s: %w", filepath.Join(dir, filepath.FromSlash(workflowref.FilePath(f.Repo, f.Path))), err)
 			}
 			scenarios = append(scenarios, sc)
 		}
@@ -1469,7 +1497,7 @@ func layoutScenarios(layout *workflowref.Layout, source, dir, onlyFile string) (
 			Scenarios:    scenarios,
 		}
 		if source != "builtin" {
-			wf.WorkflowFile = filepath.Join(dir, filepath.FromSlash(entry.Path))
+			wf.WorkflowFile = filepath.Join(dir, filepath.FromSlash(workflowref.FilePath(entry.Repo, entry.Path)))
 			wf.Project = layout.Workflows
 		}
 		results = append(results, wf)

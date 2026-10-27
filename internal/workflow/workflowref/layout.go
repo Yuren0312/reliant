@@ -33,6 +33,8 @@ func ScenarioPath(slug, name string) string {
 
 // ScenarioFile is one scenario file a project holds.
 type ScenarioFile struct {
+	// Repo is the nested repository this scenario belongs to, or the root.
+	Repo string
 	// WorkflowSlug is the directory it sits under: the slug of the workflow
 	// it tests.
 	WorkflowSlug string
