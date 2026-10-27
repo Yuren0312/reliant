@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/actingidentity"
+	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonoffline"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -286,6 +287,7 @@ func (a *ExecuteToolsActivity) Category() schema.ActivityCategory {
 // Execute contains PURE BUSINESS LOGIC only
 func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput) (*reliantv1.ExecuteToolsOutput, error) {
 	rtx := input.Runtime
+	ctx = automationpolicy.WithExecution(ctx, automationpolicy.Execution{Unattended: rtx.Unattended, Approvals: rtx.ActivationApprovals})
 	protoArgs := model.GetExecuteToolsArgs(input.Node)
 	if protoArgs == nil {
 		return nil, fmt.Errorf("expected execute_tools node, got %s", model.NodeType(input.Node))
@@ -312,7 +314,17 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	// Only a run that recorded the removed integration action approval prompt
 	// sends any: a call the person attending did not approve
 	// (runtime/action_approval_legacy.go).
-	refusedByWorkflow := protoArgs.GetRefusedToolCalls() //nolint:staticcheck // SA1019: sent only by the legacy approval gate
+	refusedByWorkflow := protoArgs.GetRefusedToolCalls() //nolint:staticcheck // SA1019: legacy approval gate
+	if len(rtx.ActivationRefusals) > 0 {
+		merged := make(map[string]string, len(refusedByWorkflow)+len(rtx.ActivationRefusals))
+		for k, v := range refusedByWorkflow {
+			merged[k] = v
+		}
+		for k, v := range rtx.ActivationRefusals {
+			merged[k] = v
+		}
+		refusedByWorkflow = merged
+	}
 
 	// Build set for O(1) response tool lookups in worker goroutines
 	responseToolSet := make(map[string]bool, len(expectedResponseTools))
