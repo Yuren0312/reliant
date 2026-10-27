@@ -168,6 +168,9 @@ func (f *budgetFilter) line(b []byte) {
 			f.held[key] = append(f.held[key], ev.Output)
 		}
 	case "fail":
+		if ev.Test != "" {
+			fmt.Fprintf(f.out, "--- FAIL: %s (package %s)\n", ev.Test, ev.Package)
+		}
 		if ev.Test == "" {
 			// A package that failed with tests still running (a panic, a
 			// timeout) never reports them: their output is the evidence.
