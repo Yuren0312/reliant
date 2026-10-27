@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -127,6 +128,7 @@ func (s *Service) CreateWorktree(
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create worktree"))
 		}
 		if existing != nil {
+			activity.Skip(ctx) // a retry of a create already recorded: no second "create" event
 			return connect.NewResponse(&reliantv1.CreateWorktreeResponse{
 				Worktree: worktreeToProto(existing),
 			}), nil

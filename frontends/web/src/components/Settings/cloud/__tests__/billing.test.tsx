@@ -106,6 +106,11 @@ vi.mock('@/hooks/observability-queries', async () => {
   }
 })
 
+vi.mock('@/hooks/observability-billing-queries', async () => {
+  const { ConnectError, Code } = await import('@connectrpc/connect')
+  return { useObsBillingUsage: () => ({ isPending: false, error: new ConnectError('Not deployed', Code.Unimplemented), refetch: vi.fn() }) }
+})
+
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
   // Real object, not a stub: `useRedeemCoupon` (from the OTHER hook module,
   // which is not mocked) dereferences these keys in its own onSuccess to
@@ -139,6 +144,14 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
 
 import { RedeemedCouponKind } from '@/gen/controlplane/services/billing/v1/billing_pb';
 import { BillingSection } from '@/components/Settings/cloud/billing'
+import { ObsQuotaBanner } from '@/components/Forge/Observability/ObsStates'
+import { ObsQuotaProvider, useObsQuota } from '@/services/controlPlane/observability/ObsQuotaContext'
+import { settingsSearchSchema } from '@/routeSchemas'
+
+function QuotaUsageLink() {
+  const { store } = useObsQuota()
+  return <><ObsQuotaBanner /><button onClick={() => store.report({ limit: 'queries', lane: 'interactive', resetsAtMs: Date.now() + 60_000, soft: false })}>Exhaust quota</button></>
+}
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -175,6 +188,26 @@ describe('BillingSection', () => {
     ])
   })
 
+  it('mounts observability usage directly at the real quota banner destination', () => {
+    obsState.orgId = 'org-fixture'
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const banner = render(<QueryClientProvider client={client}><ObsQuotaProvider><QuotaUsageLink /></ObsQuotaProvider></QueryClientProvider>)
+    fireEvent.click(screen.getByRole('button', { name: 'Exhaust quota' }))
+    const destination = new URL(screen.getByTestId('obs-quota-usage').getAttribute('href')!, 'https://app.example.test')
+    expect(destination.pathname).toBe('/settings/billing')
+    routerState.search = settingsSearchSchema.parse(Object.fromEntries(destination.searchParams))
+    banner.unmount()
+
+    renderSection()
+    expect(screen.getByRole('tab', { name: /usage & invoices/i })).toHaveAttribute('aria-selected', 'true')
+    const usageSection = screen.getByTestId('billing-observability-usage')
+    expect(usageSection.id).toBe('observability')
+    const hashTarget = document.getElementById(destination.hash.slice(1))
+    expect(hashTarget).not.toBeNull()
+    expect(usageSection).toContainElement(hashTarget)
+    expect(hashTarget).toHaveTextContent('Observability usage')
+  })
+
   it('shows the plans empty state when no plans are configured', () => {
     renderSection()
 
@@ -206,12 +239,12 @@ describe('BillingSection', () => {
     expect(section).toHaveTextContent('Customer metadata')
   })
 
-  it('shows no observability usage before an org exists', () => {
+  it('explains unavailable observability usage before an org exists', () => {
     renderSection()
 
     fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
 
-    expect(screen.queryByTestId('billing-observability-usage')).not.toBeInTheDocument()
+    expect(screen.getByTestId('billing-observability-usage')).toHaveTextContent('select an organization first')
   })
 
   it('shows the usage empty state on the merged tab', () => {
