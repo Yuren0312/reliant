@@ -93,7 +93,8 @@ describe("CopyButton timer ownership", () => {
     const nativeSetTimeout = globalThis.setTimeout;
     const resetCallback = vi.fn();
     const scheduledReset = vi.fn();
-    vi.spyOn(globalThis, "setTimeout").mockImplementation(((callback, delay, ...args) => {
+    vi.spyOn(globalThis, "setTimeout").mockImplementation(((...timerArgs: Parameters<typeof setTimeout>) => {
+      const [callback, delay, ...args] = timerArgs;
       if (delay === 2000 && typeof callback === "function") {
         scheduledReset();
         return nativeSetTimeout(() => { resetCallback(); callback(...args); }, 1000);
