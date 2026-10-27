@@ -67,6 +67,9 @@ type TriggerSummary struct {
 	Enabled         bool
 	ProjectID       string
 	DaemonID        string
+	DaemonName      string
+	MachineState    string
+	NoMachine       bool
 	ConnectionID    string
 	WebhookURL      string
 	NextFireAt      string
@@ -87,7 +90,7 @@ type ListTriggersParams struct {
 
 const (
 	ListTriggersToolName        = "list_triggers"
-	listTriggersToolDescription = `List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's health.
+	listTriggersToolDescription = `List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's machine (name, id and current registry state) and health. Failed launched runs include the failing node's error.
 
 Narrow by workflow to see a workflow's activations. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; fix the workflow, then the user re-enables it in the app).`
 )
@@ -139,6 +142,15 @@ func (l *listTriggersTool) Execute(rctx *rctx.ToolContext, params ListTriggersPa
 			fmt.Fprintf(&b, "  activates %q declared by %s\n", t.WorkflowTrigger, t.Workflow)
 		} else {
 			fmt.Fprintf(&b, "  launches %s (source written on the trigger)\n", t.Workflow)
+		}
+		if t.NoMachine {
+			b.WriteString("  machine: none (no-machine activation)\n")
+		} else {
+			state := t.MachineState
+			if state == "" {
+				state = "unknown"
+			}
+			fmt.Fprintf(&b, "  machine: %s (id %s), state %s\n", t.DaemonName, t.DaemonID, state)
 		}
 		fmt.Fprintf(&b, "  fires on: %s\n", t.Source)
 		if t.Filter != "" {
