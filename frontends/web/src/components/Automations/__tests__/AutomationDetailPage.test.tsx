@@ -22,6 +22,7 @@ import {
   TriggerHealthSchema,
   TriggerHealthStatus,
   TriggerSchema,
+  TriggerChangeSchema,
 } from "@/gen/reliant/v1/trigger_pb";
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
@@ -152,7 +153,7 @@ describe("AutomationDetail", () => {
   });
 
   it("shows configuration changes separately from firings, including the originating run", async () => {
-    getTrigger.mockResolvedValue(create(GetTriggerResponseSchema, { trigger: { ...trigger, changes: [{ id: "change-1", operation: "update", userId: "owner", chatId: "caller-chat", runId: "caller-run", toolCallId: "call-1", beforeState: '{"DaemonID":"old"}', afterState: '{"DaemonID":"cicd"}', createdAt: isoFromNow(-HOUR) }] } }));
+    getTrigger.mockResolvedValue(create(GetTriggerResponseSchema, { trigger: { ...trigger, changes: [create(TriggerChangeSchema, { id: "change-1", operation: "update", userId: "owner", chatId: "caller-chat", runId: "caller-run", toolCallId: "call-1", beforeState: '{"DaemonID":"old"}', afterState: '{"DaemonID":"cicd"}', createdAt: isoFromNow(-HOUR) })] } }));
     renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
     expect(await screen.findByText(/Agent in chat caller-chat/)).toBeInTheDocument();
     expect(screen.getByText(/Thread caller-run/)).toBeInTheDocument();
