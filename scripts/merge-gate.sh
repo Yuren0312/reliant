@@ -355,7 +355,9 @@ if [ "$fail" = 0 ]; then
     notes+=("lint: not run (only root files changed; the release gate lints the module)")
   fi
   phase proto task proto:lint & pids+=($!)
-  mapfile -t vet_pkgs < <(jq -r '.go.packages // [] | .[]' "$run_plan")
+  # Build reach includes ordinary production packages with no test binary.
+  # Keep test-only changes too: vet checks their tests even when Build is empty.
+  mapfile -t vet_pkgs < <(jq -r '((.go.build // []) + (.go.packages // [])) | unique | .[]' "$run_plan")
   if [ ${#vet_pkgs[@]} -gt 0 ]; then
     phase vet env GOMAXPROCS="$quarter" go vet "${vet_pkgs[@]}" & pids+=($!)
   fi

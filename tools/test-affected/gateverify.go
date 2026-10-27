@@ -107,8 +107,8 @@ func verifyGate(planPath, dir string) []string {
 			migration = migration || strings.HasPrefix(f.Path, "db/migrations/")
 		}
 		obliged["proto"] = "every merge lints proto"
-		if len(pl.Go.Packages) > 0 {
-			obliged["vet"] = "affected packages are vetted"
+		if len(pl.Go.Build) > 0 || len(pl.Go.Packages) > 0 {
+			obliged["vet"] = "production build reach and affected test packages are vetted"
 		}
 	}
 	if migration {

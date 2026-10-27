@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -82,6 +83,65 @@ func TestMergeTierCodegenInputs(t *testing.T) {
 		if pl.ForgeGen.Full {
 			t.Errorf("output selected as input: %s", p)
 		}
+	}
+}
+
+// Exercise the real gate's vet block with a classified no-test production
+// command, intercepting go rather than compiling a nested module. This stays
+// fast under -short and reads the script in-process for cache correctness.
+func TestMergeVetIncludesProductionPackageWithoutTests(t *testing.T) {
+	g := noWalkers()
+	// An ordinary importer with no tests must be vetted as well as the
+	// changed production package; neither appears in TestDeps.
+	g.DirPkg["cmd/no_tests"] = mod + "/cmd/no_tests"
+	g.BuildDeps[mod+"/cmd/no_tests"] = map[string]bool{mod + "/cmd/no_tests": true, mod + "/tools/docgen/cli": true}
+	pl := ClassifyReach([]Change{{Path: "tools/docgen/cli/main.go"}}, g, ReachDirect)
+	mergeTier(pl)
+	if len(pl.Go.Packages) != 0 || !reflect.DeepEqual(pl.Go.Build, []string{"./cmd/no_tests", "./tools/docgen/cli"}) {
+		t.Fatalf("fixture must select production build only: %+v", pl.Go)
+	}
+	dir := gateDir(t, pl, map[string]int{"build": 0, "test": 0, "proto": 0, "lint": 0})
+	problems := strings.Join(verifyGate(filepath.Join(dir, "plan.json"), dir), ";")
+	if !strings.Contains(problems, "vet never completed") {
+		t.Fatalf("no-test production package passed without vet: %s", problems)
+	}
+	b, err := os.ReadFile(filepath.Join(repoRoot, "scripts/merge-gate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	start := strings.Index(src, "  mapfile -t vet_pkgs")
+	if start < 0 {
+		t.Fatal("vet dispatch block missing")
+	}
+	end := strings.Index(src[start:], "  if echo ")
+	if end < 0 {
+		t.Fatal("vet dispatch block end missing")
+	}
+	block := src[start : start+end]
+	// jq and Bash execute the actual dispatch; go is a shell spy. No real
+	// vet/build or dependency on external files hidden from the Go test cache.
+	cmd := exec.Command("bash", "-c", `set -euo pipefail
+run_plan=$1
+quarter=2
+pids=()
+phase() { printf 'phase: %s\n' "$1"; shift; "$@"; }
+env() { shift; "$@"; }
+go() { printf 'go: %s\n' "$*"; }
+`+block+`
+for p in "${pids[@]}"; do wait "$p"; done`, "vet-dispatch", filepath.Join(dir, "plan.json"))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("vet dispatch: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "phase: vet\ngo: vet ./cmd/no_tests ./tools/docgen/cli") {
+		t.Fatalf("production command was not vetted: %s", out)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "vet.row"), []byte("vet 0 1 0\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if problems := verifyGate(filepath.Join(dir, "plan.json"), dir); len(problems) > 0 {
+		t.Fatalf("completed vet did not satisfy verifier: %v", problems)
 	}
 }
 
