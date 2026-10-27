@@ -25,7 +25,7 @@ import Card from "../forge-ui/card";
 import PageHeader from "../forge-ui/page_header";
 import Button from "@/components/forge-ui/button";
 import { WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
-import { openAutomationDialog } from "../Automations/automationDialog";
+import { openAutomationDialog } from "../Automations/dialog/openAutomationDialog";
 import { useWorkflowsScope } from "../workflows/useWorkflowsScope";
 import { RunList } from "./RunList";
 import { RunFilters, useRunsSearch } from "./RunFilters";

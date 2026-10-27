@@ -15,31 +15,35 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const mocks = vi.hoisted(() => ({
   library: { workflows: [] as Array<{ name: string; title?: string; triggers?: unknown[] }> },
-  triggers: [] as Array<{ id: string; workflow: string; projectId: string; workflowTrigger?: string; name: string }>,
+  triggers: [] as Array<{ id: string; workflow: string; projectId: string; workflowTrigger?: string; name: string; source: { kind: string } }>,
 }));
 
 vi.mock("@/hooks/workflow-library-queries", () => ({
   useWorkflowLibrary: () => ({ data: mocks.library, isLoading: false }),
 }));
 vi.mock("@/hooks/trigger-queries", () => ({
-  useTriggerById: (id?: string) => mocks.triggers.find((t) => t.id === id),
+  useTrigger: (id?: string) => ({ data: mocks.triggers.find((t) => t.id === id) }),
 }));
 vi.mock("@/store/projectStore", () => {
   const state = { currentProject: { id: "proj-1", name: "Reliant" } };
   return { useProjectStore: (selector: (s: typeof state) => unknown) => selector(state) };
 });
-vi.mock("../../Automations/AutomationFormDialog", () => ({
-  AutomationFormDialog: (props: { trigger?: { id: string }; prefill?: { workflow?: string; name?: string }; defaultProjectId?: string }) => (
-    <div data-testid="custom-form" data-trigger={props.trigger?.id ?? ""} data-workflow={props.prefill?.workflow ?? ""} data-project={props.defaultProjectId ?? ""} />
+vi.mock("../../workflow/useWorkflowDefinition", () => ({
+  useWorkflowDefinition: (_project: string, ref: string) => ({ workflowDef: { triggers: mocks.library.workflows.find((w) => w.name === ref)?.triggers ?? [] } }),
+}));
+vi.mock("../../Automations/dialog/InlineAutomationForm", () => ({
+  InlineAutomationForm: (props: { trigger?: { id: string }; workflowRef?: string; prefill?: { workflow?: string }; projectId?: string }) => (
+    <div data-testid="custom-form" data-trigger={props.trigger?.id ?? ""} data-workflow={props.workflowRef ?? props.prefill?.workflow ?? ""} data-project={props.projectId ?? ""} />
   ),
 }));
-vi.mock("../../Automations/WorkflowSetupDialog", () => ({
-  WorkflowSetupDialog: (props: { workflowRef: string; mode?: string; defaultProjectId?: string; declared: unknown[] }) => (
+vi.mock("../../Automations/dialog/DeclaredAutomationForm", () => ({
+  DeclaredAutomationForm: (props: { workflowRef: string; mode?: string; defaultProjectId?: string; declared: unknown[] }) => (
     <div data-testid="setup-form" data-workflow={props.workflowRef} data-mode={props.mode ?? ""} data-project={props.defaultProjectId ?? ""} data-declared={props.declared.length} />
   ),
 }));
 
-import { AutomationDialogHost, closeAutomationDialog, openAutomationDialog } from "../../Automations/automationDialog";
+import { AutomationDialogHost } from "../../Automations/dialog/AutomationDialogHost";
+import { closeAutomationDialog, openAutomationDialog } from "../../Automations/dialog/openAutomationDialog";
 
 function renderHost() {
   return render(
@@ -57,8 +61,8 @@ beforeEach(() => {
     ],
   };
   mocks.triggers = [
-    { id: "declared-1", workflow: "triage", projectId: "proj-2", workflowTrigger: "nightly", name: "Triage · nightly" },
-    { id: "custom-1", workflow: "builtin://agent", projectId: "proj-1", name: "Morning" },
+    { id: "declared-1", workflow: "triage", projectId: "proj-2", workflowTrigger: "nightly", name: "Triage · nightly", source: { kind: "activation" } },
+    { id: "custom-1", workflow: "builtin://agent", projectId: "proj-1", name: "Morning", source: { kind: "schedule" } },
   ];
 });
 afterEach(() => act(() => closeAutomationDialog()));
