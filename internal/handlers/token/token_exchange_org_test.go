@@ -18,11 +18,10 @@ import (
 // none named it lands in the user's default. Introspect reports that org.
 type orgAuthority struct {
 	*tokenauthority.Memory
-	member  map[string]bool // "user|org"
-	def     map[string]string
-	orgOf   map[string]string // token plaintext -> org
-	minted  []tokenauthority.MintRequest
-	session string
+	member map[string]bool // "user|org"
+	def    map[string]string
+	orgOf  map[string]string // token plaintext -> org
+	minted []tokenauthority.MintRequest
 }
 
 func (a *orgAuthority) MintForUser(ctx context.Context, req tokenauthority.MintRequest) (tokenauthority.Minted, error) {
