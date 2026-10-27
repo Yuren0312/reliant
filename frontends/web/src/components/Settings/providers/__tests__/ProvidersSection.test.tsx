@@ -127,7 +127,7 @@ describe("Settings → AI", () => {
     mocks.listAccounts.mockResolvedValue([claudeAccount]);
     renderWithQuery(<AISettings />);
 
-    expect(screen.getByRole("heading", { level: 1, name: "AI" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "AI providers" })).toBeInTheDocument();
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Providers", "Models", "Local & custom"]);
 
     await userEvent.click(screen.getByRole("tab", { name: "Models" }));

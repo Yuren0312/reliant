@@ -31,7 +31,7 @@ export function RunFormError({ message, onNavigate }: { message: string; onNavig
         <p className="mt-1.5">
           <Link
             to="/settings/$section"
-            params={{ section: "general" }}
+            params={{ section: "ai" }}
             onClick={onNavigate}
             className="font-medium underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
