@@ -41,7 +41,7 @@ export function SecretsMatrix({ envs, projectId, secretHref }: {
               <th scope="col" className="px-4 py-3 text-left font-medium text-ink">Secret</th>
               {envs.map((env, i) => {
                 const listing = listings[i];
-                const note = listing.isLoading ? "Loading…" : listing.data?.availability === "available" ? null
+                const note = listing.isLoading ? "Loading…" : listing.isFetching ? "Refreshing…" : listing.data?.availability === "available" ? null
                   : availabilityExplanation(listing.data?.availability ?? "unreachable");
                 return <th key={env.name} scope="col" className="min-w-40 px-4 py-3 text-left font-medium text-ink">
                   <Link href={secretHref(env.name)} className="hover:underline">{env.name}</Link>
@@ -54,11 +54,14 @@ export function SecretsMatrix({ envs, projectId, secretHref }: {
                 <th scope="row" className="px-4 py-3 text-left font-mono font-normal text-ink">{name}</th>
                 {envs.map((env, i) => {
                   const listing = listings[i];
-                  const summary = listing.data?.secrets.find((secret) => secret.name === name);
+                  // Cached names keep the comparison stable, but their old status
+                  // and timestamp are not authoritative while a refresh is pending.
+                  const summary = listing.isFetching ? undefined : listing.data?.secrets.find((secret) => secret.name === name);
                   const declared = env.live?.declaredShape?.secrets.find((secret) => secret.name === name);
                   const readable = listing.data?.availability === "available";
                   const provider = declared?.provider;
                   const status = listing.isLoading ? "Loading…"
+                    : listing.isFetching ? "Refreshing…"
                     : declared && provider && provider !== "hosted" ? (provider === "file" || provider === "rendered" ? "Local file store" : "External store")
                     : summary ? ({ set: "Set", deleted: "Deleted", destroyed: "Destroyed", tombstoned: "No versions" }[managedSecretState(summary)])
                     : !readable ? "Unknown"
@@ -74,6 +77,7 @@ export function SecretsMatrix({ envs, projectId, secretHref }: {
               </tr>)}
               {!names.length && <tr><td colSpan={envs.length + 1} className="px-4 py-6 text-ink-muted">
                 {listings.some((listing) => listing.isLoading) ? "Loading secret metadata…"
+                  : listings.some((listing) => listing.isFetching) ? "Refreshing secret metadata…"
                   : listings.every((listing) => listing.data?.availability === "available") ? "No secrets declared or stored in these environments."
                   : "No secret names could be listed. Some environments are unavailable; this does not mean their secrets are unset."}
               </td></tr>}

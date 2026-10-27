@@ -1099,7 +1099,9 @@ export function managedSecretsQueryOptions(
         return { availability: availabilityFromError(err), secrets: [], protected: false };
       }
     },
-    enabled: !!projectId && !!env && !!target,
+    // A cloud-only project has no local project id. Its live environment id
+    // is the lookup authority; keep project/env/org cache dimensions intact.
+    enabled: !!env && !!target && (target.kind !== "lookup" || !!environmentId),
     staleTime: 5_000,
     retry: forgeRetry,
   };
