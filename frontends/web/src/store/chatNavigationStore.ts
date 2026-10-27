@@ -67,10 +67,8 @@ export function chatNeedsAttention(
 }
 
 async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
-  // The list spans projects: openChat moves the context to the chat's project
-  // and workspace before selecting it. Imported lazily (it imports this store).
-  const { openChat } = await import("./openChat");
-  await openChat(chat);
+  const { openChatInWorkspace } = await import("../lib/openChatInWorkspace");
+  await openChatInWorkspace(chat);
 }
 
 /**

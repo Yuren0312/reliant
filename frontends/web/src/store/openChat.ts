@@ -11,55 +11,22 @@
  */
 
 import type { Chat } from "../api/client";
-import { fetchProjects, getCachedProjects, type Project } from "../hooks/project-queries";
+import { beginWorkspaceOpen, findProject, openChatInWorkspace, ChatProjectUnavailableError } from "../lib/openChatInWorkspace";
+export { findProject, ChatProjectUnavailableError } from "../lib/openChatInWorkspace";
 import { getChatFromCache } from "../hooks/chat-queries";
 import { resolveMainWorktree, resolveWorktree } from "../hooks/worktree-queries";
-import { useChatNavigationStore } from "./chatNavigationStore";
 import { useChatStore } from "./chatStore";
 import { useProjectStore } from "./projectStore";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useWorktreeStore } from "./worktreeStore";
 
-export class ChatProjectUnavailableError extends Error {
-  constructor() {
-    super("That chat's project is no longer available.");
-    this.name = "ChatProjectUnavailableError";
-  }
-}
-
-/** The project row for an id: the cached list, else a fresh read. */
-export async function findProject(projectId: string): Promise<Project | undefined> {
-  const cached = getCachedProjects().find((p) => p.id === projectId);
-  if (cached) return cached;
-  return (await fetchProjects()).find((p) => p.id === projectId);
-}
 
 /**
- * Make `chat` the open chat: switch the context project to the chat's (without
- * reopening that project's last chat), switch to the chat's workspace, then
- * select it. Throws ChatProjectUnavailableError when the chat's project is
- * gone.
+ * Select immediately, then follow its project/workspace with main's identity
+ * fence. All source entry points share the same epoch as the main helper.
  */
-export async function openChat(chat: Chat): Promise<void> {
-  const projectStore = useProjectStore.getState();
-  if (chat.projectId && projectStore.currentProject?.id !== chat.projectId) {
-    const project = await findProject(chat.projectId);
-    if (!project) throw new ChatProjectUnavailableError();
-    await useProjectStore.getState().selectProject(project, { restoreChat: false });
-  }
-
-  const projectId = chat.projectId || useProjectStore.getState().currentProject?.id;
-  if (projectId) {
-    const worktree = chat.worktreeId ? await resolveWorktree(chat.worktreeId) : null;
-    // A workspace row that is gone leaves the context where it is; the chat
-    // still opens.
-    if (worktree || !chat.worktreeId) {
-      await useWorktreeStore.getState().switchWorktreeContext(projectId, worktree ?? null);
-    }
-  }
-
-  useChatStore.getState().selectChat(chat);
-  useChatNavigationStore.getState().navigateToChat(chat.id);
+export function openChat(chat: Chat): Promise<void> {
+  return openChatInWorkspace(chat, { navigate: true });
 }
 
 /**
@@ -81,22 +48,34 @@ export function newChatTargetProjectId(): string | null {
  * project; else the project's main workspace).
  */
 export async function openNewChat(target: { projectId?: string | null; worktreeId?: string | null } = {}): Promise<void> {
+  const isLatest = beginWorkspaceOpen();
   const projectId = target.projectId ?? newChatTargetProjectId();
   const projectStore = useProjectStore.getState();
-  const switching = !!projectId && projectStore.currentProject?.id !== projectId;
+  let contextProjectId = projectStore.currentProject?.id;
+  const activeChatId = useChatStore.getState().activeChatId;
+  const isCurrent = () => isLatest() &&
+    useChatStore.getState().activeChatId === activeChatId &&
+    useProjectStore.getState().currentProject?.id === contextProjectId;
+  const switching = !!projectId && contextProjectId !== projectId;
   if (switching) {
     const project = await findProject(projectId);
-    if (project) {
-      await useProjectStore.getState().selectProject(project, { restoreChat: false });
-    }
+    if (!isCurrent()) return;
+    if (!project) throw new ChatProjectUnavailableError();
+    const selected = useProjectStore.getState().selectProject(project, {
+      restoreChat: false,
+      restoreWorkspace: false,
+    });
+    contextProjectId = project.id;
+    await selected;
+    if (!isCurrent()) return;
   }
-
-  const contextProjectId = useProjectStore.getState().currentProject?.id;
   if (target.worktreeId && contextProjectId) {
     const worktree = await resolveWorktree(target.worktreeId);
+    if (!isCurrent()) return;
     if (worktree) {
-      await useWorktreeStore.getState().switchWorktreeContext(contextProjectId, worktree);
+      await useWorktreeStore.getState().switchWorktreeContext(contextProjectId, worktree, { isCurrent });
     }
+    if (!isCurrent()) return;
     useChatStore.getState().clearCurrentChat(target.worktreeId);
     return;
   }
@@ -105,9 +84,11 @@ export async function openNewChat(target: { projectId?: string | null; worktreeI
     // A new project starts on its main workspace, not on whichever workspace
     // the last chat there used.
     const main = contextProjectId ? await resolveMainWorktree(contextProjectId) : null;
+    if (!isCurrent()) return;
     if (main && contextProjectId) {
-      await useWorktreeStore.getState().switchWorktreeContext(contextProjectId, main);
+      await useWorktreeStore.getState().switchWorktreeContext(contextProjectId, main, { isCurrent });
     }
+    if (!isCurrent()) return;
     useChatStore.getState().clearCurrentChat(main?.id ?? null);
     return;
   }

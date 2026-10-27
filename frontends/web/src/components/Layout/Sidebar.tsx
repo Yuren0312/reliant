@@ -60,6 +60,7 @@ import { openChat, openNewChat } from "../../store/openChat";
 import { openAddProject } from "../../store/addProjectDialogStore";
 import { useProjects } from "../../hooks/project-queries";
 import { ProjectFilterMenu } from "./ProjectFilterMenu";
+import { useShortcutLabel } from "../../store/shortcutsStore";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
 import Tooltip from "../forge-ui/tooltip";
@@ -178,9 +179,11 @@ interface SidebarNavButtonProps {
   onClick?: () => void;
   testId?: string;
   onboardingId?: string;
+  /** The action's shortcut, formatted (useShortcutLabel); shown at the end. */
+  shortcut?: string;
 }
 
-function SidebarNavButton({ icon, label, onClick, testId, onboardingId }: SidebarNavButtonProps) {
+function SidebarNavButton({ icon, label, onClick, testId, onboardingId, shortcut }: SidebarNavButtonProps) {
   return (
     <button
       type="button"
@@ -194,11 +197,18 @@ function SidebarNavButton({ icon, label, onClick, testId, onboardingId }: Sideba
       )}
       data-testid={testId}
       data-onboarding={onboardingId}
+      // The label alone names the button; the key cap is a visual hint.
+      aria-label={label}
     >
       <span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
         {icon}
       </span>
       <span className="min-w-0 truncate">{label}</span>
+      {shortcut && (
+        <kbd aria-hidden="true" className="ml-auto shrink-0 font-mono text-xs text-muted-foreground">
+          {shortcut}
+        </kbd>
+      )}
     </button>
   );
 }
@@ -698,6 +708,7 @@ function SidebarComponent({
   const setProjectFilter = useProjectStore((state) => state.setProjectFilter);
   const { projects } = useProjects();
   const { data: chatList } = useChatListWithWorkspaces(projectFilterId);
+  const newChatShortcut = useShortcutLabel("newChat");
   const listedChats = useMemo(() => chatList?.chats ?? [], [chatList?.chats]);
   // The list carries each chat's workspace and every listed project's main
   // one, so the sidebar groups from this response alone.
@@ -1535,6 +1546,7 @@ function SidebarComponent({
             label="New chat"
             onClick={handleNewChat}
             testId="create-chat-button"
+            shortcut={newChatShortcut}
           />
           {/* Apps (/apps) is the org's index of every app it runs, each one a
               drill-in to its console (environments, releases, ...). It sits

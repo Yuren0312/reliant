@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -578,25 +579,32 @@ func (r *Repo) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, c
 	return store.ListRecentMessagesInContextWindowBeforeSeq(ctx, r.ORM(), contextWindowID, beforeSeq, limit)
 }
 
-// HasMessagesBeforeInContextWindow reports whether any message in this
-// context window precedes beforeSeq.
-func (r *Repo) HasMessagesBeforeInContextWindow(ctx context.Context, contextWindowID string, beforeSeq int64) (bool, error) {
-	if contextWindowID == "" {
-		return false, fmt.Errorf("context window ID cannot be empty")
+// ListTranscriptSiblingMessagesInRange returns, ascending, every message of
+// the chat on a thread other than mainThreadID that is not a spawn thread,
+// with seq >= fromSeq and, when toSeq is set, seq < toSeq. It is the sibling
+// half of a ListMessages page, from the same filter the chat snapshot uses.
+func (r *Repo) ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64) ([]*Message, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	if mainThreadID == "" {
+		return nil, fmt.Errorf("main thread ID cannot be empty")
 	}
 
-	return store.HasMessagesBeforeInContextWindow(ctx, r.ORM(), contextWindowID, beforeSeq)
+	return store.ListTranscriptSiblingMessagesInRange(ctx, r.ORM(), chatID, mainThreadID, fromSeq, toSeq)
 }
 
-// ListMessagesInContextWindowRange returns messages in a single context
-// window with seq >= fromSeq, ascending. toSeq is an exclusive upper
-// bound, or nil for unbounded above.
-func (r *Repo) ListMessagesInContextWindowRange(ctx context.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*Message, error) {
-	if contextWindowID == "" {
-		return nil, fmt.Errorf("context window ID cannot be empty")
+// CountMessagesInChatOutsideThread counts the chat's messages that sit on
+// threads other than threadID.
+func (r *Repo) CountMessagesInChatOutsideThread(ctx context.Context, chatID, threadID string) (int, error) {
+	if chatID == "" {
+		return 0, fmt.Errorf("chat ID cannot be empty")
+	}
+	if threadID == "" {
+		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return store.ListMessagesInContextWindowRange(ctx, r.ORM(), contextWindowID, fromSeq, toSeq)
+	return store.CountMessagesInChatOutsideThread(ctx, r.ORM(), chatID, threadID)
 }
 
 func (r *Repo) GetLatestMessageInThread(ctx context.Context, threadID string) (*Message, error) {
@@ -2313,6 +2321,13 @@ func (r *Repo) countMessages(ctx context.Context, opts ...orm.QueryOption) (int,
 //
 // Returns 0 if no token data exists (caller should estimate if needed).
 func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *int64) (int64, error) {
+	return r.threadTokenCount(ctx, thread, maxSeq, nil)
+}
+
+// threadTokenCount is GetThreadTokenCount for a caller that has already
+// resolved the thread's current context sequence (knownContextSeq), saving the
+// repeat lookup. Inherited parents resolve their own.
+func (r *Repo) threadTokenCount(ctx context.Context, thread string, maxSeq *int64, knownContextSeq *int) (int64, error) {
 	if thread == "" {
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
@@ -2329,8 +2344,10 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 	}
 
 	// Get current context sequence for the thread
-	contextSeq, err := r.getMaxContextSequenceInThread(ctx, thread)
-	if err != nil {
+	var contextSeq int
+	if knownContextSeq != nil {
+		contextSeq = *knownContextSeq
+	} else if contextSeq, err = r.getMaxContextSequenceInThread(ctx, thread); err != nil {
 		logging.WarnContext(ctx, "[GetThreadTokenCount] Error getting context sequence",
 			"thread", thread,
 			"error", err)
@@ -2414,21 +2431,21 @@ func (r *Repo) GetContextUsage(ctx context.Context, chatID, thread string) (*Con
 		return nil, fmt.Errorf("thread cannot be empty")
 	}
 
-	// Get token count using unified function (handles fork inheritance)
-	tokens, err := r.GetThreadTokenCount(ctx, thread, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get thread token count: %w", err)
-	}
-
-	// Get current context sequence
+	// The current context sequence is the same for all three reads below.
 	contextSeq, err := r.getMaxContextSequenceInThread(ctx, thread)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get max context sequence: %w", err)
 	}
 
+	// Get token count using unified function (handles fork inheritance)
+	tokens, err := r.threadTokenCount(ctx, thread, nil, &contextSeq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get thread token count: %w", err)
+	}
+
 	return &ContextUsage{
 		ThreadTokenCount:    tokens,
-		CompactionThreshold: int64(r.resolveThreadCompactionThreshold(ctx, thread, nil)),
+		CompactionThreshold: int64(r.resolveThreadCompactionThreshold(ctx, thread, nil, &contextSeq)),
 		CurrentContextSeq:   int64(contextSeq),
 	}, nil
 }
@@ -2439,14 +2456,19 @@ func (r *Repo) GetContextUsage(ctx context.Context, chatID, thread string) (*Con
 // the same model the trigger evaluates. Falls back to the global default when
 // no model-bearing message is found. maxSeq bounds inheritance to a fork
 // point, the same way maxOrdinal used to -- see GetThreadTokenCount.
-func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread string, maxSeq *int64) int {
+func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread string, maxSeq *int64, knownContextSeq *int) int {
 	if thread == "" {
 		return models.UnknownModelCompactionFloor
 	}
 
-	contextSeq, err := r.getMaxContextSequenceInThread(ctx, thread)
-	if err != nil {
-		contextSeq = 0
+	var contextSeq int
+	if knownContextSeq != nil {
+		contextSeq = *knownContextSeq
+	} else {
+		var err error
+		if contextSeq, err = r.getMaxContextSequenceInThread(ctx, thread); err != nil {
+			contextSeq = 0
+		}
 	}
 
 	msg, err := r.GetLatestMessageWithTokensInThread(ctx, thread, contextSeq)
@@ -2470,7 +2492,7 @@ func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread stri
 	if err != nil {
 		return models.UnknownModelCompactionFloor
 	}
-	return r.resolveThreadCompactionThreshold(ctx, parentThreadID, &forkMsg.Seq)
+	return r.resolveThreadCompactionThreshold(ctx, parentThreadID, &forkMsg.Seq, nil)
 }
 
 // ==================== Workflows ====================
@@ -2741,7 +2763,16 @@ func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t == nil {
 		return fmt.Errorf("trigger cannot be nil")
 	}
-	return store.InsertTrigger(ctx, r.ORM(), t)
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.InsertTrigger(ctx, r.ORM(), t); err != nil {
+			return err
+		}
+		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
+		if err != nil {
+			return err
+		}
+		return store.RecordTriggerChange(ctx, r.ORM(), "create", nil, after)
+	})
 }
 
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
@@ -2777,7 +2808,26 @@ func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t.ID == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return store.ReplaceTrigger(ctx, r.ORM(), t)
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockTrigger(ctx, r.ORM(), t.ID); err != nil {
+			return err
+		}
+		before, err := store.GetTrigger(ctx, r.ORM(), t.ID)
+		if err != nil {
+			return err
+		}
+		if revision, ok := automationpolicy.Revision(ctx); ok && !before.UpdatedAt.Equal(revision) {
+			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
+		}
+		if err := store.ReplaceTrigger(ctx, r.ORM(), t); err != nil {
+			return err
+		}
+		after, err := store.GetTrigger(ctx, r.ORM(), t.ID)
+		if err != nil {
+			return err
+		}
+		return store.RecordTriggerChange(ctx, r.ORM(), "update", before, after)
+	})
 }
 
 func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
@@ -2791,7 +2841,38 @@ func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) e
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return store.SetTriggerEnabled(ctx, r.ORM(), id, enabled)
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
+			return err
+		}
+		before, err := store.GetTrigger(ctx, r.ORM(), id)
+		if err != nil {
+			return err
+		}
+		if revision, ok := automationpolicy.Revision(ctx); ok && !before.UpdatedAt.Equal(revision) {
+			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
+		}
+		if err := store.SetTriggerEnabled(ctx, r.ORM(), id, enabled); err != nil {
+			return err
+		}
+		after, err := store.GetTrigger(ctx, r.ORM(), id)
+		if err != nil {
+			return err
+		}
+		op := "pause"
+		if enabled {
+			op = "enable"
+		}
+		return store.RecordTriggerChange(ctx, r.ORM(), op, before, after)
+	})
+}
+
+func (r *Repo) LockActivationDependencies(ctx context.Context, userID, projectID string) error {
+	return store.LockActivationDependencies(ctx, r.ORM(), userID, projectID)
+}
+
+func (r *Repo) ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error) {
+	return store.TriggerChanges(ctx, r.ORM(), userID, triggerID)
 }
 
 func (r *Repo) SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error {
@@ -2860,6 +2941,11 @@ func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome
 		return fmt.Errorf("trigger event ID cannot be empty")
 	}
 	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
+}
+
+// SetLaunchEventRunFailureDetail records why the launch run failed.
+func (r *Repo) SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error {
+	return store.SetLaunchEventRunFailureDetail(ctx, r.ORM(), chatID, detail)
 }
 
 // SetLaunchEventRunStatus records how the run a trigger fired ended, on
@@ -3118,6 +3204,11 @@ func (r *Repo) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*
 	return store.ListChatStepExecutions(ctx, r.ORM(), chatID, model.InternalActivities)
 }
 
+// ListRunNodeExecutions returns bounded diagnostics for one workflow subtree.
+func (r *Repo) ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*StepExecution, error) {
+	return store.ListRunNodeExecutions(ctx, r.ORM(), workflowID, limit)
+}
+
 // ListStepExecutionRecordsForChat returns full step rows (inputs, output,
 // error), newest first, optionally scoped to one node and what ran inside it.
 func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error) {
@@ -3178,6 +3269,10 @@ func (r *Repo) GetThread(ctx context.Context, id string) (*Thread, error) {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 	return store.GetThread(ctx, r.ORM(), id)
+}
+
+func (r *Repo) ListThreadsByIDs(ctx context.Context, ids []string) ([]*Thread, error) {
+	return store.ListThreadsByIDs(ctx, r.ORM(), ids)
 }
 
 func (r *Repo) GetRootThread(ctx context.Context, chatID string) (*Thread, error) {

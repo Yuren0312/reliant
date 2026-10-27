@@ -49,6 +49,8 @@ type Repository interface {
 	ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error)
 	IsLatestTurnInThread(ctx context.Context, threadID, messageID string) (bool, error)
 	CountMessagesInThread(ctx context.Context, threadID string) (int, error)
+	CountMessagesInChatOutsideThread(ctx context.Context, chatID, threadID string) (int, error)
+	ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64) ([]*db.Message, error)
 	GetWorkflowByThread(ctx context.Context, chatID, thread string) (*db.Workflow, error)
 	ListWorkflowsByChat(ctx context.Context, chatID string) ([]*db.Workflow, error)
 
@@ -57,6 +59,7 @@ type Repository interface {
 	ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*db.MessageContentBlock, error)
 	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
 	GetToolResultBlock(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error)
+	ListToolResultBlocks(ctx context.Context, toolCallID string) ([]*db.MessageContentBlock, error)
 	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
 
 	// The agent mailbox: messages queued for a thread until it can take them.
@@ -112,5 +115,5 @@ type Repository interface {
 	daemonchoice.Reader
 	daemonplacement.WorktreeReader
 	daemonplacement.PinStore
-	messageproto.ToolCallReader
+	messageproto.Reader
 }
