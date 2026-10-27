@@ -8,8 +8,8 @@
  * local UI state only.
  *
  * Layout: a single machines view (list / create / detail). The list is
- * /settings/environments and one machine's detail is
- * /settings/environments/$machineId, so Back, refresh and deep links (the
+ * /settings/machines and one machine's detail is
+ * /settings/machines/$machineId, so Back, refresh and deep links (the
  * onboarding DaemonConnectingGate "View logs" action, docs) all work. Daemon
  * access tokens are managed in the standalone System → Access Tokens settings
  * section.
@@ -49,6 +49,7 @@ import { cn } from "@/lib/utils";
 import Tooltip from "@/components/forge-ui/tooltip";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import Button from "@/components/forge-ui/button";
+import { SettingsPageHeader } from "../SettingsPageHeader";
 import {
   Badge,
   Card,
@@ -56,7 +57,6 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
-  PageHeader,
   StatusDot,
   Table,
   Tbody,
@@ -406,7 +406,7 @@ function SelfHostedSetupCard() {
 
 // ── Root section ────────────────────────────────────────────────────────────
 export function MachinesSection() {
-  // The open machine is the URL (/settings/environments/$machineId), so Back
+  // The open machine is the URL (/settings/machines/$machineId), so Back
   // returns to the list, a refresh keeps it open, and it can be linked to.
   // `?daemon=<id>` is the older deep link; the route redirects it onto the
   // path, and it is still read here so a stale link never lands on the list.
@@ -415,8 +415,8 @@ export function MachinesSection() {
   const navigate = useNavigate();
   const selectedId = params.machineId ?? search.daemon ?? null;
   const openMachine = (machineId: string) =>
-    navigate({ to: "/settings/environments/$machineId", params: { machineId } });
-  const backToList = () => navigate({ to: "/settings/$section", params: { section: "environments" } });
+    navigate({ to: "/settings/machines/$machineId", params: { machineId } });
+  const backToList = () => navigate({ to: "/settings/$section", params: { section: "machines" } });
   // Without a control plane there are no managed machines to create or
   // drive, but registered machines — and the app access granted to them —
   // still exist, so the list and detail render in a registry-only mode rather
@@ -424,15 +424,15 @@ export function MachinesSection() {
   const cloud = capabilities.cloudDaemons;
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div>
       {selectedId ? (
         <EnvironmentDetail daemonId={selectedId} cloud={cloud} onBack={backToList} />
       ) : (
         <div className="space-y-6">
           <div>
-            <PageHeader
+            <SettingsPageHeader
               title="Machines"
-              subtitle="Managed and self-hosted machines that run your projects."
+              description="Managed and self-hosted machines that run your projects."
             />
             {!cloud && (
               <p className="mb-4 text-sm text-muted-foreground">

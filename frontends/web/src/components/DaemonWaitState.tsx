@@ -86,7 +86,7 @@ export function DaemonWaitState({
   });
 
   const goToMachines = () =>
-    navigate({ to: "/settings/$section", params: { section: "environments" } });
+    navigate({ to: "/settings/$section", params: { section: "machines" } });
 
   // Only the speaker is a live region. Three echoes of one state announced
   // three times bury the phase change that is the thing worth hearing.
