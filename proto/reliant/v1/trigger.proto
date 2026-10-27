@@ -635,7 +635,7 @@ message Trigger {
   optional TriggerEvent last_event = 13;
 
   // Configuration history (newest 100), distinct from firing health.
-  repeated TriggerChange changes = 30;
+  repeated TriggerChange changes = 31;
 
   // The daemon every tool call in each launched run executes on. Empty exactly
   // when no_machine is set.

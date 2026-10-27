@@ -1416,7 +1416,7 @@ type Trigger struct {
 	// it has never fired.
 	LastEvent *TriggerEvent `protobuf:"bytes,13,opt,name=last_event,json=lastEvent,proto3,oneof" json:"last_event,omitempty"`
 	// Configuration history (newest 100), distinct from firing health.
-	Changes []*TriggerChange `protobuf:"bytes,30,rep,name=changes,proto3" json:"changes,omitempty"`
+	Changes []*TriggerChange `protobuf:"bytes,31,rep,name=changes,proto3" json:"changes,omitempty"`
 	// The daemon every tool call in each launched run executes on. Empty exactly
 	// when no_machine is set.
 	DaemonId string `protobuf:"bytes,14,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
@@ -1430,6 +1430,9 @@ type Trigger struct {
 	// Read-only: display name (hostname) of the daemon the runs execute on.
 	// Empty when the daemon has not reported one.
 	DaemonName string `protobuf:"bytes,17,opt,name=daemon_name,json=daemonName,proto3" json:"daemon_name,omitempty"`
+	// Read-only registry state: connected, disconnected, starting, suspended,
+	// failed, removed, or none for a no-machine activation.
+	MachineState string `protobuf:"bytes,30,opt,name=machine_state,json=machineState,proto3" json:"machine_state,omitempty"`
 	// When true, a completed run of this trigger marks its chat unread
 	// (raising the OS notification) and appears in the Inbox as "Run finished".
 	// Off by default: unattended completions are silent, failures always notify
@@ -1647,6 +1650,13 @@ func (x *Trigger) GetProjectName() string {
 func (x *Trigger) GetDaemonName() string {
 	if x != nil {
 		return x.DaemonName
+	}
+	return ""
+}
+
+func (x *Trigger) GetMachineState() string {
+	if x != nil {
+		return x.MachineState
 	}
 	return ""
 }
@@ -4576,7 +4586,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\b\n" +
-	"\x06source\"\xf4\v\n" +
+	"\x06source\"\x99\f\n" +
 	"\aTrigger\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
@@ -4598,14 +4608,15 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"nextFireAt\x88\x01\x01\x12<\n" +
 	"\n" +
 	"last_event\x18\r \x01(\v2\x18.reliant.v1.TriggerEventH\x03R\tlastEvent\x88\x01\x01\x123\n" +
-	"\achanges\x18\x1e \x03(\v2\x19.reliant.v1.TriggerChangeR\achanges\x12\x1b\n" +
+	"\achanges\x18\x1f \x03(\v2\x19.reliant.v1.TriggerChangeR\achanges\x12\x1b\n" +
 	"\tdaemon_id\x18\x0e \x01(\tR\bdaemonId\x12\x1d\n" +
 	"\n" +
 	"no_machine\x18\x1b \x01(\bR\tnoMachine\x121\n" +
 	"\x06health\x18\x0f \x01(\v2\x19.reliant.v1.TriggerHealthR\x06health\x12!\n" +
 	"\fproject_name\x18\x10 \x01(\tR\vprojectName\x12\x1f\n" +
 	"\vdaemon_name\x18\x11 \x01(\tR\n" +
-	"daemonName\x12,\n" +
+	"daemonName\x12#\n" +
+	"\rmachine_state\x18\x1e \x01(\tR\fmachineState\x12,\n" +
 	"\x12notify_on_complete\x18\x12 \x01(\bR\x10notifyOnComplete\x12\x16\n" +
 	"\x06filter\x18\x13 \x01(\tR\x06filter\x128\n" +
 	"\bschedule\x18\x14 \x01(\v2\x1a.reliant.v1.ScheduleSourceH\x00R\bschedule\x125\n" +
