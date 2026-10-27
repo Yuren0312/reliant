@@ -213,6 +213,26 @@ beforeEach(() =>
 );
 afterEach(() => setTransport(null));
 
+import { SecretsTab } from "../../EnvPage/EnvTabPanels";
+import { useLiveView } from "@/hooks/forge-queries";
+
+/** The Secrets page's body for staging, as the console mounts it (ConsolePages.SecretsPage). */
+function StagingSecrets() {
+  const live = useLiveView("hounders");
+  const staging = (live.data?.envs ?? []).find((env) => env.name === "staging") ?? null;
+  if (!staging) return null;
+  return <SecretsTab projectId="proj-1" live={staging} envName="staging" forgeProject="hounders" selectedSecret={null} onSelectSecret={() => undefined} />;
+}
+
+function renderSecrets() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <StagingSecrets />
+    </QueryClientProvider>
+  );
+}
+
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(
@@ -364,11 +384,10 @@ describe("acceptance: unregistered → Register → daemon offline → Overview 
 
     second.unmount();
 
-    // ── …and on Secrets a secret can be set, with the daemon still offline. ──
-    // DATABASE_URL is a row because the DECLARED SHAPE names it — the row
-    // that used to need `forge.secret_list` on the daemon.
-    routeState.tab = "secrets";
-    renderPage();
+    // ── …and on Secrets (the project's page, scoped to staging) a secret can be
+    // set, with the daemon still offline. DATABASE_URL is a row because the
+    // DECLARED SHAPE names it — the row that used to need `forge.secret_list`.
+    renderSecrets();
     await screen.findByText("DATABASE_URL", {}, { timeout: 5000 });
 
     await user.click(screen.getByTestId("add-secret"));

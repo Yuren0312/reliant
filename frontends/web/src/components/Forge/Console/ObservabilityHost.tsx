@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * One Observability view, hosted as a console page (decision D9).
+ * One Observability view, hosted as a console page.
  *
  * The views (ObservabilityPanel) still speak their own URL vocabulary
  * (obsSearch.ts) — "open Logs for this service", "narrow to these
@@ -122,7 +122,7 @@ export function ObservabilityHost({ view, needsEnvironments = true }: Observabil
             place={{ kind: "project", project: forgeProject, environments }}
             search={obsSearch}
             navigate={navigateObs}
-            chrome="console"
+           
           />
         </Suspense>
       )}

@@ -176,8 +176,6 @@ const ForgeConsoleReleasesPage = lazyRoute(
   () => import('./components/Forge/Releases/ReleasesPages'), 'ReleasesPage')
 const ForgeConsoleReleasePage = lazyRoute(
   () => import('./components/Forge/Releases/ReleasesPages'), 'ReleasePage')
-const ForgeConsoleObservabilityPage = lazyRoute(
-  () => import('./components/Forge/Console/ConsolePages'), 'ObservabilityOverviewPage')
 const ForgeConsoleObservabilityViewPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'ObservabilityViewPage')
 const ForgeConsoleDashboardsPage = lazyRoute(
@@ -186,10 +184,6 @@ const ForgeConsoleDashboardPage = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardPage')
 const ForgeConsoleSecretsPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'SecretsPage')
-const ForgeConsoleMonitoringPage = lazyRoute(
-  () => import('./components/Forge/Console/ConsolePages'), 'MonitoringSettingsPage')
-const ForgeConsoleSettingsPage = lazyRoute(
-  () => import('./components/Forge/Console/ConsolePages'), 'ProjectSettingsPage')
 const ForgeConsoleActivityPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'ActivityPage')
 const ForgeEnvironmentsPage = lazyRoute(
@@ -704,7 +698,7 @@ function ForgeGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// The forge console (research/console-v3/PROPOSAL.md §3.2): /forge/p/$project/…
+// The forge console: /forge/p/$project/…
 // for every page, addressed by the FORGE project name, plus /forge and the
 // retired URLs, which resolve a project and redirect so bookmarks and
 // notification deep links keep working. Defined in forgeConsoleRoutes.tsx so
@@ -727,7 +721,6 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   workload: gated(ForgeConsoleWorkloadPage),
   releases: gated(ForgeConsoleReleasesPage),
   release: gated(ForgeConsoleReleasePage),
-  observability: gated(ForgeConsoleObservabilityPage),
   observabilityView: gated(ForgeConsoleObservabilityViewPage),
   dashboards: gated(ForgeConsoleDashboardsPage),
   dashboard: gated(ForgeConsoleDashboardPage),
@@ -735,8 +728,6 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   environment: gated(ForgeEnvPage),
   secrets: gated(ForgeConsoleSecretsPage),
   domains: gated(ForgeDomainsPage),
-  monitoring: gated(ForgeConsoleMonitoringPage),
-  settings: gated(ForgeConsoleSettingsPage),
   activity: gated(ForgeConsoleActivityPage),
   orgLayout: gated(ForgeOrgLayout),
   orgObservability: gated(ForgeOrgObservabilityRoute),

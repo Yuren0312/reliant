@@ -1,17 +1,15 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Observability home, the Dashboards index and one dashboard as console
- * routes:
+ * The Dashboards index and one dashboard as console routes:
  *
- *   /forge/p/:project/observability
  *   /forge/p/:project/observability/dashboards
  *   /forge/p/:project/observability/dashboards/:kind/:key
  *
  * This file only adapts the console to the pages — the project and scope
  * from the console context, the recorded environments from its roster, the
  * URL's search state, and every href built by the console's own paths — so
- * ObservabilityHome, DashboardsList and DashboardView know nothing about
+ * DashboardsList and DashboardView know nothing about
  * routing, which is what lets the preview harness and the tests mount them on
  * fixtures.
  */
@@ -23,7 +21,6 @@ import Card from "@/components/forge-ui/card";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
-import { DEFAULT_RANGE } from "@/services/controlPlane/observability/window";
 
 import { useForgeConsole } from "../../Console/consoleContext";
 import { ENV_ALL } from "../../Console/envScope";
@@ -31,7 +28,6 @@ import { CloudNotice } from "../../SourceNotices";
 import type { ObsEnvironment } from "../obsPlace";
 import type { ObsSearch } from "../obsSearch";
 import { ObsNoEnvironments, type ObsTopic } from "../ObsStates";
-import { ObservabilityHome, type ObservabilityHomeHrefs } from "../Home/ObservabilityHome";
 import { compareParam, isDashboardPageKind, rangeParam, refreshParam, type DashboardSearch } from "./dashboardModel";
 import { DashboardsList, type DashboardsSearch } from "./DashboardsList";
 import { DashboardView, type DashboardHrefs } from "./DashboardView";
@@ -60,7 +56,7 @@ function useSearchUpdater<T extends object>(replace = true) {
 }
 
 /** Every href the observability pages link to, from the console's own paths (and carrying the scope). */
-function useObservabilityHrefs(): DashboardHrefs & ObservabilityHomeHrefs {
+function useObservabilityHrefs(): DashboardHrefs {
   const { href, env } = useForgeConsole();
   return useMemo(
     () => ({
@@ -119,28 +115,6 @@ function RosterGate({ testId, topic, children }: { testId: string; topic: ObsTop
 function useNavigateTo() {
   const navigate = useNavigate();
   return useCallback((target: string) => void navigate({ href: target }), [navigate]);
-}
-
-export function ObservabilityHomePage() {
-  const { forgeProject, env } = useForgeConsole();
-  const search = useSearch({ strict: false }) as { range?: string };
-  const onSearch = useSearchUpdater<{ range?: string }>();
-  const environments = useRecordedEnvs();
-  const hrefs = useObservabilityHrefs();
-  const navigateTo = useNavigateTo();
-  return (
-    <RosterGate testId="console-observability" topic="overview">
-      <ObservabilityHome
-        project={forgeProject}
-        env={env}
-        environments={environments}
-        range={rangeParam(search.range) ?? DEFAULT_RANGE}
-        onRange={(range) => onSearch({ range: range === DEFAULT_RANGE ? undefined : range })}
-        hrefs={hrefs}
-        navigateTo={navigateTo}
-      />
-    </RosterGate>
-  );
 }
 
 export function DashboardsPage() {

@@ -16,13 +16,14 @@ import { SEVERITIES } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 
 /**
- * The views, in tab order. A view is one entry in this list (the route schema
- * reads it), one label and one branch in ObservabilityPanel. Delivery is not
- * one: releases and their DORA figures are the console's Releases page (D9).
- * Dashboards are not one either: native dashboards are console pages of their
- * own (Observability › Dashboards, decision DB).
+ * The views. A view is one entry in this list (the route schema reads it), one
+ * label and one branch in ObservabilityPanel. Delivery is not one: releases
+ * and their DORA figures are the console's Releases page. Dashboards are not
+ * one either: native dashboards are console pages of their own (Observability
+ * › Dashboards). Usage is not one: the organization's allowance is the app's
+ * Settings › Billing.
  */
-export const OBS_VIEWS = ["overview", "alerts", "errors", "sessions", "logs", "traces", "profiles", "usage"] as const;
+export const OBS_VIEWS = ["overview", "alerts", "errors", "sessions", "logs", "traces", "profiles"] as const;
 export type ObsView = (typeof OBS_VIEWS)[number];
 
 export const OBS_VIEW_LABELS: Record<ObsView, string> = {
@@ -33,7 +34,6 @@ export const OBS_VIEW_LABELS: Record<ObsView, string> = {
   logs: "Logs",
   traces: "Traces",
   profiles: "Profiles",
-  usage: "Usage",
 };
 
 /** The views where grouping means something: the ones that aggregate. */

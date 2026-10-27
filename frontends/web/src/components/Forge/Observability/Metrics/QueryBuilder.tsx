@@ -88,7 +88,7 @@ export interface QueryBuilderProps {
 }
 
 const SELECT =
-  "h-7 min-w-0 rounded-md border border-border bg-background px-1.5 text-xs text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "h-7 min-w-0 rounded-md border border-border bg-surface-sunken px-1.5 text-xs text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
 export function QueryBuilder({ panel, chart, catalog, attributes, scope, range, onPanel, onChart }: QueryBuilderProps) {
   const entryOf = (name: string | undefined) => catalog.find((m) => m.name === name);
@@ -379,7 +379,7 @@ function WhereEditor({
     <div className={cn("flex flex-wrap items-center gap-1.5", compact && "min-h-0")} data-testid={testId} role="group" aria-label={label}>
       {!compact && <span className="w-16 shrink-0 text-xs text-ink-muted">Where</span>}
       {where.map((p, i) => (
-        <span key={`${p.field}-${i}`} className="inline-flex h-6 items-center gap-1 rounded-md border border-border bg-background pl-2 text-xs text-ink">
+        <span key={`${p.field}-${i}`} className="inline-flex h-6 items-center gap-1 rounded-md border border-border bg-surface-sunken pl-2 text-xs text-ink">
           <span className="font-mono">{predicateText(p)}</span>
           <button
             type="button"
@@ -477,7 +477,7 @@ function GroupByEditor({ fields, groupBy, onChange }: { fields: string[]; groupB
     <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Group by" data-testid="metrics-group-by">
       <span className="w-16 shrink-0 text-xs text-ink-muted">Group by</span>
       {groupBy.map((field) => (
-        <span key={field} className="inline-flex h-6 items-center gap-1 rounded-md border border-border bg-background pl-2 text-xs font-mono text-ink">
+        <span key={field} className="inline-flex h-6 items-center gap-1 rounded-md border border-border bg-surface-sunken pl-2 text-xs font-mono text-ink">
           {fieldLabel(field)}
           <button
             type="button"

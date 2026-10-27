@@ -69,7 +69,7 @@ export function ProfilesView({
           id="obs-profile-type"
           value={type.id}
           onChange={(event) => navigate({ profileType: event.target.value }, { replace: true })}
-          className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:h-[44px]"
+          className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:h-[44px]"
           data-testid="obs-profile-type"
         >
           {types.map((candidate) => (
@@ -79,11 +79,11 @@ export function ProfilesView({
           ))}
         </select>
         {traceId && (
-          <p className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="obs-profile-trace-scope">
-            Only samples from trace <span className="font-mono text-foreground">{shortId(traceId)}</span>
+          <p className="flex items-center gap-2 text-xs text-ink-muted" data-testid="obs-profile-trace-scope">
+            Only samples from trace <span className="font-mono text-ink">{shortId(traceId)}</span>
             <button
               type="button"
-              className="touch-target inline-flex items-center rounded-sm text-foreground underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="touch-target inline-flex items-center rounded-sm text-ink underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => navigate({ trace: undefined, span: undefined }, { replace: true })}
             >
               Whole service
@@ -97,7 +97,7 @@ export function ProfilesView({
         <p
           role="status"
           data-testid="obs-profiles-pick"
-          className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground"
+          className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted"
         >
           Choose a service to see where it spent its {type.unit}.
         </p>
@@ -111,7 +111,7 @@ export function ProfilesView({
         <p
           role="status"
           data-testid="obs-profiles-empty"
-          className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground"
+          className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted"
         >
           {traceId
             ? "No profile samples are linked to this trace. The CPU profiler samples 100 times a second, so spans shorter than about 10ms usually have none."
@@ -157,7 +157,7 @@ export function SpeedscopeFrame({ profile, title }: { profile: string; title: st
       title={`Flamegraph: ${title}`}
       loading="lazy"
       referrerPolicy="no-referrer"
-      className="block h-[60vh] min-h-[24rem] w-full border-0 bg-background max-md:h-[50dvh] max-md:min-h-[18rem]"
+      className="block h-[60vh] min-h-[24rem] w-full border-0 bg-surface-sunken max-md:h-[50dvh] max-md:min-h-[18rem]"
       data-testid="obs-speedscope"
     />
     {/* Inside a card on a phone the flamegraph has a few hundred pixels and
@@ -168,7 +168,7 @@ export function SpeedscopeFrame({ profile, title }: { profile: string; title: st
       href={src}
       target="_blank"
       rel="noopener"
-      className="hidden min-h-[44px] items-center justify-center border-t border-border text-sm font-medium text-foreground max-md:flex"
+      className="hidden min-h-[44px] items-center justify-center border-t border-border text-sm font-medium text-ink max-md:flex"
       data-testid="obs-speedscope-fullscreen"
     >
       Open the flamegraph full screen
@@ -234,12 +234,12 @@ function TopFunctions({ profile, stackCount, truncated }: { profile: string; sta
         description={`By self ${isTimeUnit(unit) ? "time" : unit || "weight"}, over ${formatCount(stackCount)} distinct stacks${truncated ? " (the heaviest kept)" : ""}`}
       />
       {rows.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Open the flamegraph to explore this profile.</p>
+        <p className="text-xs text-ink-muted">Open the flamegraph to explore this profile.</p>
       ) : (
         <table className="w-full table-fixed text-xs">
           <caption className="sr-only">Functions with the most self weight in this profile</caption>
           <thead>
-            <tr className="border-b border-border text-left text-muted-foreground">
+            <tr className="border-b border-border text-left text-ink-muted">
               <th scope="col" className="py-1 pr-2 font-medium">
                 Function
               </th>
@@ -254,11 +254,11 @@ function TopFunctions({ profile, stackCount, truncated }: { profile: string; sta
           <tbody>
             {rows.map((row) => (
               <tr key={row.name} className="border-b border-border/50 last:border-b-0">
-                <td className="truncate py-1 pr-2 font-mono text-foreground" title={row.name}>
+                <td className="truncate py-1 pr-2 font-mono text-ink" title={row.name}>
                   {row.name}
                 </td>
-                <td className="py-1 pr-2 text-right tabular-nums text-foreground">{format(row.self)}</td>
-                <td className="py-1 text-right tabular-nums text-muted-foreground">{(row.share * 100).toFixed(1)}</td>
+                <td className="py-1 pr-2 text-right tabular-nums text-ink">{format(row.self)}</td>
+                <td className="py-1 text-right tabular-nums text-ink-muted">{(row.share * 100).toFixed(1)}</td>
               </tr>
             ))}
           </tbody>

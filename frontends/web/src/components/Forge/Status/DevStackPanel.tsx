@@ -26,9 +26,9 @@
  * service. It reports.
  *
  * SURFACES. Each table is a forge `Card` (`bg-surface` = `--card`, `border-border`)
- * on the page's `bg-background`; anything inset inside a card (the evidence
- * block in CheckRow) is `bg-background` + `border-border/60`. Cards are never
- * nested, and `bg-muted` is never used for structure — `--muted` inverts
+ * on the page's `bg-surface-sunken`; anything inset inside a card (the evidence
+ * block in CheckRow) is `bg-surface-sunken` + `border-border/60`. Cards are never
+ * nested, and `bg-surface-sunken` is never used for structure — `--muted` inverts
  * direction between light and dark across the ten schemes in
  * themes/professional-themes.css.
  */
@@ -81,12 +81,12 @@ export interface DevStackPanelProps {
  * glance about what kind of answer this is.
  */
 const VERDICT_STYLES: Record<EnvStatusVerdict, string> = {
-  failing: "border-solid border-destructive/40 bg-destructive/10 text-destructive-ink",
-  degraded: "border-solid border-warning/40 bg-warning/10 text-warning-ink",
-  "all-good": "border-solid border-success/40 bg-success/10 text-success-ink",
+  failing: "border-solid border-danger-border bg-danger-surface text-danger-ink",
+  degraded: "border-solid border-warning-border bg-warning-surface text-warning-ink",
+  "all-good": "border-solid border-success-border bg-success-surface text-success-ink",
   incomplete:
-    "border-dashed border-muted-foreground/60 bg-transparent text-muted-foreground ring-1 ring-inset ring-muted-foreground/30",
-  "no-checks": "border-dashed border-border bg-transparent text-muted-foreground",
+    "border-dashed border-ink-muted/60 bg-transparent text-ink-muted ring-1 ring-inset ring-ink-muted/30",
+  "no-checks": "border-dashed border-border bg-transparent text-ink-muted",
 };
 
 const VERDICT_LABELS: Record<EnvStatusVerdict, string> = {
@@ -98,7 +98,7 @@ const VERDICT_LABELS: Record<EnvStatusVerdict, string> = {
 };
 
 /** Shared column-header treatment, so both tables on the screen read alike. */
-const TH = "px-4 py-2 text-left text-xs font-medium text-muted-foreground";
+const TH = "px-4 py-2 text-left text-xs font-medium text-ink-muted";
 
 export function DevStackPanel({
   outcome,
@@ -152,9 +152,9 @@ export function DevStackPanel({
       <header className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           {/* The env is the page's subject, named in its header — not repeated here. */}
-          <h3 className="text-sm font-semibold text-foreground">Runtime checks</h3>
+          <h3 className="text-sm font-semibold text-ink">Runtime checks</h3>
           {report.head_commit_at && (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-ink-muted">
               measured against HEAD at {report.head_commit_at}
             </span>
           )}
@@ -172,9 +172,9 @@ export function DevStackPanel({
         {/* The sentence that keeps the panel honest, stated once at the top as
             well as per row. A check that could not look is not a check that
             passed, and this is the misreading the whole surface exists to stop. */}
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ink-muted">
           A check that could not obtain its facts reports{" "}
-          <span className="text-foreground">could not measure</span> — never a pass and never a
+          <span className="text-ink">could not measure</span> — never a pass and never a
           skip. Three outcomes, not two.
         </p>
       </header>
@@ -250,7 +250,7 @@ function ServiceSummary({
 }) {
   return (
     <section className="space-y-2" data-testid="forge-status-services">
-      <h3 className="text-sm font-semibold text-foreground">Host services</h3>
+      <h3 className="text-sm font-semibold text-ink">Host services</h3>
 
       <Card padding="none" className="overflow-hidden">
         <StackedTable className="w-full border-collapse text-left">
@@ -291,8 +291,8 @@ function ServiceSummary({
                       className={cn(
                         "inline-flex items-center rounded-md border border-solid px-2 py-0.5 text-xs",
                         service.listening
-                          ? "border-success/40 bg-success/15 text-success-ink"
-                          : "border-destructive/40 bg-destructive/15 text-destructive-ink"
+                          ? "border-success-border bg-success-surface text-success-ink"
+                          : "border-danger-border bg-danger-surface text-danger-ink"
                       )}
                     >
                       {service.listening ? "Listening" : "Down"}
@@ -300,15 +300,15 @@ function ServiceSummary({
                   </td>
 
                   {/* A service name is an identifier, so it stays mono. */}
-                  <td className="px-4 py-2 align-middle font-mono text-sm text-foreground">
+                  <td className="px-4 py-2 align-middle font-mono text-sm text-ink">
                     {name}
                   </td>
 
-                  <td className="whitespace-nowrap px-4 py-2 align-middle text-sm text-muted-foreground">
+                  <td className="whitespace-nowrap px-4 py-2 align-middle text-sm text-ink-muted">
                     {service.kind || <span aria-hidden="true">—</span>}
                   </td>
 
-                  <td className="whitespace-nowrap px-4 py-2 text-right align-middle font-mono text-sm tabular-nums text-muted-foreground">
+                  <td className="whitespace-nowrap px-4 py-2 text-right align-middle font-mono text-sm tabular-nums text-ink-muted">
                     {typeof service.port === "number" && service.port > 0 ? (
                       service.port
                     ) : (
@@ -320,23 +320,23 @@ function ServiceSummary({
                     {hasNote ? (
                       <div className="flex flex-wrap justify-end gap-1">
                         {stale && (
-                          <span className="rounded-md border border-solid border-warning/40 bg-warning/15 px-2 py-0.5 text-xs text-warning-ink">
+                          <span className="rounded-md border border-solid border-warning-border bg-warning-surface px-2 py-0.5 text-xs text-warning-ink">
                             Stale build
                           </span>
                         )}
                         {service.duplicate && (
-                          <span className="rounded-md border border-solid border-warning/40 bg-warning/15 px-2 py-0.5 text-xs text-warning-ink">
+                          <span className="rounded-md border border-solid border-warning-border bg-warning-surface px-2 py-0.5 text-xs text-warning-ink">
                             Duplicate process
                           </span>
                         )}
                         {service.attribution_undetermined && (
-                          <span className="rounded-md border border-dashed border-muted-foreground/60 px-2 py-0.5 text-xs text-muted-foreground ring-1 ring-inset ring-muted-foreground/30">
+                          <span className="rounded-md border border-dashed border-ink-muted/60 px-2 py-0.5 text-xs text-ink-muted ring-1 ring-inset ring-ink-muted/30">
                             Attribution undetermined
                           </span>
                         )}
                       </div>
                     ) : (
-                      <span aria-hidden="true" className="text-xs text-muted-foreground">
+                      <span aria-hidden="true" className="text-xs text-ink-muted">
                         —
                       </span>
                     )}

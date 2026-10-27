@@ -3,7 +3,7 @@
 /**
  * The Overview (project home with the workloads) against the workload
  * fixtures: the environment strip, needs attention, the Services and Jobs
- * tables reading the server's verdict, the scope (D1), the filters, and the
+ * tables reading the server's verdict, the scope, the filters, and the
  * empty / loading / error / not-set-up states.
  */
 
@@ -29,17 +29,20 @@ describe("the Overview", () => {
     const strip = screen.getByTestId("overview-env-strip");
     expect(within(strip).getByTestId("overview-env-prod")).toHaveAttribute("data-tone", "danger");
     expect(within(strip).getByTestId("overview-env-prod")).toHaveTextContent("1 failing");
-    expect(within(strip).getByTestId("overview-env-prod")).toHaveAttribute("aria-pressed", "true");
+    expect(within(strip).getByTestId("overview-env-prod")).toHaveAttribute("aria-current", "page");
     expect(within(strip).getByTestId("overview-env-e2e")).toHaveTextContent("1 job failed");
     expect(within(strip).getByTestId("overview-env-dev")).toHaveTextContent("Healthy");
     expect(within(strip).getByTestId("overview-env-previews")).toHaveTextContent("3 running");
   });
 
-  it("scopes the console from the strip", async () => {
-    const harness = renderOverview();
+  it("makes the strip status, each cell a link to that environment — not a second scope switch", async () => {
+    renderOverview();
     await ready();
-    await userEvent.click(screen.getByTestId("overview-env-e2e"));
-    expect(harness.selectEnv).toHaveBeenCalledWith("e2e");
+    const cell = screen.getByTestId("overview-env-e2e");
+    expect(cell.tagName).toBe("A");
+    expect(cell).toHaveAttribute("href", "/overview?env=e2e");
+    expect(cell).not.toHaveAttribute("aria-pressed");
+    expect(screen.getByTestId("overview-env-prod")).toHaveAttribute("aria-current", "page");
   });
 
   it("lists the scoped environment's services with the server's verdict, never re-derived", async () => {
@@ -101,6 +104,23 @@ describe("the Overview", () => {
     expect(rows[2]).toHaveTextContent("reliant-temporal-worker crash-looping");
     await userEvent.click(within(rows[2]!).getByText(/Restarting repeatedly \(14 times in the last 24 hours\)/));
     expect(harness.navigateTo).toHaveBeenCalledWith("/w/prod/reliant-temporal-worker");
+  });
+
+  it("offers the way back on each item, naming the environment and the release", async () => {
+    const onRollback = vi.fn();
+    const target = { env: "prod", current: "v2", previous: "20261017.120000-abc" };
+    renderOverview({ rollback: { targets: new Map([["prod", target]]), onRollback, blockedReason: null } });
+    await ready();
+    const attention = screen.getByTestId("overview-attention");
+    const button = within(attention).getAllByRole("button", { name: /Roll back prod to 20261017\.120000/ })[0]!;
+    await userEvent.click(button);
+    expect(onRollback).toHaveBeenCalledWith(target);
+  });
+
+  it("says nothing is deployed without counting telemetry it is about to disown", async () => {
+    renderOverview({ envs: [] });
+    expect(await screen.findByTestId("overview-counts")).toHaveTextContent("Not deployed");
+    expect(screen.getByText("Nothing deployed yet")).toBeInTheDocument();
   });
 
   it("shows the latest run of each job with the release that ran it", async () => {

@@ -141,8 +141,6 @@ interface SidebarProps {
   /** Settings → Projects, where projects are renamed and removed. */
   onManageProjects?: () => void;
   onOpenForge?: () => void;
-  /** The org-wide Observability area (/forge/observability). */
-  onOpenObservability?: () => void;
   onOpenInbox?: () => void;
 }
 
@@ -699,7 +697,6 @@ function SidebarComponent({
   onNavigateToSettings,
   onManageProjects,
   onOpenForge,
-  onOpenObservability,
 }: SidebarProps) {
   // The project filter (null: All projects) decides what the list shows; the
   // context project (the open chat's) does not, so opening a chat elsewhere
@@ -1549,9 +1546,10 @@ function SidebarComponent({
             shortcut={newChatShortcut}
           />
           {/* Apps (/apps) is the org's index of every app it runs, each one a
-              drill-in to its console (environments, releases, ...). It sits
-              directly under New chat: after writing code, the next place to
-              go is what that code runs as. */}
+              drill-in to its console (environments, releases, observability) —
+              the ONE entry into the running side — so it sits directly under
+              New chat: after writing code, the next place to go is what that
+              code runs as. */}
           {showForgeEntry && (
             <SidebarNavButton
               icon={<Boxes className="h-4 w-4" />}
@@ -1563,16 +1561,6 @@ function SidebarComponent({
           )}
           {/* What is live, one click from anywhere: each app's console and its site. */}
           {showForgeEntry && <SidebarApps />}
-          {/* Org-wide telemetry across every app and environment (apps and
-              envs are filters on the page). Same gate as Apps. */}
-          {showForgeEntry && onOpenObservability && (
-            <SidebarNavButton
-              icon={<Activity className="h-4 w-4" />}
-              label="Observability"
-              onClick={onOpenObservability}
-              testId="sidebar-observability-button"
-            />
-          )}
           <InboxNavItem onOpen={onOpenInbox} />
           {/* One entry for the whole area: Workflows and Runs are
               its tabs (WORKFLOW_UI.md §1.2), so they get no entries here. */}

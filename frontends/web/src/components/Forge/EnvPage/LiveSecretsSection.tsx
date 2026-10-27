@@ -249,9 +249,9 @@ export function LiveSecretsSection({
   if (!env) {
     return (
       <div className="space-y-3" data-testid="live-secrets-not-built">
-        <p className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
-          <span className="font-mono text-foreground">{name}</span> hasn&apos;t been built yet. Run{" "}
-          <code className="font-mono text-foreground">forge env build {name}</code>, or open Preview
+        <p className="rounded-lg border border-dashed border-border px-4 py-3 text-sm text-ink-muted">
+          <span className="font-mono text-ink">{name}</span> hasn&apos;t been built yet. Run{" "}
+          <code className="font-mono text-ink">forge env build {name}</code>, or open Preview
           with your daemon online.
         </p>
 
@@ -259,7 +259,7 @@ export function LiveSecretsSection({
           type="button"
           onClick={() => setModal({ existing: null })}
           data-testid="add-secret"
-          className="rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink-muted transition-colors hover:text-ink"
         >
           Add secret
         </button>
@@ -282,8 +282,8 @@ export function LiveSecretsSection({
   return (
     <div className="space-y-3" data-testid="live-secrets">
       {env.kind === "local" && (
-        <p data-testid="secrets-local-pull" className="text-xs text-muted-foreground">
-          <code className="font-mono text-foreground">forge env up</code> pulls these into the
+        <p data-testid="secrets-local-pull" className="text-xs text-ink-muted">
+          <code className="font-mono text-ink">forge env up</code> pulls these into the
           processes it starts, in memory — they are never written to disk.
         </p>
       )}

@@ -219,7 +219,7 @@ export function DeployDialog({
       // that could be mistaken for a finished deploy.
       <p
         data-testid="deploy-job-connecting"
-        className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground"
+        className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-ink-muted"
       >
         A deploy is in flight. Reading its status…
       </p>

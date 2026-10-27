@@ -71,7 +71,7 @@ export interface ObservabilityApi {
   getSession: typeof rum.getSession;
   getSessionTimeline: typeof rum.getSessionTimeline;
   getSessionReplay: typeof rum.getSessionReplay;
-  // Native dashboards (DashboardService, decision DB): reads need membership,
+  // Native dashboards (DashboardService): reads need membership,
   // authoring the admin role.
   listDashboards: typeof dashboards.listDashboards;
   listDashboardTemplates: typeof dashboards.listDashboardTemplates;

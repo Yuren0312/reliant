@@ -1,14 +1,14 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * ONE WORKLOAD in one environment (PROPOSAL §4.2; breadcrumb "Overview ›
+ * ONE WORKLOAD in one environment (breadcrumb "Overview ›
  * <name>"). The environment is in the path, so the page is pinned to it.
  *
  *   header   status, environment, kind · ready, the release it runs (verified
  *            by digest, or declared by the promotion), the image, and the
- *            actions — every mutating one naming its environment (D1):
- *            "Restart in prod" for a hosted environment (D6); Scale is never a
- *            console mutation (D6): it shows the declared line and "Open PR".
+ *            actions — every mutating one naming its environment:
+ *            "Restart in prod" for a hosted environment; Scale is never a
+ *            console mutation: it shows the declared line and "Open PR".
  *   tabs     Overview (requests, errors, CPU and memory against their limits,
  *            each with release markers; pods), Logs / Traces / Profiles (the
  *            existing explorers, pre-filtered to this workload), Events,
@@ -24,7 +24,7 @@
  */
 
 import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowRight, Copy, ExternalLink, GitPullRequest, Play, RotateCcw, ScrollText, SlidersHorizontal, Square } from "lucide-react";
+import { AlertTriangle, ArrowRight, Copy, ExternalLink, GitPullRequest, Play, RotateCcw, ScrollText, SlidersHorizontal, Square, Undo2 } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import EmptyState from "@/components/forge-ui/empty_state";
@@ -55,6 +55,7 @@ import { unionTimestamps } from "../Observability/Dashboards/PanelBody";
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatAgo, formatBytes, formatCores, formatCount, formatPercent } from "../Observability/format";
 import { ratioSeries, redPanel, seriesValues } from "../Observability/Home/homeModel";
+import type { RollbackTarget } from "../Promote/rollback";
 import { ObsAsOf, ObsError, ObsNotSetUp } from "../Observability/ObsStates";
 import type { ObsNavigate, ObsSearch, ObsView } from "../Observability/obsSearch";
 import { useReleaseMarkers } from "../Observability/releaseMarkers";
@@ -115,7 +116,7 @@ export type WorkloadDetailSearch = Omit<ObsSearch, "view" | "envs" | "service" |
 /**
  * What the page lets a reader do to the running workload, and why not.
  *
- * Restart and Stop/Start are HOSTED-ONLY (decision D6, hosted first): the
+ * Restart and Stop/Start are HOSTED-ONLY (hosted first): the
  * platform runs those pods. Stop/Start is the deployment's RUN STATE
  * (DeployService.Scale: running or suspended), not a replica count — replicas
  * are declared in KCL and the Scale button only points at the declaration.
@@ -131,6 +132,13 @@ export interface WorkloadActions {
 export interface HostedObservation {
   workload: ForgeHostedWorkload | null;
   loading: boolean;
+}
+
+/** Rolling the workload's environment back: what to, and the plan flow that does it. */
+export interface WorkloadRollback {
+  target: RollbackTarget | null;
+  onRollback: (target: RollbackTarget) => void;
+  blockedReason: string | null;
 }
 
 export interface WorkloadDetailHrefs {
@@ -150,11 +158,13 @@ export interface WorkloadDetailProps {
   hrefs: WorkloadDetailHrefs;
   actions: WorkloadActions;
   hosted: HostedObservation | null;
+  /** Roll the environment back to the release it ran before, when it ran one. */
+  rollback?: WorkloadRollback;
   /** The environment's last recorded render declares this workload (a self-managed environment, where nothing may report). */
   declaredInRender?: boolean;
 }
 
-export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, actions, hosted, declaredInRender = false }: WorkloadDetailProps) {
+export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, actions, hosted, rollback, declaredInRender = false }: WorkloadDetailProps) {
   const range = (search.range as RangePreset | undefined) ?? OVERVIEW_RANGE;
   const tab: WorkloadTab = search.tab ?? "overview";
   const org = useObservabilityOrg();
@@ -271,6 +281,7 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
         lastDeploy={history.entries[0] ?? null}
         hrefs={hrefs}
         actions={actions}
+        rollback={rollback}
         // An explorer tab carries its own window control (the same `range` key): one on screen, not two.
         rangeControl={explorer ? null : rangeControl}
         onTab={(next) => onSearch({ tab: next === "overview" ? undefined : next, range: search.range })}
@@ -358,6 +369,7 @@ function WorkloadHeader({
   lastDeploy,
   hrefs,
   actions,
+  rollback,
   rangeControl,
   onTab,
   canOpen,
@@ -372,6 +384,7 @@ function WorkloadHeader({
   lastDeploy: DeployHistoryEntry | null;
   hrefs: WorkloadDetailHrefs;
   actions: WorkloadActions;
+  rollback?: WorkloadRollback;
   rangeControl: ReactNode;
   onTab: (tab: WorkloadTab) => void;
   canOpen: (tab: WorkloadTab) => boolean;
@@ -491,6 +504,22 @@ function WorkloadHeader({
               <ScaleButton name={name} env={env.name} summary={summary} />
             </>
           )}
+          {rollback?.target && (
+            // A rollback moves the whole ENVIRONMENT to the release it ran
+            // before — a release is one bundle — so the button says which
+            // environment and which release, and goes through the plan.
+            <button
+              type="button"
+              className={BUTTON_SECONDARY}
+              onClick={() => rollback.onRollback(rollback.target!)}
+              disabled={!!rollback.blockedReason}
+              title={rollback.blockedReason ?? `Plan a rollback of ${env.name} to ${rollback.target.previous}`}
+              data-testid="workload-rollback"
+            >
+              <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Roll back {env.name} to {shortVersion(rollback.target.previous)}
+            </button>
+          )}
           <RowMenu label={`More actions for ${name}`} items={menu} testId="workload-menu" />
         </div>
       </div>
@@ -596,7 +625,7 @@ function WorkloadHeader({
 }
 
 /**
- * Scale (D6): replicas are declared in KCL, so the console never changes them.
+ * Scale: replicas are declared in KCL, so the console never changes them.
  * It shows where the declaration lives. "Open PR" edits the declaration on the
  * repository's DEFAULT branch only — where a change is proposed as a pull
  * request — and only when that branch is known; otherwise the file can be
@@ -648,7 +677,7 @@ function ScaleButton({ name, env, summary }: { name: string; env: string; summar
             Changing them here would drift from your repository. Edit the declaration instead; the next deploy converges {env}.
           </p>
           {declared || summary?.desiredReplicas !== null ? (
-            <pre className="mt-3 overflow-x-auto rounded-md border border-border/60 bg-background px-3 py-2 font-mono text-xs text-ink">
+            <pre className="mt-3 overflow-x-auto rounded-md border border-border/60 bg-surface-sunken px-3 py-2 font-mono text-xs text-ink">
               <span className="text-ink-muted">{path}</span>
               {"\n"}
               {`  ${name}: replicas = ${replicas ?? "not declared"}`}
@@ -1515,7 +1544,7 @@ function ExplorerTab({
         </Card>
       }
     >
-      <ObservabilityPanel place={{ kind: "project", project, environments }} search={panelSearch} navigate={navigate} chrome="console" />
+      <ObservabilityPanel place={{ kind: "project", project, environments }} search={panelSearch} navigate={navigate} />
     </Suspense>
   );
 }

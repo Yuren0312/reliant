@@ -4,7 +4,7 @@
  * ReleasesPages adapts the console to the pages: the roster becomes the
  * pages' environments (prod first, previews apart, local ones dropped), and a
  * promote request becomes the plan dialog — titled for what it does, naming
- * the env (D1) — or, with no Reliant project to plan against, a blocked
+ * the env — or, with no Reliant project to plan against, a blocked
  * reason and no dialog. The pages themselves are stubbed to their props.
  */
 
@@ -87,6 +87,13 @@ vi.mock("../ReleaseDetail", () => ({
     detailProps(props);
     return <PromoteButtons promote={props.promote} />;
   },
+}));
+
+// The Deploys section and the promoter names read the control plane; neither is under test here.
+vi.mock("../../Deploy/DeployRuns", () => ({ DeployRunsPanel: () => <div data-testid="deploys" /> }));
+vi.mock("../useReleaseData", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../useReleaseData")>()),
+  usePromoterNames: () => new Map(),
 }));
 
 import { ReleasePage, ReleasesPage } from "../ReleasesPages";

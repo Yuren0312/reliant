@@ -368,7 +368,7 @@ export function UPlotChart({
                 style={{ left: dot.x, top: dot.y }}
                 className={cn(
                   "pointer-events-auto absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
-                  exemplar.solid ? "bg-primary" : "bg-background"
+                  exemplar.solid ? "bg-primary" : "bg-surface-sunken"
                 )}
                 aria-label={exemplar.label}
                 data-testid="chart-exemplar-dot"
@@ -379,7 +379,7 @@ export function UPlotChart({
         </div>
       )}
       {!compact && annotationSummary && (
-        <p className="min-w-0 truncate text-xs text-muted-foreground" title={`${describeMarkers(markers)} ${describeBands(shown)}`} data-testid="chart-annotations" aria-hidden="true">
+        <p className="min-w-0 truncate text-xs text-ink-muted" title={`${describeMarkers(markers)} ${describeBands(shown)}`} data-testid="chart-annotations" aria-hidden="true">
           {annotationSummary}
         </p>
       )}
@@ -508,13 +508,22 @@ export function describeSeries(series: ChartSeries[], unit: ValueUnit | undefine
  * The markers inside the chart's time span, oldest first. A bucket's timestamp
  * is its start, so the span runs one bucket past the last one: a marker in the
  * newest bucket belongs on the chart.
+ *
+ * ONE MARKER PER LABEL: a version promoted twice in the window (re-promoted,
+ * or rolled back to) is drawn at its latest landing, not listed twice.
  */
 export function visibleMarkers(markers: readonly ChartMarker[], timestamps: number[]): ChartMarker[] {
   if (timestamps.length === 0) return [];
   const first = timestamps[0];
   const last = timestamps[timestamps.length - 1];
   const step = timestamps.length > 1 ? timestamps[1] - timestamps[0] : 0;
-  return markers.filter((m) => m.timeSec >= first && m.timeSec <= last + step).sort((a, b) => a.timeSec - b.timeSec);
+  const latest = new Map<string, ChartMarker>();
+  for (const m of markers) {
+    if (m.timeSec < first || m.timeSec > last + step) continue;
+    const seen = latest.get(m.label);
+    if (!seen || m.timeSec > seen.timeSec) latest.set(m.label, m);
+  }
+  return [...latest.values()].sort((a, b) => a.timeSec - b.timeSec);
 }
 
 /** "Marked: v1.8.2 at 14:05." */

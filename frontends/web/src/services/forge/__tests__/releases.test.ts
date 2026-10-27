@@ -3,8 +3,8 @@
 /**
  * releases.ts is the one file that knows DeployService's release shapes.
  * These pin the readings the pages rely on: the cut commit's subject and
- * author (D4), a capped range's `truncated`, a scoped promotion's targets
- * (D5), a historical free-text gate status read as error (the proto's rule),
+ * author, a capped range's `truncated`, a scoped promotion's targets
+ *, a historical free-text gate status read as error (the proto's rule),
  * the comparison states, and a rollout phase this build does not know never
  * reading as success.
  */

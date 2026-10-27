@@ -59,7 +59,7 @@ function Explain({ panel, scope, range, onOpenSql, subject }: SqlTabProps) {
       </p>
       <ol className="space-y-3">
         {statements.map((statement, index) => (
-          <li key={index} className="rounded-md border border-border/60 bg-background" data-testid="metrics-sql-statement">
+          <li key={index} className="rounded-md border border-border/60 bg-surface-sunken" data-testid="metrics-sql-statement">
             <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-1.5">
               <span className="text-xs text-ink-muted">
                 Statement {index + 1} of {statements.length}
@@ -141,7 +141,7 @@ function SqlPanelEditor({ sqlPanel, scope, range, onOpenSql, onBack, subject }: 
         }}
         spellCheck={false}
         rows={Math.min(18, Math.max(6, draft.split("\n").length + 1))}
-        className="w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="w-full rounded-md border border-border bg-surface-sunken px-3 py-2 font-mono text-xs text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         data-testid="metrics-sql-editor"
       />
       <div className="flex flex-wrap items-center gap-2">
