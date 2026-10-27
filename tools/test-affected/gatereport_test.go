@@ -145,6 +145,41 @@ for p in "${pids[@]}"; do wait "$p"; done`, "vet-dispatch", filepath.Join(dir, "
 	}
 }
 
+// The rebase onto #1698 must retain ee79d69f's evidence binding while
+// applying merge-only policy to both the initial and regenerated plans.
+func TestMergeTierPreservesLandedPlanIdentity(t *testing.T) {
+	pl := &Plan{Schema: planSchema, Base: "base", Head: "head", InputDigest: strings.Repeat("a", 64)}
+	mergeTier(pl)
+	b, err := json.Marshal(pl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved Plan
+	if err := json.Unmarshal(b, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if !saved.Merge || saved.Schema != planSchema || saved.Base != "base" || saved.Head != "head" || saved.InputDigest != pl.InputDigest {
+		t.Fatalf("merge policy dropped plan identity: %+v", saved)
+	}
+	b, err = os.ReadFile(filepath.Join(repoRoot, "scripts/merge-gate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	for _, want := range []string{
+		`phase plan go run ./tools/test-affected plan -merge -json`,
+		`phase plan-2 go run ./tools/test-affected plan -merge -json`,
+		`run -plan "$run_plan" -base "$base" -lanes go,web`,
+		`gate-verify -plan "$run_plan" -base "$base"`,
+		`load_selection || fail=1`,
+		`regeneration expanded generator obligations`,
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("lost authoritative merge-plan consumer: %s", want)
+		}
+	}
+}
+
 func TestMergeTierCoverageAndWiring(t *testing.T) {
 	read := func(p string) string {
 		t.Helper()
