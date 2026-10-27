@@ -1490,8 +1490,10 @@ message PanelSeriesResult {
 
 message PanelTableRow {
   map<string, string> group = 1;
-  // One per entry of QueryPanelResponse.columns.
+  // One per entry of QueryPanelResponse.columns. Values whose zero-based
+  // index is in missing_value_indexes MUST be ignored (NULL, not zero).
   repeated double values = 2;
+  repeated uint32 missing_value_indexes = 3;
 }
 
 message GetDashboardsRequest {
@@ -1536,6 +1538,12 @@ message Dashboard {
   // one of the same name). Empty for a synthesized dashboard. Set by the server
   // from the recorded row, never read from the dashboard's own JSON.
   string source = 7;
+  repeated DashboardSection sections = 8;
+}
+
+message DashboardSection {
+  string id = 1;
+  string title = 2;
 }
 
 message DashboardFilter {
@@ -1545,6 +1553,8 @@ message DashboardFilter {
   // traces | metrics | logs: the telemetry the dropdown reads its values from.
   // Empty is traces.
   string signal = 4;
+  // Empty applies to all panels; otherwise only these panel IDs.
+  repeated string panel_ids = 5;
 }
 
 // DashboardAnnotation declares where a dashboard's time-series markers come from.
@@ -1605,6 +1615,8 @@ message Panel {
   // {to:DateTime64(9)}, {step:UInt32}, {env_ids:Array(String)},
   // {envs:Array(String)} and {services:Array(String)}.
   string sql = 18;
+  // Optional declared presentation section; no implicit query filtering.
+  string section = 19;
 }
 
 // The definition a funnel panel draws (forge.Funnel): product event names in

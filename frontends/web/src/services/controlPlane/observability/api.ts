@@ -400,7 +400,10 @@ export async function queryPanel(req: QueryPanelRequest): Promise<PanelResult> {
     stepSeconds: res.stepSeconds,
     truncated: res.truncated,
     columns: [...res.columns],
-    rows: res.rows.map((r) => ({ group: { ...r.group }, values: r.values.map((v) => (Number.isFinite(v) ? v : null)) })),
+    rows: res.rows.map((r) => {
+      const missing = new Set(r.missingValueIndexes);
+      return { group: { ...r.group }, values: r.values.map((v, index) => (!missing.has(index) && Number.isFinite(v) ? v : null)) };
+    }),
     series: res.series.map((s) => ({
       label: s.label,
       group: { ...s.group },
