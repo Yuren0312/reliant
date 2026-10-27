@@ -163,6 +163,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
       istatus: undefined,
       platform: undefined,
       isort: undefined,
+      assignee: undefined,
       session: undefined,
       t: undefined,
       replay: undefined,
@@ -321,6 +322,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             statuses={issueStatusesOf(search.istatus)}
             platform={issuePlatformOf(search.platform)}
             sort={issueSortOf(search.isort)}
+            assignee={search.assignee}
             issueId={search.issue}
             navigate={navigate}
           />
