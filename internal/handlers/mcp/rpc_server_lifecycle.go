@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -395,6 +396,7 @@ func (s *Service) MoveServerScope(
 	sourceScope := normalizeScope(scoped.Scope)
 
 	if scoped.Scope == targetScope {
+		activity.Skip(ctx) // already stored there: nothing moved
 		return connect.NewResponse(&reliantv1.MoveServerScopeResponse{
 			Success: true,
 			Message: "Server is already stored in the requested scope",
