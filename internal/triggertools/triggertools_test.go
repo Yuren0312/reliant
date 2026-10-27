@@ -186,15 +186,14 @@ func TestListTriggersScopedToAWorkflowShowsBrokenHealth(t *testing.T) {
 	require.Len(t, listed, 2)
 }
 
-// No registered tool creates, enables, re-points or deletes an activation.
-// Manual firing is the only non-read-only trigger operation.
-func TestNoAgentToolActivates(t *testing.T) {
+// Activation management is explicit, orchestrator-tier and approval-backed.
+func TestTriggerToolMutationClassification(t *testing.T) {
 	var triggerTools []string
 	for _, def := range tools.GetToolRegistry() {
 		lower := strings.ToLower(def.Name)
 		if strings.Contains(lower, "trigger") || strings.Contains(lower, "activat") {
 			triggerTools = append(triggerTools, def.Name)
-			if def.Name == tools.ToolFireTrigger {
+			if def.Name == tools.ToolFireTrigger || tools.IsActivationManagementTool(def.Name) {
 				assert.False(t, slices.Contains(def.Tags, tools.TagReadOnly))
 				assert.Equal(t, tools.PermissionOrchestrator, tools.MinimumPermissionForTool(def.Name))
 			} else {
@@ -202,7 +201,7 @@ func TestNoAgentToolActivates(t *testing.T) {
 			}
 		}
 	}
-	assert.Equal(t, []string{tools.ToolListTriggers, tools.ToolFireTrigger, tools.ToolListTriggerEvents}, triggerTools)
+	assert.Equal(t, []string{tools.ToolListTriggers, tools.ToolFireTrigger, tools.ToolCreateTriggerActivation, tools.ToolUpdateTriggerActivation, tools.ToolEnableTrigger, tools.ToolPauseTrigger, tools.ToolListTriggerEvents}, triggerTools)
 }
 
 // The adapter cannot create, enable or change an activation.
