@@ -134,9 +134,14 @@ const ARCHIVED = worktree({
 
 let server: WorktreeServer;
 
-/** Serve these workspaces, and answer git status for the feature workspace. */
-function serve(rows: Worktree[]) {
-  server = worktreeServer(rows);
+/**
+ * Serve these workspaces, and answer git status for the feature workspace.
+ * `pageSize` caps the server's pages below the request's limit, so a paging
+ * test renders a few rows instead of WORKTREE_PAGE_SIZE: a hundred rendered
+ * rows took over 15s under load and timed the test out.
+ */
+function serve(rows: Worktree[], pageSize?: number) {
+  server = worktreeServer(rows, { pageSize });
   setTransport(
     mockTransport({
       ...server.handlers,
@@ -147,9 +152,8 @@ function serve(rows: Worktree[]) {
   );
 }
 
-/** Live agent workspaces enough to need a second page. */
-const manyFeatures = () =>
-  Array.from({ length: WORKTREE_PAGE_SIZE }, (_, i) => worktree({ id: `wt-agent-${i}`, name: `agent-${i}` }));
+/** The page size the paging tests serve: small, so a second page costs nothing to render. */
+const SMALL_PAGE = 3;
 
 function renderSection() {
   return render(
@@ -343,13 +347,28 @@ describe("Settings → Workspaces", () => {
   });
 
   it("offers the next page of live workspaces and fetches it on request", async () => {
-    serve([MAIN, FEATURE, ...manyFeatures()]);
+    serve(
+      [
+        MAIN,
+        FEATURE,
+        worktree({ id: "wt-first-page", name: "first-page" }),
+        worktree({ id: "wt-agent", name: "agent" }),
+      ],
+      SMALL_PAGE,
+    );
     const user = userEvent.setup();
     await renderLoaded();
+    expect(server.requests("ListWorktrees").at(-1)?.limit).toBe(WORKTREE_PAGE_SIZE);
+    expect(screen.queryByRole("button", { name: "View details for agent" })).not.toBeInTheDocument();
 
+    expect(screen.queryByTestId("workspace-row-wt-agent")).not.toBeInTheDocument();
+    expect(server.requests("ListWorktrees")[0]).toMatchObject({ limit: WORKTREE_PAGE_SIZE });
     await user.click(screen.getByTestId("load-more-workspaces"));
 
-    await waitFor(() => expect(server.requests("ListWorktrees").at(-1)?.pageToken).toBe(String(WORKTREE_PAGE_SIZE)));
+    await waitFor(() => expect(server.requests("ListWorktrees").at(-1)?.pageToken).toBe(String(SMALL_PAGE)));
+    expect(await screen.findByTestId("workspace-row-wt-agent")).toBeInTheDocument();
+    expect(screen.getByTestId("workspace-row-wt-feature")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "View details for agent" })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByTestId("load-more-workspaces")).not.toBeInTheDocument());
   });
 
@@ -359,21 +378,30 @@ describe("Settings → Workspaces", () => {
   });
 
   it("pages the archived workspaces on their own token", async () => {
-    serve([
-      MAIN,
-      ...Array.from({ length: WORKTREE_PAGE_SIZE + 1 }, (_, i) =>
-        worktree({ id: `wt-old-${i}`, name: `old-${i}`, deleted_at: "2025-05-01T00:00:00Z" }),
-      ),
-    ]);
+    serve(
+      [
+        MAIN,
+        ...Array.from({ length: SMALL_PAGE + 1 }, (_, i) =>
+          worktree({ id: `wt-old-${i}`, name: `old-${i}`, deleted_at: "2025-05-01T00:00:00Z" }),
+        ),
+      ],
+      SMALL_PAGE,
+    );
     const user = userEvent.setup();
     await renderLoaded();
 
     await user.click(screen.getByRole("tab", { name: /archived/i }));
-    await user.click(await screen.findByTestId("load-more-archived"));
+    const more = await screen.findByTestId("load-more-archived");
+    expect(screen.queryByTestId(`archived-row-wt-old-${SMALL_PAGE}`)).not.toBeInTheDocument();
+    expect(server.requests("ListArchivedWorktrees")[0]).toMatchObject({ limit: WORKTREE_PAGE_SIZE });
+    await user.click(more);
 
     await waitFor(() =>
-      expect(server.requests("ListArchivedWorktrees").at(-1)?.pageToken).toBe(String(WORKTREE_PAGE_SIZE)),
+      expect(server.requests("ListArchivedWorktrees").at(-1)?.pageToken).toBe(String(SMALL_PAGE)),
     );
+    expect(await screen.findByTestId(`archived-row-wt-old-${SMALL_PAGE}`)).toBeInTheDocument();
+    expect(screen.getByTestId("archived-row-wt-old-0")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId("load-more-archived")).not.toBeInTheDocument());
     expect(server.requests("ListWorktrees").every((r) => !r.pageToken)).toBe(true);
   });
 

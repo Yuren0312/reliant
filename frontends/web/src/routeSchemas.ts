@@ -175,6 +175,14 @@ export const authSearchSchema = z.object({
   redirect: z.string().optional(),
 });
 
+// Search params for `/apps`. `claimed` names the app (the forge project) a
+// finished claim just made the user's own, so the page can point at it. It is
+// a highlight, not a filter: every app is still listed, and the param is
+// dropped once the page has shown it.
+export const appsSearchSchema = z.object({
+  claimed: z.string().optional(),
+});
+
 // Search params for `/upgrade`. `returnTo` is the URL the user should be sent
 // back to after they link a real identity (with an email) onto their existing
 // anonymous account — e.g. the admin billing page. Validated at the call site
@@ -338,6 +346,7 @@ export const BILLING_TAB_IDS = [
   "plans",
   "invoices",
   "usage",
+  "ai",
 ] as const;
 export type BillingTab = (typeof BILLING_TAB_IDS)[number];
 
@@ -347,7 +356,7 @@ export type BillingTab = (typeof BILLING_TAB_IDS)[number];
  * were one tab pretending to be two, and reconciling a number meant checking
  * both.
  */
-export const VISIBLE_BILLING_TABS = ["overview", "plans", "usage"] as const;
+export const VISIBLE_BILLING_TABS = ["overview", "plans", "usage", "ai"] as const;
 export type VisibleBillingTab = (typeof VISIBLE_BILLING_TABS)[number];
 
 /** Where an inbound `?tab=` lands now that invoices has been folded in. */
@@ -380,7 +389,11 @@ export const settingsSearchSchema = z.object({
   // mid-wizard had no way home. `forge`: an environment whose deploy is queued
   // on billing; the way back is its page. `connectors`: the retired
   // /settings/connectors redirect, so Machines can say where Connectors went.
-  from: z.enum(["onboarding", "forge", "connectors"]).optional(),
+  // Every other value is a surface that sent the user to billing
+  // (hooks/useGoToBilling's BillingOrigin); billing offers the way back.
+  from: z
+    .enum(["onboarding", "forge", "connectors", "machines", "chat", "runs", "inbox", "reliant-ai", "credit", "upgrade"])
+    .optional(),
   // The exact URL to return to, captured at the moment the user left. Carries
   // onboarding's `plan` search param — the wizard's ENTIRE state — so the trip
   // through billing (and Stripe, which is a full cold boot) is resumable.
@@ -612,6 +625,15 @@ export const forgeConsoleDashboardSearchSchema = z.object({
   service: z.string().optional().catch(undefined),
   compare: z.enum(COMPARE_MODES).optional().catch(undefined),
   refresh: z.enum(REFRESH_INTERVALS).optional().catch(undefined),
+  rpcService: z.string().optional().catch(undefined),
+  rpcMethod: z.string().optional().catch(undefined),
+  rpcProcedure: z.string().optional().catch(undefined),
+  variables: z.record(z.string(), z.string()).optional().catch(undefined),
+  breakdown: z.string().optional().catch(undefined),
+  hiddenSections: z.array(z.string()).optional().catch(undefined),
+  hiddenPanels: z.array(z.string()).optional().catch(undefined),
+  releases: z.boolean().optional().catch(undefined),
+  alerts: z.boolean().optional().catch(undefined),
   tv: z.boolean().optional().catch(undefined),
   version: z.number().int().positive().optional().catch(undefined),
   release: z.string().optional().catch(undefined),

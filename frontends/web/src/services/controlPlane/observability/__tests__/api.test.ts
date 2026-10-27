@@ -249,6 +249,17 @@ describe("traces and panels", () => {
     expect(client.queryPanel.mock.calls[0][0].panel).toMatchObject({ kind: "sql", series: [], groupBy: [], sql: expect.stringContaining("AS clients") });
   });
 
+  it("preserves a SQL NULL placeholder separately from a measured zero", async () => {
+    client.queryPanel.mockResolvedValue({ panelId: "nullable", kind: "sql", unit: "", stepSeconds: 0, truncated: false,
+      columns: ["unmeasured", "actual_zero", "count"], rows: [{ group: {}, values: [0, 0, 12], missingValueIndexes: [0] }],
+      series: [], funnelSteps: [], issues: [], sessions: [],
+    });
+    const result = await queryPanel({ ...env, window, services: [], stepSeconds: 0,
+      panel: { id: "nullable", title: "Nullable", kind: "sql", signal: "", series: [], sql: "SELECT NULL, 0, 12" },
+    });
+    expect(result.rows[0].values).toEqual([null, 0, 12]);
+  });
+
   it("sends a funnel's steps and a sessions panel's has-error, and maps the browser kinds back (C7)", async () => {
     client.queryPanel.mockResolvedValue({
       panelId: "f",
