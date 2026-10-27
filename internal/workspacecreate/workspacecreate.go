@@ -355,14 +355,9 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			return repoCreateResult{repo: repo, worktreePath: ex.Path, baseBranch: ex.Base}, nil
 		}
 
-		if req.Force && !adopting {
-			// Stale-branch cleanup; the workspace dir itself is fresh per create.
-			_ = m.Send(ctx, "worktree.force_cleanup", map[string]string{
-				"project_path":  repoPath,
-				"worktree_path": "",
-				"branch":        wt.Branch,
-			}, nil, commandTimeoutMs)
-		}
+		// Force is passed to the daemon's create operation, which validates
+		// the fetched head/start point before git worktree add -B. Never run
+		// a separate destructive cleanup before that validation.
 
 		type createReq struct {
 			ProjectPath  string `json:"project_path"`

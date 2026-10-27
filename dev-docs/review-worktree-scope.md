@@ -28,8 +28,16 @@ behavior.
 `fetch_branch` requires both a target and an exact `expected_head` SHA. The daemon
 validates the branch, fetches that single origin ref through subprocess argv (no
 shell interpolation), then compares the fetched commit before creating a checkout.
-It refuses a moved head and uses the immutable SHA rather than a possibly stale
-local branch. Siblings receive neither fetch fields nor the target's base.
+It refuses a moved head and uses the immutable object expression directly as
+the start point, bypassing branch-first resolution (even a branch named exactly
+the SHA cannot shadow it). Fetch+reuse is refused. Successful creation also
+checks the checkout's actual HEAD against expected_head. Siblings receive neither
+fetch fields nor the target's base.
+
+`Finish` does not issue a separate `worktree.force_cleanup`: force is delegated
+to the daemon create operation's `git worktree add -B`, only after fetched-head
+and base validation. A drift refusal therefore cannot prune/delete an existing
+branch or worktree before reporting failure.
 
 ## Responder composition
 
