@@ -32,7 +32,9 @@ func (*AutomationApprovalActivity) Description() string {
 func (*AutomationApprovalActivity) Category() schema.ActivityCategory { return schema.CategoryAgentic }
 func (a *AutomationApprovalActivity) Execute(ctx context.Context, in types.AutomationApprovalInput) (types.AutomationApprovalPreview, error) {
 	refuse := func(err error) (types.AutomationApprovalPreview, error) {
-		return types.AutomationApprovalPreview{Refusal: err.Error()}, nil
+		// Validation errors can quote arbitrary input/graph values. Do not copy
+		// those into another durable activity result or approval surface.
+		return types.AutomationApprovalPreview{Refusal: "Activation could not be validated for approval; nothing changed. Check setup in the app."}, nil
 	}
 	if a.factory == nil {
 		return refuse(fmt.Errorf("activation management unavailable"))

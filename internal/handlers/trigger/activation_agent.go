@@ -6,7 +6,10 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -136,18 +139,22 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 		copy := *existing
 		copy.ProjectName = ""
 		copy.DaemonName = ""
-		saved, _ := json.Marshal(copy)
+		saved, _ := json.Marshal(copy) // memory-only digest material
+		safe, _ := automationpolicy.SafeJSON(&copy)
 		machineName := existing.DaemonName
 		if machine, e := s.deps.Repo.GetDaemon(ctx, existing.DaemonID); e == nil && machine != nil {
 			if machine.Name != "" {
 				machineName = machine.Name
 			}
 		}
-		title := fmt.Sprintf("Pause activation %s (%s). Owner: %s. Machine: %s (id %s). No future scheduled/event runs until enabled. Saved configuration: %s", existing.Name, existing.ID, user, machineName, existing.DaemonID, saved)
-		hash := sha256.Sum256([]byte(title))
+		title := fmt.Sprintf("Pause activation %s (%s). Owner: %s. Machine: %s (id %s). No future scheduled/event runs until enabled. Saved configuration: %s", "(name withheld)", existing.ID, user, machineName, existing.DaemonID, safe)
+		hash := sha256.Sum256(append([]byte(title), saved...))
 		revision := time.Time{}
 		if existing != nil {
 			revision = existing.UpdatedAt
+		}
+		if len(title) > automationpolicy.MaxDisplayBytes {
+			return nil, tools.ActivationPreview{}, svcerr.FailedPrecondition("Activation approval display size limit exceeded")
 		}
 		return def, tools.ActivationPreview{Title: title, Hash: fmt.Sprintf("%x", hash), Revision: revision}, nil
 	}
@@ -197,8 +204,10 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 	// Resolve the default connection before approval, so a changed default
 	// cannot silently redirect a previously approved activation.
 	def.ConnectionId = row.ConnectionID
-	graph := canonicalProto(wf)
-	source := canonicalProto(wt)
+	closure, err := s.activationSnapshot(ctx, user, def, wf)
+	if err != nil {
+		return nil, tools.ActivationPreview{}, err
+	}
 	definition := canonicalProto(def)
 	// Volatile names/health are not authorization inputs; configuration and its
 	// revision are. Holding the saved revision in the hash detects an edit.
@@ -213,9 +222,22 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 		}{Definition: &copy, UpdatedAt: existing.UpdatedAt}
 	}
 	before, _ := json.Marshal(previous)
-	snapshot := fmt.Sprintf("Operation: %s\nRun as user: %s; integration identity: %s\nActivation: %s\nDeclared trigger: %s\nWorkflow privileges and graph: %s\nPrevious activation: %s", operation, user, def.ActingIdentity, definition, source, graph, before)
-	title := fmt.Sprintf("Machine: %s (id %s)\n%s", machineName, row.DaemonID, snapshot)
-	hash := sha256.Sum256([]byte(title))
+	// No raw configuration is ever a card title. Hash the full canonical
+	// dependency closure in memory, display only the allowlisted projection.
+	raw, err := json.Marshal(struct {
+		Definition string
+		Previous   string
+		Closure    *activationSnapshot
+	}{definition, string(before), closure})
+	if err != nil || len(raw) > maxApprovalSnapshotBytes {
+		return nil, tools.ActivationPreview{}, svcerr.FailedPrecondition("Activation approval snapshot size limit exceeded")
+	}
+	safe, _ := automationpolicy.SafeJSON(row)
+	title := fmt.Sprintf("Machine: %s (id %s)\nOperation: %s\nRun as user: %s; integration identity: %s\nActivation: %s\n%s", machineName, row.DaemonID, operation, user, def.ActingIdentity, safe, strings.Join(closure.Summary, "\n"))
+	if len(title) > automationpolicy.MaxDisplayBytes {
+		return nil, tools.ActivationPreview{}, svcerr.FailedPrecondition("Activation approval display size limit exceeded")
+	}
+	hash := sha256.Sum256(append(raw, []byte(title)...))
 	revision := time.Time{}
 	if existing != nil {
 		revision = existing.UpdatedAt
@@ -225,6 +247,46 @@ func (s *Service) prepareAgentActivation(ctx context.Context, user, operation st
 
 // ManageActivation always revalidates the preview before calling the app RPC.
 func (s *Service) ManageActivation(ctx context.Context, user, operation string, p tools.ActivationParams, approvedHash string) (tools.TriggerSummary, error) {
+	if automationpolicy.From(ctx).Unattended {
+		return tools.TriggerSummary{}, svcerr.PermissionDenied(automationpolicy.Refusal())
+	}
+	// Serializable snapshot + dependency locks bind all app re-resolutions
+	// to the approved dependency set. A row revision
+	// check alone does not protect mutable workflows, presets or connections.
+	var result tools.TriggerSummary
+	var effects *activationEffects
+	err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+		project := p.ProjectID
+		if p.TriggerID != "" {
+			existing, err := s.ownedTrigger(context.WithValue(txCtx, auth.UserIDContextKey, user), p.TriggerID)
+			if err != nil {
+				return err
+			}
+			if project == "" {
+				project = existing.ProjectID
+			}
+		}
+		if err := s.deps.Repo.LockActivationDependencies(txCtx, user, project); err != nil {
+			return svcerr.Wrap(err)
+		}
+		effects = &activationEffects{}
+		txCtx = context.WithValue(txCtx, activationEffectsKey{}, effects)
+		var err error
+		result, err = s.manageActivationAtomic(txCtx, user, operation, p, approvedHash)
+		return err
+	})
+	if err != nil {
+		return tools.TriggerSummary{}, err
+	}
+	for _, effect := range effects.pending {
+		if err := effect(ctx); err != nil {
+			return tools.TriggerSummary{}, svcerr.FailedPrecondition("Activation configuration committed, but external reconciliation failed; inspect the activation before retrying")
+		}
+	}
+	return result, nil
+}
+
+func (s *Service) manageActivationAtomic(ctx context.Context, user, operation string, p tools.ActivationParams, approvedHash string) (tools.TriggerSummary, error) {
 	if approvedHash == "" {
 		return tools.TriggerSummary{}, svcerr.PermissionDenied("An interactive approval is required for activation management")
 	}

@@ -141,7 +141,7 @@ func (t *activationTypedTool) Execute(ctx *rctx.ToolContext, p ActivationParams)
 	actorCtx := automationpolicy.WithActor(ctx.Context, automationpolicy.Actor{ChatID: ctx.ChatID, RunID: ctx.Thread, ToolCallID: callID})
 	summary, err := o.manager.ManageActivation(actorCtx, caller.userID, o.name, p, approved)
 	if err != nil {
-		return NewTextErrorResponse(err.Error()), nil
+		return NewTextErrorResponse("Activation change refused or could not be completed. Inspect its current state and setup in the app before retrying; a changed configuration requires a new approval."), nil
 	}
 	return WithResponseMetadata(NewTextResponse(fmt.Sprintf("%s: %s (id %s), enabled=%t, machine=%s (id %s), project=%s", o.name, summary.Name, summary.ID, summary.Enabled, summary.DaemonName, summary.DaemonID, summary.ProjectID)), summary), nil
 }

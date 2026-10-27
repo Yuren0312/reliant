@@ -155,7 +155,7 @@ describe("AutomationDetail", () => {
     getTrigger.mockResolvedValue(create(GetTriggerResponseSchema, { trigger: { ...trigger, changes: [{ id: "change-1", operation: "update", userId: "owner", chatId: "caller-chat", runId: "caller-run", toolCallId: "call-1", beforeState: '{"DaemonID":"old"}', afterState: '{"DaemonID":"cicd"}', createdAt: isoFromNow(-HOUR) }] } }));
     renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
     expect(await screen.findByText(/Agent in chat caller-chat/)).toBeInTheDocument();
-    expect(screen.getByText(/Run caller-run/)).toBeInTheDocument();
+    expect(screen.getByText(/Thread caller-run/)).toBeInTheDocument();
     expect(screen.getByText(/After:.*cicd/)).toBeInTheDocument();
     expect(await screen.findByTestId("automation-event-ev-1")).toBeInTheDocument();
   });

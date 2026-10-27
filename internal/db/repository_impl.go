@@ -2840,6 +2840,10 @@ func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) e
 	})
 }
 
+func (r *Repo) LockActivationDependencies(ctx context.Context, userID, projectID string) error {
+	return store.LockActivationDependencies(ctx, r.ORM(), userID, projectID)
+}
+
 func (r *Repo) ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error) {
 	return store.TriggerChanges(ctx, r.ORM(), userID, triggerID)
 }

@@ -157,6 +157,9 @@ func (s *Service) sync(ctx context.Context, kind core.TriggerKind, id string) er
 	if !syncs(kind) || s.deps.Syncer == nil {
 		return nil
 	}
+	if deferActivationEffect(ctx, func(ctx context.Context) error { return s.sync(ctx, kind, id) }) {
+		return nil
+	}
 	return s.deps.Syncer.Sync(ctx, id)
 }
 

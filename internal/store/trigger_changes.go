@@ -3,7 +3,6 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -14,17 +13,18 @@ import (
 )
 
 // RecordTriggerChange is called in the SAME transaction as the row mutation.
-// Core definitions contain no webhook secrets or delegated credentials.
+// Only the bounded allowlisted projection is persisted: arbitrary params,
+// prompts, source expressions, and graph literals are never audit data.
 func RecordTriggerChange(ctx context.Context, db orm.Context, op string, before, after *core.Trigger) error {
 	var old any
 	if before != nil {
-		data, err := json.Marshal(before)
+		data, err := automationpolicy.SafeJSON(before)
 		if err != nil {
 			return err
 		}
 		old = string(data)
 	}
-	data, err := json.Marshal(after)
+	data, err := automationpolicy.SafeJSON(after)
 	if err != nil {
 		return err
 	}

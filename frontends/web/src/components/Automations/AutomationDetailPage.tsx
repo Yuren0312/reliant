@@ -310,7 +310,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
           {(trigger.changes ?? []).map((change) => (
             <details key={change.id} className="py-3 text-sm">
               <summary className="cursor-pointer text-foreground">{change.operation} · {formatAbsoluteTime(change.createdAt)} · {change.chatId ? `Agent in chat ${change.chatId}` : `User ${change.userId}`}</summary>
-              {change.chatId && <p className="mt-2 text-xs text-muted-foreground">Run {change.runId} · Call {change.toolCallId}</p>}
+              {change.chatId && <p className="mt-2 text-xs text-muted-foreground">Thread {change.runId} · Call {change.toolCallId}</p>}
               <pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">{`Before: ${change.beforeState || "(new activation)"}\nAfter: ${change.afterState}`}</pre>
             </details>
           ))}

@@ -767,6 +767,11 @@ func (l *Launcher) LoadPresetFromDB(ctx context.Context, userID, projectID, name
 	return loadPresetFromDB(ctx, l.repo, userID, projectID, name)
 }
 
+// ResolveRunPreset uses the launcher's exact user/project/builtin precedence.
+func ResolveRunPreset(ctx context.Context, repo WorkflowResolver, userID, projectID, name string) (*preset.Preset, error) {
+	return loadPresetFromDB(ctx, repo, userID, projectID, name)
+}
+
 func loadPresetFromDB(ctx context.Context, repo WorkflowResolver, userID, projectID, name string) (*preset.Preset, error) {
 	slug := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 
