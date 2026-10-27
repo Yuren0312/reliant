@@ -305,7 +305,7 @@ function ProjectGroupRow({
           )}
           <ToggleSwitch
             checked={on}
-            onChange={(next) => switchTriggers(group.triggers, next, subject)}
+            onChange={(next) => switchTriggers(group.triggers, next, subject, true)}
             disabled={isPending}
             ariaLabel={`On in ${group.projectName}`}
             size="lg"

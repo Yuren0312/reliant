@@ -5,9 +5,9 @@
  * project's triggers on its page, one trigger — with one vocabulary and one
  * set of messages, wherever the switch is.
  *
- * Off: a workflow's declared triggers in a project are turned off together
- * (DisableWorkflow, which settles them as one); a hand-made trigger on its
- * own. On: every trigger in the set that is off is turned back on.
+ * Off: only an explicit whole-workflow action settles declared triggers in
+ * a project together (DisableWorkflow). Individual rows change only their
+ * activation, never its siblings. On: every off trigger in the set is enabled.
  */
 
 import { toast } from "sonner";
@@ -19,7 +19,7 @@ export function useSwitchTriggers() {
   const disable = useDisableWorkflow();
   const setEnabled = useSetTriggerEnabled();
 
-  const switchTriggers = (triggers: readonly Trigger[], next: boolean, subject: string) => {
+  const switchTriggers = (triggers: readonly Trigger[], next: boolean, subject: string, wholeWorkflow = false) => {
     if (next) {
       for (const trigger of triggers.filter((t) => !t.enabled)) {
         setEnabled.mutate(
@@ -32,7 +32,7 @@ export function useSwitchTriggers() {
     const declared = new Map<string, Trigger>();
     for (const trigger of triggers) {
       if (!trigger.enabled) continue;
-      if (trigger.workflowTrigger) {
+      if (wholeWorkflow && trigger.workflowTrigger) {
         declared.set(`${trigger.workflow}::${trigger.projectId}`, trigger);
         continue;
       }

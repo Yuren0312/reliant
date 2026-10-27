@@ -537,7 +537,7 @@ function WorkflowsBody() {
       // several, each project is switched on the workflow's page.
       onToggle:
         row.triggers.length > 0 && projects.size === 1
-          ? (next) => switchTriggers(row.triggers, next, workflowDisplayName(workflow))
+          ? (next) => switchTriggers(row.triggers, next, workflowDisplayName(workflow), true)
           : undefined,
       toggling: switching,
       cta: needing?.health.cta

@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
   listTriggers: vi.fn(),
   getTrigger: vi.fn(),
   disableWorkflow: vi.fn(),
+  setTriggerEnabled: vi.fn(),
   fireTrigger: vi.fn(),
   listPresetsForWorkflow: vi.fn(),
   getDefaultPresetsBatch: vi.fn(),
@@ -48,7 +49,7 @@ const mocks = vi.hoisted(() => ({
 // named from the catalog's trigger types; none here.
 beforeEach(() => {
   setTransport(mockTransport({
-      ...serviceHandlers("TriggerService", { listTriggers: mocks.listTriggers, getTrigger: mocks.getTrigger, disableWorkflow: mocks.disableWorkflow, fireTrigger: mocks.fireTrigger }),
+      ...serviceHandlers("TriggerService", { listTriggers: mocks.listTriggers, getTrigger: mocks.getTrigger, disableWorkflow: mocks.disableWorkflow, setTriggerEnabled: mocks.setTriggerEnabled, fireTrigger: mocks.fireTrigger }),
       // The run form lists workspaces through the generated WorktreeService hooks.
       ...serviceHandlers("WorktreeService", { listWorktrees: mocks.listWorktrees }),
       ...serviceHandlers("WorkflowService", { listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow }),
@@ -350,6 +351,23 @@ describe("WorkflowDetailPage", () => {
       expect(within(rows[0]!).getByText("From the workflow file")).toBeInTheDocument();
       // Every declared trigger is set up here: nothing is listed as off.
       expect(screen.queryByTestId("triggers-not-set-up")).toBeNull();
+    });
+
+    it("turning one declared trigger off leaves its enabled sibling alone", async () => {
+      const first = activation("a1", "morning", true);
+      const sibling = activation("a2", "evening", true);
+      mocks.listTriggers.mockResolvedValue({ triggers: [first, sibling] });
+      mocks.setTriggerEnabled.mockImplementation(async ({ id, enabled }: { id: string; enabled: boolean }) => {
+        if (id === first.id) first.enabled = enabled;
+        return { trigger: first };
+      });
+      renderDetail();
+      await userEvent.click(await screen.findByRole("switch", { name: "morning on" }));
+      await waitFor(() => expect(mocks.setTriggerEnabled).toHaveBeenCalledWith(expect.objectContaining({ id: "a1", enabled: false })));
+      expect(mocks.setTriggerEnabled).toHaveBeenCalledTimes(1);
+      expect(mocks.disableWorkflow).not.toHaveBeenCalled();
+      expect(sibling.enabled).toBe(true);
+      expect(screen.getByRole("switch", { name: "evening on" })).toHaveAttribute("aria-checked", "true");
     });
 
     it("turning a project off turns the workflow off there in one call", async () => {
