@@ -1,5 +1,6 @@
 import { ArrowLeft, X, Activity } from "lucide-react";
 import Tooltip from "../forge-ui/tooltip";
+import { OrgSwitcher } from "../Orgs/OrgSwitcher";
 import { isDev } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
@@ -58,6 +59,7 @@ export function SettingsHeader({ onClose }: SettingsHeaderProps) {
         className="flex cursor-default items-center gap-1 pr-2"
         style={noDragRegionStyle}
       >
+        <OrgSwitcher />
         {/* Dev-only: Temporal UI button */}
         {isDev && (
           <Tooltip content="Open Temporal UI" side="bottom" delay={300}>

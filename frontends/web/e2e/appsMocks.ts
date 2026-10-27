@@ -157,6 +157,15 @@ const emptyStream = (route: Route) =>
   });
 
 export interface AppsMockOptions {
+  /**
+   * The orgs ListMyOrganizations returns. Default: one, so no switcher shows.
+   * Environments are served per org (`environmentsByOrg`) when given.
+   */
+  orgs?: Array<{ id: string; name: string; slug: string; role: string; isOwner: boolean; isDefault: boolean }>;
+  /** Environments by org id; an org without an entry has none. Overrides `environments`. */
+  environmentsByOrg?: Record<string, typeof ENVIRONMENTS>;
+  /** Called with the org_id of every control-plane request that carried one (undefined: none named). */
+  onOrgRequest?: (rpc: string, orgId: string | undefined) => void;
   /** Whether the user has finished onboarding. Default true. */
   onboarded?: boolean;
   /** The org's deploy environments. Default ENVIRONMENTS; [] for a user who has deployed nothing. */
@@ -203,9 +212,24 @@ export async function mockAppsBackend(page: Page, options: AppsMockOptions = {})
     return json(route, { messages, total: messages.length, count: messages.length, hasMore: false, oldestSeq: '1' });
   });
 
+  const orgs = options.orgs ?? [{ id: 'org_acme', name: 'Acme', slug: 'acme', role: 'owner', isOwner: true, isDefault: true }];
+  await page.route('**/controlplane.v1.OrganizationService/ListMyOrganizations', (route) =>
+    json(route, { organizations: orgs, defaultOrgId: orgs.find((o) => o.isDefault)?.id ?? '' }),
+  );
+  await page.route('**/controlplane.v1.OrganizationService/SetDefaultOrganization', (route) =>
+    json(route, { defaultOrgId: (route.request().postDataJSON() as { orgId?: string }).orgId ?? '' }),
+  );
+  // Observe requests independently of which route fulfils them.
+  page.on('request', (request) => {
+    if (!request.url().includes('/controlplane.v1.DeployService/')) return;
+    const body = (request.postDataJSON() ?? {}) as { orgId?: string };
+    options.onOrgRequest?.(new URL(request.url()).pathname.split('/').pop() ?? '', body.orgId);
+  });
+
   await page.route('**/controlplane.v1.DeployService/ListEnvironments', (route) => {
-    const { project } = (route.request().postDataJSON() ?? {}) as { project?: string };
-    const envs = project === undefined ? environments : environments.filter((env) => env.project === project);
+    const { project, orgId } = (route.request().postDataJSON() ?? {}) as { project?: string; orgId?: string };
+    const pool = options.environmentsByOrg ? (options.environmentsByOrg[orgId ?? orgs.find((o) => o.isDefault)?.id ?? ''] ?? []) : environments;
+    const envs = project === undefined ? pool : pool.filter((env) => env.project === project);
     return json(route, { environments: envs });
   });
   await page.route('**/controlplane.v1.DeployService/GetStatus', (route) => {
@@ -236,7 +260,7 @@ export async function mockAppsBackend(page: Page, options: AppsMockOptions = {})
   await page.route('**/config.js', (route) =>
     route.fulfill({ status: 200, contentType: 'text/javascript', body: `window.__FORGE_CONFIG__ = ${JSON.stringify(config)};` }),
   );
-  await page.addInitScript(() => {
-    localStorage.setItem('reliant-api-key', 'test-key-123');
-  });
+  await page.addInitScript((appOrigin) => {
+    if (location.origin === appOrigin) localStorage.setItem('reliant-api-key', 'test-key-123');
+  }, origin);
 }

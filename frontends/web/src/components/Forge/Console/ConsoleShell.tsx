@@ -212,6 +212,8 @@ export interface ConsoleShellProps extends ConsoleNavInput {
    * "padded": the forge-ui page gutter (px-8, pt-6).
    */
   contentLayout?: "padded" | "fill";
+  /** Product org switcher; injected to keep preview chrome free of queries. */
+  orgSwitcher?: ReactNode;
   children: ReactNode;
 }
 
@@ -224,6 +226,7 @@ export function ConsoleShell({
   collapsed,
   onToggleCollapsed,
   contentLayout,
+  orgSwitcher,
   children,
   ...nav
 }: ConsoleShellProps) {
@@ -273,6 +276,7 @@ export function ConsoleShell({
                 </span>
               ))}
             </nav>
+            {orgSwitcher}
             <EnvScopeControl
               value={nav.env}
               long={scope.long}
