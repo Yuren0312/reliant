@@ -109,7 +109,7 @@ export function ObservabilityLimits({ limits, orgId, save, reload }: {
       </fieldset>
       <button type="button" className="text-sm text-primary underline" onClick={cancel}>Cancel</button>
     </form>}
-    <p className="mt-3 text-xs text-muted-foreground">Threshold preferences are saved only. Alert delivery and recipient routing are not yet connected here; saving does not enable email, Slack or webhook delivery.</p>
+    <p className="mt-3 text-xs text-muted-foreground">Usage threshold and cap-reached notices are wired to email organization owners and admins via Resend. Delivery has not been live-tested. Selecting recipients, Slack channels or webhooks for these notices is not supported.</p>
     {message && <p role="status" className="mt-3 text-sm">{message}</p>}
     {conflict && <button type="button" className="mt-2 text-primary underline" disabled={pending === "reload"} onClick={() => void reloadLatest()}>Reload latest limits</button>}
     {limits.updatedAt && <p className="mt-3 text-xs text-muted-foreground">Last changed {at(limits.updatedAt)} by {limits.updatedByEmail || "system"}.</p>}
