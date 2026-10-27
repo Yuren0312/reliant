@@ -23,6 +23,7 @@ import { createIssuesFixture, type IssuesFixtureOptions } from "./fixtureIssues"
 import { createSessionsFixture, type SessionsFixtureOptions } from "./fixtureSessions";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { fixtureGraph, fixtureCatalog } from "./fixtureGraph";
 import type {
   AttributeValueCount,
   Dashboard,
@@ -833,6 +834,7 @@ export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureO
   failError?: unknown;
   /** An environment that has sent nothing. */
   empty?: boolean;
+  graphUnknown?: boolean;
   /** Called for each RPC, with its request — tests assert on what was asked. */
   onCall?: (rpc: string, request: unknown) => void;
   /**
@@ -857,6 +859,8 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
   const delivery = createDeliveryFixture(options, call);
   return {
     currentOrgId: async () => FIXTURE_ORG,
+    getServiceGraph: (req) => call("GetServiceGraph", req, () => fixtureGraph(options.empty, options.graphUnknown)),
+    getServiceGraphCatalog: (req) => call("GetServiceGraphCatalog", req, () => fixtureCatalog(options.empty, options.graphUnknown)),
     getServiceOverview: (req) =>
       call("GetServiceOverview", req, () => {
         if (options.empty) return { services: [], trendStepSeconds: 60 };

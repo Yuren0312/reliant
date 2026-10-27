@@ -51,6 +51,7 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "not-set-up", label: "org not set up (FailedPrecondition)", options: { failWith: Code.FailedPrecondition } },
   { id: "nothing-yet", label: "set up, nothing arrived this week (getting started)", options: { empty: true, signals: { services: [], truncated: false } } },
   { id: "empty", label: "no data in range", options: { empty: true } },
+  { id: "graph-unknown", label: "graph: coverage/catalog unavailable", options: { graphUnknown: true } },
   { id: "window-empty", label: "no data in range, data this week", options: { empty: true, signals: FIXTURE_SIGNALS } },
   { id: "denied", label: "no permission", options: { failWith: Code.PermissionDenied } },
   { id: "unavailable", label: "service unavailable", options: { failWith: Code.Unavailable } },
@@ -84,7 +85,7 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
 ];
 
 /** The views the panel hosts (Metrics and Dashboards are console pages of their own). */
-const PANEL_VIEWS: ObsNavView[] = ["errors", "sessions", "logs", "traces", "profiles", "alerts"];
+const PANEL_VIEWS: ObsNavView[] = ["graph", "rpc", "errors", "sessions", "logs", "traces", "profiles", "alerts"];
 
 const LIST_KEYS = new Set(["envs", "f", "groupBy", "cursor"]);
 
@@ -100,7 +101,7 @@ function searchFromUrl(params: URLSearchParams): ObsSearch {
       } catch {
         // A malformed edit is dropped, as the real route's schema drops it.
       }
-    } else if (key === "live" || key === "errors" || key === "replay") out[key] = params.get(key) === "true";
+    } else if (key === "live" || key === "errors" || key === "replay" || key === "declared" || key === "internal") out[key] = params.get(key) === "true";
     else if (key === "t") out[key] = Number(params.get(key)) || undefined;
     else out[key] = params.get(key);
   }

@@ -82,6 +82,7 @@ import { ReleaseStrip } from "./ReleaseStrip";
 import { useNothingArrived } from "./serviceSignals";
 import { SessionsView } from "./Sessions/SessionsView";
 import { TracesView } from "./TracesView";
+import { GraphView } from "./Graph/GraphView";
 
 export type { ObsEnvironment, ObsPlace } from "./obsPlace";
 
@@ -204,7 +205,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
                 className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 data-testid="obs-range"
               >
-                {RANGE_PRESETS.map((preset) => (
+                {RANGE_PRESETS.filter((preset) => (view !== "graph" && view !== "rpc") || preset === "15m" || preset === "1h" || preset === range).map((preset) => (
                   <option key={preset} value={preset}>
                     {RANGE_LABELS[preset]}
                   </option>
@@ -297,6 +298,8 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             rule={search.rule}
             navigate={navigate}
           />
+        ) : view === "graph" || view === "rpc" ? (
+          <GraphView key={`${scope.orgId}/${scope.projectId}/${scope.envIds.join(",")}/${range}`} scope={scope} range={range} search={search} navigate={navigate} subject={subject} />
         ) : comparing ? (
           <ReleaseComparison
             scope={scope}
