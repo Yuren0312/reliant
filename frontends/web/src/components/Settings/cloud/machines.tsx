@@ -8,8 +8,8 @@
  * local UI state only.
  *
  * Layout: a single machines view (list / create / detail). The list is
- * /settings/environments and one machine's detail is
- * /settings/environments/$machineId, so Back, refresh and deep links (the
+ * /settings/machines and one machine's detail is
+ * /settings/machines/$machineId, so Back, refresh and deep links (the
  * onboarding DaemonConnectingGate "View logs" action, docs) all work. Daemon
  * access tokens are managed in the standalone System → Access Tokens settings
  * section.
@@ -31,12 +31,9 @@ import {
   AlertTriangle,
   ArrowLeft,
   Check,
-  Clock,
   Copy,
   Cpu,
   ExternalLink,
-  GitBranch,
-  Github,
   Pause,
   Play,
   Plus,
@@ -49,17 +46,17 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { capabilities } from "@/services/controlPlane/capabilities";
+import Button from "@/components/forge-ui/button";
+import { SettingsPageHeader } from "../SettingsPageHeader";
 import {
-  Button,
   Badge,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   EmptyState,
-  PageHeader,
   StatusDot,
   Table,
   Tbody,
@@ -86,13 +83,11 @@ import {
   suspendDaemon,
   type PortAccessRule,
 } from "@/services/controlPlane/environments";
-import { create } from "@bufbuild/protobuf";
-import { grpcClient } from "@/api/grpc-client";
 import {
   DaemonStatus,
-  ListDaemonsRequestSchema,
   type DaemonInfo as Daemon,
 } from "@/gen/reliant/v1/daemon_registry_pb";
+import { daemonListQuery, fetchDaemonList, invalidateDaemonList } from "@/hooks/daemon-registry-queries";
 import {
   LIFECYCLE_PHASE_UNSPECIFIED,
   lifecyclePlan,
@@ -100,7 +95,8 @@ import {
   type LifecycleAction,
   type RestartStage,
 } from "./machineLifecycle";
-import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonConnect";
+import { PairMachinePanel } from "@/components/Machines/PairMachinePanel";
+import { AddMachineSheet } from "@/components/Machines/AddMachineSheet";
 import { clearWaking, markWaking, presentMachineStatus, useWakingMachines } from "@/lib/machineWake";
 import { getComputeEligibility } from "@/services/controlPlane/billing";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
@@ -115,39 +111,27 @@ import { formatMachineSpec } from "@/components/Billing/machineSpecs";
 import { MachineCost } from "@/components/Billing/MachineCost";
 import { CardInset } from "@/components/forge-ui/card";
 import { MachineDiskCard } from "./MachineDiskCard";
+import { machineBuildLabel } from "@/lib/machineBuild";
 import { machineCrashSummary } from "@/lib/machineMemory";
 import { DiskGrowNotice, GrowDiskModal, type GrowStage } from "./GrowDiskModal";
 import { diskGrowStatus, isStorageDenied } from "./diskGrow";
 import { DaemonDiskState } from "@/gen/controlplane/controlplane/v1/shared_pb";
-import { CLOUD_PROJECT_ROOT, cloudPathForRepo } from "@/lib/cloudProjectPath";
+import { CLOUD_PROJECT_ROOT } from "@/lib/cloudProjectPath";
 import { toast } from "@/lib/toast-manager";
 import { machineDisplayName, type NameableMachine } from "@/lib/machineName";
-import { useProjectStore } from "@/store/projectStore";
-import type { GitRepo } from "@/services/controlPlane/git";
-import { createMachine, type CreateMachineResult } from "./createMachine";
-import { useAccountGate } from "@/hooks/useAccountGate";
 import { MachineAccess, activeGrantCounts, appCountLabel, useConnectors } from "./machineAccess";
 // The overage formatter, shared with the billing purchase grid so the two
 // surfaces cannot disagree about how a rate is written.
 
 
-// The GitHub repo picker shared with onboarding and the project picker's Clone
-// dialog. Loaded when the user opens it: most machines are created without a
-// repository, and the picker brings the GitHub credential and repo-list
-// queries with it.
-const RepoSelector = React.lazy(() =>
-  import("@/components/Projects/RepoSelector").then((m) => ({ default: m.RepoSelector })),
-);
 
 // ── Query keys ──────────────────────────────────────────────────────────────
+// The machine LIST is not here: it is the one shared daemon list
+// (daemon-registry-queries), which the list view and the detail view both read
+// on their own cadence. A restart's 2s poll therefore refreshes every reader
+// of the list while it runs — one list, one answer
+// (docs/design/one-daemon-list.md).
 const QK = {
-  daemons: ["cp", "environments", "list"] as const,
-  // The detail view reads the same registry list but on its own cadence (2s
-  // during a restart). A separate key rather than sharing QK.daemons: two
-  // observers of one key negotiate a single interval, so sharing would either
-  // slow the restart progress copy to the list's 15s or speed the whole list
-  // up to 2s for every mounted consumer.
-  detailList: ["cp", "environments", "detailList"] as const,
   daemon: (id: string) => ["cp", "environments", "detail", id] as const,
   // Shared with the header DetectedPortsChip's one-click-public toggle so a
   // "Make public" there invalidates this panel's rules query and vice-versa.
@@ -287,17 +271,9 @@ const SIZE_TIERS = [
 //
 // This replaced a `<Badge variant="neutral">` — a bordered pill that looked
 // like a button, did nothing on click, and named no way forward at all.
-const NO_FUNDING_CTA = "Redeem a coupon or choose a plan";
 const NO_FUNDING_DESCRIPTION =
   "Redeem a coupon code or subscribe to a compute plan to start a machine. Machines run on the compute sizes your plan allows.";
 
-const IDLE_TIMEOUT_OPTIONS = [
-  { value: "15m", label: "15 minutes" },
-  { value: "30m", label: "30 minutes" },
-  { value: "1h", label: "1 hour" },
-  { value: "2h", label: "2 hours" },
-  { value: "4h", label: "4 hours" },
-] as const;
 
 /**
  * Which sizes may this caller run, per the server?
@@ -385,16 +361,6 @@ function Modal({
   );
 }
 
-function Field({ label, htmlFor, children }: { label: React.ReactNode; htmlFor?: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-4">
-      <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium text-foreground">
-        {label}
-      </label>
-      {children}
-    </div>
-  );
-}
 
 const inputCls =
   "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring";
@@ -410,15 +376,13 @@ function ErrorNote({ message }: { message?: string }) {
 
 // ── Self-hosted setup instructions ──────────────────────────────────────────
 /**
- * "Run Reliant on your own machine" — the download + install + connect steps.
+ * "Run Reliant on your own machine" — install, run, approve.
  *
- * The body is `SelfHostedDaemonConnect`, the SAME component onboarding's
- * ComputeStep and the ProjectPicker's connect modal render. That is
- * deliberate: download URLs, the Homebrew cask, the token step, and the
- * `reliant daemon start` command (which varies by deployment — see
- * lib/cli-commands) then have exactly one source of truth. Passing
- * mode="reference" drops the bootstrap-only flow control, since a user on
- * this page usually already has a working machine and is adding another.
+ * The body is `PairMachinePanel`, the SAME component the Add machine sheet
+ * and onboarding render, so the download links, the `reliant daemon start`
+ * command (which varies by deployment — see lib/cli-commands) and the pairing
+ * approval have one source of truth. mode="reference" drops the waiting
+ * affordances; pairing a machine from here still works.
  */
 function SelfHostedSetupCard() {
   return (
@@ -429,12 +393,12 @@ function SelfHostedSetupCard() {
           Run Reliant on your own machine
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Install the desktop app or CLI on a laptop or server, then connect it
-          with an access token. It shows up here once it connects.
+          Install the desktop app or CLI on a laptop or server and start it. It
+          prints a code; approve it here and the machine shows up in the list.
         </p>
       </CardHeader>
       <CardContent>
-        <SelfHostedDaemonConnect mode="reference" />
+        <PairMachinePanel mode="reference" />
       </CardContent>
     </Card>
   );
@@ -442,7 +406,7 @@ function SelfHostedSetupCard() {
 
 // ── Root section ────────────────────────────────────────────────────────────
 export function MachinesSection() {
-  // The open machine is the URL (/settings/environments/$machineId), so Back
+  // The open machine is the URL (/settings/machines/$machineId), so Back
   // returns to the list, a refresh keeps it open, and it can be linked to.
   // `?daemon=<id>` is the older deep link; the route redirects it onto the
   // path, and it is still read here so a stale link never lands on the list.
@@ -451,8 +415,8 @@ export function MachinesSection() {
   const navigate = useNavigate();
   const selectedId = params.machineId ?? search.daemon ?? null;
   const openMachine = (machineId: string) =>
-    navigate({ to: "/settings/environments/$machineId", params: { machineId } });
-  const backToList = () => navigate({ to: "/settings/$section", params: { section: "environments" } });
+    navigate({ to: "/settings/machines/$machineId", params: { machineId } });
+  const backToList = () => navigate({ to: "/settings/$section", params: { section: "machines" } });
   // Without a control plane there are no managed machines to create or
   // drive, but registered machines — and the app access granted to them —
   // still exist, so the list and detail render in a registry-only mode rather
@@ -460,15 +424,15 @@ export function MachinesSection() {
   const cloud = capabilities.cloudDaemons;
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div>
       {selectedId ? (
         <EnvironmentDetail daemonId={selectedId} cloud={cloud} onBack={backToList} />
       ) : (
         <div className="space-y-6">
           <div>
-            <PageHeader
+            <SettingsPageHeader
               title="Machines"
-              subtitle="Managed and self-hosted machines that run your projects."
+              description="Managed and self-hosted machines that run your projects."
             />
             {!cloud && (
               <p className="mb-4 text-sm text-muted-foreground">
@@ -504,65 +468,31 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Daemon | null>(null);
   const [actionError, setActionError] = useState("");
-  // The per-daemon price list (design §6.2), for the suspended-disk fee shown
-  // beside Delete. Absent from an older server, in which case no fee renders.
-  const daemonPricing = usePlans({ enabled: cloud }).data?.daemonPricing;
-  // The plan's monthly allowance (a server total, not what is left of it).
-  const includedSmallHours = useComputeUsage("current", { enabled: cloud }).data?.includedSmallDaemonSeconds;
-  const includedHours = includedSmallHours === undefined ? undefined : Number(includedSmallHours) / 3600;
   // Which machines outside AI apps can reach. Read once for the whole list
   // (ListConnectors is per user, not per machine) and counted per row.
   const appCounts = activeGrantCounts(useConnectors().data);
-  // Routes to /settings/billing?tab=plans — the place a coupon is redeemed and
-  // a plan is bought. Shared with every other "go buy compute" call site so
-  // the destination cannot drift; see the hook's own header.
-  const goToBilling = useGoToBilling();
-
   // The LIST comes from reliant's registry — the one daemon list
   // (docs/design/one-daemon-list.md). The per-machine DETAIL view below still
   // calls control-plane's GetDaemon, which is kept deliberately: port-access
   // rules, the workspace base domain and the provisioning spec are
   // control-plane concerns with no reliant equivalent.
-  const daemonsQ = useQuery({
-    queryKey: QK.daemons,
-    queryFn: async () => {
-      const resp = await grpcClient
-        .daemonRegistry()
-        .listDaemons(create(ListDaemonsRequestSchema));
-      return resp.daemons;
-    },
+  const daemonsQ = useQuery(daemonListQuery({
     staleTime: 10_000,
     refetchInterval: 15_000,
-  });
+  }));
 
-  // THE GATE. GetCurrentUserComputeEligibility is the server's own prediction
-  // of internal/svcdaemon.checkDaemonSizeAllowed, and it is the only thing that
-  // decides whether machine creation is offered here.
-  //
-  // This page used to gate on getComputeSubscription() alone, which is a
-  // strictly narrower rule than the server's: a redeemed compute coupon grants
-  // machine MINUTES and no subscription, so that check reported "not
-  // subscribed" for a user the server would have happily started a machine
-  // for, and replaced New Machine with a dead badge telling them to subscribe.
-  // Predicting a server rule by reimplementing a piece of it is how that
-  // happened; asking the server is how it stops happening.
+  // Add machine is always offered: the sheet itself shows which sizes the
+  // plan runs and takes payment in place for the rest. Eligibility here only
+  // picks the empty state's words (the server's own prediction of
+  // internal/svcdaemon.checkDaemonSizeAllowed — never a reimplementation).
   const eligibilityQ = useQuery({
     queryKey: QK.computeEligibility,
     queryFn: () => getComputeEligibility(),
     staleTime: 30_000,
     enabled: cloud,
   });
-  const allowedSizes = useMemo(
-    () => sizeTiersFromWire(eligibilityQ.data?.allowedDaemonSizes ?? []),
-    [eligibilityQ.data?.allowedDaemonSizes],
-  );
-  // Both halves are required and they are different facts: eligibility is
-  // "is there funding at all", sizes is "is there anything runnable". The
-  // server enforces both, so offering a Create button that satisfies only one
-  // would just move the denial to after the click.
-  const canCreate = Boolean(eligibilityQ.data?.eligible) && allowedSizes.length > 0;
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: QK.daemons });
+  const invalidate = () => invalidateDaemonList(qc);
 
   const suspendMut = useMutation({
     mutationFn: (id: string) => suspendDaemon(id),
@@ -605,15 +535,11 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
           <option value={String(DaemonStatus.FAILED)}>Failed</option>
           <option value={String(DaemonStatus.DISCONNECTED)}>Disconnected</option>
         </select>
-        {!cloud ? null : canCreate ? (
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> New Machine
+        {cloud && (
+          <Button onClick={() => setCreateOpen(true)} size="xl" leftIcon={<Plus />}>
+            Add machine
           </Button>
-        ) : !eligibilityQ.isLoading ? (
-          <Button variant="outline" onClick={goToBilling}>
-            {NO_FUNDING_CTA}
-          </Button>
-        ) : null}
+        )}
       </div>
 
       {actionError && <ErrorNote message={actionError} />}
@@ -627,8 +553,8 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
           <CardContent>
             <p className="text-sm font-medium text-destructive-ink">Failed to load machines</p>
             <p className="mt-1 text-sm text-muted-foreground">{describeError(daemonsQ.error)}</p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => daemonsQ.refetch()}>
-              <RefreshCw className="h-3.5 w-3.5" /> Retry
+            <Button variant="outline" size="md" className="mt-3" onClick={() => daemonsQ.refetch()} leftIcon={<RefreshCw />}>
+              Retry
             </Button>
           </CardContent>
         </Card>
@@ -641,22 +567,16 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
       ) : daemons.length === 0 ? (
         <EmptyState
           icon={Server}
-          title="No machines"
+          title="No machines yet"
           description={
-            canCreate
-              ? "Create your first cloud machine."
+            eligibilityQ.data?.eligible
+              ? "Add a cloud machine, or connect your own computer."
               : NO_FUNDING_DESCRIPTION
           }
           action={
-            canCreate ? (
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4" /> New Machine
-              </Button>
-            ) : (
-              <Button variant="outline" onClick={goToBilling}>
-                {NO_FUNDING_CTA}
-              </Button>
-            )
+            <Button onClick={() => setCreateOpen(true)} size="xl" leftIcon={<Plus />}>
+              Add machine
+            </Button>
           }
         />
       ) : (
@@ -695,13 +615,13 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
         </div>
       )}
 
-      <CreateEnvironmentModal
+      <AddMachineSheet
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        allowedSizes={allowedSizes}
-        pricing={daemonPricing}
-        includedHours={includedHours}
-        onCreated={() => { setCreateOpen(false); invalidate(); }}
+        onReady={(machine) => {
+          invalidate();
+          onOpenDetail(machine.daemonId);
+        }}
       />
 
       <RemoveMachineModal
@@ -799,6 +719,7 @@ function ManagedMachinesTable({
                   {daemonDisplayName(d)}
                 </button>
                 <AppAccessIndicator count={appCounts.get(d.daemonId) ?? 0} />
+                <MachineBuild daemon={d} />
               </Td>
               <Td>
                 <StatusDot
@@ -831,7 +752,7 @@ function ManagedMachinesTable({
                   <div className="inline-flex items-center gap-1">
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="md"
                       disabled={busy}
                       onClick={() => (isSuspended ? onResume(d.daemonId) : onSuspend(d.daemonId))}
                     >
@@ -844,13 +765,12 @@ function ManagedMachinesTable({
                     {cloud && <MachineCost daemonId={d.daemonId} size={d.size} suspended={isSuspended} />}
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="md"
                       onClick={() => onDelete(d)}
                       aria-label={`Delete ${daemonDisplayName(d)}`}
                       title="Delete machine"
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive-ink" aria-hidden="true" />
-                    </Button>
+                      icon={<Trash2 className="text-destructive-ink" aria-hidden="true" />}
+                    />
                   </div>
                 )}
               </Td>
@@ -860,6 +780,13 @@ function ManagedMachinesTable({
       </Tbody>
     </Table>
   );
+}
+
+/** The daemon's reported build, small and secondary under the machine's name. */
+function MachineBuild({ daemon }: { daemon: Daemon }) {
+  const label = machineBuildLabel(daemon);
+  if (!label) return null;
+  return <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>;
 }
 
 function SelfHostedMachinesTable({
@@ -904,6 +831,7 @@ function SelfHostedMachinesTable({
                   {daemonDisplayName(d)}
                 </button>
                 <AppAccessIndicator count={appCounts.get(d.daemonId) ?? 0} />
+                <MachineBuild daemon={d} />
               </Td>
               <Td>
                 <StatusDot variant={statusDotVariant[status]} label={badge.label} />
@@ -916,17 +844,18 @@ function SelfHostedMachinesTable({
                   const button = (
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="md"
                       disabled={!removal.allowed}
                       onClick={() => onRemove(d)}
+                      leftIcon={<Trash2 className="text-destructive-ink" />}
                     >
-                      <Trash2 className="h-4 w-4 text-destructive-ink" /> Remove
+                      Remove
                     </Button>
                   );
                   return removal.allowed ? (
                     button
                   ) : (
-                    <Tooltip content={removal.reason ?? ""} placement="left">
+                    <Tooltip content={removal.reason ?? ""} side="left">
                       {button}
                     </Tooltip>
                   );
@@ -978,266 +907,11 @@ function RemoveMachineModal({
         )}
       </p>
       <div className="mt-6 flex justify-end gap-3">
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button variant="danger" isLoading={isPending} onClick={onConfirm}>
+        <Button variant="outline" onClick={onClose} size="xl">Cancel</Button>
+        <Button variant="danger" loading={isPending} onClick={onConfirm} size="xl">
           {isPending ? confirmingLabel : confirmLabel}
         </Button>
       </div>
-    </Modal>
-  );
-}
-
-/**
- * Tell the user what happened to the repository they picked, once the machine
- * exists. Same copy as the project picker's Clone dialog for the queued case:
- * a new machine is still booting, so the clone nearly always waits for it.
- */
-function reportRepoOutcome({ machineName, repo }: CreateMachineResult) {
-  if (repo.kind === "added") {
-    void useProjectStore.getState().loadProjects();
-    if (repo.queued) {
-      toast.info(`Queued — ${repo.projectName} will clone when ${machineName} is ready`);
-    } else {
-      toast.success(`${repo.projectName} added to ${machineName}`);
-    }
-  } else if (repo.kind === "failed") {
-    toast.error(`${machineName} was created, but ${repo.projectName} could not be added: ${repo.message}`);
-  }
-}
-
-function CreateEnvironmentModal({
-  open,
-  onClose,
-  allowedSizes,
-  pricing,
-  includedHours,
-  onCreated,
-}: {
-  open: boolean;
-  onClose: () => void;
-  // Always a list, never null. The nullable form used to mean "no plan, so
-  // nothing is known"; the server now answers the size question directly, so
-  // an empty list means exactly "no size may be started" and there is no
-  // third, unknowable state to model.
-  allowedSizes: DaemonSize[];
-  /** ListPlans' daemon_pricing — each size's multiplier, for hours per size. */
-  pricing?: DaemonPricingLike;
-  includedHours?: number;
-  onCreated: () => void;
-}) {
-  const formId = useId();
-  const [name, setName] = useState("");
-  // The repository to add to the new machine, or null for an empty machine —
-  // a first-class choice, not a missing answer. `pickingRepo` shows the
-  // picker; it is separate from `repo` so "Change" keeps the current pick
-  // until a new one is made.
-  const [repo, setRepo] = useState<GitRepo | null>(null);
-  const [pickingRepo, setPickingRepo] = useState(false);
-  const [idleTimeout, setIdleTimeout] = useState("30m");
-  // No hardcoded default. MEDIUM used to be it, so a small-only plan opened
-  // this modal with a size the server would refuse already selected. null
-  // means "not yet chosen"; `effectiveSize` resolves it to the first size the
-  // plan actually allows.
-  const [size, setSize] = useState<DaemonSize | null>(null);
-  const [error, setError] = useState("");
-
-  const tiers = useMemo(
-    () => SIZE_TIERS.filter((t) => allowedSizes.includes(t.value)),
-    [allowedSizes],
-  );
-  // Hours the user's plan includes at its own (largest allowed) size.
-  const ownHours = planOwnSizeHours(pricing, tiers.map((t) => t.name), includedHours);
-
-  // Keep the selection inside the plan's allowed set, and default to the
-  // first allowed size rather than to a constant. Undefined when the plan
-  // allows nothing at all, which is what makes Create unclickable.
-  const effectiveSize = useMemo((): DaemonSize | undefined => {
-    if (allowedSizes.length === 0) return undefined;
-    return size !== null && allowedSizes.includes(size) ? size : allowedSizes[0];
-  }, [allowedSizes, size]);
-
-  const accountGate = useAccountGate();
-  const createMut = useMutation({
-    mutationFn: () => {
-      // Refuse rather than guess. A size the plan does not allow is one the
-      // server rejects at CreateDaemon time, and guessing here would surface
-      // that as a mysterious failure after the user pressed Create.
-      if (effectiveSize === undefined) {
-        throw new Error("Your plan does not allow any machine sizes.");
-      }
-      return createMachine({
-        machine: { name: name.trim(), size: effectiveSize, idleTimeout },
-        repo,
-      });
-    },
-    onSuccess: (result) => {
-      reportRepoOutcome(result);
-      setName("");
-      setRepo(null);
-      setPickingRepo(false);
-      setIdleTimeout("30m");
-      setError("");
-      onCreated();
-    },
-    onError: (e) => {
-      if (accountGate.handleError(e, () => createMut.mutate())) return;
-      setError(describeError(e, "Failed to create machine"));
-    },
-  });
-
-  // The form wraps only the Name field, and Create submits it by `form` id.
-  // The repository picker is the same RepoSelector the project picker and
-  // onboarding use, and it carries its own <form> (its paste-a-URL box); a
-  // form nested inside this one is invalid HTML, and its Enter would submit
-  // the outer form and create the machine.
-  return (
-    <Modal open={open} onClose={onClose} title="Create Machine" maxWidth="max-w-xl">
-      <form
-        id={formId}
-        onSubmit={(e) => {
-          e.preventDefault();
-          setError("");
-          void accountGate.run(() => createMut.mutate());
-        }}
-      >
-        <Field label="Name" htmlFor="env-name">
-          <input
-            id="env-name"
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="my-machine"
-            className={inputCls}
-          />
-        </Field>
-      </form>
-
-      <Field
-        label={
-          <span className="inline-flex items-center gap-1.5">
-            <GitBranch className="h-4 w-4 text-muted-foreground" /> Repository
-            <span className="text-xs font-normal text-muted-foreground">(optional)</span>
-          </span>
-        }
-      >
-        {pickingRepo ? (
-          <div className="space-y-2" data-testid="create-machine-repo-picker">
-            <React.Suspense
-              fallback={<p className="py-4 text-center text-sm text-muted-foreground">Loading repositories…</p>}
-            >
-              <RepoSelector
-                onSelect={(picked) => {
-                  setRepo(picked);
-                  setPickingRepo(false);
-                }}
-                analyticsPhase="create_machine"
-              />
-            </React.Suspense>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setPickingRepo(false)}>
-              {repo ? `Keep ${repo.fullName}` : "Start without a repository"}
-            </Button>
-          </div>
-        ) : repo ? (
-          <CardInset className="flex items-center gap-3" data-testid="create-machine-selected-repo">
-            <Github className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium text-foreground">{repo.fullName}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                Cloned onto the machine at {cloudPathForRepo(repo)}
-              </div>
-            </div>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setPickingRepo(true)}>
-              Change
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              aria-label="Remove repository"
-              onClick={() => setRepo(null)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </CardInset>
-        ) : (
-          <CardInset className="flex items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">
-              None — the machine starts empty, and you can add projects to it later.
-            </p>
-            <Button type="button" variant="outline" size="sm" onClick={() => setPickingRepo(true)}>
-              <Github className="h-4 w-4" /> Choose repository
-            </Button>
-          </CardInset>
-        )}
-      </Field>
-
-      <Field label={<span className="inline-flex items-center gap-1.5"><Cpu className="h-4 w-4 text-muted-foreground" /> Size</span>}>
-        {/* A real radiogroup, not a row of styled buttons: this is a
-            single-choice control and assistive tech should be told so.
-            Two columns, not four: a card has to hold a name, a price and a
-            spec line, and at a quarter of this modal the spec wrapped
-            mid-phrase ("2GB" / "RAM"). */}
-        <div role="radiogroup" aria-label="Size" className="grid grid-cols-2 gap-2">
-          {tiers.map((t) => {
-            const selected = effectiveSize === t.value;
-            const labelId = `${formId}-size-${t.name}`;
-            const detailId = `${labelId}-detail`;
-            return (
-              <button
-                key={t.value}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                // Named by the size alone so "Small" is the radio's name;
-                // the price and specs describe it.
-                aria-labelledby={labelId}
-                aria-describedby={detailId}
-                onClick={() => setSize(t.value)}
-                className={cn(
-                  "rounded-lg border-2 p-3 text-left transition-colors",
-                  selected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-muted-foreground/40",
-                )}
-              >
-                <span id={labelId} className="block text-sm font-semibold text-foreground">{t.label}</span>
-                <div id={detailId} className="mt-1 whitespace-nowrap text-xs text-muted-foreground">{t.specs}</div>
-              </button>
-            );
-          })}
-        </div>
-        {tiers.length === 0 && (
-          <p className="text-xs text-muted-foreground">No sizes available on your current plan.</p>
-        )}
-        <p className="mt-2 text-xs text-muted-foreground" data-testid="size-pricing-note">
-          {machinePricingFootnote(ownHours)}
-        </p>
-      </Field>
-
-      <Field
-        label={<span className="inline-flex items-center gap-1.5"><Clock className="h-4 w-4 text-muted-foreground" /> Auto-suspend after inactivity</span>}
-        htmlFor="env-idle"
-      >
-        <select id="env-idle" value={idleTimeout} onChange={(e) => setIdleTimeout(e.target.value)} className={inputCls}>
-          {IDLE_TIMEOUT_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-muted-foreground">Suspended machines are not billed for compute.</p>
-      </Field>
-
-      <ErrorNote message={error} />
-
-      <div className="flex justify-end gap-3 border-t border-border pt-4">
-        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-        <Button
-          type="submit"
-          form={formId}
-          isLoading={createMut.isPending}
-          disabled={!name.trim() || tiers.length === 0}
-        >
-          {createMut.isPending ? "Creating…" : "Create"}
-        </Button>
-      </div>
-      {accountGate.modal}
     </Modal>
   );
 }
@@ -1326,7 +1000,7 @@ function MachineLifecycleActions({
           disabled={disabled}
           title={reason}
           onClick={onClick[action]}
-        >
+         size="xl">
           {icon[action]} {label[action]}
         </Button>
       ))}
@@ -1375,8 +1049,8 @@ function RestartMachineModal({
         </p>
       )}
       <div className="mt-6 flex justify-end gap-3">
-        <Button variant="outline" disabled={isPending} onClick={onClose}>Cancel</Button>
-        <Button isLoading={isPending} onClick={onConfirm}>
+        <Button variant="outline" disabled={isPending} onClick={onClose} size="xl">Cancel</Button>
+        <Button loading={isPending} onClick={onConfirm} size="xl">
           {isPending ? "Restarting…" : "Restart machine"}
         </Button>
       </div>
@@ -1538,12 +1212,12 @@ function ResizeMachineModal({
       <ErrorNote message={error} />
 
       <div className="mt-6 flex justify-end gap-3">
-        <Button variant="outline" disabled={isPending} onClick={onClose}>Cancel</Button>
+        <Button variant="outline" disabled={isPending} onClick={onClose} size="xl">Cancel</Button>
         <Button
-          isLoading={isPending}
+          loading={isPending}
           disabled={selected === null}
           onClick={() => selected !== null && onConfirm(selected)}
-        >
+         size="xl">
           {isPending ? "Resizing…" : running ? "Resize and restart" : "Resize"}
         </Button>
       </div>
@@ -1589,7 +1263,7 @@ function EnvironmentDetail({
   const [growDenied, setGrowDenied] = useState(false);
   // The grow RPC's own stage. With a restart, restartStage takes over after it.
   const [growStage, setGrowStage] = useState<GrowStage | null>(null);
-  const goToBilling = useGoToBilling();
+  const goToBilling = useGoToBilling("machines");
 
   // The detail view reads BOTH halves, from the service that owns each.
   //
@@ -1600,16 +1274,9 @@ function EnvironmentDetail({
   // domain, idle timeout, storage) come from control-plane's GetDaemon, which
   // is kept deliberately for exactly this: they have no reliant equivalent.
   // See docs/design/one-daemon-list.md.
-  const listQ = useQuery({
-    queryKey: QK.detailList,
-    queryFn: async () => {
-      const resp = await grpcClient
-        .daemonRegistry()
-        .listDaemons(create(ListDaemonsRequestSchema));
-      return resp.daemons;
-    },
+  const listQ = useQuery(daemonListQuery({
     refetchInterval: restartStage ? 2_000 : 15_000,
-  });
+  }));
   const daemon = listQ.data?.find((d) => d.daemonId === daemonId);
 
   const daemonQ = useQuery({
@@ -1628,8 +1295,7 @@ function EnvironmentDetail({
 
   const refetchAll = () => {
     qc.invalidateQueries({ queryKey: QK.daemon(daemonId) });
-    qc.invalidateQueries({ queryKey: QK.detailList });
-    qc.invalidateQueries({ queryKey: QK.daemons });
+    invalidateDaemonList(qc);
   };
 
   const suspendMut = useMutation({
@@ -1644,7 +1310,7 @@ function EnvironmentDetail({
   });
   const deleteMut = useMutation({
     mutationFn: () => deleteDaemon(daemonId),
-    onSuccess: () => { setDeleteOpen(false); qc.invalidateQueries({ queryKey: QK.daemons }); onBack(); },
+    onSuccess: () => { setDeleteOpen(false); invalidateDaemonList(qc); onBack(); },
     onError: (e) => setError(describeError(e, "Failed to delete machine")),
   });
 
@@ -1674,11 +1340,9 @@ function EnvironmentDetail({
       // list keeps the signal restartMachine waits on (phase SUSPENDED) and
       // the status the UI shows from coming out of two different services,
       // which is the disagreement docs/design/one-daemon-list.md removes.
+      // Through the shared entry, so each poll also moves the page's status.
       poll: async () => {
-        const resp = await grpcClient
-          .daemonRegistry()
-          .listDaemons(create(ListDaemonsRequestSchema));
-        const row = resp.daemons.find((d) => d.daemonId === daemonId);
+        const row = (await fetchDaemonList(qc)).find((d) => d.daemonId === daemonId);
         return {
           phase: row?.lifecyclePhase ?? LIFECYCLE_PHASE_UNSPECIFIED,
           status: row?.status ?? 0,
@@ -1897,14 +1561,16 @@ function EnvironmentDetail({
                     variant="danger"
                     disabled={busy || !removal.allowed}
                     onClick={() => setDeleteOpen(true)}
+                   size="xl"
+                    leftIcon={<Trash2 />}
                   >
-                    <Trash2 className="h-4 w-4" /> {external ? "Remove" : "Delete"}
+                    {external ? "Remove" : "Delete"}
                   </Button>
                 );
                 return removal.allowed ? (
                   button
                 ) : (
-                  <Tooltip content={removal.reason ?? ""} placement="bottom">
+                  <Tooltip content={removal.reason ?? ""} side="bottom">
                     {button}
                   </Tooltip>
                 );
@@ -2164,8 +1830,8 @@ function PortAccessPanel({ daemonId, workspaceBaseDomain }: { daemonId: string; 
               <option value={String(PortAccessMode.TOKEN)}>Token</option>
             </select>
           </div>
-          <Button type="submit" isLoading={addMut.isPending} disabled={!port}>
-            <Plus className="h-4 w-4" /> Add
+          <Button type="submit" loading={addMut.isPending} disabled={!port} size="xl" leftIcon={<Plus />}>
+            Add
           </Button>
         </form>
 
@@ -2200,8 +1866,8 @@ function PortAccessPanel({ daemonId, workspaceBaseDomain }: { daemonId: string; 
                         ) : "—"}
                       </Td>
                       <Td className="text-right">
-                        <Button variant="ghost" size="sm" disabled={removing} onClick={() => removeMut.mutate(r.port)}>
-                          <Trash2 className="h-4 w-4 text-destructive-ink" /> {removing ? "Removing…" : "Remove"}
+                        <Button variant="ghost" size="md" disabled={removing} onClick={() => removeMut.mutate(r.port)} leftIcon={<Trash2 className="text-destructive-ink" />}>
+                          {removing ? "Removing…" : "Remove"}
                         </Button>
                       </Td>
                     </Tr>
@@ -2236,12 +1902,12 @@ function TokenRevealModal({ token, onClose, title }: { token: string | null; onC
         </div>
         <div className="flex items-center gap-2">
           <code className="flex-1 overflow-x-auto rounded-md border border-border/60 bg-background px-3 py-2 font-mono text-sm text-foreground">{token}</code>
-          <Button variant="outline" onClick={copy}>
+          <Button variant="outline" onClick={copy} size="xl">
             {copied ? <><Check className="h-4 w-4 text-success-ink" /> Copied</> : <><Copy className="h-4 w-4" /> Copy</>}
           </Button>
         </div>
         <div className="flex justify-end">
-          <Button onClick={() => { setCopied(false); onClose(); }}>Done</Button>
+          <Button onClick={() => { setCopied(false); onClose(); }} size="xl">Done</Button>
         </div>
       </div>
     </Modal>

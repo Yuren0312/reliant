@@ -30,7 +30,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/access_token/v1/access_token.proto.
  */
 export const file_services_access_token_v1_access_token: GenFile = /*@__PURE__*/
-  fileDesc("CitzZXJ2aWNlcy9hY2Nlc3NfdG9rZW4vdjEvYWNjZXNzX3Rva2VuLnByb3RvEg9jb250cm9scGxhbmUudjEiTwoPT3JnTWVtYmVyR3JhbnRzEg8KB3VzZXJfaWQYASABKAkSDQoFZW1haWwYAiABKAkSDAoEcm9sZRgDIAEoCRIOCgZzY29wZXMYBCADKAkiHAoaTGlzdE9yZ01lbWJlckdyYW50c1JlcXVlc3QiYwobTGlzdE9yZ01lbWJlckdyYW50c1Jlc3BvbnNlEjEKB21lbWJlcnMYASADKAsyIC5jb250cm9scGxhbmUudjEuT3JnTWVtYmVyR3JhbnRzEhEKCWdyYW50YWJsZRgCIAMoCSI/ChxVcGRhdGVPcmdNZW1iZXJHcmFudHNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkSDgoGc2NvcGVzGAIgAygJIlEKHVVwZGF0ZU9yZ01lbWJlckdyYW50c1Jlc3BvbnNlEjAKBm1lbWJlchgBIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5PcmdNZW1iZXJHcmFudHMiKwoPUmVzb3VyY2VCaW5kaW5nEgwKBGtpbmQYASABKAkSCgoCaWQYAiABKAkinAMKC0FjY2Vzc1Rva2VuEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSFgoOZGlzcGxheV9wcmVmaXgYAyABKAkSDgoGc2NvcGVzGAQgAygJEhoKEmNyZWF0ZWRfYnlfdXNlcl9pZBgFIAEoCRIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpleHBpcmVzX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIwCgxsYXN0X3VzZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnJldm9rZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg4KBm9yZ19pZBgKIAEoCRIWCg5hY3RpbmdfdXNlcl9pZBgLIAEoCRIyCghyZXNvdXJjZRgMIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5SZXNvdXJjZUJpbmRpbmcSEQoJZXBoZW1lcmFsGA0gASgIImIKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEg4KBnNjb3BlcxgCIAMoCRIuCgpleHBpcmVzX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJSChNDcmVhdGVUb2tlblJlc3BvbnNlEisKBXRva2VuGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuEg4KBnNlY3JldBgCIAEoCSJFChFMaXN0VG9rZW5zUmVxdWVzdBIcCg9pbmNsdWRlX3Jldm9rZWQYASABKAhIAIgBAUISChBfaW5jbHVkZV9yZXZva2VkIkIKEkxpc3RUb2tlbnNSZXNwb25zZRIsCgZ0b2tlbnMYASADKAsyHC5jb250cm9scGxhbmUudjEuQWNjZXNzVG9rZW4iIAoSUmV2b2tlVG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJIkIKE1Jldm9rZVRva2VuUmVzcG9uc2USKwoFdG9rZW4YASABKAsyHC5jb250cm9scGxhbmUudjEuQWNjZXNzVG9rZW4iuwEKFENyZWF0ZU15VG9rZW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSDgoGc2NvcGVzGAIgAygJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjIKCHJlc291cmNlGAQgASgLMiAuY29udHJvbHBsYW5lLnYxLlJlc291cmNlQmluZGluZxIRCgllcGhlbWVyYWwYBSABKAgSDgoGcm90YXRlGAYgASgIImUKFUNyZWF0ZU15VG9rZW5SZXNwb25zZRIrCgV0b2tlbhgBIAEoCzIcLmNvbnRyb2xwbGFuZS52MS5BY2Nlc3NUb2tlbhIOCgZzZWNyZXQYAiABKAkSDwoHcm90YXRlZBgDIAEoCCJlChNMaXN0TXlUb2tlbnNSZXF1ZXN0EhwKD2luY2x1ZGVfcmV2b2tlZBgBIAEoCEgAiAEBEhIKBXNjb3BlGAIgASgJSAGIAQFCEgoQX2luY2x1ZGVfcmV2b2tlZEIICgZfc2NvcGUiRAoUTGlzdE15VG9rZW5zUmVzcG9uc2USLAoGdG9rZW5zGAEgAygLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuIiIKFFJldm9rZU15VG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJIhcKFVJldm9rZU15VG9rZW5SZXNwb25zZSJlChRVcGRhdGVNeVRva2VuUmVxdWVzdBIKCgJpZBgBIAEoCRIRCgRuYW1lGAIgASgJSACIAQESDgoGc2NvcGVzGAMgAygJEhUKDXVwZGF0ZV9zY29wZXMYBCABKAhCBwoFX25hbWUiRAoVVXBkYXRlTXlUb2tlblJlc3BvbnNlEisKBXRva2VuGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuIiYKFEV4Y2hhbmdlVG9rZW5SZXF1ZXN0Eg4KBnNjb3BlcxgBIAMoCSJUChVFeGNoYW5nZVRva2VuUmVzcG9uc2USKwoFdG9rZW4YASABKAsyHC5jb250cm9scGxhbmUudjEuQWNjZXNzVG9rZW4SDgoGc2VjcmV0GAIgASgJMrwLChJBY2Nlc3NUb2tlblNlcnZpY2USogEKC0NyZWF0ZVRva2VuEiMuY29udHJvbHBsYW5lLnYxLkNyZWF0ZVRva2VuUmVxdWVzdBokLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVUb2tlblJlc3BvbnNlIkiiuxhECAE6QAoGY3JlYXRlEjYKDGFjY2Vzc190b2tlbhIRcmVzcG9uc2UudG9rZW4uaWQaE3Jlc3BvbnNlLnRva2VuLm5hbWUSXQoKTGlzdFRva2VucxIiLmNvbnRyb2xwbGFuZS52MS5MaXN0VG9rZW5zUmVxdWVzdBojLmNvbnRyb2xwbGFuZS52MS5MaXN0VG9rZW5zUmVzcG9uc2UiBqK7GAIIARKVAQoLUmV2b2tlVG9rZW4SIy5jb250cm9scGxhbmUudjEuUmV2b2tlVG9rZW5SZXF1ZXN0GiQuY29udHJvbHBsYW5lLnYxLlJldm9rZVRva2VuUmVzcG9uc2UiO6K7GDcIARgBOjEKBnJldm9rZRInCgxhY2Nlc3NfdG9rZW4SAmlkGhNyZXNwb25zZS50b2tlbi5uYW1lErMBCg1DcmVhdGVNeVRva2VuEiUuY29udHJvbHBsYW5lLnYxLkNyZWF0ZU15VG9rZW5SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLkNyZWF0ZU15VG9rZW5SZXNwb25zZSJTorsYTwgBOksKBmNyZWF0ZRI2CgxhY2Nlc3NfdG9rZW4SEXJlc3BvbnNlLnRva2VuLmlkGhNyZXNwb25zZS50b2tlbi5uYW1lKgllcGhlbWVyYWwSYwoMTGlzdE15VG9rZW5zEiQuY29udHJvbHBsYW5lLnYxLkxpc3RNeVRva2Vuc1JlcXVlc3QaJS5jb250cm9scGxhbmUudjEuTGlzdE15VG9rZW5zUmVzcG9uc2UiBqK7GAIIARKGAQoNUmV2b2tlTXlUb2tlbhIlLmNvbnRyb2xwbGFuZS52MS5SZXZva2VNeVRva2VuUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5SZXZva2VNeVRva2VuUmVzcG9uc2UiJqK7GCIIARgBOhwKBnJldm9rZRISCgxhY2Nlc3NfdG9rZW4SAmlkEpkBCg1VcGRhdGVNeVRva2VuEiUuY29udHJvbHBsYW5lLnYxLlVwZGF0ZU15VG9rZW5SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLlVwZGF0ZU15VG9rZW5SZXNwb25zZSI5orsYNQgBOjEKBnVwZGF0ZRInCgxhY2Nlc3NfdG9rZW4SAmlkGhNyZXNwb25zZS50b2tlbi5uYW1lEq0BCg1FeGNoYW5nZVRva2VuEiUuY29udHJvbHBsYW5lLnYxLkV4Y2hhbmdlVG9rZW5SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLkV4Y2hhbmdlVG9rZW5SZXNwb25zZSJNorsYSQgBOkU6Q21pbnRzIGEgc2hvcnQtbGl2ZWQgc2Vzc2lvbiB0b2tlbiBmb3IgdGhlIENMSTsgYXVkaXRfbG9nIHJlY29yZHMgaXQSeAoTTGlzdE9yZ01lbWJlckdyYW50cxIrLmNvbnRyb2xwbGFuZS52MS5MaXN0T3JnTWVtYmVyR3JhbnRzUmVxdWVzdBosLmNvbnRyb2xwbGFuZS52MS5MaXN0T3JnTWVtYmVyR3JhbnRzUmVzcG9uc2UiBqK7GAIIARKfAQoVVXBkYXRlT3JnTWVtYmVyR3JhbnRzEi0uY29udHJvbHBsYW5lLnYxLlVwZGF0ZU9yZ01lbWJlckdyYW50c1JlcXVlc3QaLi5jb250cm9scGxhbmUudjEuVXBkYXRlT3JnTWVtYmVyR3JhbnRzUmVzcG9uc2UiJ6K7GCMIATofCgpzZXRfZ3JhbnRzEhEKBm1lbWJlchIHdXNlcl9pZELeAQoTY29tLmNvbnRyb2xwbGFuZS52MUIQQWNjZXNzVG9rZW5Qcm90b1ABWlhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvYWNjZXNzX3Rva2VuL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CitzZXJ2aWNlcy9hY2Nlc3NfdG9rZW4vdjEvYWNjZXNzX3Rva2VuLnByb3RvEg9jb250cm9scGxhbmUudjEiTwoPT3JnTWVtYmVyR3JhbnRzEg8KB3VzZXJfaWQYASABKAkSDQoFZW1haWwYAiABKAkSDAoEcm9sZRgDIAEoCRIOCgZzY29wZXMYBCADKAkiPAoaTGlzdE9yZ01lbWJlckdyYW50c1JlcXVlc3QSEwoGb3JnX2lkGAEgASgJSACIAQFCCQoHX29yZ19pZCJjChtMaXN0T3JnTWVtYmVyR3JhbnRzUmVzcG9uc2USMQoHbWVtYmVycxgBIAMoCzIgLmNvbnRyb2xwbGFuZS52MS5PcmdNZW1iZXJHcmFudHMSEQoJZ3JhbnRhYmxlGAIgAygJIl8KHFVwZGF0ZU9yZ01lbWJlckdyYW50c1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCRIOCgZzY29wZXMYAiADKAkSEwoGb3JnX2lkGAMgASgJSACIAQFCCQoHX29yZ19pZCJRCh1VcGRhdGVPcmdNZW1iZXJHcmFudHNSZXNwb25zZRIwCgZtZW1iZXIYASABKAsyIC5jb250cm9scGxhbmUudjEuT3JnTWVtYmVyR3JhbnRzIisKD1Jlc291cmNlQmluZGluZxIMCgRraW5kGAEgASgJEgoKAmlkGAIgASgJIpwDCgtBY2Nlc3NUb2tlbhIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEhYKDmRpc3BsYXlfcHJlZml4GAMgASgJEg4KBnNjb3BlcxgEIAMoCRIaChJjcmVhdGVkX2J5X3VzZXJfaWQYBSABKAkSLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF91c2VkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpyZXZva2VkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIOCgZvcmdfaWQYCiABKAkSFgoOYWN0aW5nX3VzZXJfaWQYCyABKAkSMgoIcmVzb3VyY2UYDCABKAsyIC5jb250cm9scGxhbmUudjEuUmVzb3VyY2VCaW5kaW5nEhEKCWVwaGVtZXJhbBgNIAEoCCKCAQoSQ3JlYXRlVG9rZW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSDgoGc2NvcGVzGAIgAygJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKBm9yZ19pZBgEIAEoCUgAiAEBQgkKB19vcmdfaWQiUgoTQ3JlYXRlVG9rZW5SZXNwb25zZRIrCgV0b2tlbhgBIAEoCzIcLmNvbnRyb2xwbGFuZS52MS5BY2Nlc3NUb2tlbhIOCgZzZWNyZXQYAiABKAkiZQoRTGlzdFRva2Vuc1JlcXVlc3QSHAoPaW5jbHVkZV9yZXZva2VkGAEgASgISACIAQESEwoGb3JnX2lkGAIgASgJSAGIAQFCEgoQX2luY2x1ZGVfcmV2b2tlZEIJCgdfb3JnX2lkIkIKEkxpc3RUb2tlbnNSZXNwb25zZRIsCgZ0b2tlbnMYASADKAsyHC5jb250cm9scGxhbmUudjEuQWNjZXNzVG9rZW4iQAoSUmV2b2tlVG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJEhMKBm9yZ19pZBgCIAEoCUgAiAEBQgkKB19vcmdfaWQiQgoTUmV2b2tlVG9rZW5SZXNwb25zZRIrCgV0b2tlbhgBIAEoCzIcLmNvbnRyb2xwbGFuZS52MS5BY2Nlc3NUb2tlbiLbAQoUQ3JlYXRlTXlUb2tlblJlcXVlc3QSDAoEbmFtZRgBIAEoCRIOCgZzY29wZXMYAiADKAkSLgoKZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMgoIcmVzb3VyY2UYBCABKAsyIC5jb250cm9scGxhbmUudjEuUmVzb3VyY2VCaW5kaW5nEhEKCWVwaGVtZXJhbBgFIAEoCBIOCgZyb3RhdGUYBiABKAgSEwoGb3JnX2lkGAcgASgJSACIAQFCCQoHX29yZ19pZCJlChVDcmVhdGVNeVRva2VuUmVzcG9uc2USKwoFdG9rZW4YASABKAsyHC5jb250cm9scGxhbmUudjEuQWNjZXNzVG9rZW4SDgoGc2VjcmV0GAIgASgJEg8KB3JvdGF0ZWQYAyABKAgihQEKE0xpc3RNeVRva2Vuc1JlcXVlc3QSHAoPaW5jbHVkZV9yZXZva2VkGAEgASgISACIAQESEgoFc2NvcGUYAiABKAlIAYgBARITCgZvcmdfaWQYAyABKAlIAogBAUISChBfaW5jbHVkZV9yZXZva2VkQggKBl9zY29wZUIJCgdfb3JnX2lkIkQKFExpc3RNeVRva2Vuc1Jlc3BvbnNlEiwKBnRva2VucxgBIAMoCzIcLmNvbnRyb2xwbGFuZS52MS5BY2Nlc3NUb2tlbiJCChRSZXZva2VNeVRva2VuUmVxdWVzdBIKCgJpZBgBIAEoCRITCgZvcmdfaWQYAiABKAlIAIgBAUIJCgdfb3JnX2lkIhcKFVJldm9rZU15VG9rZW5SZXNwb25zZSJSCh1SZXNldERhZW1vblNjb3BlUG9saWN5UmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSEwoGb3JnX2lkGAIgASgJSACIAQFCCQoHX29yZ19pZCIgCh5SZXNldERhZW1vblNjb3BlUG9saWN5UmVzcG9uc2UihQEKFFVwZGF0ZU15VG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJEhEKBG5hbWUYAiABKAlIAIgBARIOCgZzY29wZXMYAyADKAkSFQoNdXBkYXRlX3Njb3BlcxgEIAEoCBITCgZvcmdfaWQYBSABKAlIAYgBAUIHCgVfbmFtZUIJCgdfb3JnX2lkIkQKFVVwZGF0ZU15VG9rZW5SZXNwb25zZRIrCgV0b2tlbhgBIAEoCzIcLmNvbnRyb2xwbGFuZS52MS5BY2Nlc3NUb2tlbiImChRFeGNoYW5nZVRva2VuUmVxdWVzdBIOCgZzY29wZXMYASADKAkiVAoVRXhjaGFuZ2VUb2tlblJlc3BvbnNlEisKBXRva2VuGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLkFjY2Vzc1Rva2VuEg4KBnNlY3JldBgCIAEoCTLrDAoSQWNjZXNzVG9rZW5TZXJ2aWNlEqIBCgtDcmVhdGVUb2tlbhIjLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVUb2tlblJlcXVlc3QaJC5jb250cm9scGxhbmUudjEuQ3JlYXRlVG9rZW5SZXNwb25zZSJIorsYRAgBOkAKBmNyZWF0ZRI2CgxhY2Nlc3NfdG9rZW4SEXJlc3BvbnNlLnRva2VuLmlkGhNyZXNwb25zZS50b2tlbi5uYW1lEl0KCkxpc3RUb2tlbnMSIi5jb250cm9scGxhbmUudjEuTGlzdFRva2Vuc1JlcXVlc3QaIy5jb250cm9scGxhbmUudjEuTGlzdFRva2Vuc1Jlc3BvbnNlIgaiuxgCCAESlQEKC1Jldm9rZVRva2VuEiMuY29udHJvbHBsYW5lLnYxLlJldm9rZVRva2VuUmVxdWVzdBokLmNvbnRyb2xwbGFuZS52MS5SZXZva2VUb2tlblJlc3BvbnNlIjuiuxg3CAEYAToxCgZyZXZva2USJwoMYWNjZXNzX3Rva2VuEgJpZBoTcmVzcG9uc2UudG9rZW4ubmFtZRKzAQoNQ3JlYXRlTXlUb2tlbhIlLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVNeVRva2VuUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVNeVRva2VuUmVzcG9uc2UiU6K7GE8IATpLCgZjcmVhdGUSNgoMYWNjZXNzX3Rva2VuEhFyZXNwb25zZS50b2tlbi5pZBoTcmVzcG9uc2UudG9rZW4ubmFtZSoJZXBoZW1lcmFsEmMKDExpc3RNeVRva2VucxIkLmNvbnRyb2xwbGFuZS52MS5MaXN0TXlUb2tlbnNSZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLkxpc3RNeVRva2Vuc1Jlc3BvbnNlIgaiuxgCCAEShgEKDVJldm9rZU15VG9rZW4SJS5jb250cm9scGxhbmUudjEuUmV2b2tlTXlUb2tlblJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuUmV2b2tlTXlUb2tlblJlc3BvbnNlIiaiuxgiCAEYATocCgZyZXZva2USEgoMYWNjZXNzX3Rva2VuEgJpZBKZAQoNVXBkYXRlTXlUb2tlbhIlLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVNeVRva2VuUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVNeVRva2VuUmVzcG9uc2UiOaK7GDUIAToxCgZ1cGRhdGUSJwoMYWNjZXNzX3Rva2VuEgJpZBoTcmVzcG9uc2UudG9rZW4ubmFtZRKsAQoWUmVzZXREYWVtb25TY29wZVBvbGljeRIuLmNvbnRyb2xwbGFuZS52MS5SZXNldERhZW1vblNjb3BlUG9saWN5UmVxdWVzdBovLmNvbnRyb2xwbGFuZS52MS5SZXNldERhZW1vblNjb3BlUG9saWN5UmVzcG9uc2UiMaK7GC0IATopCgVyZXNldBIgChNkYWVtb25fc2NvcGVfcG9saWN5EglkYWVtb25faWQSrQEKDUV4Y2hhbmdlVG9rZW4SJS5jb250cm9scGxhbmUudjEuRXhjaGFuZ2VUb2tlblJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuRXhjaGFuZ2VUb2tlblJlc3BvbnNlIk2iuxhJCAE6RTpDbWludHMgYSBzaG9ydC1saXZlZCBzZXNzaW9uIHRva2VuIGZvciB0aGUgQ0xJOyBhdWRpdF9sb2cgcmVjb3JkcyBpdBJ4ChNMaXN0T3JnTWVtYmVyR3JhbnRzEisuY29udHJvbHBsYW5lLnYxLkxpc3RPcmdNZW1iZXJHcmFudHNSZXF1ZXN0GiwuY29udHJvbHBsYW5lLnYxLkxpc3RPcmdNZW1iZXJHcmFudHNSZXNwb25zZSIGorsYAggBEp8BChVVcGRhdGVPcmdNZW1iZXJHcmFudHMSLS5jb250cm9scGxhbmUudjEuVXBkYXRlT3JnTWVtYmVyR3JhbnRzUmVxdWVzdBouLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVPcmdNZW1iZXJHcmFudHNSZXNwb25zZSInorsYIwgBOh8KCnNldF9ncmFudHMSEQoGbWVtYmVyEgd1c2VyX2lkQt4BChNjb20uY29udHJvbHBsYW5lLnYxQhBBY2Nlc3NUb2tlblByb3RvUAFaWGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9hY2Nlc3NfdG9rZW4vdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * OrgMemberGrants is one member and the org permissions they hold.
@@ -76,6 +76,14 @@ export const OrgMemberGrantsSchema: GenMessage<OrgMemberGrants> = /*@__PURE__*/
  * @generated from message controlplane.v1.ListOrgMemberGrantsRequest
  */
 export type ListOrgMemberGrantsRequest = Message<"controlplane.v1.ListOrgMemberGrantsRequest"> & {
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 1;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -128,6 +136,15 @@ export type UpdateOrgMemberGrantsRequest = Message<"controlplane.v1.UpdateOrgMem
    * @generated from field: repeated string scopes = 2;
    */
   scopes: string[];
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 3;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -278,6 +295,15 @@ export type CreateTokenRequest = Message<"controlplane.v1.CreateTokenRequest"> &
    * @generated from field: google.protobuf.Timestamp expires_at = 3;
    */
   expiresAt?: Timestamp | undefined;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 4;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -319,6 +345,15 @@ export type ListTokensRequest = Message<"controlplane.v1.ListTokensRequest"> & {
    * @generated from field: optional bool include_revoked = 1;
    */
   includeRevoked?: boolean | undefined;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -353,6 +388,15 @@ export type RevokeTokenRequest = Message<"controlplane.v1.RevokeTokenRequest"> &
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -418,6 +462,15 @@ export type CreateMyTokenRequest = Message<"controlplane.v1.CreateMyTokenRequest
    * @generated from field: bool rotate = 6;
    */
   rotate: boolean;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 7;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -472,6 +525,15 @@ export type ListMyTokensRequest = Message<"controlplane.v1.ListMyTokensRequest">
    * @generated from field: optional string scope = 2;
    */
   scope?: string | undefined;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 3;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -506,6 +568,15 @@ export type RevokeMyTokenRequest = Message<"controlplane.v1.RevokeMyTokenRequest
    * @generated from field: string id = 1;
    */
   id: string;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -527,6 +598,45 @@ export type RevokeMyTokenResponse = Message<"controlplane.v1.RevokeMyTokenRespon
  */
 export const RevokeMyTokenResponseSchema: GenMessage<RevokeMyTokenResponse> = /*@__PURE__*/
   messageDesc(file_services_access_token_v1_access_token, 18);
+
+/**
+ * @generated from message controlplane.v1.ResetDaemonScopePolicyRequest
+ */
+export type ResetDaemonScopePolicyRequest = Message<"controlplane.v1.ResetDaemonScopePolicyRequest"> & {
+  /**
+   * @generated from field: string daemon_id = 1;
+   */
+  daemonId: string;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.ResetDaemonScopePolicyRequest.
+ * Use `create(ResetDaemonScopePolicyRequestSchema)` to create a new message.
+ */
+export const ResetDaemonScopePolicyRequestSchema: GenMessage<ResetDaemonScopePolicyRequest> = /*@__PURE__*/
+  messageDesc(file_services_access_token_v1_access_token, 19);
+
+/**
+ * @generated from message controlplane.v1.ResetDaemonScopePolicyResponse
+ */
+export type ResetDaemonScopePolicyResponse = Message<"controlplane.v1.ResetDaemonScopePolicyResponse"> & {
+};
+
+/**
+ * Describes the message controlplane.v1.ResetDaemonScopePolicyResponse.
+ * Use `create(ResetDaemonScopePolicyResponseSchema)` to create a new message.
+ */
+export const ResetDaemonScopePolicyResponseSchema: GenMessage<ResetDaemonScopePolicyResponse> = /*@__PURE__*/
+  messageDesc(file_services_access_token_v1_access_token, 20);
 
 /**
  * @generated from message controlplane.v1.UpdateMyTokenRequest
@@ -565,6 +675,15 @@ export type UpdateMyTokenRequest = Message<"controlplane.v1.UpdateMyTokenRequest
    * @generated from field: bool update_scopes = 4;
    */
   updateScopes: boolean;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 5;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -572,7 +691,7 @@ export type UpdateMyTokenRequest = Message<"controlplane.v1.UpdateMyTokenRequest
  * Use `create(UpdateMyTokenRequestSchema)` to create a new message.
  */
 export const UpdateMyTokenRequestSchema: GenMessage<UpdateMyTokenRequest> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 19);
+  messageDesc(file_services_access_token_v1_access_token, 21);
 
 /**
  * @generated from message controlplane.v1.UpdateMyTokenResponse
@@ -589,7 +708,7 @@ export type UpdateMyTokenResponse = Message<"controlplane.v1.UpdateMyTokenRespon
  * Use `create(UpdateMyTokenResponseSchema)` to create a new message.
  */
 export const UpdateMyTokenResponseSchema: GenMessage<UpdateMyTokenResponse> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 20);
+  messageDesc(file_services_access_token_v1_access_token, 22);
 
 /**
  * @generated from message controlplane.v1.ExchangeTokenRequest
@@ -610,7 +729,7 @@ export type ExchangeTokenRequest = Message<"controlplane.v1.ExchangeTokenRequest
  * Use `create(ExchangeTokenRequestSchema)` to create a new message.
  */
 export const ExchangeTokenRequestSchema: GenMessage<ExchangeTokenRequest> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 21);
+  messageDesc(file_services_access_token_v1_access_token, 23);
 
 /**
  * @generated from message controlplane.v1.ExchangeTokenResponse
@@ -634,7 +753,7 @@ export type ExchangeTokenResponse = Message<"controlplane.v1.ExchangeTokenRespon
  * Use `create(ExchangeTokenResponseSchema)` to create a new message.
  */
 export const ExchangeTokenResponseSchema: GenMessage<ExchangeTokenResponse> = /*@__PURE__*/
-  messageDesc(file_services_access_token_v1_access_token, 22);
+  messageDesc(file_services_access_token_v1_access_token, 24);
 
 /**
  * @generated from service controlplane.v1.AccessTokenService
@@ -711,6 +830,10 @@ export const AccessTokenService: GenService<{
    * checked against the caller's org permissions exactly as a mint is, so
    * editing is never a way to widen past what the user holds. Rotation is
    * deliberately not an operation here — it is mint-new plus revoke-old.
+   * For a daemon-bound token a scope edit ONLY NARROWS, atomically persisting
+   * a per-daemon ceiling that also clips existing helpers and future renewals.
+   * Label-only edits and revocation leave that ceiling alone. To restore full
+   * authority explicitly ResetDaemonScopePolicy, then reissue via user login.
    *
    * @generated from rpc controlplane.v1.AccessTokenService.UpdateMyToken
    */
@@ -720,20 +843,27 @@ export const AccessTokenService: GenService<{
     output: typeof UpdateMyTokenResponseSchema;
   },
   /**
-   * ExchangeToken is the ON-DEMAND ELEVATION a machine credential acting as a
-   * person uses to do what that person's role allows — without the credential
-   * itself being permanently widened. forge calls it when a command is refused
-   * for a missing scope (domain:read, cluster:manage), so a signed-in user
-   * never runs a second login.
+   * ResetDaemonScopePolicy explicitly restores full user-granted defaults for
+   * FUTURE credentials of one owned daemon. User session only. Existing token
+   * scope sets are never widened: reissue through authenticated login afterwards.
+   * Renewal, label edits and token revocation never reset this durable policy.
    *
-   * Caller: a machine credential that ACTS AS A USER and holds deploy:write
-   * (a `forge login` token, or one Reliant's credential helper minted). The
-   * granted scopes are the requested ones that are exchangeable AND that the
-   * acting user holds in the credential's org AT THIS MOMENT — so a demoted
-   * user's old token elevates to nothing. The result lives at most an hour and
-   * never outlives the caller, acts as the same user in the same org, and
-   * inherits the caller's binding: cluster:manage cannot ride a daemon binding,
-   * so a managed daemon's credential can never obtain it.
+   * @generated from rpc controlplane.v1.AccessTokenService.ResetDaemonScopePolicy
+   */
+  resetDaemonScopePolicy: {
+    methodKind: "unary";
+    input: typeof ResetDaemonScopePolicyRequestSchema;
+    output: typeof ResetDaemonScopePolicyResponseSchema;
+  },
+  /**
+   * ExchangeToken attenuates a machine credential acting as a person to a
+   * short-lived helper. It NEVER widens: requested scopes must be explicitly
+   * held by the caller (not merely implied by write), exchangeable, and still
+   * held by the acting user in the credential's own org. A narrowed credential
+   * must be reissued through authenticated user login to regain permissions.
+   * Caller must hold deploy:write. The result lives at most an hour, never
+   * outlives the caller, and inherits its user, org and resource binding.
+   * All org capabilities may ride a daemon binding, including cluster:manage.
    *
    * @generated from rpc controlplane.v1.AccessTokenService.ExchangeToken
    */

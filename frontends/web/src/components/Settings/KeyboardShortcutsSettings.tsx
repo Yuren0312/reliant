@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { cn } from "../../lib/utils";
 import { effectiveBinding, useShortcutsStore } from "../../store/shortcutsStore";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { RotateCcw, Edit3, Check, X, AlertTriangle, Keyboard, Globe } from "lucide-react";
 import { toast } from "../../lib/toast-manager";
 import {
@@ -251,18 +251,16 @@ function KeyInput({
             // Saving mid-sequence would store a bare prefix, which shadows
             // every sequence that starts with it.
             disabled={!value || !!conflictWarning || !!pendingPrefix}
-          >
-            <Check className="w-4 h-4" />
-          </Button>
-          <Button size="sm" variant="ghost" onClick={onCancel}>
-            <X className="w-4 h-4" />
-          </Button>
+            icon={<Check />}
+            aria-label="Save shortcut"
+          />
+          <Button size="sm" variant="ghost" onClick={onCancel} icon={<X />} aria-label="Cancel" />
         </div>
       </div>
 
       {/* Advisory, not blocking: the user may know better than our table. */}
       {reservationWarning && !conflictWarning && (
-        <div className="flex items-start gap-1 text-xs text-amber-600 dark:text-amber-500">
+        <div className="flex items-start gap-1 text-xs text-warning-ink">
           <Globe className="w-3 h-3 mt-0.5 shrink-0" />
           <span>{reservationWarning}</span>
         </div>
@@ -345,8 +343,8 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
   return (
     <div
       className={cn(
-        "group px-4 py-3 hover:elevation-1 transition-colors",
-        isEditingThis && "elevation-1"
+        "group px-4 py-3 hover:bg-foreground/5 transition-colors",
+        isEditingThis && "bg-foreground/5"
       )}
     >
       <div className="space-y-3">
@@ -371,7 +369,7 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
                 reservationWarning={reservationWarning}
               />
             ) : (
-              <kbd className="px-2 py-1 bg-muted rounded border border-border/40 text-xs font-mono min-w-[120px] text-center">
+              <kbd className="px-2 py-1 rounded border border-border bg-background text-xs font-mono min-w-[120px] text-center">
                 {formatAuthored(effective)}
               </kbd>
             )}
@@ -379,13 +377,9 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
             <div className="flex items-center gap-1">
               {!isEditingThis && (
                 <>
-                  <Button size="sm" variant="outline" onClick={handleEdit}>
-                    <Edit3 className="w-3 h-3" />
-                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleEdit} icon={<Edit3 />} aria-label="Edit shortcut" />
                   {!isDefault && (
-                    <Button size="sm" variant="ghost" onClick={handleReset}>
-                      <RotateCcw className="w-3 h-3" />
-                    </Button>
+                    <Button size="sm" variant="ghost" onClick={handleReset} icon={<RotateCcw />} aria-label="Reset to default" />
                   )}
                 </>
               )}
@@ -417,17 +411,13 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
               </div>
             ) : (
               <>
-                <kbd className="px-2 py-1 bg-muted rounded border border-border/40 text-xs font-mono flex-1 text-center">
+                <kbd className="px-2 py-1 rounded border border-border bg-background text-xs font-mono flex-1 text-center">
                   {formatAuthored(effective)}
                 </kbd>
                 <div className="flex items-center gap-1">
-                  <Button size="sm" variant="outline" onClick={handleEdit}>
-                    <Edit3 className="w-3 h-3" />
-                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleEdit} icon={<Edit3 />} aria-label="Edit shortcut" />
                   {!isDefault && (
-                    <Button size="sm" variant="ghost" onClick={handleReset}>
-                      <RotateCcw className="w-3 h-3" />
-                    </Button>
+                    <Button size="sm" variant="ghost" onClick={handleReset} icon={<RotateCcw />} aria-label="Reset to default" />
                   )}
                 </div>
               </>
@@ -443,7 +433,7 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
         )}
 
         {unavailableOverride && !isEditingThis && (
-          <div className="flex items-start gap-1 text-xs text-amber-600 dark:text-amber-500">
+          <div className="flex items-start gap-1 text-xs text-warning-ink">
             <Globe className="w-3 h-3 mt-0.5 shrink-0" />
             <span>
               Your binding {formatAuthored(unavailableOverride)} is taken by the
@@ -465,8 +455,13 @@ export function KeyboardShortcutsSettings() {
     initializeShortcuts();
   }, [initializeShortcuts]);
 
-  // Group shortcuts by category
-  const categories = Object.values(shortcuts).reduce((acc, shortcut) => {
+  // Group shortcuts by category. A desktop-only shortcut does not exist in a
+  // browser tab, so the web lists only what can fire there.
+  const { isDesktop } = detectPlatform();
+  const available = Object.values(shortcuts).filter(
+    (shortcut) => isDesktop || !shortcut.desktopOnly,
+  );
+  const categories = available.reduce((acc, shortcut) => {
     if (!acc[shortcut.category]) {
       acc[shortcut.category] = [];
     }
@@ -543,8 +538,7 @@ export function KeyboardShortcutsSettings() {
                 }
               }
             }}
-            className="flex items-center gap-2"
-            rightIcon={<RotateCcw className="w-4 h-4" />}
+            rightIcon={<RotateCcw />}
           >
             Reset All
           </Button>
@@ -558,7 +552,7 @@ export function KeyboardShortcutsSettings() {
             <h3 className="text-sm font-semibold text-foreground mb-3">
               {category}
             </h3>
-            <div className="border border-border/40 rounded-lg overflow-hidden bg-card">
+            <div className="rounded-lg border border-border overflow-hidden bg-card">
               {shortcuts.map((shortcut, index) => (
                 <div key={shortcut.id}>
                   <ShortcutRow shortcutId={shortcut.id} />
@@ -580,7 +574,7 @@ export function KeyboardShortcutsSettings() {
       )}
 
       {/* Tips */}
-      <div className="mt-8 p-4 elevation-1 rounded-lg border border-border/40">
+      <div className="mt-8 p-4 rounded-lg border border-border/60 bg-background">
         <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
           <Keyboard className="w-4 h-4" />
           Tips

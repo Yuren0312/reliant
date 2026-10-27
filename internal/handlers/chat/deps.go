@@ -49,6 +49,8 @@ type Repository interface {
 	ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error)
 	IsLatestTurnInThread(ctx context.Context, threadID, messageID string) (bool, error)
 	CountMessagesInThread(ctx context.Context, threadID string) (int, error)
+	CountMessagesInChatOutsideThread(ctx context.Context, chatID, threadID string) (int, error)
+	ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64) ([]*db.Message, error)
 	GetWorkflowByThread(ctx context.Context, chatID, thread string) (*db.Workflow, error)
 	ListWorkflowsByChat(ctx context.Context, chatID string) ([]*db.Workflow, error)
 
@@ -57,6 +59,7 @@ type Repository interface {
 	ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*db.MessageContentBlock, error)
 	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
 	GetToolResultBlock(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error)
+	ListToolResultBlocks(ctx context.Context, toolCallID string) ([]*db.MessageContentBlock, error)
 	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
 
 	// The agent mailbox: messages queued for a thread until it can take them.
@@ -86,6 +89,7 @@ type Repository interface {
 
 	// Worktrees a chat list resolves and a branch un-archives.
 	ListWorktreesByIDs(ctx context.Context, ids []string) ([]*db.Worktree, error)
+	ListMainWorktreesForUser(ctx context.Context, userID string, projectID *string) ([]*db.Worktree, error)
 	UnarchiveWorktree(ctx context.Context, id string) error
 
 	// The durable state a resumed run is rebuilt from. The callees that
@@ -97,6 +101,9 @@ type Repository interface {
 	ListToolGrants(ctx context.Context, chatID string) ([]*db.ToolGrant, error)
 	GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string) (*db.StoppedSpawnAgent, error)
 	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
+	// CreateNumberedMessage appends a message the handler builds itself (the
+	// branch repair), numbered from the counters.
+	CreateNumberedMessage(ctx context.Context, msg *db.Message) error
 
 	// GetChat, CreateChat, UpdateChat, GetThread, SaveMessageToThread,
 	// GetWorkflow, RunTx and the rest of the 74 methods the handlers call
@@ -107,5 +114,6 @@ type Repository interface {
 	chatselection.Store
 	daemonchoice.Reader
 	daemonplacement.WorktreeReader
-	messageproto.ToolCallReader
+	daemonplacement.PinStore
+	messageproto.Reader
 }

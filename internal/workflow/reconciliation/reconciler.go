@@ -33,6 +33,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
@@ -89,10 +90,14 @@ import (
 // stranded-spawn repairs, orphaned mailbox resolution — is unconditional too.
 //
 // Every anomaly class increments reliant_reconciler_anomalies_total and logs
-// at ERROR (which the logging package forwards to Sentry).
+// at ERROR (each an issue in forge's ClickStack).
 type Reconciler struct {
 	repo       ReconcilerStore
 	tempClient client.Client
+
+	// owners answers whose chat a pass is working on, so the records it logs
+	// name a user (see scope).
+	owners *telemetry.ChatOwnerCache
 
 	// Background polling state
 	mu          sync.Mutex
@@ -246,6 +251,16 @@ const (
 	// for a run Temporal stopped outright, where no workflow code ran to
 	// cascade. Expected, not a bug; see reapOrphanedDescendants.
 	anomalyOrphanDescendantReapedAfterTerminate = "orphan_descendant_reaped_after_terminate"
+	// anomalyStrandedStartFailed is a PENDING root whose launch committed but
+	// whose run never reached Temporal within strandedStartBound, with no
+	// failed start recorded: whoever was starting it died between the commit
+	// and the start, or lost the write. Recorded as a failed start, so a
+	// trigger's next fire stops treating it as in flight. See
+	// markStrandedStarts.
+	anomalyStrandedStartFailed = "stranded_start_failed"
+	// anomalyStrandedStartRepaired is the same PENDING root, but Temporal has
+	// its run: the launch's mark-active was lost. Moved to ACTIVE.
+	anomalyStrandedStartRepaired = "stranded_start_repaired"
 )
 
 // Debounce defaults: a stuck task must be observed on at least
@@ -474,6 +489,7 @@ func NewReconciler(repo ReconcilerStore, tempClient client.Client, config *Recon
 	return &Reconciler{
 		repo:                    repo,
 		tempClient:              tempClient,
+		owners:                  telemetry.NewChatOwnerCache(chatOwnerOf(repo), time.Hour, 10000),
 		pollInterval:            cfg.PollInterval,
 		stuckActivityThreshold:  cfg.StuckActivityThreshold,
 		taskQueue:               cfg.TaskQueue,
@@ -490,6 +506,38 @@ func NewReconciler(repo ReconcilerStore, tempClient client.Client, config *Recon
 		stopPolling:             make(chan struct{}),
 		pollDone:                make(chan struct{}),
 	}
+}
+
+// chatOwnerOf reads a chat's user off repo.
+func chatOwnerOf(repo ReconcilerStore) func(ctx context.Context, chatID string) (string, error) {
+	return func(ctx context.Context, chatID string) (string, error) {
+		chat, err := repo.GetChat(ctx, chatID)
+		if err != nil || chat == nil {
+			return "", err
+		}
+		return chat.UserID, nil
+	}
+}
+
+func derefString(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+// scope returns ctx scoped to the run a pass is working on, so every record
+// logged with it (logging.*Context) carries user.id, reliant.chat.id, thread.id
+// and workflow.id without each of the sweep's log calls saying so. A reconciler
+// has no request to take a user from; the chat's owner is the user an issue
+// raised here affected.
+func (r *Reconciler) scope(ctx context.Context, chatID, threadID, workflowID string) context.Context {
+	return telemetry.WithRunScope(ctx, telemetry.RunScope{
+		UserID:     r.owners.Owner(ctx, chatID),
+		ChatID:     chatID,
+		ThreadID:   threadID,
+		WorkflowID: workflowID,
+	})
 }
 
 // TemporalWorkflowState represents the actual state from Temporal
@@ -609,7 +657,7 @@ func (s *passStats) snapshot() (total int, summary string) {
 
 // recordAnomaly increments the Prometheus anomaly counter for the class and
 // adds it to the per-pass summary. Callers pair every recordAnomaly with a
-// context-rich ERROR log (which the logging package forwards to Sentry —
+// context-rich ERROR log (an issue in forge's ClickStack —
 // these classes are actionable and must never be suppressed).
 func (r *Reconciler) recordAnomaly(stats *passStats, class string) {
 	observability.ReconcilerAnomaliesTotal.WithLabelValues(class).Inc()
@@ -932,6 +980,7 @@ func (r *Reconciler) ReconcileWorkflow(ctx context.Context, wf *db.Workflow) *Re
 // pass regardless of how many workflows it reconciles) and a per-pass anomaly
 // aggregator for the end-of-pass summary line.
 func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pollers *pollerState, stats *passStats) *ReconciliationResult {
+	ctx = r.scope(ctx, wf.ChatID, wf.Thread, wf.ID)
 	result := &ReconciliationResult{
 		WorkflowID: wf.ID,
 		ChatID:     wf.ChatID,
@@ -972,7 +1021,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			return result // another reconciler already handled this
 		}
 
-		// ERROR (Sentry-visible): the DB believed this workflow was live but
+		// ERROR (an issue): the DB believed this workflow was live but
 		// Temporal has no record of it — state was silently lost somewhere.
 		logging.ErrorContext(ctx, "[Reconciler] Workflow not found in Temporal, marked as completed",
 			"workflowID", wf.ID,
@@ -1914,7 +1963,7 @@ func (r *Reconciler) recoverStuckWorkflowByReset(ctx context.Context, wf *db.Wor
 		return fmt.Errorf("resetting workflow execution: %w", err)
 	}
 
-	// ERROR (Sentry-visible) even though recovery succeeded: a task was LOST
+	// ERROR (an issue) even though recovery succeeded: a task was LOST
 	// from Temporal's queue, which should never happen — the repair working is
 	// not a reason to hide the anomaly.
 	logging.ErrorContext(ctx, "[Reconciler] Recovered stuck workflow via reset (task was lost from queue)",
@@ -2010,6 +2059,7 @@ func (r *Reconciler) reapOrphanedDescendants(ctx context.Context, stats *passSta
 		return 0, nil
 	}
 	for _, run := range r.groupReapedWorkflowsByRun(ctx, reaped) {
+		ctx := r.scope(ctx, run.chatID, "", run.rootWorkflowID)
 		closeStatus := r.runCloseStatus(ctx, run.rootWorkflowID)
 		fields := []any{
 			"workflowID", run.rootWorkflowID,
@@ -2104,6 +2154,7 @@ func (r *Reconciler) reapOrphanedThreads(ctx context.Context, stats *passStats) 
 		return 0, nil
 	}
 	for _, run := range r.groupReapedThreadsByRun(ctx, reaped) {
+		ctx := r.scope(ctx, run.chatID, "", run.rootWorkflowID)
 		closeStatus := r.runCloseStatus(ctx, run.rootWorkflowID)
 		fields := []any{
 			"workflowID", run.rootWorkflowID,
@@ -2262,6 +2313,7 @@ func (r *Reconciler) repairStrandedSpawnToolCalls(ctx context.Context, stats *pa
 
 	repaired := 0
 	for _, call := range stranded {
+		ctx := r.scope(ctx, call.ChatID, "", derefString(call.ChildWorkflowID))
 		now := time.Now().UTC()
 		if err := r.repo.UpsertToolCallResult(ctx, call.ChatID, &db.ToolCallResult{
 			ToolCallID: call.ID,
@@ -2388,6 +2440,7 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 	undeliverable := 0
 	resumableByChat := map[string]bool{}
 	for _, call := range stranded {
+		ctx := r.scope(ctx, call.ChatID, call.ChildThreadID, "")
 		// A spawn whose ROOT execution died but is still resumable is not
 		// stranded — it is waiting to be relaunched. Both resume paths bring
 		// it back: reset-and-replay re-runs its goroutine, and the coarse
@@ -2667,6 +2720,7 @@ func (r *Reconciler) resolveOrphanedAgentMessages(ctx context.Context, stats *pa
 
 	resolved := 0
 	for _, threadID := range threadIDs {
+		ctx := r.scope(ctx, "", threadID, "")
 		if r.mailboxMayStillBeDelivered(ctx, threadID) {
 			continue
 		}
@@ -2840,6 +2894,14 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	// (and the run) that started it, and only its daemon can say it ended.
 	if _, repairErr := r.reconcileBackgroundedProcesses(ctx, stats); repairErr != nil {
 		errors = append(errors, repairErr)
+	}
+	// Before the active list: a stranded start whose run Temporal does have
+	// moves to ACTIVE here, so the drift scan below already compares it with
+	// that run in this pass.
+	settled, strandedErr := r.markStrandedStarts(ctx, stats)
+	reconciled += settled
+	if strandedErr != nil {
+		errors = append(errors, strandedErr)
 	}
 
 	allWorkflows, err := r.repo.ListWorkflowsByStatus(ctx, db.Active())
@@ -3064,7 +3126,7 @@ func (r *Reconciler) silentEnd(ctx context.Context, workflowID string, state *Te
 //     how it ended — and still did not report it: ERROR,
 //     silent_terminal_drift. Unless the failure that ended it is the user's
 //     to act on, which the error-class handler (#686) writes at INFO with
-//     error_class=user and never sends to Sentry; it is counted as expected.
+//     error_class=user so it never becomes an issue; it is counted as expected.
 func (r *Reconciler) logSilentEnd(stats *passStats, message string, wf *db.Workflow, end silentEnd) {
 	fields := []any{
 		"workflowID", wf.ID,

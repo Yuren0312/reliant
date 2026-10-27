@@ -17,10 +17,12 @@
 import { useState } from "react";
 import { MoreHorizontal, Play, Square, Trash2 } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
-import { Dropdown } from "@/components/ui/Dropdown";
-import { Input } from "@/components/ui/Input";
-import { Modal } from "@/components/ui/Modal";
+import DropdownMenu from "@/components/forge-ui/dropdown_menu";
+import { FormField } from "@/components/forge-ui/form";
+import Input from "@/components/forge-ui/input";
+import Label from "@/components/forge-ui/label";
+import Modal from "@/components/forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { useDeleteEnvironment, useSetEnvironmentRunState } from "@/hooks/forge-queries";
 import { cloudErrorDetail, type CloudEnvStatus } from "@/services/forge/cloudEnvs";
 
@@ -40,7 +42,6 @@ export function EnvLifecycleControls({
   const setRunState = useSetEnvironmentRunState(environmentId);
   const [stopOpen, setStopOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const workloads = status?.workloads ?? [];
   const stopped = environmentStopped(workloads);
@@ -76,44 +77,40 @@ export function EnvLifecycleControls({
             Stop environment
           </Button>
         )}
-        <Dropdown
+        <DropdownMenu
           align="right"
-          isOpen={menuOpen}
-          onOpenChange={setMenuOpen}
-          variant="form"
-          trigger={
+          label="More actions"
+          trigger={(props) => (
             <button
               type="button"
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              {...props}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-ink-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="env-danger-menu"
               aria-label="More actions"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
             >
               <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
             </button>
-          }
-        >
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive-ink hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => {
-              setMenuOpen(false);
-              setDeleteOpen(true);
-            }}
-            data-testid="env-action-delete"
-          >
-            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-            Delete environment…
-          </button>
-        </Dropdown>
+          )}
+          groups={[
+            {
+              items: [
+                {
+                  label: "Delete environment…",
+                  icon: <Trash2 className="h-3.5 w-3.5" />,
+                  variant: "danger",
+                  testId: "env-action-delete",
+                  onClick: () => setDeleteOpen(true),
+                },
+              ],
+            },
+          ]}
+        />
       </div>
 
       {startError && (
         <p
           role="alert"
-          className="max-w-md text-right text-xs text-foreground"
+          className="max-w-md text-right text-xs text-ink"
           data-testid="env-start-refused"
         >
           Couldn&apos;t start {envName}: {cloudErrorDetail(startError)}
@@ -155,13 +152,13 @@ export function StopEnvironmentDialog({
   onConfirm: () => void;
 }) {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="sm" title={`Stop ${envName}?`}>
+    <Modal open={isOpen} onClose={onClose} size="sm" title={`Stop ${envName}?`}>
       <div className="space-y-4" data-testid="stop-environment-dialog">
-        <p className="text-sm text-foreground">
+        <p className="text-sm text-ink">
           Compute stops. Data and URLs are kept. Start brings it back.
         </p>
         {error && (
-          <p role="alert" className="text-xs text-foreground" data-testid="stop-environment-error">
+          <p role="alert" className="text-xs text-ink" data-testid="stop-environment-error">
             {error}
           </p>
         )}
@@ -209,9 +206,9 @@ export function DeleteEnvironmentDialog({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={close} size="md" title={`Delete ${envName}?`}>
+    <Modal open={isOpen} onClose={close} size="md" title={`Delete ${envName}?`}>
       <div className="space-y-4" data-testid="delete-environment-dialog">
-        <div className="space-y-2 text-sm text-foreground">
+        <div className="space-y-2 text-sm text-ink">
           <p>
             This tears down <span className="font-mono">{envName}</span>: every deployment in it, its
             running workloads, its URLs, and its namespaces.
@@ -225,16 +222,18 @@ export function DeleteEnvironmentDialog({
             or use the Deploy button.
           </p>
         </div>
-        <Input
-          label={`Type ${envName} to confirm`}
-          value={typed}
-          onChange={(event) => setTyped(event.target.value)}
-          autoComplete="off"
-          spellCheck={false}
-          data-testid="delete-environment-confirm-input"
-        />
+        <FormField className="forge-ui">
+          <Label>Type {envName} to confirm</Label>
+          <Input
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            data-testid="delete-environment-confirm-input"
+          />
+        </FormField>
         {del.isError && (
-          <p role="alert" className="text-xs text-foreground" data-testid="delete-environment-error">
+          <p role="alert" className="text-xs text-ink" data-testid="delete-environment-error">
             {cloudErrorDetail(del.error)}
           </p>
         )}
@@ -243,7 +242,7 @@ export function DeleteEnvironmentDialog({
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant="danger"
             size="sm"
             loading={del.isPending}
             disabled={!matches || del.isPending}

@@ -5,11 +5,11 @@
  * is data, and nothing renders it until a browser viewer exists in viewerStore.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const createTab = vi.fn(async () => 'browser-tab-1');
 const openBrowserViewer = vi.fn(async () => {});
-const openExternal = vi.fn(async () => {});
+const openExternal = vi.fn(async (_url: string) => {});
 const getPreferences = vi.fn(async () => ({
   additional: {} as Record<string, string>,
 }));
@@ -36,20 +36,15 @@ vi.mock('../../store/projectStore', () => ({
   },
 }));
 
-vi.mock('../../api/client', () => ({
-  api: {
-    settings: {
-      getPreferences: () => getPreferences(),
-    },
-  },
-}));
-
 vi.mock('../constants', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../constants')>()),
   isElectron: () => true,
 }));
 
 import { openLink } from '../open-link';
+import { setTransport } from '../connect';
+import { queryClient } from '../query-client';
+import { mockTransport } from '../test-utils';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -57,9 +52,16 @@ beforeEach(() => {
   mockViewerState = { openBrowserViewer };
   mockProjectState = { currentProject: { id: 'project-1' } };
   getPreferences.mockResolvedValue({ additional: {} });
+  // The preference is read off the GetPreferences cache entry.
+  setTransport(mockTransport({ 'SettingsService.GetPreferences': () => getPreferences() }));
   (window as unknown as { electronAPI?: unknown }).electronAPI = {
     openExternal: (url: string) => openExternal(url),
   };
+});
+
+afterEach(() => {
+  queryClient.clear();
+  setTransport(null);
 });
 
 describe('openLink in-app routing', () => {

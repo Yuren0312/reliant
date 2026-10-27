@@ -96,6 +96,11 @@ describe("release markers", () => {
     expect(shown.map((m) => m.label)).toEqual(["now-ish"]);
   });
 
+  it("draw a version promoted twice in the window once, at its latest landing", () => {
+    const shown = visibleMarkers([{ timeSec: 10, label: "v1" }, { timeSec: 70, label: "v2" }, { timeSec: 130, label: "v1" }], [0, 60, 120]);
+    expect(shown).toEqual([{ timeSec: 70, label: "v2" }, { timeSec: 130, label: "v1" }]);
+  });
+
   it("say so when the ledger recorded no commit or actor", () => {
     expect(describePromotion(promotion({ gitCommit: "", promotedBy: "" }))).toBe("v1.8.3 promoted to prod");
   });

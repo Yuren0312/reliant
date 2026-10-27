@@ -129,7 +129,7 @@ export interface CloudEnvStatus {
  * signal. It lands in `unreachable` with the server's own message as detail.
  *
  *   available         the control plane answered.
- *   no-control-plane  this build has none (no VITE_CONTROL_PLANE_API_URL).
+ *   no-control-plane  this build has none (no CONTROL_PLANE_API_URL).
  *   no-access         PermissionDenied: the caller's role in the organization
  *                     may not read deploy state (deploy reads need org admin).
  *   not-configured    Unimplemented: this control plane does not serve the
@@ -318,6 +318,18 @@ export async function listProjectEnvironments(project: string): Promise<CloudEnv
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Every environment the org holds, across all its forge projects — the Apps
+ * list's one read. An environment with no project predates the project
+ * dimension and names no app, so it is dropped here.
+ */
+export async function listOrgEnvironments(): Promise<CloudEnv[]> {
+  const res = await client().listEnvironments({});
+  return (res.environments ?? [])
+    .map(toCloudEnv)
+    .filter((env) => env.id !== "" && env.name !== "" && env.project !== "");
+}
+
 /** The control plane's observation of one environment — a database read, no cluster hop. */
 export async function getEnvironmentStatus(environmentId: string): Promise<CloudEnvStatus> {
   return toCloudEnvStatus(await client().getStatus({ environmentId }));
@@ -353,7 +365,7 @@ export async function setEnvironmentRunState(environmentId: string, state: RunSt
 /**
  * Stop or start ONE hosted workload's deployment: its RUN STATE (running or
  * suspended), which DeployService.Scale carries. Not a replica count — forge's
- * tiers carry none, and replicas are declared in KCL (decision D6).
+ * tiers carry none, and replicas are declared in KCL.
  */
 export async function setWorkloadRunState(deploymentId: string, state: RunStateRequest): Promise<void> {
   await client().scale({ deploymentId, runState: runStateEnum(state) });
@@ -369,7 +381,7 @@ export interface RestartedWorkload {
 }
 
 /**
- * A rolling restart of one workload in one HOSTED environment (decision D6).
+ * A rolling restart of one workload in one HOSTED environment.
  * The release and declared spec do not change; the control plane audits it.
  * A self-managed or local environment answers FailedPrecondition.
  */

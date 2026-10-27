@@ -162,7 +162,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// A node's save_message is written by the worker that executes the node,
 	// through the same write path as the SaveMessage activity.
 	registry.SetMessageWriter(saveMessage)
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(deps.Repo, deps.StreamingHub, deps.ToolsFactory, deps.ConfigProvider, deps.DriverResolver, deps.MCPBinder).WithLocalModels(deps.DaemonRouter).WithControlPlane(deps.ControlPlaneURL).WithAccountRouting(deps.AccountRouting))
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(deps.Repo, deps.StreamingHub, deps.ToolsFactory, deps.ConfigProvider, deps.DriverResolver, deps.MCPBinder).WithLocalModels(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES
@@ -173,20 +173,22 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// worker), not by re-reading the whole config row per call.
 	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider))
 	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider))
-	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger))
+	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions))
 
 	// ========================================================================
 	// CONTEXT MANAGEMENT ACTIVITIES
 	// ========================================================================
 
 	v2.RegisterActivity(registry, handlers.NewCompactActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting))
-	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver))
+	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting))
+	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting))
 
 	// ========================================================================
 	// APPROVAL ACTIVITIES
 	// ========================================================================
 
 	v2.RegisterActivity(registry, handlers.NewApprovalCreateActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewAutomationApprovalActivity(deps.ToolsFactory).WithExecutionStore(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewApprovalResolveActivity(deps.Repo))
 
 	// ========================================================================

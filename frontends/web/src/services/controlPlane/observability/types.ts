@@ -15,6 +15,8 @@
  * component.
  */
 
+import type { SeriesMeta } from "./metricsTypes";
+
 /** A resolved, absolute time window. `endMs` is exclusive. */
 export interface TimeWindow {
   startMs: number;
@@ -204,6 +206,8 @@ export interface Series {
   group: Record<string, string>;
   timestamps: number[];
   values: (number | null)[];
+  /** Metrics panels: which points' buckets are still open (draw dashed). Absent on every other signal. */
+  partial?: boolean[];
   /** A number panel's value. */
   value: number | null;
 }
@@ -217,6 +221,8 @@ export interface QueryPanelRequest extends ObsScope {
   stepSeconds: number;
   /** Non-empty REPLACES the panel's own group-by (the in-place control). Max 3. */
   groupBy?: string[];
+  /** Compile the panel without running it: the result carries `compiledSql` and no data. */
+  explain?: boolean;
 }
 
 /**
@@ -239,6 +245,24 @@ export interface PanelResult {
   issues: PanelIssue[];
   /** sessions panels: browser sessions that started in the window, newest first. */
   sessions: PanelSession[];
+  /** Metrics panels: what each entry of `series` measures, in order. Empty for every other signal. */
+  seriesMeta: SeriesMeta[];
+  /** Series (groups) that matched before the cap; 0 when unknown. Compare with `series.length`. */
+  seriesTotal: number;
+  /**
+   * Non-fatal notes, "<code>" or "<code>: <detail>": mixed_bounds, mixed_temporality, step_raised,
+   * metric_stored_as_n_kinds, metric_kind_mismatch, and metric_absent (a series' metric has no data
+   * in the scope and range; its series is empty).
+   */
+  warnings: string[];
+  /** With `explain`: the statements the panel compiles to. Empty otherwise. */
+  compiledSql: CompiledStatement[];
+}
+
+/** One statement a panel compiles to: SQL with {name:Type} placeholders and the parameter values. */
+export interface CompiledStatement {
+  sql: string;
+  params: Record<string, string>;
 }
 
 /** One step of a funnel panel: how many journeys reached it (and every step before it). */
@@ -361,6 +385,8 @@ export type Unit = "" | "count" | "ms" | "bytes" | "percent" | "s";
 
 export interface Panel {
   id: string;
+  /** Optional dashboard section; viewer visibility never edits this association. */
+  section?: string;
   title: string;
   description?: string;
   kind: PanelKind;
@@ -387,6 +413,8 @@ export interface Panel {
 }
 
 export interface DashboardFilter {
+  /** Empty or absent targets all panels. Never infer targeting from panel titles. */
+  panelIds?: string[];
   id: string;
   label: string;
   field: string;
@@ -405,6 +433,7 @@ export interface DashboardAnnotation {
 }
 
 export interface Dashboard {
+  sections?: { id: string; title: string }[];
   id: string;
   title: string;
   description?: string;
@@ -456,6 +485,34 @@ export interface Flamegraph {
   /** The types this service has in the window, for the picker. */
   availableProfileTypes: string[];
   /** The heaviest stacks were kept and the rest cut. */
+  truncated: boolean;
+}
+
+// ── Service signals ──────────────────────────────────────────────────────────
+
+/** The signals a service has a view of its own for (GetServiceSignals). */
+export const SERVICE_SIGNALS = ["logs", "traces", "profiles"] as const;
+export type ServiceSignal = (typeof SERVICE_SIGNALS)[number];
+
+export interface GetServiceSignalsRequest extends ObsScope {
+  window: TimeWindow;
+}
+
+/** One service: what it sends, and what the current release of its environments switches on. */
+export interface ServiceSignals {
+  service: string;
+  /** Signals with data from the service in the window. */
+  emitting: ServiceSignal[];
+  /** Signals the release declares on; meaningful only when `declarationKnown`. */
+  declared: ServiceSignal[];
+  /** False: no environment in scope records the workload's spec, so nothing is known of what it declares. */
+  declarationKnown: boolean;
+}
+
+export interface ServiceSignalsResult {
+  /** By service name. */
+  services: ServiceSignals[];
+  /** More services sent data than the server lists (500). */
   truncated: boolean;
 }
 

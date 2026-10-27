@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, X, Search, Settings2 } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { useModels } from "../../../store/globalDataStore";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import {
   contextSeverity,
   contextWarningText,
@@ -12,7 +12,7 @@ import {
   localProviderRef,
 } from "../../Settings/localModels";
 import { preferredThinkingLevel, resolveThinkingCapabilityForModel } from "../../../hooks/useThinkingCapability";
-import { api } from "../../../api/client";
+import { driverDisplayName } from "../../../hooks/catalog-models";
 import { primaryDriverOfSelection } from "../../../lib/providerPolicy";
 import { OnLimitRow } from "./OnLimitRow";
 
@@ -312,7 +312,7 @@ export function ModelSettingsPage({
         <button
           onClick={() => {
             onClose();
-            navigate({ to: '/settings/$section', params: { section: 'general' } });
+            navigate({ to: '/settings/$section', params: { section: 'ai' } });
           }}
           title="Model preferences"
           aria-label="Model preferences"
@@ -488,7 +488,7 @@ export function ModelSettingsPage({
                     <Tooltip
                       key={`${local?.daemonId}:${model.id}`}
                       content={`${local?.machineName} is offline — this model is unavailable until it reconnects.`}
-                      wrapperClassName="block w-full"
+                      triggerClassName="block w-full"
                     >
                       {row}
                     </Tooltip>
@@ -515,7 +515,7 @@ export function ModelSettingsPage({
           primaryDriver={primaryDriverOfSelection(value, tiers)}
           selectedModel={selectedModel}
           models={models}
-          providerName={api.models._driverDisplayName}
+          providerName={driverDisplayName}
         />
       )}
 

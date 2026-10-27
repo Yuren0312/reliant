@@ -14,7 +14,7 @@ import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-rout
 import {
   forgeConsoleDashboardSearchSchema,
   forgeConsoleDashboardsSearchSchema,
-  forgeObservabilitySearchSchema,
+  forgeOrgObsSearchSchema,
 } from "@/routeSchemas";
 
 import { MAX_FILTERS, MAX_GROUP_BY, MAX_IN_VALUES } from "../attributes";
@@ -35,7 +35,7 @@ import { OBS_SEARCH_KEYS, type ObsSearch } from "../obsSearch";
 const PROJECT_PLACE: ObsPlace = { kind: "project", project: FIXTURE_PROJECT, environments: [...FIXTURE_ENVS] };
 
 /** What the router does to a search object on its way into the address bar and back. */
-function throughTheUrl(search: Record<string, unknown>, schema = forgeObservabilitySearchSchema) {
+function throughTheUrl(search: Record<string, unknown>, schema = forgeOrgObsSearchSchema) {
   const url = defaultStringifySearch(search);
   return { url, parsed: schema.parse(defaultParseSearch(url)) };
 }
@@ -141,7 +141,7 @@ describe("the URL round trip", () => {
   });
 
   it("drops a bad value instead of failing the route", () => {
-    const parsed = forgeObservabilitySearchSchema.parse({
+    const parsed = forgeOrgObsSearchSchema.parse({
       view: "heatmaps",
       range: "90d",
       groupBy: "not-a-list",
@@ -153,11 +153,16 @@ describe("the URL round trip", () => {
   it("lists every key the area owns, so leaving the tab clears them all", () => {
     expect([...OBS_SEARCH_KEYS].sort()).toEqual(
       [
-        "alerts", "cmpWindow", "compare", "envs", "errors", "f", "groupBy",
+        "alerts", "apps", "cmpWindow", "compare", "envs", "errors", "f", "groupBy",
         "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view",
-        "issue", "istatus", "platform", "isort",
+        "issue", "istatus", "platform", "isort", "assignee",
+        "session", "t", "replay", "user", "cursor",
       ].sort()
     );
+  });
+
+  it("carries the Errors view's assignee filter: me or a user id", () => {
+    for (const assignee of ["me", "user-ada"]) expect(throughTheUrl({ view: "errors", assignee }).parsed.assignee).toBe(assignee);
   });
 
   it("carries a release comparison and its window, and drops one out of bounds", () => {
@@ -189,6 +194,12 @@ describe("a dashboard's link (Share)", () => {
   it("carries the window, the service, the comparison, the refresh and full screen as they were written", () => {
     const search = { env: "prod", range: "6h", service: "api", compare: "release", refresh: "30s", tv: true };
     expect(throughTheUrl(search, forgeConsoleDashboardSearchSchema as never).parsed).toEqual(search);
+  });
+
+  it("round-trips independent viewer controls including false and array selections", () => {
+    const search = { env: "prod", service: "worker", rpcService: "orders.v1.OrdersService", rpcMethod: "CreateOrder", rpcProcedure: "/orders.v1.OrdersService/CreateOrder", variables: { client: "web" }, breakdown: "none", hiddenSections: ["resources"], hiddenPanels: ["p95", "errors"], releases: false, alerts: false };
+    expect(throughTheUrl(search, forgeConsoleDashboardSearchSchema as never).parsed).toEqual(search);
+    expect(forgeConsoleDashboardSearchSchema.parse({ hiddenSections: "resources", alerts: "false" })).toEqual({});
   });
 
   it("opens an older version or the release it shipped in", () => {

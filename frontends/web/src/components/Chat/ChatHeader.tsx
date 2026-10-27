@@ -9,7 +9,6 @@
 
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useContextUsage, useContextUsageByThread } from "../../store/chatStoreHooks";
-import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
 import { useTerminalStore } from "../../store/terminalStore";
 import {
   MoreHorizontal,
@@ -26,12 +25,15 @@ import { useChat, useDeleteChat, useRenameChat } from "../../hooks/chat-queries"
 import { NoMachinePill } from "./NoMachine";
 import { WorkspaceRecoveryMenuItems } from "./WorkspaceRecoveryMenuItems";
 import { useMessages } from "../../hooks/message-queries";
+import { fetchFullToolResult } from "../../hooks/tool-result-queries";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useThreads, ThreadTabs } from "./thread-views";
 import { ChildRunsStrip } from "../runs/ChildRunsStrip";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
+import { loadMainWorktree } from "../../hooks/worktree-actions";
+import { resolveWorktree, type Worktree, getCachedMainWorktree } from "../../hooks/worktree-queries";
 
 interface ChatHeaderProps {
   chatId: string | null;
@@ -75,8 +77,6 @@ export function ChatHeader({
   const chat = chatQuery.data;
   const messagesQuery = useMessages(chatId || undefined);
   const messages = messagesQuery.data?.messages ?? [];
-  const resolveWorktree = useWorktreeStore((state) => state.resolveWorktree);
-  const loadMainWorktree = useWorktreeStore((state) => state.loadMainWorktree);
   const deleteMutation = useDeleteChat();
   const renameMutation = useRenameChat();
   const createTerminalSession = useTerminalStore((state) => state.createSession);
@@ -140,18 +140,16 @@ export function ChatHeader({
       }
       // Only the recovery menu reads it, so fetch it (one row) rather than
       // depend on the store happening to hold it.
-      if (resolved.project_id) await loadMainWorktree(resolved.project_id);
+      if (!resolved.project_id) return;
+      await loadMainWorktree(resolved.project_id);
       if (cancelled) return;
-      setMainWorktree(
-        useWorktreeStore
-          .getState()
-          .worktrees.find((w) => w.is_main && w.project_id === resolved.project_id && !w.deleted_at),
-      );
+      const main = getCachedMainWorktree(resolved.project_id);
+      setMainWorktree(main && !main.deleted_at ? main : undefined);
     })();
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, resolveWorktree, loadMainWorktree]);
+  }, [workspaceId]);
   // Use branch name if available, otherwise use name
   const workspaceName = worktree ? worktree.branch || worktree.name || null : null;
   const workspacePath = worktree?.path || null;
@@ -231,7 +229,7 @@ export function ChatHeader({
     }
   };
 
-  const handleExportChat = () => {
+  const handleExportChat = async () => {
     setIsMenuOpen(false);
     
     if (!chatId || !chat) {
@@ -240,6 +238,18 @@ export function ChatHeader({
     }
 
     try {
+      // Large tool results are held as previews; the export gets them whole.
+      const fullResults = new Map<string, string>();
+      await Promise.all(
+        messages.flatMap((message) =>
+          (message.contentBlocks || [])
+            .filter((block) => block.type === ContentBlockType.TOOL_RESULT && block.truncated && block.toolCallId)
+            .map(async (block) => {
+              fullResults.set(block.toolCallId!, await fetchFullToolResult(chatId, block.toolCallId!));
+            }),
+        ),
+      );
+
       // Build markdown export
       let markdown = `# ${chat.title || 'Chat Export'}\n\n`;
       markdown += `Exported: ${new Date().toLocaleString()}\n`;
@@ -250,7 +260,9 @@ export function ChatHeader({
 
       // Add messages
       messages.forEach((message) => {
-        const role = message.role === MessageRole.USER ? 'User' : 'Assistant';
+        const role = message.sender
+          ? `Message from ${message.sender.title || 'another agent'}`
+          : message.role === MessageRole.USER ? 'User' : 'Assistant';
         const timestamp = new Date(message.createdAt || '').toLocaleString();
         markdown += `## ${role} - ${timestamp}\n\n`;
         
@@ -271,8 +283,9 @@ export function ChatHeader({
             }
           } else if (block.type === ContentBlockType.TOOL_RESULT) {
             markdown += `**Tool Result:** ${block.toolName || 'Unknown'}\n\n`;
-            if (block.content) {
-              markdown += `${block.content}\n\n`;
+            const content = (block.toolCallId && fullResults.get(block.toolCallId)) || block.content;
+            if (content) {
+              markdown += `${content}\n\n`;
             }
           }
         });
@@ -355,7 +368,7 @@ export function ChatHeader({
               {showBackButton && (
                 <Tooltip
                   content={backTargetThread ? `Back to ${backTargetThread.name}` : "Back to main thread"}
-                  placement="bottom"
+                  side="bottom"
                 >
                   <button
                     onClick={() => onSelectThread?.(backTargetThread ? backTargetThread.id : null)}
@@ -392,7 +405,7 @@ export function ChatHeader({
               {/* Menu button - right after title */}
               {!isNewChat && chatId && (
                 <div className="relative flex-shrink-0" ref={menuRef}>
-<Tooltip content="Chat options" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<Tooltip content="Chat options" side="bottom" delay={300} triggerClassName="inline-flex">
                   <button 
                     onClick={() => setIsMenuOpen(!isMenuOpen)}
                     className="touch-target inline-flex items-center justify-center p-1 hover:bg-accent rounded transition-colors"
@@ -449,7 +462,7 @@ export function ChatHeader({
                       )}
                       
                       <button
-                        onClick={handleExportChat}
+                        onClick={() => void handleExportChat()}
                         className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
                       >
                         <Download className="h-4 w-4" />

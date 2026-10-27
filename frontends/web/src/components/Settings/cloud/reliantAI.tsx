@@ -1,6 +1,7 @@
 /**
  * ReliantAISection — the managed-Reliant AI settings surface, rendered as the
- * "Reliant AI" tab of the `/settings/general` AI section (see AISettings).
+ * "Reliant AI" tab of Billing (`/settings/billing?tab=ai`), which the Reliant
+ * provider card in Settings → AI links to.
  *
  * This is the END-USER view of Reliant-issued LLM access + spend, ported from
  * admin-web's `(dashboard)/ai/page.tsx` but built on the PUBLIC RPCs only:
@@ -9,13 +10,13 @@
  *   - LLMGatewayService.GetLLMSpend                → spend by model + usage rows
  *   - LLMGatewayService.ListLLMKeys / Create / Revoke / Rotate → key management
  *
- * Distinct from `/settings/general` (CombinedGeneralSettings), which manages the
- * user's OWN bring-your-own provider API keys. There is no platform-admin data
+ * Distinct from Settings → AI's providers, which manage the user's OWN
+ * bring-your-own provider accounts and keys. There is no platform-admin data
  * here — admin-web's BillingAdminService cards are intentionally omitted; the
  * per-user GetLLMSpend gives the end-user the equivalent spend view.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CreditCard,
   KeyRound,
@@ -28,13 +29,12 @@ import {
 } from "lucide-react";
 
 import { cn } from "../../../lib/utils";
+import Button from "@/components/forge-ui/button";
 import {
-  Button,
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-  PageHeader,
   Table,
   Thead,
   Tbody,
@@ -62,6 +62,8 @@ import {
   useRotateLLMKey,
 } from "../../../hooks/useReliantAIQueries";
 import { LLMKeyStatus } from "../../../gen/controlplane/controlplane/v1/shared_pb";
+import { useActiveOrg } from "@/hooks/useOrgs";
+import { getActiveOrgId } from "@/store/activeOrgStore";
 
 // ---------------------------------------------------------------------------
 // Formatting helpers (self-contained — reliant-web has no lib/billing).
@@ -150,10 +152,6 @@ export function ReliantAISection() {
   if (!reliantAIAvailable) {
     return (
       <div className="space-y-6">
-        <PageHeader
-          title="Reliant AI"
-          subtitle="Managed AI access, credits, spend, and LLM keys."
-        />
         <EmptyState
           icon={KeyRound}
           title="Cloud not configured"
@@ -162,10 +160,22 @@ export function ReliantAISection() {
       </div>
     );
   }
-  return <ReliantAIPanel />;
+  return <OrgReliantAIPanel />;
 }
 
-function ReliantAIPanel() {
+function OrgReliantAIPanel() {
+  const orgId = useActiveOrg().activeOrgId ?? "";
+  return <ReliantAIPanel key={orgId} orgId={orgId} />;
+}
+
+function ReliantAIPanel({ orgId }: { orgId: string }) {
+  const live = useRef(true);
+  // A newer secret operation owns the reveal even inside the same org.
+  const secretOperation = useRef(0);
+  useEffect(() => {
+    live.current = true;
+    return () => { live.current = false; };
+  }, []);
   const [createOpen, setCreateOpen] = useState(false);
   const [revealedKey, setRevealedKey] = useState<{
     name: string;
@@ -173,18 +183,13 @@ function ReliantAIPanel() {
     kind: "created" | "rotated";
   } | null>(null);
 
-  const goToBilling = useGoToBilling();
+  const goToBilling = useGoToBilling("reliant-ai");
   const overviewQ = useReliantOverview();
   const walletQ = useWalletOverview();
 
   const overview = overviewQ.data;
   const wallet = walletQ.data;
   const entitlement = overview?.entitlement;
-
-  // Org resolution mirrors admin-web: prefer the wallet's org, fall back to the
-  // entitlement's source ref. A signed-in user resolves to exactly one billing
-  // scope, so there is no org switcher.
-  const orgId = wallet?.organization?.id ?? entitlement?.sourceRefId ?? "";
 
   const { startDate, endDate } = useMemo(() => {
     const end = new Date();
@@ -243,16 +248,17 @@ function ReliantAIPanel() {
       )
     )
       return;
+    const operation = ++secretOperation.current;
     const res = await rotateMut.mutateAsync({ keyId: key.id });
+    if (!live.current || (getActiveOrgId() ?? "") !== orgId || secretOperation.current !== operation) return;
     setRevealedKey({ name: key.name, secret: res.plaintextKey, kind: "rotated" });
   };
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Reliant AI"
-        subtitle="Manage your Reliant-issued AI access, available models, credit balance, spend, and LLM keys."
-      />
+      <p className="text-sm text-muted-foreground">
+        Your Reliant-issued AI access: the models you can use, your credit balance, spend, and LLM keys.
+      </p>
 
       {fatalError && (
         <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive-ink">
@@ -528,7 +534,9 @@ function ReliantAIPanel() {
             }
             creating={createMut.isPending}
             onCreate={async (args) => {
+              const operation = ++secretOperation.current;
               const res = await createMut.mutateAsync({ orgId, ...args });
+              if (!live.current || (getActiveOrgId() ?? "") !== orgId || secretOperation.current !== operation) return;
               setCreateOpen(false);
               setRevealedKey({
                 name: args.name,
@@ -595,7 +603,7 @@ function RevealedKeyBanner({
         </button>
       </div>
       <div className="mt-3 flex justify-end">
-        <Button variant="outline" size="sm" onClick={copy}>
+        <Button variant="outline" size="md" onClick={copy}>
           {copied ? (
             <Check className="mr-1 h-3.5 w-3.5" />
           ) : (
@@ -660,8 +668,7 @@ function LLMKeysCard({
               Anthropic / Vertex SDKs via the Reliant gateway.
             </p>
           </div>
-          <Button onClick={onToggleCreate} variant={createOpen ? "outline" : "primary"}>
-            <Plus className="mr-1.5 h-4 w-4" />
+          <Button onClick={onToggleCreate} variant={createOpen ? "outline" : "primary"} size="xl" leftIcon={<Plus />}>
             {createOpen ? "Cancel" : "Create key"}
           </Button>
         </div>
@@ -729,20 +736,20 @@ function LLMKeysCard({
                         <div className="flex justify-end gap-2">
                           <Button
                             variant="outline"
-                            size="sm"
+                            size="md"
                             onClick={() => onRotate(k)}
                             disabled={rotating}
+                            leftIcon={<RefreshCw />}
                           >
-                            <RefreshCw className="mr-1 h-3.5 w-3.5" />
                             Rotate
                           </Button>
                           <Button
                             variant="outline"
-                            size="sm"
+                            size="md"
                             onClick={() => onRevoke(k)}
                             disabled={revoking === k.id}
+                            leftIcon={<Trash2 />}
                           >
-                            <Trash2 className="mr-1 h-3.5 w-3.5" />
                             Revoke
                           </Button>
                         </div>
@@ -890,8 +897,7 @@ function CreateKeyForm({
       {formError && <p className="text-sm text-destructive-ink">{formError}</p>}
 
       <div className="flex justify-end">
-        <Button onClick={submit} isLoading={creating} disabled={creating}>
-          <Plus className="mr-1.5 h-4 w-4" />
+        <Button onClick={submit} loading={creating} disabled={creating} size="xl" leftIcon={<Plus />}>
           Create key
         </Button>
       </div>

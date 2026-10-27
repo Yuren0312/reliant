@@ -15,6 +15,7 @@ import userEvent from "@testing-library/user-event";
 import { VirtuosoMockContext } from "react-virtuoso";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ChatActivity, ChatState } from "../../../gen/reliant/v1/chat_pb";
+import { getCachedWorktrees } from "../../../hooks/worktree-queries";
 
 const navigate = vi.fn();
 
@@ -27,8 +28,8 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 // The list response: chats (each carrying its workspace) plus the project's
-// main workspace. The worktree store is never consulted, so it is mocked with
-// nothing in it — a workspace that is in no store must still group correctly.
+// main workspace. No workspace read is consulted, so the cache holds none — a
+// workspace that is in no cache must still group correctly.
 const useChatListWithWorkspaces = vi.fn();
 vi.mock("../../../hooks/chat-queries", () => ({
   useChatListWithWorkspaces: (...args: unknown[]) => useChatListWithWorkspaces(...args),
@@ -47,11 +48,10 @@ vi.mock("../../../store/projectStore", () => ({
     selector({ currentProject: { id: "p1", name: "reliant" } }),
 }));
 
-const archiveWorktree = vi.fn();
-const storeState = { worktrees: [] as unknown[], archiveWorktree };
+const archiveWorktree = vi.hoisted(() => vi.fn());
 
-vi.mock("../../../store/worktreeStore", () => ({
-  useWorktreeStore: (selector: (s: unknown) => unknown) => selector(storeState),
+vi.mock("../../../hooks/worktree-actions", () => ({
+  archiveWorktree: (...args: unknown[]) => archiveWorktree(...args),
 }));
 
 type Workspace = {
@@ -71,7 +71,7 @@ function listOf(chats: Array<ReturnType<typeof chat>>, mainWorktree: Workspace |
     data: {
       chats: chats.map((c) => ({ ...c, worktree: WORKSPACES[c.worktreeId] })),
       lastUserUpdateSequence: 0,
-      mainWorktree,
+      mainWorktrees: mainWorktree ? [{ ...mainWorktree, projectId: "p1" }] : [],
     },
     isLoading: false,
   };
@@ -113,7 +113,8 @@ vi.mock("../MobileWorkspaceSheet", () => ({
   ),
 }));
 
-const { MobileChatList } = await import("../MobileChatList");
+const { MobileChatList, buildGroups } = await import("../MobileChatList");
+const { useWorkspaceStateStore } = await import("../../../store/workspaceStateStore");
 const { SurfaceProvider } = await import("../../../lib/surfaceContext");
 
 function renderList() {
@@ -145,6 +146,7 @@ function chat(overrides: Partial<{
 }>) {
   return {
     id: "chat-default",
+    projectId: "p1",
     title: "Untitled",
     worktreeId: "wt-main",
     activity: ChatActivity.IDLE,
@@ -158,6 +160,9 @@ function chat(overrides: Partial<{
 }
 
 beforeEach(() => {
+  // These tests are about one project's list (the /m/projects filter on p1);
+  // the all-projects grouping is pinned in its own describe below.
+  useWorkspaceStateStore.setState({ projectFilterId: "p1" });
   navigate.mockReset();
   archiveWorktree.mockReset();
   useChatListWithWorkspaces.mockReset();
@@ -191,13 +196,13 @@ describe("MobileChatList", () => {
           { ...chat({ id: "c2", title: "Main chat", worktreeId: "wt-main" }), worktree: MAIN },
         ],
         lastUserUpdateSequence: 0,
-        mainWorktree: MAIN,
+        mainWorktrees: [{ ...MAIN, projectId: "p1" }],
       },
       isLoading: false,
     });
     renderList();
 
-    expect(storeState.worktrees).toEqual([]);
+    expect(getCachedWorktrees()).toEqual([]);
     expect(screen.getByText("agent-112")).toBeInTheDocument();
     expect(screen.getByText("Far chat")).toBeInTheDocument();
     expect(screen.queryByText("Unknown workspace")).not.toBeInTheDocument();
@@ -208,7 +213,7 @@ describe("MobileChatList", () => {
       data: {
         chats: [{ ...chat({ id: "c1", title: "Unbound chat" }), worktreeId: undefined, worktree: undefined }],
         lastUserUpdateSequence: 0,
-        mainWorktree: MAIN,
+        mainWorktrees: [{ ...MAIN, projectId: "p1" }],
       },
       isLoading: false,
     });
@@ -426,5 +431,24 @@ describe("MobileChatList", () => {
     useChatListWithWorkspaces.mockReturnValue({ data: undefined, isLoading: true });
     renderList();
     expect(screen.queryByText("reliant")).not.toBeInTheDocument();
+  });
+});
+
+describe("buildGroups across all projects", () => {
+  it("names each group by its project and lists no empty main workspaces", () => {
+    const groups = buildGroups(
+      [
+        { ...chat({ id: "a1", worktreeId: "wt-a" }), projectId: "pa", worktree: { ...FEATURE, id: "wt-a" } },
+        { ...chat({ id: "b1" }), projectId: "pb", worktreeId: undefined, worktree: undefined },
+      ] as never,
+      [
+        { ...MAIN, id: "main-pa", projectId: "pa" },
+        { ...MAIN, id: "main-pb", projectId: "pb" },
+      ] as never,
+      "recent_activity",
+      { scope: null, projectNames: new Map([["pa", "Alpha"], ["pb", "Beta"]]) },
+    );
+    expect(groups.map((g) => g.worktreeName).sort()).toEqual(["Alpha · feature-x", "Beta · reliant"]);
+    expect(groups.some((g) => g.worktreeId === "main-pa")).toBe(false);
   });
 });

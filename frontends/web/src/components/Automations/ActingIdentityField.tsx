@@ -5,21 +5,32 @@
  * speak as, as two radio cards side by side (stacked on a phone). The cards
  * are labels around real radios, so arrow keys move between them and the
  * whole card is the click target.
+ *
+ * The bot needs a control plane to mint its installation tokens. Without one,
+ * its option stays visible but unavailable, and the person can explicitly
+ * choose their own account. Never hide a source default or silently fall back.
  */
 
 import { useId, type ReactNode } from "react";
 
-import type { ActingIdentityKey } from "@/api/trigger-grpc";
+import type { ActingIdentityKey } from "@/hooks/trigger-model";
 import { cn } from "@/lib/utils";
+import { hasControlPlane } from "@/services/controlPlane/config";
 
 export interface ActingIdentityFieldProps {
-  value: ActingIdentityKey;
+  value: ActingIdentityKey | undefined;
   onChange: (next: ActingIdentityKey) => void;
+  /** Mixed activations keep source-specific defaults or their stored choices. */
+  defaultHint?: string;
+  /** Only GitHub has an App identity; other integrations must not offer it. */
+  allowApp?: boolean;
   /** The owner's login, to say where their writes appear. */
   ownerLogin?: string;
   /** A non-blocking note under the cards (the bot cannot write somewhere). */
   warning?: ReactNode;
   disabled?: boolean;
+  /** Whether this deployment can write as the bot. Default: it has a control plane. */
+  botAvailable?: boolean;
 }
 
 function choices(ownerLogin?: string): { value: ActingIdentityKey; label: string; hint: string }[] {
@@ -32,18 +43,19 @@ function choices(ownerLogin?: string): { value: ActingIdentityKey; label: string
     {
       value: "app",
       label: "Reliant bot",
-      hint: "They appear as reliant-labs[bot]. Only where you can push; hosted Reliant only.",
+      hint: "Comments and reviews appear as reliant-labs[bot]. Works in repositories you can push to.",
     },
   ];
 }
 
-export function ActingIdentityField({ value, onChange, ownerLogin, warning, disabled = false }: ActingIdentityFieldProps) {
+export function ActingIdentityField({ value, onChange, ownerLogin, warning, defaultHint, allowApp = true, disabled = false, botAvailable = hasControlPlane }: ActingIdentityFieldProps) {
   const ids = useId();
   return (
     <fieldset className="min-w-0">
-      <legend className="mb-1.5 text-sm font-medium text-foreground">Writes as</legend>
+      <legend className="mb-1.5 text-sm font-medium text-foreground">{allowApp ? "GitHub writes as" : "Writes as"}</legend>
+      {defaultHint && <p className="mb-1.5 text-xs text-muted-foreground">{defaultHint}</p>}
       <div className="grid gap-2 sm:grid-cols-2">
-        {choices(ownerLogin).map((choice) => {
+        {choices(ownerLogin).filter((choice) => allowApp || choice.value !== "app").map((choice) => {
           const checked = value === choice.value;
           return (
             <label
@@ -61,7 +73,7 @@ export function ActingIdentityField({ value, onChange, ownerLogin, warning, disa
                 name={`${ids}-identity`}
                 className="mt-0.5"
                 checked={checked}
-                disabled={disabled}
+                disabled={disabled || (choice.value === "app" && !botAvailable)}
                 onChange={() => onChange(choice.value)}
                 aria-describedby={`${ids}-${choice.value}-hint`}
               />
@@ -75,6 +87,9 @@ export function ActingIdentityField({ value, onChange, ownerLogin, warning, disa
           );
         })}
       </div>
+      {!botAvailable && (allowApp || value === undefined || value === "app") && (
+        <p className="mt-1.5 text-xs text-warning-ink">Reliant bot requires a control plane. Choose You explicitly to write as your account; bot writes never fall back automatically.</p>
+      )}
       {warning && <div className="mt-1.5 text-xs text-warning-ink">{warning}</div>}
     </fieldset>
   );

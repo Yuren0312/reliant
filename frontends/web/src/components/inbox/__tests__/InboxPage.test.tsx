@@ -9,6 +9,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
@@ -18,6 +20,7 @@ import {
   CleanupStorageOutcome,
   CleanupStorageResponseSchema,
   InboxItemKind,
+  InboxItemSchema,
   ListInboxResponseSchema,
   type InboxItem,
 } from "@/gen/reliant/v1/inbox_pb";
@@ -49,24 +52,8 @@ const mocks = vi.hoisted(() => ({
   notify: vi.fn(),
 }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    inbox: () => ({
-      listInbox: mocks.listInbox,
-      cleanupStorage: mocks.cleanupStorage,
-      dismissInboxItem: mocks.dismissInboxItem,
-      restoreInboxItem: mocks.restoreInboxItem,
-    }),
-    daemonRegistry: () => ({ clearMachineCaches: mocks.clearMachineCaches }),
-  },
-}));
-vi.mock("@/api/client", () => ({
-  api: { approvals: { approve: mocks.approve, deny: mocks.deny } },
-}));
-vi.mock("@/api/question-grpc", () => ({
-  questionGrpc: { resolveQuestion: mocks.resolveQuestion, listPendingQuestions: vi.fn() },
-}));
 vi.mock("@/hooks/useOnboardingQueries", () => ({
+  useDaemonList: () => ({ data: [], isPending: false, isError: false }),
   useResumeDaemon: (callbacks: { onError?: (error: unknown) => void } = {}) => ({
     mutate: (id: string) => {
       Promise.resolve(mocks.resumeDaemon(id)).catch((error) => callbacks.onError?.(error));
@@ -112,6 +99,29 @@ beforeEach(() => {
   mocks.approve.mockResolvedValue({ success: true, message: "" });
   mocks.deny.mockResolvedValue({ success: true, message: "" });
   mocks.resolveQuestion.mockResolvedValue({});
+  setTransport(
+    mockTransport({
+      // The Inbox is on InboxService's generated hooks.
+      "InboxService.ListInbox": (req) => mocks.listInbox(req),
+      "InboxService.CleanupStorage": (req) => mocks.cleanupStorage(req),
+      "InboxService.DismissInboxItem": (req) => mocks.dismissInboxItem(req),
+      "InboxService.RestoreInboxItem": (req) => mocks.restoreInboxItem(req),
+      "ApprovalService.Approve": (req) => {
+        const { requestId, actionTaken } = req as { requestId: string; actionTaken?: string };
+        return mocks.approve(requestId, actionTaken);
+      },
+      "ApprovalService.Deny": (req) => {
+        const { requestId, denialReason, actionTaken } = req as { requestId: string; denialReason?: string; actionTaken?: string };
+        return mocks.deny(requestId, denialReason, actionTaken);
+      },
+      // Free-up-space goes through the generated DaemonRegistryService write.
+      "DaemonRegistryService.ClearMachineCaches": (req) => mocks.clearMachineCaches(req),
+      "QuestionService.ResolveQuestion": (req) => {
+        const { questionId, action, responseData } = req as { questionId: string; action: string; responseData?: string };
+        return mocks.resolveQuestion(questionId, action, responseData);
+      },
+    }),
+  );
   mocks.dismissInboxItem.mockResolvedValue({});
   mocks.restoreInboxItem.mockResolvedValue({});
   mocks.resumeDaemon.mockResolvedValue({});
@@ -120,6 +130,25 @@ beforeEach(() => {
 });
 
 describe("InboxPage item kinds", () => {
+  it("shows retained recovery actions and dismisses only the notice, without restoring or deleting refs", async () => {
+    respond([create(InboxItemSchema, {
+      itemId: "recovery:retained", kind: InboxItemKind.RECOVERY, projectId: "project-1",
+      waitingSince: new Date().toISOString(),
+      payload: { case: "recovery", value: {
+        recoveryId: "retained", sourceWorktreeName: "Saved feature", phase: "held", checkoutCount: 2,
+      } },
+    })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-recovery:retained");
+    expect(within(row).getByText("Saved feature")).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "Recovery actions" }));
+    expect(within(row).getByText(/Dismissing this notice does not delete/)).toBeInTheDocument();
+    expect(within(row).getByText(/held, not confirmed complete/)).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "Dismiss Saved feature" }));
+    await waitFor(() => expect(mocks.dismissInboxItem).toHaveBeenCalled());
+    expect(mocks.restoreInboxItem).not.toHaveBeenCalled();
+  });
+
   it("an approval shows its title on one line, with Approve / Deny", async () => {
     respond([approvalItem()]);
     renderInboxAt(<InboxPage />);
@@ -184,14 +213,14 @@ describe("InboxPage item kinds", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/runs/chat-last"));
   });
 
-  it("a failed launch shows the reason, a single failure no count, and Edit automation", async () => {
+  it("a failed launch shows the reason, a single failure no count, and opens the trigger", async () => {
     respond([launchFailedItem()]);
-    const { router } = renderInboxAt(<InboxPage />);
+    renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-automation_launch_failed:evt-5");
     expect(within(row).getByText("Machine was deleted")).toBeInTheDocument();
     expect(within(row).queryByText(/in a row/)).toBeNull();
-    await userEvent.click(within(row).getByRole("link", { name: "Edit automation" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/automations/trg-2"));
+    // Until the trigger is known, the link resolves through the automation redirect.
+    expect(within(row).getByRole("link", { name: "Open trigger" })).toHaveAttribute("href", "/workflows/automations/trg-2");
   });
 
   it("an automation that needs setup names what is missing and links to Finish setup on its workflow page", async () => {
@@ -261,7 +290,7 @@ describe("InboxPage layout", () => {
     expect(row.querySelectorAll("textarea, input")).toHaveLength(0);
   });
 
-  it("an automation item without a run links to the automation", async () => {
+  it("an automation item without a run links to the trigger", async () => {
     respond([launchFailedItem()]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-automation_launch_failed:evt-5");

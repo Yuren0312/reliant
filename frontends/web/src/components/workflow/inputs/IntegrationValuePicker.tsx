@@ -4,8 +4,7 @@
  * IntegrationValuePicker — one control for every typed input
  * (`github.repository`, `github.label`, `github.user`, and every type an
  * integration adds later). It renders from CatalogService.ListInputOptions
- * and nothing else, so nothing in it is per integration
- * (research/autopilot/automation-ux-spec.md §3.5).
+ * and nothing else, so nothing in it is per integration.
  *
  * A WAI-ARIA 1.2 combobox with a listbox popup: the field shows the selected
  * values as chips (multi) or one value (single); opening it moves focus to a
@@ -30,7 +29,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { AlertTriangle, Check, ChevronDown, Loader2, Plus, RefreshCw, X } from "lucide-react";
 
-import type { InputOption } from "@/api/input-options-grpc";
+import type { InputOption } from "@/hooks/input-options-queries";
 import { inputOptionsErrorReason, useInputOptions, useResolvedInputOptions } from "@/hooks/input-options-queries";
 import { cn } from "@/lib/utils";
 import { inputTypeNouns } from "./inputTypeNouns";
@@ -85,6 +84,7 @@ interface Section {
 
 const DEBOUNCE_MS = 300;
 const PAGE_JUMP = 10;
+const NO_OPTIONS: InputOption[] = [];
 
 function asValues(value: IntegrationValuePickerProps["value"], multi: boolean): string[] {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
@@ -173,9 +173,8 @@ export function IntegrationValuePicker(props: IntegrationValuePickerProps) {
     actingIdentity,
     enabled: !scopeMissing && !disabled,
   });
-  const pages = useMemo(() => optionsQuery.data?.pages ?? [], [optionsQuery.data]);
-  const needsConnection = pages[0]?.connectionState === "needs_connection";
-  const loaded = useMemo(() => pages.flatMap((page) => page.options), [pages]);
+  const needsConnection = optionsQuery.data?.connectionState === "needs_connection";
+  const loaded = optionsQuery.data?.options ?? NO_OPTIONS;
   const byValue = useMemo(() => new Map(loaded.map((o) => [o.value, o])), [loaded]);
 
   // Stored values the loaded options do not label (an id stored for a login,

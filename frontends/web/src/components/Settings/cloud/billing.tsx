@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -12,15 +12,16 @@ import {
   Loader2,
   Pencil,
   Server,
+  Sparkles,
 } from "lucide-react";
 
+import Button from "@/components/forge-ui/button";
+import { SettingsPageHeader } from "../SettingsPageHeader";
 import {
   Badge,
-  Button,
   Card,
   CardContent,
   EmptyState,
-  PageHeader,
   Table,
   Tbody,
   Td,
@@ -64,6 +65,7 @@ import {
   isPlanDetailUnavailable,
 } from "./billingUtils";
 import { useLLMSpend } from "@/hooks/useReliantAIQueries";
+import type { BillingOrigin } from "@/hooks/useGoToBilling";
 import {
   ComputeSubscriptionCheckout,
   type ComputePlanOption,
@@ -111,9 +113,11 @@ import { WalletAutoRechargeSection } from "./WalletAutoRechargeControl";
 // proxies to admin-api and therefore could never reach these RPCs at all.
 import { DeployUsageSection } from "./usage/DeployUsageSection";
 import { useDeployUsage } from "./usage/useDeployUsage";
+import { useActiveOrg } from "@/hooks/useOrgs";
 
 /**
- * Three tabs, not four.
+ * Overview, plans, usage — and Reliant AI, the managed keys and spend that
+ * Settings → AI's Reliant card links to.
  *
  * "Plans" became "Change plan" because it is a verb and the tab is entered to
  * DO something. Invoices folded into Usage because an invoice is the settled
@@ -130,8 +134,15 @@ const TAB_META: Record<
   overview: { label: "Overview", icon: CreditCard },
   plans: { label: "Change plan", icon: Cpu },
   usage: { label: "Usage & invoices", icon: BarChart3 },
+  // Reliant's managed AI keys and spend. They used to be a tab of Settings →
+  // AI, a third place Reliant appeared there; AI now shows Reliant once, as a
+  // provider card that links here.
+  ai: { label: "Reliant AI", icon: Sparkles },
 };
 const TABS = VISIBLE_BILLING_TABS.map((id) => ({ id, ...TAB_META[id] }));
+
+// Reliant AI's keys and spend tables load only when their tab is opened.
+const ReliantAISection = lazy(() => import("./reliantAI").then((m) => ({ default: m.ReliantAISection })));
 
 /**
  * BillingSection — the end-user billing dashboard rendered inside
@@ -162,7 +173,7 @@ export function BillingSection() {
     tab?: BillingTab;
     checkout?: "success" | "cancelled";
     planId?: string;
-    from?: "onboarding" | "forge";
+    from?: BillingOrigin | "connectors";
     returnTo?: string;
   };
   // An inbound `?tab=invoices` is a real link somebody has; it resolves to the
@@ -191,9 +202,10 @@ export function BillingSection() {
 
   return (
     <div className="flex min-w-0 flex-col gap-6">
-      <PageHeader
-        title="Billing"
-        subtitle="Manage wallet credits, your compute plan, usage, and invoices."
+      <SettingsPageHeader
+        title="Billing & usage"
+        description="Manage wallet credits, your compute plan, usage, limits, and invoices."
+        className="mb-0"
       />
 
       {/* The route home, hoisted out of the Stripe-return banner.
@@ -207,6 +219,9 @@ export function BillingSection() {
       )}
       {search.from === "forge" && (
         <BackToEnvironment returnTo={search.returnTo} />
+      )}
+      {search.from && search.from !== "onboarding" && search.from !== "forge" && search.from !== "connectors" && (
+        <BackToOrigin returnTo={search.returnTo} />
       )}
 
       {search.checkout && (
@@ -251,6 +266,11 @@ export function BillingSection() {
       )}
       {tab === "plans" && <PlansTab />}
       {tab === "usage" && <UsageAndInvoicesTab />}
+      {tab === "ai" && (
+        <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+          <ReliantAISection />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -309,7 +329,7 @@ function CheckoutReturnBanner({
             whenever you&apos;re ready.
           </p>
         </div>
-        <Button size="sm" variant="ghost" onClick={onDismiss}>
+        <Button size="md" variant="ghost" onClick={onDismiss}>
           Dismiss
         </Button>
       </div>
@@ -338,7 +358,7 @@ function CheckoutReturnBanner({
         </div>
       </div>
       {confirmed && (
-        <Button size="sm" variant="ghost" onClick={onDismiss}>
+        <Button size="md" variant="ghost" onClick={onDismiss}>
           Dismiss
         </Button>
       )}
@@ -376,7 +396,7 @@ function BackToSetup({ returnTo }: { returnTo?: string }) {
         You came here from setup. Pick a plan and you can head straight back.
       </p>
       <Button
-        size="sm"
+        size="md"
         variant="outline"
         onClick={() => {
           if (safeReturnTo) {
@@ -389,8 +409,8 @@ function BackToSetup({ returnTo }: { returnTo?: string }) {
           }
           void navigate({ to: "/onboarding", search: {} });
         }}
+        leftIcon={<ArrowLeft />}
       >
-        <ArrowLeft className="h-4 w-4" />
         Back to setup
       </Button>
     </div>
@@ -423,18 +443,42 @@ function BackToEnvironment({ returnTo }: { returnTo?: string }) {
         is active it goes out on its own — nothing to re-run.
       </p>
       <Button
-        size="sm"
+        size="md"
         variant="outline"
         onClick={() => {
           if (safeReturnTo) {
             void navigate({ href: safeReturnTo });
             return;
           }
-          void navigate({ to: "/forge", search: {} });
+          void navigate({ to: "/apps" });
         }}
+        leftIcon={<ArrowLeft />}
       >
-        <ArrowLeft className="h-4 w-4" />
         Back to environment
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * The way back for every other surface that sent the user here (a chat, a
+ * machine, a run, the inbox). Payment happens in place on those surfaces, so
+ * a visit here is to compare plans or change a setting — and it must never be
+ * a dead end. `returnTo` is guarded like BackToSetup's; without a usable one
+ * there is nowhere specific to go back to and nothing renders.
+ */
+function BackToOrigin({ returnTo }: { returnTo?: string }) {
+  const navigate = useNavigate();
+  const safeReturnTo = sameOriginPath(returnTo);
+  if (!safeReturnTo) return null;
+  return (
+    <div
+      className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-3"
+      data-testid="billing-back-to-origin"
+    >
+      <p className="text-sm text-muted-foreground">Done here? Pick up where you left off.</p>
+      <Button size="md" variant="outline" onClick={() => void navigate({ href: safeReturnTo })} leftIcon={<ArrowLeft />}>
+        Back to where you were
       </Button>
     </div>
   );
@@ -536,7 +580,7 @@ function OverviewTab({
   // number — the runway — so it is deliberately not allowed to gate anything:
   // if it fails or is empty, the credit band drops one line and every control
   // still works.
-  const orgId = walletQ.data?.overview?.organization?.id ?? "";
+  const orgId = useActiveOrg().activeOrgId ?? "";
   const spendWindow = useMemo(() => {
     const end = new Date();
     const start = new Date(end);
@@ -876,7 +920,7 @@ function OverviewTab({
                   />
                   <div>
                     <Button
-                      size="sm"
+                      size="md"
                       variant="ghost"
                       onClick={() => setTopupCents(null)}
                     >
@@ -970,11 +1014,11 @@ function OverviewTab({
             <div>
               <Button
                 variant="ghost"
-                size="sm"
+                size="md"
                 onClick={handleManageStripe}
                 disabled={portalMutation.isPending}
+                leftIcon={<ArrowUpRight />}
               >
-                <ArrowUpRight className="h-4 w-4" />
                 {portalMutation.isPending
                   ? "Opening…"
                   : "Manage payment method in Stripe"}
@@ -1031,8 +1075,7 @@ function BillingEmailRow() {
             </p>
           </div>
           {!editing && (
-            <Button size="sm" variant="ghost" onClick={startEdit}>
-              <Pencil className="h-3.5 w-3.5" />
+            <Button size="md" variant="ghost" onClick={startEdit} leftIcon={<Pencil />}>
               {billingEmail ? "Change" : "Set"}
             </Button>
           )}
@@ -1050,15 +1093,15 @@ function BillingEmailRow() {
                 className="min-w-[220px] flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
               <Button
-                size="sm"
+                size="md"
                 onClick={save}
                 disabled={updateMutation.isPending}
-                isLoading={updateMutation.isPending}
+                loading={updateMutation.isPending}
               >
                 Save
               </Button>
               <Button
-                size="sm"
+                size="md"
                 variant="ghost"
                 onClick={() => setEditing(false)}
                 disabled={updateMutation.isPending}
@@ -1262,7 +1305,7 @@ function PlansTab() {
           />
           <div>
             <Button
-              size="sm"
+              size="md"
               variant="ghost"
               onClick={() => setCheckoutPlanId(null)}
             >
@@ -1346,11 +1389,11 @@ function UsageAndInvoicesTab() {
         <UsagePanel />
       </div>
       {/* The usage notices the gateway sends point here ("Settings → Billing"). */}
-      {obsOrg.orgId && (
-        <div className="border-t border-border pt-6" data-testid="billing-observability-usage">
+      <div id="observability" className="border-t border-border pt-6" data-testid="billing-observability-usage">
+        <div id="billing-observability-usage">
           <UsageView orgId={obsOrg.orgId} />
         </div>
-      )}
+      </div>
       {deployUsage.available && (
         <div className="border-t border-border pt-6">
           <DeployUsageSection

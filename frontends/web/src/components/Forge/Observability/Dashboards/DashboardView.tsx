@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * ONE DASHBOARD (console v3, decision DB): its panels over the console's
+ * ONE DASHBOARD: its panels over the console's
  * scope, with the controls the mockup draws.
  *
  *   header       title, star, source tag; one meta line (where it came from,
@@ -65,9 +65,12 @@ import { ObsChartMarkersProvider, type ChartBand, type ChartMarker } from "../ch
 import { deliveryScopeOf } from "../deliveryScope";
 import { formatAgo } from "../format";
 import type { ObsEnvironment } from "../obsPlace";
-import { ObsError } from "../ObsStates";
+import { ObsAsOf, ObsError } from "../ObsStates";
 import { useReleaseMarkers } from "../releaseMarkers";
 import { DashboardHeader } from "./DashboardHeader";
+import { ViewerControls } from "./ViewerControls";
+import { OrganizationCostsView } from "./OrganizationCostsView";
+import { visiblePanel, viewerQuery } from "./viewerModel";
 import {
   alertBands,
   COMPARE_LABELS,
@@ -88,7 +91,10 @@ import {
   type RefreshInterval,
 } from "./dashboardModel";
 import { AlertFromPanelDialog, CREATE_ALERT_LABEL } from "./AlertFromPanelDialog";
+import { useAskReliant } from "../AskReliant/AskReliant";
 import { PromoteDialog, SaveCopyDialog, envScopeOf, writeErrorMessage } from "./dialogs";
+import { useUnmountSafeTimeout } from "@/hooks/useUnmountSafeTimeout";
+import { dashboardPivot, useExploreHref } from "../Metrics/pivots";
 import { drillSearches, type ExploreHrefs } from "./drill";
 import { duplicatePanel, starterPanel, upsertPanel } from "./panelBuilder";
 import { PanelBody, type DrillTarget } from "./PanelBody";
@@ -99,6 +105,8 @@ export interface DashboardHrefs extends ExploreHrefs {
   list: string;
   release: (version: string) => string;
   trace: (traceId: string) => string;
+  /** One browser session (a sessions panel's row). Absent: rows are not links. */
+  session?: (sessionId: string) => string;
   dashboard: (ref: DashboardRef, search?: DashboardSearch) => string;
 }
 
@@ -126,15 +134,16 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const range: RangePreset = search.range ?? DEFAULT_RANGE;
   const compare: CompareMode = search.compare ?? "off";
   const refresh: RefreshInterval = search.refresh ?? "off";
+  const exploreLink = useExploreHref();
 
   const envId = env === ENV_ALL ? null : (environments.find((candidate) => candidate.name === env)?.id ?? null);
   const unrecorded = env !== ENV_ALL && !envId;
   const scope = useMemo<ObsScope | null>(
-    () => (orgId && !unrecorded ? { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] } : null),
-    [orgId, project, envId, unrecorded]
+    () => (orgId && !unrecorded && dashRef.kind !== "builtin" ? { orgId, projectId: project, envIds: envId ? [envId] : [], filters: [] } : null),
+    [orgId, project, envId, unrecorded, dashRef.kind]
   );
 
-  const doc = useDashboard(orgId, dashRef, search.version, search.release);
+  const doc = useDashboard(orgId, dashRef, dashRef.kind === "builtin" ? undefined : search.version, dashRef.kind === "builtin" ? undefined : search.release);
   const spec = doc.data?.spec;
   const summary = doc.data?.summary;
 
@@ -156,15 +165,15 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const starred = starredHere ?? !!summary?.starred;
 
   // ── Markers, bands, comparison ──
-  const marks = !!spec && marksReleases(spec);
+  const marks = !!spec && marksReleases(spec) && search.releases !== false;
   const releases = useReleaseMarkers(scope, range, environments, marks);
   const delivery = useMemo(() => (scope ? deliveryScopeOf(scope, environments) : null), [scope, environments]);
-  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!envId });
-  const history = useAlertHistory(orgId, range, envId ?? undefined);
+  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!envId && dashRef.kind !== "builtin" });
+  const history = useAlertHistory(dashRef.kind === "builtin" ? null : orgId, range, envId ?? undefined);
   const scopeEnvIds = useMemo(() => (envId ? [envId] : environments.map((candidate) => candidate.id)), [envId, environments]);
   const bands = useMemo(
-    () => alertBands(history.data ?? [], scopeEnvIds, Date.now(), search.service),
-    [history.data, scopeEnvIds, search.service]
+    () => search.alerts === false ? [] : alertBands(history.data ?? [], scopeEnvIds, Date.now(), search.service),
+    [history.data, scopeEnvIds, search.service, search.alerts]
   );
   const now = Date.now();
   const target = compareTarget(compare, range, promotions.data?.promotions ?? [], envId, now);
@@ -196,6 +205,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const [layout, setLayout] = useState<Dashboard | null>(null);
   const [drawer, setDrawer] = useState<{ mode: DrawerMode; panel: Panel } | null>(null);
   const [alertPanel, setAlertPanel] = useState<Panel | null>(null);
+  const { ask: askReliant, dialog: askReliantDialog } = useAskReliant({ forgeProject: project, envChoices: environments.map((candidate) => candidate.name) });
   const [removing, setRemoving] = useState<Panel | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
 
@@ -228,6 +238,8 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
     );
   }
 
+  if (summary.viewKind === "organization-costs") return <OrganizationCostsView orgId={orgId!} />;
+
   const currentVersion = summary.workspace?.version ?? 0;
   const viewingOld = !!search.version && search.version !== currentVersion;
   const editable = !summary.readOnly && !!doc.data?.canWrite && !search.version && !search.release;
@@ -237,12 +249,16 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const workspaceScope = summary.workspace?.envIds.length
     ? summary.workspace.envIds.map((id) => environments.find((candidate) => candidate.id === id)?.name ?? id).join(", ")
     : "all environments";
-  const services = search.service ? [search.service] : [];
+  const services = spec.filters.some((filter) => filter.field === "service.name") && search.service ? [search.service] : [];
   const refreshEvery = refreshMs(refresh);
+  const processForPanel = (panel: Panel) => viewerQuery(spec, panel, search).services[0];
+  const exploreHref = (panel: Panel): string | null =>
+    exploreLink?.(dashboardPivot(viewerQuery(spec, panel, search).panel, { service: processForPanel(panel), compare }), { range: search.range ? range : undefined }) ?? null;
   const links = {
     traceHref: hrefs.trace,
+    sessionHref: hrefs.session,
     searchHref: (panel: Panel) => {
-      const { logs, traces } = drillSearches(panel, {}, { range, service: search.service });
+      const { logs, traces } = drillSearches(viewerQuery(spec, panel, search).panel, {}, { range, service: processForPanel(panel) });
       return panel.signal === "logs" ? hrefs.logs(logs) : hrefs.traces(traces);
     },
   };
@@ -250,10 +266,11 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   const grid = (
     <ObsChartMarkersProvider markers={marks ? releases.markers : NO_MARKERS}>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="dashboard-grid" data-editing={layout ? "true" : undefined}>
-        {shown.panels.map((panel, index) => (
+        {shown.panels.filter((panel) => !!layout || visiblePanel(panel, search)).map((panel, index) => (
           <DashboardPanelCard
             key={panel.id}
             panel={panel}
+            queryPanel={viewerQuery(spec, panel, search).panel}
             layout={
               layout
                 ? {
@@ -280,22 +297,36 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
                   ]
                 : []),
               ...(!editable ? [{ label: "View spec", onSelect: () => setDrawer({ mode: "view" as const, panel }), testId: `dashboard-panel-view-${panel.id}` }] : []),
+              ...(exploreHref(panel)
+                ? [{ label: "Explore in Metrics", detail: "this query, editable", href: exploreHref(panel)!, testId: `dashboard-panel-explore-${panel.id}` }]
+                : []),
               { label: panel.signal === "logs" ? "Explore in Logs" : "Explore in Traces", detail: "with this panel's service", href: links.searchHref(panel) },
               { label: CREATE_ALERT_LABEL, detail: "as KCL", onSelect: () => setAlertPanel(panel), separated: true, testId: `dashboard-panel-alert-${panel.id}` },
+              {
+                label: "Ask Reliant",
+                detail: "in a new chat",
+                onSelect: () => void askReliant({ kind: "panel", panel, dashboard: summary.title, window: range, env: env === ENV_ALL ? null : env }),
+                testId: `dashboard-panel-ask-${panel.id}`,
+              },
               ...(editable && !layout
                 ? [{ label: "Remove panel", onSelect: () => setRemoving(panel), separated: true, testId: `dashboard-panel-remove-${panel.id}` }]
                 : []),
             ]}
             scope={scope}
             range={range}
-            services={services}
+            services={viewerQuery(spec, panel, search).services}
             refreshEvery={refreshEvery}
             target={target}
             bands={bands}
-            links={{ ...links, onDrill: (drillTarget, at) => setDrill({ target: drillTarget, panel, at }) }}
+            links={{ ...links, onDrill: (drillTarget, at) => setDrill({ target: drillTarget, panel: viewerQuery(spec, panel, search).panel, at }) }}
           />
         ))}
       </div>
+      {!layout && shown.panels.every((panel) => !visiblePanel(panel, search)) && (
+        <p className="rounded-lg border border-dashed border-border bg-surface-sunken p-4 text-sm text-ink-muted" role="status">
+          All metrics are hidden in this view. Use Metrics to show them again; the saved dashboard is unchanged.
+        </p>
+      )}
     </ObsChartMarkersProvider>
   );
 
@@ -306,6 +337,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
       environments={environments}
       range={range}
       service={search.service}
+      hasProcessFilter={spec.filters.some((filter) => filter.field === "service.name")}
       compare={compare}
       target={target}
       releaseCompare={releaseCompare}
@@ -493,6 +525,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
       )}
 
       {variables}
+      {!layout && <ViewerControls dashboard={spec} scope={scope} range={range} search={search} onSearch={onSearch} />}
 
       {layout && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm" role="status" data-testid="dashboard-layout-bar">
@@ -538,7 +571,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
       )}
 
       {drill && (
-        <DrillMenu drill={drill} range={range} service={search.service} hrefs={hrefs} env={env} onClose={closeDrill} />
+        <DrillMenu drill={drill} range={range} service={processForPanel(drill.panel)} hrefs={hrefs} env={env} onClose={closeDrill} />
       )}
 
       {drawer && (
@@ -571,6 +604,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
           }
         />
       )}
+      {askReliantDialog}
       {alertPanel && (
         <AlertFromPanelDialog panel={alertPanel} dashboardTitle={summary.title} environments={environments} env={env} services={services} onClose={() => setAlertPanel(null)} />
       )}
@@ -599,7 +633,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
             copy.mutate(input, {
               onSuccess: (saved) => {
                 setDialog(null);
-                navigateTo(hrefs.dashboard(saved.summary.ref, { range: search.range, service: search.service }));
+                navigateTo(hrefs.dashboard(saved.summary.ref, { ...search, version: undefined, release: undefined }));
               },
             })
           }
@@ -760,6 +794,7 @@ function VariablesBar({
   environments,
   range,
   service,
+  hasProcessFilter,
   compare,
   target,
   releaseCompare,
@@ -773,6 +808,7 @@ function VariablesBar({
   environments: readonly ObsEnvironment[];
   range: RangePreset;
   service: string | undefined;
+  hasProcessFilter: boolean;
   compare: CompareMode;
   target: CompareTarget;
   releaseCompare: CompareTarget;
@@ -788,32 +824,37 @@ function VariablesBar({
     return [...new Set(known)];
   }, [overview.data, service]);
   const [copied, setCopied] = useState(false);
+  const later = useUnmountSafeTimeout();
 
   const share = () => {
     const url = new URL(window.location.href);
     url.searchParams.delete("tv");
     void navigator.clipboard?.writeText(url.toString()).then(() => {
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      later(() => setCopied(false), 2000);
     });
   };
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-2" data-testid="dashboard-variables">
-      <VariableSelect
-        id="dashboard-var-env"
-        label="env"
-        value={env}
-        options={[{ value: ENV_ALL, label: "all" }, ...environments.map((candidate) => ({ value: candidate.name, label: candidate.name }))]}
-        onChange={onEnvChange}
-      />
-      <VariableSelect
+      {/* The console's top bar is the one environment selector. Full screen
+          hides the top bar, so only there does the dashboard offer its own. */}
+      {tv && (
+        <VariableSelect
+          id="dashboard-var-env"
+          label="env"
+          value={env}
+          options={[...environments.map((candidate) => ({ value: candidate.name, label: candidate.name })), { value: ENV_ALL, label: "All" }]}
+          onChange={onEnvChange}
+        />
+      )}
+      {hasProcessFilter && <VariableSelect
         id="dashboard-var-service"
-        label="service"
+        label="process"
         value={service ?? ""}
         options={[{ value: "", label: "all" }, ...names.map((name) => ({ value: name, label: name }))]}
         onChange={(value) => onSearch({ service: value || undefined })}
-      />
+      />}
       <VariableSelect
         id="dashboard-var-range"
         label="time"
@@ -902,6 +943,7 @@ interface PanelLayoutControls {
 
 function DashboardPanelCard({
   panel,
+  queryPanel,
   scope,
   range,
   services,
@@ -913,6 +955,7 @@ function DashboardPanelCard({
   layout,
 }: {
   panel: Panel;
+  queryPanel: Panel;
   scope: ObsScope | null;
   range: RangePreset;
   services: string[];
@@ -924,10 +967,10 @@ function DashboardPanelCard({
   /** Set while the layout is edited: the panel's handle, arrows, width and remove. */
   layout?: PanelLayoutControls;
 }) {
-  const query = usePanelQuery(scope, range, panel, services, [], { refetchInterval: refreshEvery });
+  const query = usePanelQuery(scope, range, queryPanel, services, [], { refetchInterval: refreshEvery });
   const comparable = (panel.kind === "line" || panel.kind === "number") && (target.mode === "period" || target.mode === "release");
   const offsetKey = target.mode === "release" ? `release:${target.promotion.promotionId}` : target.mode === "period" ? `period:${range}` : "";
-  const compareQuery = usePanelQuery(scope, range, panel, services, [], {
+  const compareQuery = usePanelQuery(scope, range, queryPanel, services, [], {
     offsetKey,
     offsetMs:
       target.mode === "release" ? () => Math.max(0, Date.now() - target.promotion.promotedAtMs) : target.mode === "period" ? () => rangeMs(range) : undefined,
@@ -969,6 +1012,7 @@ function DashboardPanelCard({
           )}
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium text-ink">{panel.title || panel.id}</h2>
+            {query.data && <ObsAsOf updatedAt={query.dataUpdatedAt} className="mt-0.5" />}
             {panel.description && <p className="truncate text-xs text-ink-muted" title={panel.description}>{panel.description}</p>}
           </div>
         </div>
@@ -1006,7 +1050,7 @@ function DashboardPanelCard({
       </div>
       <div className="px-4 pb-4 pt-2">
         <PanelBody
-          panel={panel}
+          panel={queryPanel}
           query={query}
           compare={comparable && offsetSec ? { query: compareQuery, label: target.mode === "release" ? target.label : "previous period", offsetSec } : undefined}
           bands={panel.kind === "line" ? bands : undefined}

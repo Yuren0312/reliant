@@ -29,6 +29,7 @@ import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   ObservabilityQuotaState,
   AttributeOp as WireAttributeOp,
+  MetricType as WireMetricType,
   ObservabilityService,
   Signal as WireSignal,
   SortOrder,
@@ -44,6 +45,7 @@ import {
   type WorkloadJob as WireWorkloadJob,
   type WorkloadPod as WireWorkloadPod,
   type PanelSchema,
+  type PanelSeriesMeta as WireSeriesMeta,
   type LogRecord as WireLogRecord,
   type Span as WireSpan,
   type TimePoint,
@@ -52,7 +54,7 @@ import {
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { WorkloadKind as WireWorkloadKind, type DeclaredWorkload as WireDeclaredWorkload } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 
-import { getControlPlaneClient } from "../client";
+import { obsClient } from "./obsClient";
 import type {
   AttributeFilter,
   AttributeOp,
@@ -76,6 +78,9 @@ import type {
   WorkloadMetric,
   Flamegraph,
   GetFlamegraphRequest,
+  GetServiceSignalsRequest,
+  ServiceSignal,
+  ServiceSignalsResult,
   ListTracesRequest,
   ListTracesResult,
   LogRecord,
@@ -98,9 +103,11 @@ import type {
   TraceRed,
   TraceSummary,
 } from "./types";
+import { SERVICE_SIGNALS } from "./types";
+import type { MetricKind, SeriesMeta } from "./metricsTypes";
 
 function client() {
-  return getControlPlaneClient(ObservabilityService);
+  return obsClient(ObservabilityService);
 }
 
 // ── Scope and time ───────────────────────────────────────────────────────────
@@ -304,13 +311,40 @@ export async function getTrace(req: ObsScope & { traceId: string; window: TimeWi
   return { traceId: res.traceId || req.traceId, spans: res.spans.map(mapSpan), truncated: res.truncated };
 }
 
+const KIND_OF: Partial<Record<WireMetricType, MetricKind>> = {
+  [WireMetricType.GAUGE]: "gauge",
+  [WireMetricType.SUM]: "sum",
+  [WireMetricType.HISTOGRAM]: "histogram",
+  [WireMetricType.EXPONENTIAL_HISTOGRAM]: "exp_histogram",
+  [WireMetricType.SUMMARY]: "summary",
+};
+
+/** A wire metric kind as the console's; one this build does not know (a newer server) is "unknown". */
+export function kindOfWire(type: WireMetricType): MetricKind {
+  return KIND_OF[type] ?? "unknown";
+}
+
+function mapSeriesMeta(m: WireSeriesMeta): SeriesMeta {
+  return {
+    label: m.label,
+    metric: m.metric,
+    kind: kindOfWire(m.metricType),
+    agg: m.aggregation,
+    quantile: m.quantile > 0 ? m.quantile : undefined,
+    valueUnit: m.valueUnit,
+  };
+}
+
 // ── Panels ───────────────────────────────────────────────────────────────────
 
-function pointsOf(points: TimePoint[]): { timestamps: number[]; values: (number | null)[] } {
-  return {
+function pointsOf(points: TimePoint[]): { timestamps: number[]; values: (number | null)[]; partial?: boolean[] } {
+  const out: { timestamps: number[]; values: (number | null)[]; partial?: boolean[] } = {
     timestamps: points.map((p) => Math.round(msOf(p.time) / 1000)),
-    values: points.map((p) => (Number.isFinite(p.value) ? p.value : null)),
+    // `null` is the server's gap (a formula over a missing operand): the value beside it is 0 and must be ignored.
+    values: points.map((p) => (p.null || !Number.isFinite(p.value) ? null : p.value)),
   };
+  if (points.some((p) => p.partial)) out.partial = points.map((p) => p.partial);
+  return out;
 }
 
 function panelInit(p: Panel): MessageInitShape<typeof PanelSchema> {
@@ -332,6 +366,9 @@ function panelInit(p: Panel): MessageInitShape<typeof PanelSchema> {
     where: (p.where ?? []).map(predicateInit),
     groupBy: p.groupBy ?? [],
     columns: p.columns ?? [],
+    formula: p.formula ?? "",
+    limit: p.limit ?? 0,
+    sql: p.sql ?? "",
     funnel: p.funnel ? { steps: p.funnel.steps, window: p.funnel.window ?? "", by: p.funnel.by ?? "" } : undefined,
     hasError: !!p.hasError,
     unit: p.unit ?? "",
@@ -355,6 +392,7 @@ export async function queryPanel(req: QueryPanelRequest): Promise<PanelResult> {
     panel: panelInit(req.panel),
     stepSeconds: req.stepSeconds,
     groupBy: req.groupBy ?? [],
+    explain: req.explain ?? false,
   });
   return {
     kind: res.kind,
@@ -362,7 +400,10 @@ export async function queryPanel(req: QueryPanelRequest): Promise<PanelResult> {
     stepSeconds: res.stepSeconds,
     truncated: res.truncated,
     columns: [...res.columns],
-    rows: res.rows.map((r) => ({ group: { ...r.group }, values: r.values.map((v) => (Number.isFinite(v) ? v : null)) })),
+    rows: res.rows.map((r) => {
+      const missing = new Set(r.missingValueIndexes);
+      return { group: { ...r.group }, values: r.values.map((v, index) => (!missing.has(index) && Number.isFinite(v) ? v : null)) };
+    }),
     series: res.series.map((s) => ({
       label: s.label,
       group: { ...s.group },
@@ -403,6 +444,10 @@ export async function queryPanel(req: QueryPanelRequest): Promise<PanelResult> {
       errors: Number(session.errors),
       hasReplay: session.hasReplay,
     })),
+    seriesMeta: (res.seriesMeta ?? []).map(mapSeriesMeta),
+    seriesTotal: res.seriesTotal ?? 0,
+    warnings: [...(res.warnings ?? [])],
+    compiledSql: (res.compiledSql ?? []).map((st) => ({ sql: st.sql, params: { ...st.params } })),
   };
 }
 
@@ -455,6 +500,29 @@ export async function getFlamegraph(req: GetFlamegraphRequest): Promise<Flamegra
     unit: res.unit,
     stackCount: res.stackCount,
     availableProfileTypes: [...res.availableProfileTypes],
+    truncated: res.truncated,
+  };
+}
+
+// ── Service signals ──────────────────────────────────────────────────────────
+
+const signalsOf = (values: string[]): ServiceSignal[] =>
+  values.filter((value): value is ServiceSignal => (SERVICE_SIGNALS as readonly string[]).includes(value));
+
+/**
+ * Which signals each service in the scope sends and declares: one bounded
+ * server-side statement, cached a minute. Attribute filters are not applied
+ * (a filter that matches nothing must not hide the view that would show it).
+ */
+export async function getServiceSignals(req: GetServiceSignalsRequest): Promise<ServiceSignalsResult> {
+  const res = await client().getServiceSignals({ scope: scope(req, req.window) });
+  return {
+    services: res.services.map((s) => ({
+      service: s.service,
+      emitting: signalsOf(s.emitting),
+      declared: signalsOf(s.declared),
+      declarationKnown: s.declarationKnown,
+    })),
     truncated: res.truncated,
   };
 }

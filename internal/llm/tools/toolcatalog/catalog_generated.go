@@ -100,6 +100,23 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"create_trigger_activation": {
+		Bindable: map[string]struct{}{
+			"acting_identity":  {},
+			"connection_id":    {},
+			"machine_id":       {},
+			"message":          {},
+			"name":             {},
+			"no_machine":       {},
+			"params":           {},
+			"presets":          {},
+			"project_id":       {},
+			"trigger_id":       {},
+			"workflow":         {},
+			"workflow_trigger": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"create_workflow": {
 		Bindable: map[string]struct{}{
 			"complete": {},
@@ -112,6 +129,18 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"id":   {},
 			"name": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"draft_automation": {
+		Bindable: map[string]struct{}{
+			"assumptions": {},
+			"name":        {},
+			"params":      {},
+			"prompt":      {},
+			"summary":     {},
+			"when":        {},
+			"workflow":    {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -146,6 +175,23 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"enable_trigger": {
+		Bindable: map[string]struct{}{
+			"acting_identity":  {},
+			"connection_id":    {},
+			"machine_id":       {},
+			"message":          {},
+			"name":             {},
+			"no_machine":       {},
+			"params":           {},
+			"presets":          {},
+			"project_id":       {},
+			"trigger_id":       {},
+			"workflow":         {},
+			"workflow_trigger": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"fetch": {
 		Bindable: map[string]struct{}{
 			"format":   {},
@@ -164,6 +210,12 @@ var generatedToolParams = map[string]ToolParams{
 			"replace_text": {},
 			"repo":         {},
 			"use_regex":    {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"fire_trigger": {
+		Bindable: map[string]struct{}{
+			"trigger_id": {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -390,6 +442,17 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"github__pr_enqueue": {
+		Bindable: map[string]struct{}{
+			"connection":      {},
+			"expectedHeadOid": {},
+			"owner":           {},
+			"pull_number":     {},
+			"repo":            {},
+			"repository_id":   {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"github__pr_get": {
 		Bindable: map[string]struct{}{
 			"connection":  {},
@@ -603,6 +666,14 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
 	},
+	"list_trigger_events": {
+		Bindable: map[string]struct{}{
+			"limit":      {},
+			"page_token": {},
+			"trigger_id": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"list_triggers": {
 		Bindable: map[string]struct{}{
 			"project_id": {},
@@ -637,6 +708,23 @@ var generatedToolParams = map[string]ToolParams{
 			"source_start": {},
 			"target_file":  {},
 			"target_line":  {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"pause_trigger": {
+		Bindable: map[string]struct{}{
+			"acting_identity":  {},
+			"connection_id":    {},
+			"machine_id":       {},
+			"message":          {},
+			"name":             {},
+			"no_machine":       {},
+			"params":           {},
+			"presets":          {},
+			"project_id":       {},
+			"trigger_id":       {},
+			"workflow":         {},
+			"workflow_trigger": {},
 		},
 		Unbindable: map[string]string{},
 	},
@@ -1005,6 +1093,23 @@ var generatedToolParams = map[string]ToolParams{
 			"status":      {},
 			"task_id":     {},
 			"title":       {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"update_trigger_activation": {
+		Bindable: map[string]struct{}{
+			"acting_identity":  {},
+			"connection_id":    {},
+			"machine_id":       {},
+			"message":          {},
+			"name":             {},
+			"no_machine":       {},
+			"params":           {},
+			"presets":          {},
+			"project_id":       {},
+			"trigger_id":       {},
+			"workflow":         {},
+			"workflow_trigger": {},
 		},
 		Unbindable: map[string]string{},
 	},

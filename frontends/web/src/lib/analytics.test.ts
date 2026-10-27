@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { setRuntimeConfig } from "@/test/runtimeConfig";
 
 // trackEvent reaches ClickStack (as a `product.<event>` span) and, while web
 // Sentry is on, Sentry. These tests pin that each sink is independent of the
@@ -16,8 +17,8 @@ vi.mock("@sentry/react", () => ({
   ),
 }));
 
-vi.mock("../store/privacyStore", () => ({
-  getPrivacySettings: () => ({ analyticsEnabled: true }),
+vi.mock("../hooks/privacy-queries", () => ({
+  privacyConsent: () => ({ analyticsEnabled: true }),
 }));
 
 // isDev must be false or the whole pipe is intentionally inert.
@@ -89,7 +90,7 @@ describe("trackEvent to Sentry", () => {
 
 // The sinks flag (telemetrySinks.ts) decides which of Sentry and ClickStack an
 // event reaches. Both run in parallel until web Sentry is removed.
-describe("VITE_TELEMETRY_SINKS", () => {
+describe("TELEMETRY_SINKS", () => {
   const ENDPOINT = "https://ingest.example.dev/k/rbk_x";
 
   beforeEach(() => {
@@ -102,8 +103,7 @@ describe("VITE_TELEMETRY_SINKS", () => {
   });
 
   it("sends to both Sentry and ClickStack for `sentry,clickstack`", () => {
-    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "sentry,clickstack");
+    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "sentry,clickstack" });
 
     trackEvent("onboarding_completed", { provider: "github" });
 
@@ -113,8 +113,7 @@ describe("VITE_TELEMETRY_SINKS", () => {
   });
 
   it("sends only to ClickStack for `clickstack`", () => {
-    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "clickstack");
+    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "clickstack" });
 
     trackEvent("onboarding_completed");
 
@@ -124,8 +123,7 @@ describe("VITE_TELEMETRY_SINKS", () => {
   });
 
   it("sends only to Sentry for `sentry`", () => {
-    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "sentry");
+    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "sentry" });
 
     trackEvent("onboarding_completed");
 
@@ -141,8 +139,7 @@ describe("VITE_TELEMETRY_SINKS", () => {
   });
 
   it("still reaches ClickStack when Sentry fails", () => {
-    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "sentry,clickstack");
+    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "sentry,clickstack" });
     vi.mocked(Sentry.addBreadcrumb).mockImplementationOnce(() => {
       throw new Error("sentry exploded");
     });
@@ -152,8 +149,7 @@ describe("VITE_TELEMETRY_SINKS", () => {
   });
 
   it("never throws when the runtime does", () => {
-    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "clickstack");
+    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "clickstack" });
     vi.mocked(track).mockImplementationOnce(() => {
       throw new Error("runtime exploded");
     });
@@ -169,8 +165,7 @@ describe("VITE_TELEMETRY_SINKS", () => {
 describe("ClickStack prop keys", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv("VITE_OTEL_ENDPOINT", "https://ingest.example.dev/k/rbk_x");
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "clickstack");
+    setRuntimeConfig({ OTEL_ENDPOINT: "https://ingest.example.dev/k/rbk_x", TELEMETRY_SINKS: "clickstack" });
   });
 
   afterEach(() => {
@@ -208,8 +203,8 @@ describe("ClickStack prop keys", () => {
 
   it("sends nothing when analytics consent is off", async () => {
     vi.resetModules();
-    vi.doMock("../store/privacyStore", () => ({
-      getPrivacySettings: () => ({ analyticsEnabled: false }),
+    vi.doMock("../hooks/privacy-queries", () => ({
+      privacyConsent: () => ({ analyticsEnabled: false }),
     }));
     vi.doMock("./constants", () => ({ isDev: false }));
     vi.doMock("@reliantlabs/forge-web-runtime", () => ({ track: vi.fn() }));
@@ -223,8 +218,8 @@ describe("ClickStack prop keys", () => {
 
   it("sends nothing in dev", async () => {
     vi.resetModules();
-    vi.doMock("../store/privacyStore", () => ({
-      getPrivacySettings: () => ({ analyticsEnabled: true }),
+    vi.doMock("../hooks/privacy-queries", () => ({
+      privacyConsent: () => ({ analyticsEnabled: true }),
     }));
     vi.doMock("./constants", () => ({ isDev: true }));
     vi.doMock("@reliantlabs/forge-web-runtime", () => ({ track: vi.fn() }));
@@ -242,8 +237,8 @@ describe("privacy and dev gating", () => {
 
   it("sends nothing when the user has disabled analytics", async () => {
     vi.resetModules();
-    vi.doMock("../store/privacyStore", () => ({
-      getPrivacySettings: () => ({ analyticsEnabled: false }),
+    vi.doMock("../hooks/privacy-queries", () => ({
+      privacyConsent: () => ({ analyticsEnabled: false }),
     }));
     vi.doMock("./constants", () => ({ isDev: false }));
 
@@ -256,8 +251,8 @@ describe("privacy and dev gating", () => {
 
   it("sends nothing in dev", async () => {
     vi.resetModules();
-    vi.doMock("../store/privacyStore", () => ({
-      getPrivacySettings: () => ({ analyticsEnabled: true }),
+    vi.doMock("../hooks/privacy-queries", () => ({
+      privacyConsent: () => ({ analyticsEnabled: true }),
     }));
     vi.doMock("./constants", () => ({ isDev: true }));
 

@@ -642,7 +642,12 @@ type ExchangeTokenRequest struct {
 	Audience string `protobuf:"bytes,1,opt,name=audience,proto3" json:"audience,omitempty"`
 	// scopes requested. Empty asks for every exchangeable scope the calling
 	// token holds.
-	Scopes        []string `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	Scopes []string `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	// org_id is the org the minted token acts in, which must be one the calling
+	// session's person belongs to. Unset: the org the calling session itself
+	// acts in. The control plane checks membership and clips the scopes to the
+	// person's grants IN that org.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -691,12 +696,20 @@ func (x *ExchangeTokenRequest) GetScopes() []string {
 	return nil
 }
 
+func (x *ExchangeTokenRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
 type ExchangeTokenResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`                                // Raw rlat_ token — returned once
 	TokenPrefix   string                 `protobuf:"bytes,2,opt,name=token_prefix,json=tokenPrefix,proto3" json:"token_prefix,omitempty"` // Display identifier, e.g. "rlat_A3f9Kd2p"
 	ExpiresAt     string                 `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`       // RFC 3339
 	Scopes        []string               `protobuf:"bytes,4,rep,name=scopes,proto3" json:"scopes,omitempty"`                              // What was actually granted
+	OrgId         string                 `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`                   // The org the token acts in
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -757,6 +770,13 @@ func (x *ExchangeTokenResponse) GetScopes() []string {
 		return x.Scopes
 	}
 	return nil
+}
+
+func (x *ExchangeTokenResponse) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
 }
 
 type GetGitTokenRequest struct {
@@ -906,16 +926,19 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\tScopeList\x12\x16\n" +
 	"\x06scopes\x18\x01 \x03(\tR\x06scopes\"@\n" +
 	"\x13UpdateTokenResponse\x12)\n" +
-	"\x04info\x18\x01 \x01(\v2\x15.reliant.v1.TokenInfoR\x04info\"J\n" +
+	"\x04info\x18\x01 \x01(\v2\x15.reliant.v1.TokenInfoR\x04info\"q\n" +
 	"\x14ExchangeTokenRequest\x12\x1a\n" +
 	"\baudience\x18\x01 \x01(\tR\baudience\x12\x16\n" +
-	"\x06scopes\x18\x02 \x03(\tR\x06scopes\"\x87\x01\n" +
+	"\x06scopes\x18\x02 \x03(\tR\x06scopes\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\x9e\x01\n" +
 	"\x15ExchangeTokenResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12!\n" +
 	"\ftoken_prefix\x18\x02 \x01(\tR\vtokenPrefix\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\x03 \x01(\tR\texpiresAt\x12\x16\n" +
-	"\x06scopes\x18\x04 \x03(\tR\x06scopes\"0\n" +
+	"\x06scopes\x18\x04 \x03(\tR\x06scopes\x12\x15\n" +
+	"\x06org_id\x18\x05 \x01(\tR\x05orgId\"0\n" +
 	"\x12GetGitTokenRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\"W\n" +
 	"\x13GetGitTokenResponse\x12!\n" +
@@ -925,14 +948,20 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\tTokenKind\x12\x1a\n" +
 	"\x16TOKEN_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11TOKEN_KIND_DAEMON\x10\x01\x12\x12\n" +
-	"\x0eTOKEN_KIND_API\x10\x022\x89\x04\n" +
-	"\fTokenService\x12P\n" +
-	"\vCreateToken\x12\x1e.reliant.v1.CreateTokenRequest\x1a\x1f.reliant.v1.CreateTokenResponse\"\x00\x12M\n" +
+	"\x0eTOKEN_KIND_API\x10\x022\xad\x06\n" +
+	"\fTokenService\x12\x93\x01\n" +
+	"\vCreateToken\x12\x1e.reliant.v1.CreateTokenRequest\x1a\x1f.reliant.v1.CreateTokenResponse\"C\xa2\xbb\x18?:=\n" +
+	"\x06create\x12-\n" +
+	"\x05token\x12\x10response.info.id\x1a\x12response.info.name*\x04kind\x12M\n" +
 	"\n" +
-	"ListTokens\x12\x1d.reliant.v1.ListTokensRequest\x1a\x1e.reliant.v1.ListTokensResponse\"\x00\x12P\n" +
-	"\vRevokeToken\x12\x1e.reliant.v1.RevokeTokenRequest\x1a\x1f.reliant.v1.RevokeTokenResponse\"\x00\x12P\n" +
-	"\vUpdateToken\x12\x1e.reliant.v1.UpdateTokenRequest\x1a\x1f.reliant.v1.UpdateTokenResponse\"\x00\x12\\\n" +
-	"\rExchangeToken\x12 .reliant.v1.ExchangeTokenRequest\x1a!.reliant.v1.ExchangeTokenResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12V\n" +
+	"ListTokens\x12\x1d.reliant.v1.ListTokensRequest\x1a\x1e.reliant.v1.ListTokensResponse\"\x00\x12k\n" +
+	"\vRevokeToken\x12\x1e.reliant.v1.RevokeTokenRequest\x1a\x1f.reliant.v1.RevokeTokenResponse\"\x1b\xa2\xbb\x18\x17:\x15\n" +
+	"\x06revoke\x12\v\n" +
+	"\x05token\x12\x02id\x12\x7f\n" +
+	"\vUpdateToken\x12\x1e.reliant.v1.UpdateTokenRequest\x1a\x1f.reliant.v1.UpdateTokenResponse\"/\xa2\xbb\x18+:)\n" +
+	"\x06update\x12\x1f\n" +
+	"\x05token\x12\x02id\x1a\x12response.info.name\x12\xf1\x01\n" +
+	"\rExchangeToken\x12 .reliant.v1.ExchangeTokenRequest\x1a!.reliant.v1.ExchangeTokenResponse\"\x9a\x01\xa2\xbb\x18\x95\x01\b\x00:\x90\x01:\x8d\x01per-command credential exchange: forge mints one short-lived, attenuated token for each control-plane call, so an event per exchange is noise\x12V\n" +
 	"\vGetGitToken\x12\x1e.reliant.v1.GetGitTokenRequest\x1a\x1f.reliant.v1.GetGitTokenResponse\"\x06\xa2\xbb\x18\x02\b\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
@@ -1000,6 +1029,7 @@ func file_reliant_v1_token_proto_init() {
 	}
 	file_reliant_v1_token_proto_msgTypes[3].OneofWrappers = []any{}
 	file_reliant_v1_token_proto_msgTypes[7].OneofWrappers = []any{}
+	file_reliant_v1_token_proto_msgTypes[10].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

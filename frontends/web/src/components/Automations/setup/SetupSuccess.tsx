@@ -10,13 +10,13 @@
 
 import { CircleCheck, AlertTriangle } from "lucide-react";
 
-import type { EnableWorkflowResult } from "@/api/trigger-grpc";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import type { EnableWorkflowResult } from "@/hooks/trigger-model";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { describeSchedule } from "@/lib/cronText";
 import { describeDeclaredSource, integrationOf, scheduleOf, type DeclaredTrigger } from "@/lib/declaredTriggers";
 import { formatAbsoluteTime } from "@/lib/relativeTime";
-import { Button } from "../../ui/Button";
-import { WebhookCredentialPanel } from "../ActivateTriggerDialog";
+import Button from "@/components/forge-ui/button";
+import { WebhookCredentialPanel } from "../dialog/WebhookCredentialPanel";
 
 export interface SetupSuccessProps {
   workflowTitle: string;

@@ -1,10 +1,1263 @@
 {
-  "version": "forge.dashboard-parts/v1",
+  "input": {
+    "Project": "reliant",
+    "Services": [
+      {
+        "Name": "account",
+        "Package": "reliant.v1",
+        "ProtoService": "AccountService",
+        "Methods": [
+          {
+            "Name": "PreviewAccountDeletion"
+          },
+          {
+            "Name": "DeleteAccount"
+          }
+        ]
+      },
+      {
+        "Name": "approval",
+        "Package": "reliant.v1",
+        "ProtoService": "ApprovalService",
+        "Methods": [
+          {
+            "Name": "ListApprovalsByChat"
+          },
+          {
+            "Name": "Approve"
+          },
+          {
+            "Name": "Deny"
+          },
+          {
+            "Name": "BatchApprove"
+          },
+          {
+            "Name": "BatchDeny"
+          }
+        ]
+      },
+      {
+        "Name": "attachment",
+        "Package": "reliant.v1",
+        "ProtoService": "AttachmentService",
+        "Methods": [
+          {
+            "Name": "UploadAttachment"
+          },
+          {
+            "Name": "CreateFileReference"
+          },
+          {
+            "Name": "GetAttachment"
+          },
+          {
+            "Name": "DeleteAttachment"
+          }
+        ]
+      },
+      {
+        "Name": "background",
+        "Package": "reliant.v1",
+        "ProtoService": "BackgroundService",
+        "Methods": [
+          {
+            "Name": "ListProcesses"
+          },
+          {
+            "Name": "GetProcessOutput"
+          },
+          {
+            "Name": "KillProcess"
+          },
+          {
+            "Name": "StreamProcessOutput"
+          }
+        ]
+      },
+      {
+        "Name": "connection",
+        "Package": "reliant.v1",
+        "ProtoService": "ConnectionService",
+        "Methods": [
+          {
+            "Name": "ListIntegrations"
+          },
+          {
+            "Name": "ListConnections"
+          },
+          {
+            "Name": "GetConnection"
+          },
+          {
+            "Name": "CreateApiKeyConnection"
+          },
+          {
+            "Name": "StartOAuth"
+          },
+          {
+            "Name": "CompleteOAuth"
+          },
+          {
+            "Name": "TestConnection"
+          },
+          {
+            "Name": "RenameConnection"
+          },
+          {
+            "Name": "SetDefaultConnection"
+          },
+          {
+            "Name": "DeleteConnection"
+          },
+          {
+            "Name": "ListConnectionEvents"
+          }
+        ]
+      },
+      {
+        "Name": "worktree",
+        "Package": "reliant.v1",
+        "ProtoService": "WorktreeService",
+        "Methods": [
+          {
+            "Name": "ListWorktreeRecoveries"
+          },
+          {
+            "Name": "RestoreWorktreeRecovery"
+          },
+          {
+            "Name": "DeleteWorktreeRecovery"
+          },
+          {
+            "Name": "CreateWorktree"
+          },
+          {
+            "Name": "ListWorktrees"
+          },
+          {
+            "Name": "ListArchivedWorktrees"
+          },
+          {
+            "Name": "GetWorktree"
+          },
+          {
+            "Name": "UpdateWorktree"
+          },
+          {
+            "Name": "DeleteWorktree"
+          },
+          {
+            "Name": "ArchiveWorktree"
+          },
+          {
+            "Name": "UnarchiveWorktree"
+          },
+          {
+            "Name": "ImportWorktree"
+          },
+          {
+            "Name": "DiscoverWorktrees"
+          },
+          {
+            "Name": "PruneWorktrees"
+          },
+          {
+            "Name": "RecreateWorktree"
+          },
+          {
+            "Name": "GetWorktreeChanges"
+          },
+          {
+            "Name": "GetWorktreeGitStatus"
+          },
+          {
+            "Name": "GetWorktreeCommits"
+          },
+          {
+            "Name": "ListWorktreeRepoStatuses"
+          },
+          {
+            "Name": "StageFiles"
+          },
+          {
+            "Name": "UnstageFiles"
+          },
+          {
+            "Name": "RevertFiles"
+          },
+          {
+            "Name": "CommitWorktree"
+          },
+          {
+            "Name": "PushWorktree"
+          },
+          {
+            "Name": "PullWorktree"
+          },
+          {
+            "Name": "GetWorktreePR"
+          },
+          {
+            "Name": "CreateWorktreePR"
+          }
+        ]
+      },
+      {
+        "Name": "chat",
+        "Package": "reliant.v1",
+        "ProtoService": "ChatService",
+        "Methods": [
+          {
+            "Name": "StartChat"
+          },
+          {
+            "Name": "RunNow"
+          },
+          {
+            "Name": "AdoptChat"
+          },
+          {
+            "Name": "UnadoptChat"
+          },
+          {
+            "Name": "ListChats"
+          },
+          {
+            "Name": "GetChat"
+          },
+          {
+            "Name": "UpdateChat"
+          },
+          {
+            "Name": "DeleteChat"
+          },
+          {
+            "Name": "SearchChats"
+          },
+          {
+            "Name": "ListArchivedChats"
+          },
+          {
+            "Name": "SendMessage"
+          },
+          {
+            "Name": "SendAgentMessage"
+          },
+          {
+            "Name": "ListQueuedAgentMessages"
+          },
+          {
+            "Name": "CancelQueuedAgentMessage"
+          },
+          {
+            "Name": "InterruptThread"
+          },
+          {
+            "Name": "ListMessages"
+          },
+          {
+            "Name": "GetToolResult"
+          },
+          {
+            "Name": "UpdateChatState"
+          },
+          {
+            "Name": "TerminateChat"
+          },
+          {
+            "Name": "PauseChat"
+          },
+          {
+            "Name": "ResumeChat"
+          },
+          {
+            "Name": "RetryUsageLimitWait"
+          },
+          {
+            "Name": "DismissChat"
+          },
+          {
+            "Name": "MarkUnreadChat"
+          },
+          {
+            "Name": "CompactChat"
+          },
+          {
+            "Name": "BranchChat"
+          },
+          {
+            "Name": "ListBranches"
+          },
+          {
+            "Name": "UpdateWorkflowParams"
+          },
+          {
+            "Name": "UpdateChatProviderPolicy"
+          },
+          {
+            "Name": "GetChatUpdates"
+          },
+          {
+            "Name": "ListChatPlans"
+          },
+          {
+            "Name": "GetWorkflowExecutions"
+          },
+          {
+            "Name": "ListStepExecutions"
+          },
+          {
+            "Name": "GetThreadWorkflowInputs"
+          },
+          {
+            "Name": "SetChatDaemon"
+          }
+        ]
+      },
+      {
+        "Name": "run",
+        "Package": "reliant.v1",
+        "ProtoService": "RunService",
+        "Methods": [
+          {
+            "Name": "StartRun"
+          },
+          {
+            "Name": "SignalRun"
+          },
+          {
+            "Name": "GetRun"
+          },
+          {
+            "Name": "ListRuns"
+          },
+          {
+            "Name": "LastRunPerWorkflow"
+          },
+          {
+            "Name": "PauseRun"
+          },
+          {
+            "Name": "ResumeRun"
+          },
+          {
+            "Name": "CancelRun"
+          },
+          {
+            "Name": "InterruptRun"
+          }
+        ]
+      },
+      {
+        "Name": "trigger",
+        "Package": "reliant.v1",
+        "ProtoService": "TriggerService",
+        "Methods": [
+          {
+            "Name": "CreateTrigger"
+          },
+          {
+            "Name": "GetTrigger"
+          },
+          {
+            "Name": "ListTriggers"
+          },
+          {
+            "Name": "UpdateTrigger"
+          },
+          {
+            "Name": "DeleteTrigger"
+          },
+          {
+            "Name": "SetTriggerEnabled"
+          },
+          {
+            "Name": "FireTrigger"
+          },
+          {
+            "Name": "ListTriggerEvents"
+          },
+          {
+            "Name": "GetLaunchEvent"
+          },
+          {
+            "Name": "RotateWebhookToken"
+          },
+          {
+            "Name": "EnableWorkflow"
+          },
+          {
+            "Name": "DisableWorkflow"
+          },
+          {
+            "Name": "ResolveTriggerSenders"
+          },
+          {
+            "Name": "ListReplayEvents"
+          },
+          {
+            "Name": "PreviewReplay"
+          },
+          {
+            "Name": "DraftAutomation"
+          }
+        ]
+      },
+      {
+        "Name": "catalog",
+        "Package": "reliant.v1",
+        "ProtoService": "CatalogService",
+        "Methods": [
+          {
+            "Name": "ListModels"
+          },
+          {
+            "Name": "ListModelsByProvider"
+          },
+          {
+            "Name": "ListAvailableModels"
+          },
+          {
+            "Name": "ListTools"
+          },
+          {
+            "Name": "ListNodes"
+          },
+          {
+            "Name": "GetCELCompletions"
+          },
+          {
+            "Name": "SearchCatalog"
+          },
+          {
+            "Name": "GetCatalogEntry"
+          },
+          {
+            "Name": "ListCatalogIntegrations"
+          },
+          {
+            "Name": "ListInputOptions"
+          }
+        ]
+      },
+      {
+        "Name": "connector",
+        "Package": "reliant.v1",
+        "ProtoService": "ConnectorService",
+        "Methods": [
+          {
+            "Name": "CreateConnector"
+          },
+          {
+            "Name": "ListConnectors"
+          },
+          {
+            "Name": "RevokeConnector"
+          },
+          {
+            "Name": "ListConnectorActivity"
+          },
+          {
+            "Name": "ListAvailableTools"
+          },
+          {
+            "Name": "AuthorizeClient"
+          },
+          {
+            "Name": "ListAuthorizedClients"
+          },
+          {
+            "Name": "RevokeClientAuthorization"
+          }
+        ]
+      },
+      {
+        "Name": "daemon",
+        "Package": "reliant.v1",
+        "ProtoService": "DaemonService",
+        "Methods": [
+          {
+            "Name": "StartOAuthFlow"
+          },
+          {
+            "Name": "OpenOAuthHelper"
+          },
+          {
+            "Name": "CloseOAuthHelper"
+          }
+        ]
+      },
+      {
+        "Name": "tools_daemon",
+        "Package": "reliant.v1",
+        "ProtoService": "ToolsDaemonService",
+        "Methods": [
+          {
+            "Name": "ConnectDaemon"
+          },
+          {
+            "Name": "ConnectGateway"
+          },
+          {
+            "Name": "ReportToolResult"
+          },
+          {
+            "Name": "WhoAmI"
+          }
+        ]
+      },
+      {
+        "Name": "daemon_registry",
+        "Package": "reliant.v1",
+        "ProtoService": "DaemonRegistryService",
+        "Methods": [
+          {
+            "Name": "ListDaemons"
+          },
+          {
+            "Name": "GetDaemon"
+          },
+          {
+            "Name": "ResolveDaemon"
+          },
+          {
+            "Name": "ResumeDaemon"
+          },
+          {
+            "Name": "RefreshLocalModels"
+          },
+          {
+            "Name": "SetLocalModelEndpoints"
+          },
+          {
+            "Name": "ClearMachineCaches"
+          }
+        ]
+      },
+      {
+        "Name": "file_system",
+        "Package": "reliant.v1",
+        "ProtoService": "FileSystemService",
+        "Methods": [
+          {
+            "Name": "GetFileTree"
+          },
+          {
+            "Name": "GetFileContent"
+          },
+          {
+            "Name": "SaveFileContent"
+          },
+          {
+            "Name": "GetFileMetadata"
+          },
+          {
+            "Name": "GetFilePreviewInfo"
+          },
+          {
+            "Name": "GetFilePreview"
+          },
+          {
+            "Name": "CreateFileOrFolder"
+          },
+          {
+            "Name": "DeleteFileOrFolder"
+          },
+          {
+            "Name": "CopyFile"
+          },
+          {
+            "Name": "SearchFiles"
+          },
+          {
+            "Name": "ReplaceInFiles"
+          },
+          {
+            "Name": "ListDirectory"
+          },
+          {
+            "Name": "CreateDirectory"
+          }
+        ]
+      },
+      {
+        "Name": "forge",
+        "Package": "reliant.v1",
+        "ProtoService": "ForgeService",
+        "Methods": [
+          {
+            "Name": "GetTopology"
+          },
+          {
+            "Name": "VerifyEnv"
+          },
+          {
+            "Name": "ListSecrets"
+          },
+          {
+            "Name": "GetEnvStatus"
+          },
+          {
+            "Name": "GetEnvShape"
+          },
+          {
+            "Name": "PlanPromote"
+          },
+          {
+            "Name": "ApplyPromote"
+          },
+          {
+            "Name": "PlanDeploy"
+          },
+          {
+            "Name": "StartDeployPlan"
+          },
+          {
+            "Name": "StartDeploy"
+          },
+          {
+            "Name": "GetDeployStatus"
+          }
+        ]
+      },
+      {
+        "Name": "inbox",
+        "Package": "reliant.v1",
+        "ProtoService": "InboxService",
+        "Methods": [
+          {
+            "Name": "ListInbox"
+          },
+          {
+            "Name": "CleanupStorage"
+          },
+          {
+            "Name": "DismissInboxItem"
+          },
+          {
+            "Name": "RestoreInboxItem"
+          }
+        ]
+      },
+      {
+        "Name": "mcp",
+        "Package": "reliant.v1",
+        "ProtoService": "MCPService",
+        "Methods": [
+          {
+            "Name": "ListServers"
+          },
+          {
+            "Name": "GetServer"
+          },
+          {
+            "Name": "GetServerTools"
+          },
+          {
+            "Name": "InstallServer"
+          },
+          {
+            "Name": "UninstallServer"
+          },
+          {
+            "Name": "RestartServer"
+          },
+          {
+            "Name": "ListRecommended"
+          },
+          {
+            "Name": "UpdateServerConfig"
+          },
+          {
+            "Name": "SetServerEnabled"
+          },
+          {
+            "Name": "MoveServerScope"
+          }
+        ]
+      },
+      {
+        "Name": "message",
+        "Package": "reliant.v1",
+        "ProtoService": "MessageService",
+        "Methods": [
+          {
+            "Name": "GetMessage"
+          }
+        ]
+      },
+      {
+        "Name": "model_endpoint",
+        "Package": "reliant.v1",
+        "ProtoService": "ModelEndpointService",
+        "Methods": [
+          {
+            "Name": "ListModelEndpoints"
+          },
+          {
+            "Name": "CreateModelEndpoint"
+          },
+          {
+            "Name": "UpdateModelEndpoint"
+          },
+          {
+            "Name": "DeleteModelEndpoint"
+          },
+          {
+            "Name": "TestModelEndpoint"
+          }
+        ]
+      },
+      {
+        "Name": "package_commands",
+        "Package": "reliant.v1",
+        "ProtoService": "PackageCommandsService",
+        "Methods": [
+          {
+            "Name": "ListCommands"
+          },
+          {
+            "Name": "RunCommand"
+          },
+          {
+            "Name": "ListProcesses"
+          },
+          {
+            "Name": "GetProcess"
+          },
+          {
+            "Name": "GetProcessLogs"
+          },
+          {
+            "Name": "KillProcess"
+          },
+          {
+            "Name": "GetCommandFavorites"
+          },
+          {
+            "Name": "SetCommandFavorite"
+          }
+        ]
+      },
+      {
+        "Name": "task",
+        "Package": "reliant.v1",
+        "ProtoService": "TaskService",
+        "Methods": [
+          {
+            "Name": "CreateTask"
+          },
+          {
+            "Name": "GetTask"
+          },
+          {
+            "Name": "ListTasks"
+          },
+          {
+            "Name": "UpdateTask"
+          },
+          {
+            "Name": "DeleteTask"
+          },
+          {
+            "Name": "AddTaskDependency"
+          },
+          {
+            "Name": "RemoveTaskDependency"
+          },
+          {
+            "Name": "ListReadyTasks"
+          }
+        ]
+      },
+      {
+        "Name": "plan",
+        "Package": "reliant.v1",
+        "ProtoService": "PlanService",
+        "Methods": [
+          {
+            "Name": "CreatePlan"
+          },
+          {
+            "Name": "GetPlan"
+          },
+          {
+            "Name": "GetPlanByChatId"
+          },
+          {
+            "Name": "UpdatePlan"
+          },
+          {
+            "Name": "DeletePlan"
+          },
+          {
+            "Name": "ListPlanTasks"
+          },
+          {
+            "Name": "ListPlansByProject"
+          }
+        ]
+      },
+      {
+        "Name": "preset",
+        "Package": "reliant.v1",
+        "ProtoService": "PresetService",
+        "Methods": [
+          {
+            "Name": "ListPresets"
+          },
+          {
+            "Name": "GetPreset"
+          },
+          {
+            "Name": "ListPresetsForWorkflow"
+          },
+          {
+            "Name": "CreatePreset"
+          },
+          {
+            "Name": "UpdatePreset"
+          },
+          {
+            "Name": "DeletePreset"
+          },
+          {
+            "Name": "SetDefaultPreset"
+          },
+          {
+            "Name": "GetDefaultPreset"
+          },
+          {
+            "Name": "GetDefaultPresetsBatch"
+          }
+        ]
+      },
+      {
+        "Name": "project",
+        "Package": "reliant.v1",
+        "ProtoService": "ProjectService",
+        "Methods": [
+          {
+            "Name": "CreateProject"
+          },
+          {
+            "Name": "ListProjects"
+          },
+          {
+            "Name": "GetProject"
+          },
+          {
+            "Name": "UpdateProject"
+          },
+          {
+            "Name": "DeleteProject"
+          },
+          {
+            "Name": "TouchProject"
+          },
+          {
+            "Name": "GetProjectMetadata"
+          },
+          {
+            "Name": "UpdateProjectMetadata"
+          },
+          {
+            "Name": "GetProjectGitInfo"
+          },
+          {
+            "Name": "GetProjectGitBranches"
+          },
+          {
+            "Name": "GetProjectInitStatus"
+          },
+          {
+            "Name": "InitializeProject"
+          },
+          {
+            "Name": "GetProjectChanges"
+          },
+          {
+            "Name": "GetProjectPrompts"
+          },
+          {
+            "Name": "SaveProjectPrompts"
+          },
+          {
+            "Name": "InitializeGitRepo"
+          },
+          {
+            "Name": "ListProjectDaemonsForDaemon"
+          },
+          {
+            "Name": "ListProjectDaemons"
+          },
+          {
+            "Name": "MarkProjectInstalled"
+          },
+          {
+            "Name": "CreateProjectFromRepo"
+          },
+          {
+            "Name": "ListRepositoriesForDaemon"
+          },
+          {
+            "Name": "PullProjectOnDaemon"
+          },
+          {
+            "Name": "RemoveProjectFromDaemon"
+          },
+          {
+            "Name": "RecloneProjectOnDaemon"
+          }
+        ]
+      },
+      {
+        "Name": "provider_account",
+        "Package": "reliant.v1",
+        "ProtoService": "ProviderAccountService",
+        "Methods": [
+          {
+            "Name": "ListProviderAccounts"
+          },
+          {
+            "Name": "UpdateProviderAccount"
+          },
+          {
+            "Name": "ReorderProviderAccounts"
+          },
+          {
+            "Name": "DeleteProviderAccount"
+          },
+          {
+            "Name": "AddProviderAPIKey"
+          },
+          {
+            "Name": "RefreshProviderAccountUsage"
+          },
+          {
+            "Name": "GetChatProviderAccount"
+          }
+        ]
+      },
+      {
+        "Name": "question",
+        "Package": "reliant.v1",
+        "ProtoService": "QuestionService",
+        "Methods": [
+          {
+            "Name": "ResolveQuestion"
+          },
+          {
+            "Name": "ListPendingQuestions"
+          },
+          {
+            "Name": "ListAsyncQuestions"
+          }
+        ]
+      },
+      {
+        "Name": "repo",
+        "Package": "reliant.v1",
+        "ProtoService": "RepoService",
+        "Methods": [
+          {
+            "Name": "DiscoverRepos"
+          },
+          {
+            "Name": "ListRepos"
+          },
+          {
+            "Name": "AddRepo"
+          },
+          {
+            "Name": "RemoveRepo"
+          },
+          {
+            "Name": "GetRepoGitInfo"
+          }
+        ]
+      },
+      {
+        "Name": "scenario",
+        "Package": "reliant.v1",
+        "ProtoService": "ScenarioService",
+        "Methods": [
+          {
+            "Name": "ListScenarios"
+          },
+          {
+            "Name": "CreateScenario"
+          },
+          {
+            "Name": "RunScenario"
+          },
+          {
+            "Name": "DeleteScenario"
+          },
+          {
+            "Name": "UploadScenario"
+          },
+          {
+            "Name": "ExportScenario"
+          }
+        ]
+      },
+      {
+        "Name": "settings",
+        "Package": "reliant.v1",
+        "ProtoService": "SettingsService",
+        "Methods": [
+          {
+            "Name": "CreateSetting"
+          },
+          {
+            "Name": "ListSettings"
+          },
+          {
+            "Name": "GetSetting"
+          },
+          {
+            "Name": "UpdateSetting"
+          },
+          {
+            "Name": "DeleteSetting"
+          },
+          {
+            "Name": "BatchUpsertSettings"
+          },
+          {
+            "Name": "GetShortcuts"
+          },
+          {
+            "Name": "UpdateShortcuts"
+          },
+          {
+            "Name": "GetPreferences"
+          },
+          {
+            "Name": "UpdatePreferences"
+          },
+          {
+            "Name": "SetHiddenItem"
+          },
+          {
+            "Name": "GetPrompts"
+          },
+          {
+            "Name": "SavePrompts"
+          },
+          {
+            "Name": "GetProviderStatuses"
+          },
+          {
+            "Name": "ValidateProviderAPIKey"
+          },
+          {
+            "Name": "SyncReliantProvider"
+          },
+          {
+            "Name": "CompleteCodexOAuth"
+          },
+          {
+            "Name": "CompleteClaudeOAuth"
+          },
+          {
+            "Name": "CompleteAntigravityOAuth"
+          },
+          {
+            "Name": "StartCopilotDeviceAuth"
+          },
+          {
+            "Name": "PollCopilotDeviceAuth"
+          },
+          {
+            "Name": "GetPrivacySettings"
+          },
+          {
+            "Name": "UpdatePrivacySettings"
+          },
+          {
+            "Name": "TrackPageVisited"
+          },
+          {
+            "Name": "TrackOnboardingEvent"
+          },
+          {
+            "Name": "InstallSkill"
+          },
+          {
+            "Name": "ListInstalledSkills"
+          },
+          {
+            "Name": "GetInstalledSkillDefinition"
+          },
+          {
+            "Name": "SetSkillEnabled"
+          },
+          {
+            "Name": "ListRecommendedSkills"
+          },
+          {
+            "Name": "DeleteGlobalSkill"
+          },
+          {
+            "Name": "GetConfigHealth"
+          }
+        ]
+      },
+      {
+        "Name": "streaming",
+        "Package": "reliant.v1",
+        "ProtoService": "StreamingService",
+        "Methods": [
+          {
+            "Name": "StreamUserUpdates"
+          },
+          {
+            "Name": "StreamChatUpdates"
+          }
+        ]
+      },
+      {
+        "Name": "system",
+        "Package": "reliant.v1",
+        "ProtoService": "SystemService",
+        "Methods": [
+          {
+            "Name": "Health"
+          },
+          {
+            "Name": "Ready"
+          },
+          {
+            "Name": "Info"
+          },
+          {
+            "Name": "Version"
+          },
+          {
+            "Name": "StartOAuthSignIn"
+          },
+          {
+            "Name": "DevAuthLoad"
+          },
+          {
+            "Name": "DevAuthSave"
+          },
+          {
+            "Name": "DevAuthClear"
+          }
+        ]
+      },
+      {
+        "Name": "terminal",
+        "Package": "reliant.v1",
+        "ProtoService": "TerminalService",
+        "Methods": [
+          {
+            "Name": "ListSessions"
+          },
+          {
+            "Name": "CloseSession"
+          },
+          {
+            "Name": "StreamTerminal"
+          }
+        ]
+      },
+      {
+        "Name": "token",
+        "Package": "reliant.v1",
+        "ProtoService": "TokenService",
+        "Methods": [
+          {
+            "Name": "CreateToken"
+          },
+          {
+            "Name": "ListTokens"
+          },
+          {
+            "Name": "RevokeToken"
+          },
+          {
+            "Name": "UpdateToken"
+          },
+          {
+            "Name": "ExchangeToken"
+          },
+          {
+            "Name": "GetGitToken"
+          }
+        ]
+      },
+      {
+        "Name": "tool_call",
+        "Package": "reliant.v1",
+        "ProtoService": "ToolCallService",
+        "Methods": [
+          {
+            "Name": "CancelToolCall"
+          },
+          {
+            "Name": "ConvertToBackground"
+          }
+        ]
+      },
+      {
+        "Name": "workflow",
+        "Package": "reliant.v1",
+        "ProtoService": "WorkflowService",
+        "Methods": [
+          {
+            "Name": "ListWorkflows"
+          },
+          {
+            "Name": "SaveWorkflow"
+          },
+          {
+            "Name": "GetWorkflow"
+          },
+          {
+            "Name": "DeleteWorkflow"
+          },
+          {
+            "Name": "ValidateWorkflow"
+          },
+          {
+            "Name": "ImportWorkflow"
+          },
+          {
+            "Name": "ExportWorkflow"
+          },
+          {
+            "Name": "SetWorkflowVisibility"
+          },
+          {
+            "Name": "CopyWorkflow"
+          },
+          {
+            "Name": "CreateWorkflowDraft"
+          },
+          {
+            "Name": "SetWorkflowStatus"
+          }
+        ]
+      }
+    ],
+    "Processes": null,
+    "Frontends": [
+      "web"
+    ],
+    "HasDatabase": true,
+    "Funnels": []
+  },
+  "version": "forge.dashboard-parts/v2",
   "project": "reliant",
   "overview": {
     "id": "overview",
     "title": "reliant: overview",
-    "description": "Request rate, error rate and latency per service, top errors and recent error logs. Generated by forge from the project's services; narrow with the service.name and deployment.environment.name filters.",
+    "description": "Metric-backed request, server-fault and duration health across deployed processes; saturation, errors and releases. Counters are unsampled; trace drilldowns may be sampled.",
     "filters": [
       {
         "id": "service",
@@ -28,304 +1281,196 @@
         "id": "requests",
         "title": "Requests",
         "kind": "number",
-        "signal": "traces",
+        "signal": "metrics",
         "series": [
           {
             "label": "requests",
-            "agg": "count"
+            "agg": "increase",
+            "field": "rpc.server.calls",
+            "metricType": "sum"
           }
         ],
         "where": [
           {
-            "field": "span.kind",
+            "field": "service.name",
             "op": "eq",
-            "value": "server"
-          },
-          {
-            "field": "span.name",
-            "op": "match",
-            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            "value": "__forge_no_deployed_process__"
           }
         ],
         "unit": "count",
-        "width": 6,
+        "width": 8,
         "height": 4
       },
       {
         "id": "errors",
-        "title": "Server errors",
+        "title": "Server faults",
         "kind": "number",
-        "signal": "traces",
+        "signal": "metrics",
         "series": [
           {
-            "label": "errors",
-            "agg": "count"
+            "label": "server faults",
+            "agg": "increase",
+            "field": "rpc.server.errors",
+            "metricType": "sum",
+            "where": [
+              {
+                "field": "metric.attr.error_class",
+                "op": "eq",
+                "value": "server"
+              }
+            ]
           }
         ],
         "where": [
           {
-            "field": "span.kind",
+            "field": "service.name",
             "op": "eq",
-            "value": "server"
-          },
-          {
-            "field": "span.name",
-            "op": "match",
-            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
-          },
-          {
-            "field": "span.status",
-            "op": "eq",
-            "value": "error"
+            "value": "__forge_no_deployed_process__"
           }
         ],
         "unit": "count",
-        "width": 6,
+        "width": 8,
         "height": 4
       },
       {
         "id": "p95",
-        "title": "p95 latency",
+        "title": "p95 RPC duration",
         "kind": "number",
-        "signal": "traces",
+        "signal": "metrics",
         "series": [
           {
             "label": "p95",
             "agg": "quantile",
             "quantile": 0.95,
-            "field": "span.duration"
+            "field": "rpc.server.duration",
+            "metricType": "histogram"
           }
         ],
         "where": [
           {
-            "field": "span.kind",
+            "field": "service.name",
             "op": "eq",
-            "value": "server"
-          },
-          {
-            "field": "span.name",
-            "op": "match",
-            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            "value": "__forge_no_deployed_process__"
           }
         ],
-        "unit": "ms",
-        "width": 6,
-        "height": 4
-      },
-      {
-        "id": "p99",
-        "title": "p99 latency",
-        "kind": "number",
-        "signal": "traces",
-        "series": [
-          {
-            "label": "p99",
-            "agg": "quantile",
-            "quantile": 0.99,
-            "field": "span.duration"
-          }
-        ],
-        "where": [
-          {
-            "field": "span.kind",
-            "op": "eq",
-            "value": "server"
-          },
-          {
-            "field": "span.name",
-            "op": "match",
-            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
-          }
-        ],
-        "unit": "ms",
-        "width": 6,
+        "unit": "s",
+        "width": 8,
         "height": 4
       },
       {
         "id": "request-rate",
-        "title": "Requests per service",
-        "description": "Count per time bucket.",
+        "title": "Request rate by process",
         "kind": "line",
-        "signal": "traces",
+        "signal": "metrics",
         "series": [
           {
             "label": "requests",
-            "agg": "count"
+            "agg": "rate",
+            "field": "rpc.server.calls",
+            "metricType": "sum"
           }
         ],
         "where": [
           {
-            "field": "span.kind",
+            "field": "service.name",
             "op": "eq",
-            "value": "server"
-          },
-          {
-            "field": "span.name",
-            "op": "match",
-            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            "value": "__forge_no_deployed_process__"
           }
         ],
         "groupBy": [
           "service.name"
         ],
         "unit": "count",
-        "width": 12,
+        "width": 8,
         "height": 7
       },
       {
         "id": "error-rate",
-        "title": "Error rate per service",
-        "description": "Server faults (span status Error) over all requests. Client errors such as NotFound are not counted.",
+        "title": "Server fault rate by process",
         "kind": "line",
-        "signal": "traces",
+        "signal": "metrics",
         "series": [
           {
-            "label": "errors",
-            "agg": "count",
+            "label": "server faults",
+            "agg": "rate",
+            "field": "rpc.server.errors",
+            "metricType": "sum",
             "where": [
               {
-                "field": "span.status",
+                "field": "metric.attr.error_class",
                 "op": "eq",
-                "value": "error"
+                "value": "server"
               }
             ]
           },
           {
             "label": "requests",
-            "agg": "count"
+            "agg": "rate",
+            "field": "rpc.server.calls",
+            "metricType": "sum"
           }
         ],
         "ratio": true,
         "where": [
           {
-            "field": "span.kind",
+            "field": "service.name",
             "op": "eq",
-            "value": "server"
-          },
-          {
-            "field": "span.name",
-            "op": "match",
-            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            "value": "__forge_no_deployed_process__"
           }
         ],
         "groupBy": [
           "service.name"
         ],
         "unit": "percent",
-        "width": 12,
+        "width": 8,
         "height": 7
       },
       {
         "id": "latency",
-        "title": "Latency p50 / p95 / p99",
+        "title": "p95 duration by process",
         "kind": "line",
-        "signal": "traces",
+        "signal": "metrics",
         "series": [
-          {
-            "label": "p50",
-            "agg": "quantile",
-            "quantile": 0.5,
-            "field": "span.duration"
-          },
           {
             "label": "p95",
             "agg": "quantile",
             "quantile": 0.95,
-            "field": "span.duration"
-          },
-          {
-            "label": "p99",
-            "agg": "quantile",
-            "quantile": 0.99,
-            "field": "span.duration"
+            "field": "rpc.server.duration",
+            "metricType": "histogram"
           }
         ],
         "where": [
           {
-            "field": "span.kind",
+            "field": "service.name",
             "op": "eq",
-            "value": "server"
-          },
-          {
-            "field": "span.name",
-            "op": "match",
-            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
-          }
-        ],
-        "unit": "ms",
-        "width": 24,
-        "height": 7
-      },
-      {
-        "id": "red-by-service",
-        "title": "Rate, errors and latency by service",
-        "kind": "table",
-        "signal": "traces",
-        "series": [
-          {
-            "label": "requests",
-            "agg": "count"
-          },
-          {
-            "label": "errors",
-            "agg": "count",
-            "where": [
-              {
-                "field": "span.status",
-                "op": "eq",
-                "value": "error"
-              }
-            ]
-          },
-          {
-            "label": "p50",
-            "agg": "quantile",
-            "quantile": 0.5,
-            "field": "span.duration"
-          },
-          {
-            "label": "p95",
-            "agg": "quantile",
-            "quantile": 0.95,
-            "field": "span.duration"
-          },
-          {
-            "label": "p99",
-            "agg": "quantile",
-            "quantile": 0.99,
-            "field": "span.duration"
-          }
-        ],
-        "where": [
-          {
-            "field": "span.kind",
-            "op": "eq",
-            "value": "server"
-          },
-          {
-            "field": "span.name",
-            "op": "match",
-            "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            "value": "__forge_no_deployed_process__"
           }
         ],
         "groupBy": [
           "service.name"
         ],
-        "width": 24,
-        "height": 8
+        "unit": "s",
+        "width": 8,
+        "height": 7
       },
       {
         "id": "top-errors",
-        "title": "Top errors",
+        "title": "Top server faults",
         "kind": "table",
         "signal": "traces",
         "series": [
           {
-            "label": "count",
+            "label": "sampled faults",
             "agg": "count"
           }
         ],
+        "limit": 20,
         "where": [
+          {
+            "field": "service.name",
+            "op": "eq",
+            "value": "__forge_no_deployed_process__"
+          },
           {
             "field": "span.kind",
             "op": "eq",
@@ -343,95 +1488,124 @@
           }
         ],
         "groupBy": [
+          "service.name",
           "span.name",
           "span.status_message"
         ],
         "width": 24,
-        "height": 8
+        "height": 7
       },
       {
-        "id": "db-latency",
-        "title": "Database call latency",
-        "description": "Client spans carrying db.system (the ORM's query hook).",
+        "id": "cpu-vs-limit",
+        "title": "CPU against its limit",
+        "description": "The busiest container of each workload as a fraction of its CPU limit. Near 1 the container is being throttled.",
         "kind": "line",
-        "signal": "traces",
+        "signal": "metrics",
         "series": [
           {
-            "label": "p50",
-            "agg": "quantile",
-            "quantile": 0.5,
-            "field": "span.duration"
-          },
-          {
-            "label": "p95",
-            "agg": "quantile",
-            "quantile": 0.95,
-            "field": "span.duration"
-          },
-          {
-            "label": "p99",
-            "agg": "quantile",
-            "quantile": 0.99,
-            "field": "span.duration"
+            "label": "of limit",
+            "agg": "max",
+            "field": "k8s.container.cpu_limit_utilization",
+            "metricType": "gauge"
           }
         ],
         "where": [
           {
-            "field": "span.kind",
+            "field": "resource.attr.k8s.workload.name",
             "op": "eq",
-            "value": "client"
-          },
-          {
-            "field": "span.attr.db.system",
-            "op": "exists"
+            "value": "__forge_no_deployed_process__"
           }
         ],
-        "unit": "ms",
+        "groupBy": [
+          "resource.attr.k8s.workload.name"
+        ],
+        "unit": "percent",
         "width": 12,
         "height": 7
       },
       {
-        "id": "db-by-operation",
-        "title": "Database calls by operation",
-        "kind": "table",
-        "signal": "traces",
+        "id": "memory-vs-limit",
+        "title": "Memory against its limit",
+        "description": "The fullest container of each workload as a fraction of its memory limit. Near 1 the container is about to be OOM-killed.",
+        "kind": "line",
+        "signal": "metrics",
         "series": [
           {
-            "label": "calls",
-            "agg": "count"
-          },
-          {
-            "label": "errors",
-            "agg": "count",
-            "where": [
-              {
-                "field": "span.status",
-                "op": "eq",
-                "value": "error"
-              }
-            ]
-          },
-          {
-            "label": "p95",
-            "agg": "quantile",
-            "quantile": 0.95,
-            "field": "span.duration"
+            "label": "of limit",
+            "agg": "max",
+            "field": "k8s.container.memory_limit_utilization",
+            "metricType": "gauge"
           }
         ],
         "where": [
           {
-            "field": "span.kind",
+            "field": "resource.attr.k8s.workload.name",
             "op": "eq",
-            "value": "client"
-          },
-          {
-            "field": "span.attr.db.system",
-            "op": "exists"
+            "value": "__forge_no_deployed_process__"
           }
         ],
         "groupBy": [
-          "span.attr.db.operation"
+          "resource.attr.k8s.workload.name"
         ],
+        "unit": "percent",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "restarts",
+        "title": "Container restarts",
+        "description": "The highest restart count among each workload's containers; a step is a restart.",
+        "kind": "line",
+        "signal": "metrics",
+        "series": [
+          {
+            "label": "restarts",
+            "agg": "max",
+            "field": "k8s.container.restarts",
+            "metricType": "gauge"
+          }
+        ],
+        "where": [
+          {
+            "field": "resource.attr.k8s.workload.name",
+            "op": "eq",
+            "value": "__forge_no_deployed_process__"
+          }
+        ],
+        "groupBy": [
+          "resource.attr.k8s.workload.name"
+        ],
+        "unit": "count",
+        "width": 12,
+        "height": 7
+      },
+      {
+        "id": "request-rate-by-version",
+        "title": "Requests by version",
+        "kind": "line",
+        "signal": "traces",
+        "series": [
+          {
+            "label": "requests",
+            "agg": "count"
+          }
+        ],
+        "where": [
+          {
+            "field": "service.name",
+            "op": "eq",
+            "value": "__forge_no_deployed_process__"
+          },
+          {
+            "field": "span.kind",
+            "op": "eq",
+            "value": "server"
+          }
+        ],
+        "groupBy": [
+          "resource.attr.service.version"
+        ],
+        "unit": "count",
         "width": 12,
         "height": 7
       },
@@ -441,6 +1615,11 @@
         "kind": "search",
         "signal": "logs",
         "where": [
+          {
+            "field": "service.name",
+            "op": "eq",
+            "value": "__forge_no_deployed_process__"
+          },
           {
             "field": "log.severity",
             "op": "eq",
@@ -1033,7 +2212,7 @@
     {
       "id": "frontend",
       "title": "reliant: frontend",
-      "description": "Browser errors, page loads, web vitals and API calls from the HyperDX browser SDK (service.name reliant-frontend). Panels follow HyperDX's Browser RUM template: a browser span carries the rum.sessionId resource attribute.",
+      "description": "Browser errors, page loads, web vitals and API calls from the HyperDX browser SDK (service.name reliant-web). Panels follow HyperDX's Browser RUM template: a browser span carries the rum.sessionId resource attribute.",
       "filters": [
         {
           "id": "service",
@@ -1065,6 +2244,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1101,6 +2287,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             }
@@ -1121,6 +2314,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1151,6 +2351,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1186,6 +2393,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             },
@@ -1215,6 +2429,13 @@
           "signal": "traces",
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             }
@@ -1229,6 +2450,13 @@
           "kind": "sessions",
           "signal": "traces",
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1252,6 +2480,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1285,6 +2520,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             },
@@ -1317,6 +2559,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             },
@@ -1347,6 +2596,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1379,6 +2635,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1465,6 +2728,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             },
@@ -1493,6 +2763,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1545,6 +2822,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             },
@@ -1585,6 +2869,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1632,6 +2923,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             },
@@ -1657,6 +2955,13 @@
           "kind": "search",
           "signal": "traces",
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"

@@ -207,6 +207,24 @@ func ListWorktreesByIDs(ctx context.Context, db orm.Context, ids []string) ([]*c
 	return worktreesToCore(rows), nil
 }
 
+// ListMainWorktreesForUser returns the live main workspace of each project
+// userID owns, or of the one project when projectID is set. Ownership is part
+// of the query: a project id that is not the caller's yields nothing.
+func ListMainWorktreesForUser(ctx context.Context, db orm.Context, userID string, projectID *string) ([]*core.Worktree, error) {
+	var rows []*Worktree
+	q := db.Bun().NewSelect().Model(&rows).
+		Where("is_main").
+		Where("deleted_at IS NULL").
+		Where("project_id IN (SELECT id FROM projects WHERE user_id = ?)", userID)
+	if projectID != nil {
+		q = q.Where("project_id = ?", *projectID)
+	}
+	if err := q.OrderExpr("project_id, id").Scan(ctx); err != nil {
+		return nil, fmt.Errorf("failed to list main worktrees: %w", err)
+	}
+	return worktreesToCore(rows), nil
+}
+
 // ReplaceWorktree rewrites a worktree's mutable columns, archived or not,
 // and stamps updated_at. Path is among them because asynchronous creation
 // only learns the on-disk location after the daemon reports it: the row is
@@ -220,7 +238,7 @@ func ReplaceWorktree(ctx context.Context, db orm.Context, w *core.Worktree) erro
 		Set("updated_at = NOW()").
 		Where("id = ?", w.ID).
 		Exec(ctx)
-	return err
+	return recoveryAdmissionError(err)
 }
 
 // SetWorktreeCleanupMetadata replaces a worktree's cleanup metadata (nil
@@ -395,7 +413,7 @@ func RemoveWorktree(ctx context.Context, db orm.Context, id string) error {
 	_, err := db.Bun().NewDelete().Model((*Worktree)(nil)).
 		Where("id = ?", id).
 		Exec(ctx)
-	return err
+	return recoveryAdmissionError(err)
 }
 
 // ArchiveWorktree stamps the worktree archived as of now.
@@ -405,7 +423,7 @@ func ArchiveWorktree(ctx context.Context, db orm.Context, id string) error {
 		Set("updated_at = NOW()").
 		Where("id = ?", id).
 		Exec(ctx)
-	return err
+	return recoveryAdmissionError(err)
 }
 
 // UnarchiveWorktree makes the worktree live again; a live worktree that
@@ -416,7 +434,7 @@ func UnarchiveWorktree(ctx context.Context, db orm.Context, id string) error {
 		Set("updated_at = NOW()").
 		Where("id = ?", id).
 		Exec(ctx)
-	return nameTakenOr(err)
+	return nameTakenOr(recoveryAdmissionError(err))
 }
 
 // firstWorktree returns the first worktree, archived or not, the filter
@@ -467,24 +485,26 @@ func worktreeToCore(row *Worktree) *core.Worktree {
 		status = int32(*row.Status)
 	}
 	return &core.Worktree{
-		ID:              row.ID,
-		Name:            row.Name,
-		Path:            row.Path,
-		Branch:          row.Branch,
-		BaseBranch:      row.BaseBranch,
-		BaseBranches:    decodeBaseBranches(row.BaseBranches),
-		ProjectID:       row.ProjectID,
-		ChatID:          row.ChatID,
-		DaemonID:        row.DaemonID,
-		Status:          status,
-		IdempotencyKey:  row.IdempotencyKey,
-		IsMain:          row.IsMain,
-		CreatedAt:       row.CreatedAt,
-		UpdatedAt:       row.UpdatedAt,
-		LastActive:      row.LastActive,
-		DeletedAt:       row.DeletedAt,
-		CleanupMetadata: cleanupMetadata,
-		FailureReason:   row.FailureReason,
+		ID:                   row.ID,
+		Name:                 row.Name,
+		Path:                 row.Path,
+		Branch:               row.Branch,
+		BaseBranch:           row.BaseBranch,
+		BaseBranches:         decodeBaseBranches(row.BaseBranches),
+		ProjectID:            row.ProjectID,
+		ChatID:               row.ChatID,
+		DaemonID:             row.DaemonID,
+		Status:               status,
+		IdempotencyKey:       row.IdempotencyKey,
+		IsMain:               row.IsMain,
+		CreatedAt:            row.CreatedAt,
+		UpdatedAt:            row.UpdatedAt,
+		LastActive:           row.LastActive,
+		DeletedAt:            row.DeletedAt,
+		CleanupMetadata:      cleanupMetadata,
+		FailureReason:        row.FailureReason,
+		ActivityGeneration:   row.ActivityGeneration,
+		RecoveryFinalizingID: row.RecoveryFinalizingID,
 	}
 }
 

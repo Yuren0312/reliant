@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import {
   Folder,
   FolderPlus,
@@ -11,12 +12,12 @@ import {
   ArrowUp,
   X,
 } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
+import type { DirectoryEntry } from "../../gen/reliant/v1/filesystem_pb";
 import {
-  listDirectory,
-  createDirectory,
-  type DirectoryEntry,
-} from "../../api/filesystem-grpc";
+  useCreateDirectory,
+  useListDirectory,
+} from "../../hooks/file-system-service-hooks_gen";
 import { cn } from "../../lib/utils";
 import {
   containsSeparator,
@@ -32,61 +33,67 @@ interface DirectoryPickerProps {
   onSelect: (path: string) => void;
 }
 
+const NO_ENTRIES: DirectoryEntry[] = [];
+
 export function DirectoryPicker({
   isOpen,
   onClose,
   onSelect,
 }: DirectoryPickerProps) {
-  const [, setCurrentPath] = useState("");
-  const [resolvedPath, setResolvedPath] = useState("");
-  const [entries, setEntries] = useState<DirectoryEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The directory asked for; "" is the machine's home directory.
+  const [requestedPath, setRequestedPath] = useState("");
+  // The last directory that listed, so a failed navigation still leaves the
+  // breadcrumbs and "Up" to get back with.
+  const [lastListedPath, setLastListedPath] = useState("");
   const [showHidden, setShowHidden] = useState(false);
   // "New folder" inline-create state.
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
-  const [isSubmittingFolder, setIsSubmittingFolder] = useState(false);
+  // A path typed (or pasted) instead of browsed to: the machine lists it, so
+  // a Windows path works as well as a POSIX one.
+  const [typedPath, setTypedPath] = useState("");
 
-  const loadDirectory = useCallback(async (path: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await listDirectory(path);
-      setResolvedPath(result.path);
-      setEntries(result.entries);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to list directory"
-      );
-      setEntries([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  // Re-read on every open and every visit (`staleTime: 0`), showing the
+  // cached listing meanwhile. While a new directory loads, the one being left
+  // stays on screen.
+  const listing = useListDirectory(
+    { path: requestedPath },
+    { enabled: isOpen, staleTime: 0, retry: false, placeholderData: keepPreviousData },
+  );
+  // A successful create invalidates every FileSystemService read, which
+  // refetches this listing, so the new folder appears and is selectable.
+  const createDirectory = useCreateDirectory({ meta: { silenceErrorToast: true } });
 
-  // Load home directory on open
+  useEffect(() => {
+    if (listing.data) setLastListedPath(listing.data.path);
+  }, [listing.data]);
+
+  const resolvedPath = listing.data?.path ?? lastListedPath;
+  const entries = listing.data?.entries ?? NO_ENTRIES;
+  const isLoading = listing.isFetching && (listing.isPlaceholderData || !listing.data);
+  const error = listing.error
+    ? listing.error.message || "Failed to list directory"
+    : null;
+  const isSubmittingFolder = createDirectory.isPending;
+
+  // Start at the home directory on open
   useEffect(() => {
     if (isOpen) {
-      setCurrentPath("");
-      setResolvedPath("");
-      setEntries([]);
-      setError(null);
+      setRequestedPath("");
       setShowHidden(false);
       setIsCreatingFolder(false);
       setNewFolderName("");
       setCreateError(null);
-      loadDirectory("");
+      setTypedPath("");
     }
-  }, [isOpen, loadDirectory]);
+  }, [isOpen]);
 
   const navigateTo = (path: string) => {
     setIsCreatingFolder(false);
     setNewFolderName("");
     setCreateError(null);
-    setCurrentPath(path);
-    loadDirectory(path);
+    setRequestedPath(path);
   };
 
   const handleCreateFolder = async () => {
@@ -106,22 +113,16 @@ export function DirectoryPicker({
     // joinPath keeps the daemon's own separator style, so a Windows daemon
     // gets `C:\a\new` rather than the mixed `C:\a/new` a template literal
     // would have produced.
-    const parent = resolvedPath;
-    const targetPath = joinPath(parent, name);
-    setIsSubmittingFolder(true);
+    const targetPath = joinPath(resolvedPath, name);
     setCreateError(null);
     try {
-      await createDirectory(targetPath);
+      await createDirectory.mutateAsync({ path: targetPath });
       setIsCreatingFolder(false);
       setNewFolderName("");
-      // Refresh so the new folder appears and is selectable.
-      await loadDirectory(parent);
     } catch (err) {
       setCreateError(
         err instanceof Error ? err.message : "Failed to create folder"
       );
-    } finally {
-      setIsSubmittingFolder(false);
     }
   };
 
@@ -157,12 +158,44 @@ export function DirectoryPicker({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
       onClose={onClose}
       title="Choose a folder"
       size="lg"
     >
       <div className="flex flex-col gap-4">
+        {/* Go to a typed path */}
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const path = typedPath.trim();
+            if (path) navigateTo(path);
+          }}
+        >
+          <label className="sr-only" htmlFor="directory-picker-path">
+            Folder path
+          </label>
+          <input
+            id="directory-picker-path"
+            type="text"
+            value={typedPath}
+            onChange={(event) => setTypedPath(event.target.value)}
+            placeholder="Type a folder path, or browse below"
+            spellCheck={false}
+            autoComplete="off"
+            data-testid="directory-picker-path"
+            className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2.5 font-mono text-xs text-foreground placeholder:font-sans placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          <button
+            type="submit"
+            disabled={!typedPath.trim()}
+            className="flex h-8 items-center rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Go
+          </button>
+        </form>
+
         {/* Breadcrumb navigation */}
         <div className="flex items-center gap-1 text-sm font-mono overflow-x-auto pb-1 min-h-[32px]">
           {crumbs.map((crumb, index) => {

@@ -33,6 +33,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskguard"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -40,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/netports"
+	"github.com/reliant-labs/reliant/internal/shellaudit"
 	"github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -186,11 +188,11 @@ func (d *daemonClient) currentUserID() string {
 }
 
 // projectSnapshot builds the config snapshot for projectPath.
-func (d *daemonClient) projectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
+func (d *daemonClient) projectSnapshot(ctx context.Context, projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
 	if d.buildSnapshot != nil {
 		return d.buildSnapshot(projectPath)
 	}
-	return buildProjectSnapshot(projectPath)
+	return buildProjectSnapshotContext(ctx, projectPath)
 }
 
 type StartOptions struct {
@@ -227,6 +229,20 @@ func Start(ctx context.Context, opts StartOptions) error {
 		return fmt.Errorf("daemon runtime bootstrap config invalid: %w", err)
 	}
 	setOAuthHelperOrigins(opts.OAuthHelperOrigins)
+	// The data directory holds the daemon's identity and state; a command run
+	// with `credentials: none` does not see it (see daemonpolicy.ProtectedCredentials).
+	daemonpolicy.SetDaemonDataDir(opts.BootstrapConfig.DataDir)
+
+	// Every shell command the tool is asked to run is recorded beside the
+	// daemon's other logs, for investigations of shared-state damage. A log
+	// that cannot be opened is reported and skipped: auditing never stops work.
+	if auditLog, err := shellaudit.Open(filepath.Join(opts.BootstrapConfig.DataDir, "logs", shellaudit.FileName), shellaudit.Options{}); err != nil {
+		logging.Warn(logPrefix+" Shell audit log unavailable; shell commands are not being recorded", "error", err)
+	} else {
+		defer auditLog.Close() //nolint:errcheck
+		previous := shellaudit.SetDefault(auditLog)
+		defer shellaudit.SetDefault(previous)
+	}
 
 	// Claim the data directory before anything else, so a second daemon fails
 	// here rather than at the gateway. Two daemons on one host resolve to one
@@ -258,6 +274,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	ctx, stopRuntime := context.WithCancel(ctx)
 	defer stopRuntime()
 	client.armWorkspaceGuard(ctx, stopRuntime)
+	initializeWorktreeActivity(ctx, opts.BootstrapConfig.DataDir)
 
 	// Publish the runtime record before the first dial. Until the gateway acks
 	// registration the record says so, which is what makes `reliant daemon
@@ -438,9 +455,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// This process IS the machine that runs shell commands, so its own GOOS is
 	// the right answer here — unlike on the server, where reading runtime.GOOS
 	// would describe the wrong machine entirely.
-	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
-		ShellPlatform: tools.ShellPlatformFromGOOS(runtime.GOOS),
-	})
+	toolsFactory := newDaemonToolsFactory(host)
 
 	caps := toolsFactory.ListAvailableToolsForPlacement(tools.PlacementDaemon)
 	sort.Strings(caps)
@@ -477,6 +492,11 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	SetHeavyGate(heavyGate)
 
 	localExec := toolexec.NewLocalToolExecutor(toolsFactory)
+	egressLimiter, err := egresslimit.New(egresslimit.Deps{Limits: daemonEgressLimits(host)})
+	if err != nil {
+		return nil, fmt.Errorf("creating egress limiter: %w", err)
+	}
+	localExec.SetEgressLimiter(egressLimiter)
 	localExec.SetMCPContextBinder(toolexec.NewLocalMCPContextBinder(mcpManager))
 	// The daemon runtime IS the local machine, so give the executor a
 	// LocalClient so filesystem tools (glob, view, etc.) can operate.
@@ -519,7 +539,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		return nil, fmt.Errorf("creating daemon HTTP client: %w", err)
 	}
 
-	return &daemonClient{
+	client := &daemonClient{
 		daemonID:   bootCfg.DaemonID,
 		daemonName: daemonName,
 		// userID is set later from RegistrationAck (gateway-derived from PAT).
@@ -544,7 +564,27 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		memWatcher:        cgroupmem.NewWatcher(memReader, cgroupmem.DefaultPollInterval),
 		diskWatcher:       diskWatcher,
 		diskGuard:         diskGuard,
-	}, nil
+	}
+	client.restoreResultOutbox()
+	return client, nil
+}
+
+// restoreResultOutbox gives the result outbox its home in the instance's data
+// directory and reloads what the previous process left there, so a tool
+// result survives a daemon restart. A daemon with no data directory (an
+// embedded runtime), or one whose outbox directory cannot be used, runs with
+// the in-memory outbox: it never fails to start over this.
+func (d *daemonClient) restoreResultOutbox() {
+	dataDir := strings.TrimSpace(d.bootCfg.DataDir)
+	if dataDir == "" {
+		return
+	}
+	store, err := openOutboxStore(filepath.Join(dataDir, outboxDirName))
+	if err != nil {
+		logging.Warn(logPrefix+" Tool results will not survive a daemon restart", "error", err)
+		return
+	}
+	d.results.restore(store)
 }
 
 // persistDaemonID writes the server-assigned daemon id into THIS INSTANCE's
@@ -996,6 +1036,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			MovesOnDrain: true,
 		}},
 	}
+	stampBuildIdentity(register.GetRegister())
 	if err := sendRegistration(stream, register); err != nil {
 		close(sessionOver)
 		return fmt.Errorf("sending daemon registration to %s: %w", baseURL, err)
@@ -1229,7 +1270,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 						if ctx.Err() != nil {
 							return // session over; the next ack asks again
 						}
-						if err := d.sendLoadProjectConfigResponse(projectPath, uuid.New().String()); err != nil {
+						if err := d.sendLoadProjectConfigResponse(ctx, projectPath, uuid.New().String()); err != nil {
 							logging.WarnContext(ctx, logPrefix+" Failed responding to registration requested project load", "projectPath", projectPath, "error", err)
 						}
 					}
@@ -1252,7 +1293,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 		// LoadProjectConfigs on reconnect — a self-sustaining outage loop
 		// (2026-07-09 incident).
 		go func(req *reliantv1.LoadProjectConfigsRequest) {
-			if err := d.sendLoadProjectConfigResponse(req.ProjectPath, req.RequestId); err != nil {
+			if err := d.sendLoadProjectConfigResponse(ctx, req.ProjectPath, req.RequestId); err != nil {
 				logSendFailure(logPrefix+" Failed to send project config response", err, "project_path", req.ProjectPath, "request_id", req.RequestId)
 			}
 		}(m.LoadProjectConfigs)
@@ -1403,6 +1444,13 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 		return
 	}
 	ctx = daemonpolicy.NewContext(ctx, policy)
+
+	releaseRecovery, admissionErr := beginRecoveryCommand(req.CommandType, req.Payload)
+	if admissionErr != nil {
+		d.sendCommandFailure(s, req, admissionErr)
+		return
+	}
+	defer releaseRecovery()
 
 	// What became of a tool call is the daemon's own bookkeeping, not the
 	// disk's, so it is answered even while the guard below refuses work.
@@ -1735,6 +1783,19 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	if req == nil {
 		return
 	}
+
+	// Before the tool can do anything a restart would cut short.
+	d.results.persistRunning(req.RequestId)
+
+	releaseRecovery, admissionErr := beginRecoveryWork()
+	if admissionErr != nil {
+		d.sendToolResult(s, req.RequestId, &toolexec.ExecutionResult{
+			Success: false, IsError: true, Content: admissionErr.Error(),
+			ErrorMessage: admissionErr.Error(), ErrorCode: "RECOVERY_FINALIZING",
+		})
+		return
+	}
+	defer releaseRecovery()
 
 	execCtx, cancel := context.WithCancel(dispatchContext(req))
 	// Registered under both ids. request_id is the transport's correlation key
@@ -2088,8 +2149,8 @@ func pathLooksLikeGitRepo(projectPath string) bool {
 	return false
 }
 
-func (d *daemonClient) sendLoadProjectConfigResponse(projectPath, requestID string) error {
-	snapshot, err := d.projectSnapshot(projectPath)
+func (d *daemonClient) sendLoadProjectConfigResponse(ctx context.Context, projectPath, requestID string) error {
+	snapshot, err := d.projectSnapshot(ctx, projectPath)
 	resp := &reliantv1.LoadProjectConfigsResponse{
 		RequestId: requestID,
 		Snapshot:  snapshot,
@@ -2196,7 +2257,7 @@ func (d *daemonClient) runProjectWatcher(ctx context.Context, projectPath string
 	var lastVersion string
 
 	sendSnapshotDelta := func() {
-		snapshot, err := d.projectSnapshot(projectPath)
+		snapshot, err := d.projectSnapshot(ctx, projectPath)
 		if err != nil || snapshot == nil {
 			if err != nil {
 				logging.WarnContext(ctx, logPrefix+" Failed to build project snapshot for watcher", "projectPath", projectPath, "error", err)
@@ -2239,6 +2300,10 @@ func (d *daemonClient) runProjectWatcher(ctx context.Context, projectPath string
 }
 
 func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
+	return buildProjectSnapshotContext(context.Background(), projectPath)
+}
+
+func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
 	projectPath = normalizePath(projectPath)
 	if projectPath == "" {
 		return nil, fmt.Errorf("project path is empty")
@@ -2262,10 +2327,13 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 	globalMemory, _ := readOptionalFile(globalMemoryPath)
 	projectMemory := readProjectMemory(projectPath)
 
-	layout, workflowsDir := readWorkflowLayout(projectPath)
-	workflows, workflowBytes := indexWorkflows(layout, workflowsDir)
+	workflowSources, err := readWorkflowSources(ctx, projectPath)
+	if err != nil {
+		return nil, err
+	}
+	workflows, workflowBytes := indexWorkflows(workflowSources)
 	presets, presetBytes := indexPresets(projectPath)
-	scenarios, scenarioBytes := indexScenarios(layout, workflowsDir)
+	scenarios, scenarioBytes := indexScenarios(workflowSources)
 	skills, skillBytes := indexSkills(projectPath)
 	repoMemories, repoMemoriesBytes := collectRepoMemories(projectPath)
 
@@ -2571,49 +2639,85 @@ func buildSkillsIndex(projectPath string) ([]*reliantv1.IndexedSkill, []byte) {
 	return results, []byte(acc.String())
 }
 
-// readWorkflowLayout reads the project's .reliant/workflows with the one
-// locator the CLI uses too (workflowref.ReadLayout), so the server indexes
-// exactly the workflows and scenarios `reliant workflow` sees on disk.
-func readWorkflowLayout(projectPath string) (*workflowref.Layout, string) {
-	baseDir := filepath.Join(projectPath, filepath.FromSlash(workflowref.Dir))
-	layout, err := workflowref.ReadLayout(os.DirFS(baseDir))
-	if err != nil {
-		logging.Warn("Failed to read project workflows", "dir", baseDir, "error", err)
-		return workflowref.NewLayout(nil), baseDir
-	}
-	// Misplaced scenarios are reported by the surfaces that read them
-	// (`reliant workflow scenario`), not here: this runs on every 2s poll.
-	return layout, baseDir
+// workflowSource is one workflows directory a project syncs: the project
+// root's .reliant/workflows, or one nested repo's.
+type workflowSource struct {
+	// repo is the nested repo's slash-separated path relative to the project
+	// root, "" for the project root itself.
+	repo    string
+	layout  *workflowref.Layout
+	baseDir string
 }
 
-// indexWorkflows syncs every project workflow file with its path and
-// content. Problems (no name:, a name two files share) are not resolved here:
-// the server indexes the files with workflowref, as the CLI does, and reports
-// them where a ref or the workflow list meets them.
-func indexWorkflows(layout *workflowref.Layout, baseDir string) ([]*reliantv1.IndexedWorkflow, []byte) {
-	entries := layout.Workflows.Entries()
-	results := make([]*reliantv1.IndexedWorkflow, 0, len(entries))
-	acc := strings.Builder{}
-
-	for _, e := range entries {
-		rel := filepath.ToSlash(filepath.Join(workflowref.Dir, e.Path))
-		st, err := os.Stat(filepath.Join(baseDir, filepath.FromSlash(e.Path)))
-		if err != nil {
+// readWorkflowSources reads the project's workflows directories — the project
+// root's .reliant/workflows, then each nested repo's (the same repos
+// reliant.md and skills are discovered in) — with the one locator the CLI
+// uses too (workflowref.ReadLayout), so the server indexes exactly the
+// workflows and scenarios `reliant workflow` sees on disk. The project root's
+// source is always first; nested repos follow in path order. Which of them a
+// bare name resolves to is the server's to decide (workflowref.Index).
+func readWorkflowSources(ctx context.Context, projectPath string) ([]workflowSource, error) {
+	root, err := readWorkflowSource(ctx, projectPath, "")
+	if err != nil {
+		return nil, err
+	}
+	sources := []workflowSource{root}
+	repos := append([]string(nil), discoverRepoSources(ctx, projectPath)...)
+	sort.Strings(repos)
+	for _, rel := range repos {
+		rel = filepath.ToSlash(filepath.Clean(rel))
+		if rel == "" || rel == "." {
 			continue
 		}
-		h := hashBytes(e.Content)
-		results = append(results, &reliantv1.IndexedWorkflow{
-			Slug:         e.Slug,
-			Name:         e.Name,
-			RelativePath: rel,
-			ContentHash:  h,
-			MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
-			YamlContent:  e.Content,
-		})
-		acc.WriteString(rel)
-		acc.WriteString(":")
-		acc.WriteString(h)
-		acc.WriteString(";")
+		source, err := readWorkflowSource(ctx, projectPath, rel)
+		if err != nil {
+			return nil, err
+		}
+		sources = append(sources, source)
+	}
+	return sources, nil
+}
+
+func readWorkflowSource(ctx context.Context, projectPath, repo string) (workflowSource, error) {
+	sourceDir := filepath.Join(projectPath, filepath.FromSlash(repo))
+	baseDir := filepath.Join(sourceDir, filepath.FromSlash(workflowref.Dir))
+	layout, err := workflowref.ReadSourceLayout(ctx, sourceDir)
+	if err != nil {
+		return workflowSource{}, fmt.Errorf("read workflows in %s: %w", sourceDir, err)
+	}
+	return workflowSource{repo: repo, layout: layout, baseDir: baseDir}, nil
+}
+
+// indexWorkflows syncs every project workflow file of every source with its
+// project-relative path and content. Problems (no name:, a name two files
+// share, a name two repos share) are not resolved here: the server indexes the
+// files with workflowref, as the CLI does, and reports them where a ref or the
+// workflow list meets them.
+func indexWorkflows(sources []workflowSource) ([]*reliantv1.IndexedWorkflow, []byte) {
+	var results []*reliantv1.IndexedWorkflow
+	acc := strings.Builder{}
+
+	for _, src := range sources {
+		for _, e := range src.layout.Workflows.Entries() {
+			rel := workflowref.RelativePath(src.repo, e.Path)
+			st, err := os.Stat(filepath.Join(src.baseDir, filepath.FromSlash(e.Path)))
+			if err != nil {
+				continue
+			}
+			h := hashBytes(e.Content)
+			results = append(results, &reliantv1.IndexedWorkflow{
+				Slug:         e.Slug,
+				Name:         e.Name,
+				RelativePath: rel,
+				ContentHash:  h,
+				MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
+				YamlContent:  e.Content,
+			})
+			acc.WriteString(rel)
+			acc.WriteString(":")
+			acc.WriteString(h)
+			acc.WriteString(";")
+		}
 	}
 	return results, []byte(acc.String())
 }
@@ -2652,15 +2756,22 @@ func indexPresets(projectPath string) ([]*reliantv1.IndexedPreset, []byte) {
 	return results, []byte(acc.String())
 }
 
-// indexScenarios syncs the scenarios in .reliant/workflows/<slug>/scenarios/,
-// located by workflowref — the locator `reliant workflow scenario` uses.
-func indexScenarios(layout *workflowref.Layout, baseDir string) ([]*reliantv1.IndexedScenario, []byte) {
+// indexScenarios syncs scenarios under the same address as their workflow.
+// A cross-repo collision must not attach one repo's scenarios to another's.
+func indexScenarios(sources []workflowSource) ([]*reliantv1.IndexedScenario, []byte) {
+	root := sources[0]
+	repos := map[string]*workflowref.Layout{}
+	for _, src := range sources[1:] {
+		repos[src.repo] = src.layout
+	}
+	layout := workflowref.MergeLayouts(root.layout, repos)
+	baseDir := root.baseDir
 	results := make([]*reliantv1.IndexedScenario, 0, len(layout.Scenarios))
 	acc := strings.Builder{}
 
 	for _, sc := range layout.Scenarios {
-		rel := filepath.ToSlash(filepath.Join(workflowref.Dir, sc.Path))
-		st, err := os.Stat(filepath.Join(baseDir, filepath.FromSlash(sc.Path)))
+		rel := workflowref.RelativePath(sc.Repo, sc.Path)
+		st, err := os.Stat(filepath.Join(baseDir, filepath.FromSlash(workflowref.FilePath(sc.Repo, sc.Path))))
 		if err != nil {
 			continue
 		}

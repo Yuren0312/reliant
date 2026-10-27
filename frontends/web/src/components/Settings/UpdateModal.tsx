@@ -1,5 +1,5 @@
-import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import Modal from "../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { Download, CheckCircle2, AlertCircle } from "lucide-react";
 
 interface UpdateStatus {
@@ -63,7 +63,7 @@ export function UpdateModal({
                   Version {updateStatus.version} is ready to download. This update includes new features, improvements, and bug fixes.
                 </p>
                 {updateStatus.releaseNotes && (
-                  <div className="mt-4 p-4 bg-muted/50 rounded-lg border border-border/50">
+                  <div className="mt-4 p-4 rounded-lg border border-border/60 bg-background">
                     <p className="text-xs font-medium text-foreground mb-2">Release Notes:</p>
                     <div className="text-xs text-muted-foreground whitespace-pre-wrap max-h-40 overflow-y-auto">
                       {updateStatus.releaseNotes}
@@ -84,7 +84,7 @@ export function UpdateModal({
               <Button
                 onClick={onDownload}
                 disabled={isDownloading}
-                className="min-w-[100px] bg-primary hover:bg-primary/90"
+                className="min-w-[100px]"
               >
                 Download
               </Button>
@@ -205,7 +205,7 @@ export function UpdateModal({
               <Button
                 onClick={onInstall}
                 disabled={isInstalling}
-                className="min-w-[140px] bg-success hover:bg-success/90"
+                className="min-w-[140px]"
               >
                 {isInstalling ? (
                   <>
@@ -262,7 +262,7 @@ export function UpdateModal({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
       onClose={onClose}
       size="md"
       hideCloseButton={updateStatus.type === 'download-progress'}

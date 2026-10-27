@@ -137,6 +137,7 @@
             "group": "Account & billing",
             "pages": [
               "account/billing",
+              "account/observability-billing",
               "help/privacy"
             ]
           },

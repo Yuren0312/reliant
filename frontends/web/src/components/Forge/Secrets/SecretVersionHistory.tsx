@@ -36,7 +36,7 @@
  * needs. The bytes are gone; the record that they existed is not.
  */
 
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { useState } from "react";
 import { RotateCcw, Trash2, Flame } from "lucide-react";
 
@@ -103,7 +103,7 @@ export function SecretVersionHistory({
     return (
       <div className="space-y-2" data-testid="version-history-loading">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-9 animate-pulse rounded-md border border-border/60 bg-background" />
+          <div key={i} className="h-9 animate-pulse rounded-md border border-border/60 bg-surface-sunken" />
         ))}
       </div>
     );
@@ -111,7 +111,7 @@ export function SecretVersionHistory({
 
   if (versions.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground" data-testid="version-history-empty">
+      <p className="text-sm text-ink-muted" data-testid="version-history-empty">
         No versions yet. Setting this secret creates version 1.
       </p>
     );
@@ -124,7 +124,7 @@ export function SecretVersionHistory({
        * already a surface; a card in here would be the card-in-card stacking
        * the elevation rules forbid.
        */}
-      <ul className="divide-y divide-border/60 overflow-hidden rounded-md border border-border/60 bg-background">
+      <ul className="divide-y divide-border/60 overflow-hidden rounded-md border border-border/60 bg-surface-sunken">
         {versions.map((version) => {
           const state = versionState(version);
           const pending = pendingVersion === version.version;
@@ -142,7 +142,7 @@ export function SecretVersionHistory({
               <span
                 className={cn(
                   "w-12 shrink-0 font-mono text-xs",
-                  state === "live" ? "text-foreground" : "text-muted-foreground",
+                  state === "live" ? "text-ink" : "text-ink-muted",
                   // Struck through only when destroyed. A soft delete is not
                   // gone, so it must not be drawn as gone.
                   state === "destroyed" && "line-through"
@@ -151,7 +151,7 @@ export function SecretVersionHistory({
                 v{version.version}
               </span>
 
-              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+              <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">
                 {state === "destroyed" ? (
                   <>Destroyed — created {formatWhen(version.createdAt)}</>
                 ) : state === "deleted" ? (
@@ -166,7 +166,7 @@ export function SecretVersionHistory({
                   {version.setBy ? (
                     <>
                       by{" "}
-                      <span className={cn(version.setBy.kind === "user" && version.setBy.email && "text-foreground")}>
+                      <span className={cn(version.setBy.kind === "user" && version.setBy.email && "text-ink")}>
                         {authorLabel(version.setBy)}
                       </span>
                     </>
@@ -255,15 +255,15 @@ function RowAction({
   danger?: boolean;
 }) {
   return (
-    <Tooltip content={title} placement="bottom" delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={title} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       className={cn(
         "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors",
-        "text-muted-foreground",
-        danger ? "hover:text-destructive-ink" : "hover:text-foreground",
+        "text-ink-muted",
+        danger ? "hover:text-danger-ink" : "hover:text-ink",
         "disabled:cursor-not-allowed disabled:opacity-40"
       )} aria-label={title}>
       <Icon className="h-3 w-3" aria-hidden="true" />

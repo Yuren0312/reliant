@@ -44,7 +44,7 @@ var unattendedWithheld = []struct {
 		// start_run's run is attended (agent.start_run), so it would be handed
 		// everything withheld here. send_to_run instructs a run that may hold
 		// those tools, and control_run stops or resumes the user's own work.
-		withholds: toolNamed(ToolStartRun, ToolSendToRun, ToolControlRun),
+		withholds: toolNamed(ToolStartRun, ToolSendToRun, ToolControlRun, ToolFireTrigger),
 		reason:    "unattended runs can't start, message or control other runs",
 	},
 	{
@@ -74,6 +74,9 @@ func toolNamed(names ...string) func(string) bool {
 // other run.
 func UnattendedWithholding(name string) string {
 	name = strings.TrimSpace(name)
+	if IsActivationManagementTool(name) {
+		return "unattended runs cannot manage trigger activations; an interactive owner approval is required"
+	}
 	for _, category := range unattendedWithheld {
 		if category.withholds(name) {
 			return category.reason

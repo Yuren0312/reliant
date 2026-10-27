@@ -228,6 +228,36 @@ describe("traces and panels", () => {
     expect(req.panel).toMatchObject({ id: "p", ratio: true, groupBy: ["service.name"], series: [{ agg: "count", where: [{ field: "span.status", op: "eq", value: "error", values: [] }] }, { label: "requests" }] });
     expect(result.series[0]).toMatchObject({ label: "ratio", group: { "service.name": "api" }, timestamps: [window.startMs / 1000], values: [0.02] });
     expect(result.rows[0]).toEqual({ group: { "span.name": "a/B" }, values: [12] });
+    expect(result.columns).toEqual(["requests"]);
+  });
+
+  it("preserves SQL numeric column metadata separately from string group attributes", async () => {
+    client.queryPanel.mockResolvedValue({
+      panelId: "event-mix", kind: "sql", unit: "", stepSeconds: 0, truncated: true,
+      columns: ["events", "users"],
+      rows: [{ group: { event: "page_visited", clients: "electron,web" }, values: [120, Number.NaN] }],
+      series: [], funnelSteps: [], issues: [], sessions: [],
+    });
+    const result = await queryPanel({
+      ...env, window, services: [], stepSeconds: 0,
+      panel: { id: "event-mix", title: "Event mix", kind: "sql", signal: "traces", series: [], sql: "SELECT EventName AS event, count() AS events, uniqExact(UserId) AS users, arrayStringConcat(groupUniqArray(Client), ',') AS clients FROM product_events GROUP BY EventName" },
+    });
+    expect(result).toMatchObject({
+      kind: "sql", truncated: true, columns: ["events", "users"], series: [],
+      rows: [{ group: { event: "page_visited", clients: "electron,web" }, values: [120, null] }],
+    });
+    expect(client.queryPanel.mock.calls[0][0].panel).toMatchObject({ kind: "sql", series: [], groupBy: [], sql: expect.stringContaining("AS clients") });
+  });
+
+  it("preserves a SQL NULL placeholder separately from a measured zero", async () => {
+    client.queryPanel.mockResolvedValue({ panelId: "nullable", kind: "sql", unit: "", stepSeconds: 0, truncated: false,
+      columns: ["unmeasured", "actual_zero", "count"], rows: [{ group: {}, values: [0, 0, 12], missingValueIndexes: [0] }],
+      series: [], funnelSteps: [], issues: [], sessions: [],
+    });
+    const result = await queryPanel({ ...env, window, services: [], stepSeconds: 0,
+      panel: { id: "nullable", title: "Nullable", kind: "sql", signal: "", series: [], sql: "SELECT NULL, 0, 12" },
+    });
+    expect(result.rows[0].values).toEqual([null, 0, 12]);
   });
 
   it("sends a funnel's steps and a sessions panel's has-error, and maps the browser kinds back (C7)", async () => {
@@ -266,7 +296,9 @@ describe("errors", () => {
     const notSetUp = new ConnectError("not set up", Code.FailedPrecondition);
     expect(obsErrorKind(notSetUp)).toBe("not-set-up");
     expect(obsRetry(0, notSetUp)).toBe(false);
-    expect(obsErrorKind(new ConnectError("quota", Code.ResourceExhausted))).toBe("over-quota");
+    // Only the hourly allowance is "over-quota"; any other ResourceExhausted is "busy" (quota.test.ts).
+    expect(obsErrorKind(new ConnectError("quota", Code.ResourceExhausted))).toBe("busy");
+    expect(obsErrorKind(new ConnectError("this organization's hourly observability query quota is used up", Code.ResourceExhausted))).toBe("over-quota");
     expect(obsErrorKind(new ConnectError("slow", Code.DeadlineExceeded))).toBe("too-broad");
     expect(obsRetry(0, new ConnectError("down", Code.Unavailable))).toBe(true);
     expect(obsRetry(1, new ConnectError("down", Code.Unavailable))).toBe(false);
@@ -410,7 +442,7 @@ describe("workloads (customer metadata, contract K2)", () => {
   });
 });
 
-describe("workloads: the server's verdict, pods, jobs and the declaration (console v3)", () => {
+describe("workloads: the server's verdict, pods, jobs and the declaration", () => {
   const wire = (over: Record<string, unknown> = {}) => ({
     envId: "env-1",
     envName: "prod",

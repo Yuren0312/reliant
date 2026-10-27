@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { Shield } from 'lucide-react';
 import { ApprovalActions } from './ApprovalActions';
 import { useActiveChatId } from '../../store/chatStoreHooks';
-import { usePendingApprovals, useBatchApprove, useBatchDeny } from '../../hooks/approval-queries';
+import { usePendingApprovals, useBatchApproveInChat, useBatchDenyInChat } from '../../hooks/approval-queries';
 import { cn } from '../../lib/utils';
 import { useSurface } from '../../lib/surfaceContext';
 
@@ -19,11 +19,11 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
   // The `?? []` fallback would otherwise mint a new array on every render while
   // the query is still loading, re-creating both approve/deny callbacks.
   const pendingApprovals = useMemo(
-    () => pendingApprovalsQuery.data ?? [],
+    () => pendingApprovalsQuery.data?.approvals ?? [],
     [pendingApprovalsQuery.data],
   );
-  const batchApproveMutation = useBatchApprove();
-  const batchDenyMutation = useBatchDeny();
+  const batchApproveMutation = useBatchApproveInChat(chatId ?? undefined);
+  const batchDenyMutation = useBatchDenyInChat(chatId ?? undefined);
   
   // Detect platform for keyboard shortcut hint
   const isMac = typeof window !== 'undefined' && 
@@ -34,7 +34,6 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
   const handleApprove = useCallback(() => {
     if (chatId && pendingApprovals.length > 0) {
       batchApproveMutation.mutate({
-        chatId,
         requestIds: pendingApprovals.map((a) => a.id),
       });
     }
@@ -43,7 +42,6 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
   const handleDeny = useCallback(() => {
     if (chatId && pendingApprovals.length > 0) {
       batchDenyMutation.mutate({
-        chatId,
         requestIds: pendingApprovals.map((a) => a.id),
       });
     }
@@ -61,6 +59,11 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
   // viewport, so narrow surfaces get a full-width, wrapping layout instead.
   return (
     <div className="flex w-full flex-col items-end">
+      <div className="mb-2 max-h-80 w-full overflow-auto rounded-lg border border-border bg-background p-3" aria-label="Pending approval details">
+        {pendingApprovals.map((approval) => (
+          <pre key={approval.id} className="whitespace-pre-wrap break-words py-2 text-xs text-foreground">{approval.title}</pre>
+        ))}
+      </div>
       <div
         className={cn(
           "flex items-center gap-3 px-4 py-3 mb-3 bg-primary/5 dark:bg-primary/10 border border-primary/30 rounded-lg elevation-3",

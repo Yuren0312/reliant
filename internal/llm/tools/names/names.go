@@ -108,6 +108,15 @@ const (
 	ToolGetCELRef              = "get_cel_reference"
 	ToolCELEval                = "cel_eval"
 
+	// Existing trigger inspection and manual firing; no activation writes.
+	ToolListTriggers            = "list_triggers"
+	ToolFireTrigger             = "fire_trigger"
+	ToolCreateTriggerActivation = "create_trigger_activation"
+	ToolUpdateTriggerActivation = "update_trigger_activation"
+	ToolEnableTrigger           = "enable_trigger"
+	ToolPauseTrigger            = "pause_trigger"
+	ToolListTriggerEvents       = "list_trigger_events"
+
 	// Integration discovery tools
 	ToolSearchIntegrations   = "search_integrations"
 	ToolGetIntegrationSchema = "get_integration_schema"
@@ -153,6 +162,9 @@ var AllToolNames = []string{
 	ToolCreateWorkflow, ToolEditWorkflow, ToolWriteWorkflow,
 	// Workflow discovery
 	ToolListWorkflows, ToolGetWorkflow, ToolGetWorkflowSuggestions, ToolListPresets, ToolGetPreset, ToolGetSchema, ToolGetCELRef, ToolCELEval,
+	// Trigger tools
+	ToolListTriggers, ToolFireTrigger, ToolListTriggerEvents,
+	ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger,
 	// Integration discovery
 	ToolSearchIntegrations, ToolGetIntegrationSchema,
 	// Integration manifests: every exposed action in internal/integrations/catalog.
@@ -161,7 +173,7 @@ var AllToolNames = []string{
 	"github__user_get", "github__issue_create", "github__issue_get", "github__issue_comment",
 	"github__issue_comment_update", "github__issue_comment_list", "github__issue_labels_add", "github__issue_labels_remove",
 	"github__issue_search", "github__labels_create", "github__labels_list", "github__issue_update", "github__pr_get", "github__pr_list_files", "github__pr_create",
-	"github__pr_update", "github__pr_review_create", "github__pr_reviews_list", "github__pr_review_comments_list",
+	"github__pr_enqueue", "github__pr_update", "github__pr_review_create", "github__pr_reviews_list", "github__pr_review_comments_list",
 	"github__pr_review_comment_reply",
 	"github__repo_list_for_user", "github__repo_get", "github__branch_get", "github__repo_get_content", "github__repo_get_tree",
 	"github__code_search", "github__workflow_dispatch",

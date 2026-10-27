@@ -76,6 +76,14 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     exit 1
 fi
 
+# One release of reliant at a time on this machine: a second release.sh or
+# release-tag.sh fails here, naming who holds the lock, instead of racing the
+# first. Releases are the release train's job (control-plane's
+# scripts/release-train.sh); a chat labels its PR release:asap instead.
+# shellcheck source=scripts/lib/release-lock.sh
+. "$(dirname "$0")/lib/release-lock.sh"
+release_lock reliant "release.sh $RELEASE_TYPE" || exit $?
+
 # Check if there are uncommitted changes
 if ! git diff-index --quiet HEAD --; then
     echo -e "${RED}Error: You have uncommitted changes. Please commit or stash them first.${NC}"
@@ -144,7 +152,7 @@ if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
         echo -e "${BLUE}  make changelog${NC}"
         echo -e "${BLUE}  make changelog-draft VERSION=${RELEASE_TAG} [SINCE_TAG=vX.Y.Z]${NC}"
         echo -e "${BLUE}  edit ${CHANGELOG_FILE}${NC}"
-        echo -e "${BLUE}  make generate-changelog${NC}"
+        echo -e "${BLUE}  task generate:docs:changelog${NC}"
         exit 1
     fi
 
@@ -179,7 +187,7 @@ if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
     fi
 
     echo -e "${YELLOW}📝 Regenerating Mintlify changelog from YAML...${NC}"
-    make generate-changelog
+    task generate:docs:changelog
 fi
 
 # Always cut a branch. Even when this is run from a non-main branch, the

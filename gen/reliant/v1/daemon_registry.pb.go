@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -1051,9 +1052,19 @@ type DaemonInfo struct {
 	// that was full is still full when the machine resumes — so read
 	// disk.reported_at_ms before treating it as current. Unset when the daemon
 	// has never reported one.
-	Disk          *DiskReport `protobuf:"bytes,23,opt,name=disk,proto3" json:"disk,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Disk *DiskReport `protobuf:"bytes,23,opt,name=disk,proto3" json:"disk,omitempty"`
+	// The build the attached daemon reported when it registered, from the same
+	// attachment lease as the memory telemetry: present only while the daemon is
+	// attached, and empty/zero both for a daemon that predates the fields and for
+	// an unstamped build. Callers treat that as "unknown build", never an error.
+	// version is display only (semver cannot order two builds between the same
+	// pair of tags); commit_time_unix is the ordering key, 0 meaning unordered.
+	Version        string `protobuf:"bytes,24,opt,name=version,proto3" json:"version,omitempty"`
+	Commit         string `protobuf:"bytes,25,opt,name=commit,proto3" json:"commit,omitempty"`
+	CommitTimeUnix int64  `protobuf:"varint,26,opt,name=commit_time_unix,json=commitTimeUnix,proto3" json:"commit_time_unix,omitempty"`
+	ForgeVersion   string `protobuf:"bytes,27,opt,name=forge_version,json=forgeVersion,proto3" json:"forge_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DaemonInfo) Reset() {
@@ -1247,12 +1258,40 @@ func (x *DaemonInfo) GetDisk() *DiskReport {
 	return nil
 }
 
+func (x *DaemonInfo) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *DaemonInfo) GetCommit() string {
+	if x != nil {
+		return x.Commit
+	}
+	return ""
+}
+
+func (x *DaemonInfo) GetCommitTimeUnix() int64 {
+	if x != nil {
+		return x.CommitTimeUnix
+	}
+	return 0
+}
+
+func (x *DaemonInfo) GetForgeVersion() string {
+	if x != nil {
+		return x.ForgeVersion
+	}
+	return ""
+}
+
 var File_reliant_v1_daemon_registry_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\n" +
 	" reliant/v1/daemon_registry.proto\x12\n" +
-	"reliant.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dreliant/v1/tools_daemon.proto\"N\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dreliant/v1/tools_daemon.proto\"N\n" +
 	"\x19ClearMachineCachesRequest\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x14\n" +
 	"\x05kinds\x18\x02 \x03(\tR\x05kinds\"t\n" +
@@ -1297,7 +1336,7 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x1b\n" +
 	"\tbase_urls\x18\x02 \x03(\tR\bbaseUrls\"d\n" +
 	"\x1eSetLocalModelEndpointsResponse\x12B\n" +
-	"\flocal_models\x18\x01 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\"\xc2\b\n" +
+	"\flocal_models\x18\x01 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\"\xc3\t\n" +
 	"\n" +
 	"DaemonInfo\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x17\n" +
@@ -1325,7 +1364,11 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"created_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12B\n" +
 	"\flocal_models\x18\x15 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\x12\x12\n" +
 	"\x04name\x18\x16 \x01(\tR\x04name\x12*\n" +
-	"\x04disk\x18\x17 \x01(\v2\x16.reliant.v1.DiskReportR\x04disk*\xd1\x01\n" +
+	"\x04disk\x18\x17 \x01(\v2\x16.reliant.v1.DiskReportR\x04disk\x12\x18\n" +
+	"\aversion\x18\x18 \x01(\tR\aversion\x12\x16\n" +
+	"\x06commit\x18\x19 \x01(\tR\x06commit\x12(\n" +
+	"\x10commit_time_unix\x18\x1a \x01(\x03R\x0ecommitTimeUnix\x12#\n" +
+	"\rforge_version\x18\x1b \x01(\tR\fforgeVersion*\xd1\x01\n" +
 	"\fDaemonStatus\x12\x1d\n" +
 	"\x19DAEMON_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14DAEMON_STATUS_ACTIVE\x10\x01\x12\x16\n" +
@@ -1341,15 +1384,19 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\x1cDAEMON_LIFECYCLE_PHASE_READY\x10\x03\x12%\n" +
 	"!DAEMON_LIFECYCLE_PHASE_SUSPENDING\x10\x04\x12$\n" +
 	" DAEMON_LIFECYCLE_PHASE_SUSPENDED\x10\x05\x12!\n" +
-	"\x1dDAEMON_LIFECYCLE_PHASE_FAILED\x10\x062\xa3\x05\n" +
+	"\x1dDAEMON_LIFECYCLE_PHASE_FAILED\x10\x062\xe8\a\n" +
 	"\x15DaemonRegistryService\x12P\n" +
 	"\vListDaemons\x12\x1e.reliant.v1.ListDaemonsRequest\x1a\x1f.reliant.v1.ListDaemonsResponse\"\x00\x12J\n" +
-	"\tGetDaemon\x12\x1c.reliant.v1.GetDaemonRequest\x1a\x1d.reliant.v1.GetDaemonResponse\"\x00\x12V\n" +
-	"\rResolveDaemon\x12 .reliant.v1.ResolveDaemonRequest\x1a!.reliant.v1.ResolveDaemonResponse\"\x00\x12S\n" +
-	"\fResumeDaemon\x12\x1f.reliant.v1.ResumeDaemonRequest\x1a .reliant.v1.ResumeDaemonResponse\"\x00\x12e\n" +
-	"\x12RefreshLocalModels\x12%.reliant.v1.RefreshLocalModelsRequest\x1a&.reliant.v1.RefreshLocalModelsResponse\"\x00\x12q\n" +
-	"\x16SetLocalModelEndpoints\x12).reliant.v1.SetLocalModelEndpointsRequest\x1a*.reliant.v1.SetLocalModelEndpointsResponse\"\x00\x12e\n" +
-	"\x12ClearMachineCaches\x12%.reliant.v1.ClearMachineCachesRequest\x1a&.reliant.v1.ClearMachineCachesResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\tGetDaemon\x12\x1c.reliant.v1.GetDaemonRequest\x1a\x1d.reliant.v1.GetDaemonResponse\"\x00\x12Y\n" +
+	"\rResolveDaemon\x12 .reliant.v1.ResolveDaemonRequest\x1a!.reliant.v1.ResolveDaemonResponse\"\x03\x90\x02\x01\x12\xc7\x01\n" +
+	"\fResumeDaemon\x12\x1f.reliant.v1.ResumeDaemonRequest\x1a .reliant.v1.ResumeDaemonResponse\"t\xa2\xbb\x18p:n:lreports whether the daemon is routable: this server cannot wake a machine, control-plane's ResumeDaemon does\x12\xd0\x01\n" +
+	"\x12RefreshLocalModels\x12%.reliant.v1.RefreshLocalModelsRequest\x1a&.reliant.v1.RefreshLocalModelsResponse\"k\xa2\xbb\x18g:e:cre-probes the machine's local model servers: refreshes an observed inventory and configures nothing\x12\xa7\x01\n" +
+	"\x16SetLocalModelEndpoints\x12).reliant.v1.SetLocalModelEndpointsRequest\x1a*.reliant.v1.SetLocalModelEndpointsResponse\"6\xa2\xbb\x182:0\n" +
+	"\x19set_local_model_endpoints\x12\x13\n" +
+	"\x06daemon\x12\tdaemon_id\x12\x8e\x01\n" +
+	"\x12ClearMachineCaches\x12%.reliant.v1.ClearMachineCachesRequest\x1a&.reliant.v1.ClearMachineCachesResponse\")\xa2\xbb\x18%:#\n" +
+	"\fclear_caches\x12\x13\n" +
+	"\x06daemon\x12\tdaemon_idB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_daemon_registry_proto_rawDescOnce sync.Once

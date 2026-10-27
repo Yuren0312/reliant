@@ -160,9 +160,7 @@ type CleanupStore interface {
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
 	GetToolResultBlock(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error)
 	ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*db.ToolCall, error)
-	GetNextOrdinal(ctx context.Context, threadID string) (int64, error)
-	GetNextSeq(ctx context.Context, chatID string, threadID string) (int64, error)
-	CreateMessage(ctx context.Context, msg *db.Message) error
+	CreateNumberedMessage(ctx context.Context, msg *db.Message) error
 	CreateContentBlock(ctx context.Context, block *db.MessageContentBlock) error
 	db.ToolCallStatusStore
 }
@@ -176,6 +174,9 @@ type CompactStore interface {
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	threads.Repository
 	LLMHistoryStore
+	// The user's Settings → Model tag preferences, read exactly as CallLLM
+	// reads them, so the summary resolves to the model that filled the thread.
+	toolbindings.SettingsReader
 }
 
 // CreateWorkflowWithThreadStore is what CreateWorkflowWithThreadActivity reads
@@ -374,6 +375,9 @@ type WorkflowCheckpointStore interface {
 // the transition to the next workflow. It forwards the store to
 // threads.Service, runevents.EmitTerminal and TransitionChatOnCompletion.
 type WorkflowStatusStore interface {
+	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
+	SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error
+	SaveMessageToThreadOnce(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*db.Message, bool, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)

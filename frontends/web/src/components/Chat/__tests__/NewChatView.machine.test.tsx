@@ -16,10 +16,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const daemonState = vi.hoisted(() => ({
   current: {
-    activeDaemon: undefined as { daemonId: string; hostname: string; status: number } | undefined,
-    daemons: [] as Array<{ daemonId: string; hostname: string; status: number }>,
+    activeDaemon: undefined,
+    daemons: [],
     loading: false,
-    answered: undefined as boolean | undefined,
+  } as {
+    activeDaemon: { daemonId: string; hostname: string; status: number } | undefined;
+    daemons: Array<{ daemonId: string; hostname: string; status: number }>;
+    loading: boolean;
+    /** Set to pin the answer; otherwise it follows `loading`. */
+    answered?: boolean;
   },
 }));
 const startChat = vi.hoisted(() => vi.fn(async () => ({ id: "chat-new" })));
@@ -32,6 +37,12 @@ function storeMock(state: () => any) {
   });
 }
 
+// Where the project is installed decides which machine a new chat names
+// (lib/chatMachine defaultMachineDaemon); these suites are not about that.
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjectDaemonInstalls: () => ({ data: [], isLoading: false }),
+}));
 vi.mock("../../../hooks/chat-queries", () => ({
   useChatList: () => ({ data: [], isSuccess: true }),
 }));
@@ -40,6 +51,20 @@ vi.mock("../../../store/chatStore", () => ({
 }));
 vi.mock("../../../store/worktreeStore", () => ({
   useWorktreeStore: storeMock(() => ({
+    currentWorktree: { id: "w-feature", branch: "feature", name: "feature" },
+    worktrees: [
+      { id: "w-main", branch: "main", name: "main", is_main: true },
+      { id: "w-feature", branch: "feature", name: "feature" },
+    ],
+    switchWorktreeContext: vi.fn(),
+    loadWorktrees: vi.fn(),
+  })),
+}));
+// Workspace rows are read through hooks/worktree-queries; answer them from the
+// same fixture.
+vi.mock("../../../hooks/worktree-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/worktree-queries")>()),
+  ...(await import("../../../test/worktreeQueriesMock")).worktreeQueriesMock(() => ({
     currentWorktree: { id: "w-feature", branch: "feature", name: "feature" },
     worktrees: [
       { id: "w-main", branch: "main", name: "main", is_main: true },
@@ -65,7 +90,11 @@ vi.mock("../../../store/chatParamsStore", () => ({
   useChatParamsStore: storeMock(() => ({ transferTempToChat: vi.fn() })),
 }));
 vi.mock("@/hooks/useDaemonStatus", () => ({
-  useDaemonStatus: () => ({ answered: !daemonState.current.loading, ...daemonState.current, refresh: vi.fn() }),
+  useDaemonStatus: () => ({
+    ...daemonState.current,
+    answered: daemonState.current.answered ?? !daemonState.current.loading,
+    refresh: vi.fn(),
+  }),
 }));
 vi.mock("@/hooks/useDaemonWait", () => ({
   useDaemonWait: ({ waiting }: { waiting: boolean }) => ({
@@ -89,10 +118,10 @@ vi.mock("../DiskPressureBanner", () => ({ DiskPressureBanner: () => null }));
 vi.mock("../../DaemonWaitState", () => ({
   DaemonWaitState: ({ state }: { state: { title: string } }) => <div role="status">{state.title}</div>,
 }));
-vi.mock("../../Layout/ConnectDaemonModal", () => ({ ConnectDaemonModal: () => null }));
+vi.mock("../../Machines/AddMachineSheet", () => ({ AddMachineSheet: () => null }));
 vi.mock("../../Worktrees/CreateWorktreeModal", () => ({ CreateWorktreeModal: () => null }));
 vi.mock("../../Worktrees/DiscoverWorktreesModal", () => ({ DiscoverWorktreesModal: () => null }));
-vi.mock("../../ui/Tooltip", () => ({ Tooltip: ({ children }: any) => <>{children}</> }));
+vi.mock("../../forge-ui/tooltip", () => ({ default: ({ children }: any) => <>{children}</> }));
 vi.mock("../../icons/ReliantIcon", () => ({ ReliantIcon: () => null }));
 vi.mock("@/lib/analytics", () => ({ trackEvent: vi.fn() }));
 vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));

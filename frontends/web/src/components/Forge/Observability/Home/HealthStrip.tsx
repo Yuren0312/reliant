@@ -3,11 +3,12 @@
 /**
  * THE HEALTH STRIP — requests · error rate · p95 · alerts firing for a
  * telemetry scope, each with the change against the previous window and a
- * sparkline carrying the scope's release markers.
+ * sparkline.
  *
- * Shared by the Observability home and the project Overview (the KPI tiles
- * with release markers), so the two pages show the same four figures from
- * the same four reads: react-query dedupes them when both are mounted.
+ * On the project Overview. A sparkline marks only the LATEST release in the
+ * window: at sparkline size several dashed rules read as hatching, and "did
+ * the last deploy move this?" is the question a sparkline can answer. The
+ * workload page's full charts carry every marker.
  */
 
 import { useMemo } from "react";
@@ -16,6 +17,7 @@ import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import { useAlertHistory, useAlerts, usePanelQuery } from "@/hooks/observability-queries";
 import type { ObsScope, PanelResult } from "@/services/controlPlane/observability/types";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +44,10 @@ export function HealthStrip({ scope, range, environments, envId, alertsHref }: H
   const alerts = useAlerts(orgId, envId ?? undefined);
   const history = useAlertHistory(orgId, range, envId ?? undefined);
   const releases = useReleaseMarkers(scope, range, environments, !!scope);
+  const latestMarker = useMemo(() => {
+    const newest = [...releases.markers].sort((a, b) => b.timeSec - a.timeSec)[0];
+    return newest ? [newest] : [];
+  }, [releases.markers]);
   const numberPanel = useMemo(() => redPanel("number"), []);
   const linePanel = useMemo(() => redPanel("line"), []);
   const totals = usePanelQuery(scope, range, numberPanel, []);
@@ -57,7 +63,7 @@ export function HealthStrip({ scope, range, environments, envId, alertsHref }: H
       totals={scope ? totals : { data: undefined, isLoading: true, error: null }}
       previous={previous.data}
       trend={trend}
-      markers={releases.markers}
+      markers={latestMarker}
       firing={firing.length}
       firingDetail={firing[0] ? `${firing[0].rule}${firing[0].firingAtMs ? ` · ${formatAgo(firing[0].firingAtMs).replace(" ago", "")}` : ""}` : null}
       firingCounts={(timestamps) => firingCounts(timestamps, bands)}
@@ -120,7 +126,7 @@ function Strip({
   const trendErrors = trend.data ? seriesValues(trend.data.series, "errors") : [];
   const trendP95 = trend.data ? seriesValues(trend.data.series, "p95") : [];
   const loading = totals.isLoading;
-  const failed = !!totals.error;
+  const failed = !!totals.error && !keepsLastResult(totals.error, totals.data);
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="observability-strip">

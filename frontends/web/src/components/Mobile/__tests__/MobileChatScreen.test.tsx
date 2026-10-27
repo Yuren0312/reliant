@@ -27,9 +27,17 @@ vi.mock("../../../store/chatStoreHooks", () => ({
 
 const projectState = vi.hoisted(() => ({
   currentProject: { id: "p1", path: "/repo" } as { id: string; path: string } | null,
+  // The project list as the cache holds it (getCachedProjects), and what a
+  // fetch of it answers (fetchProjects).
   projects: [] as Array<{ id: string; path: string }>,
-  loadProjects: vi.fn(async () => {}),
+  fetchProjects: vi.fn(async (): Promise<Array<{ id: string; path: string }>> => projectState.projects),
   selectProject: vi.fn(async () => {}),
+}));
+
+vi.mock("../../../hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/project-queries")>()),
+  getCachedProjects: () => projectState.projects,
+  fetchProjects: () => projectState.fetchProjects(),
 }));
 
 vi.mock("../../../store/projectStore", () => ({
@@ -39,13 +47,10 @@ vi.mock("../../../store/projectStore", () => ({
   ),
 }));
 
-vi.mock("../../../store/worktreeStore", () => ({
-  useWorktreeStore: (selector: (s: unknown) => unknown) =>
-    selector({
-      worktrees: [{ id: "wt-main", is_main: true, name: "main", deleted_at: null }],
-      loadWorktrees: vi.fn(),
-    }),
+vi.mock("../../../hooks/worktree-queries", () => ({
+  useMainWorktree: () => ({ id: "wt-main", is_main: true, name: "main", deleted_at: null }),
 }));
+vi.mock("../../../hooks/worktree-actions", () => ({ loadMainWorktree: vi.fn() }));
 
 vi.mock("../../Chat/ChatContainer", () => ({
   ChatContainer: ({ tabId }: { tabId?: string }) => (
@@ -103,7 +108,7 @@ describe("MobileChatScreen project alignment", () => {
   beforeEach(() => {
     projectState.currentProject = p1;
     projectState.projects = [p1, p2];
-    projectState.loadProjects.mockClear();
+    projectState.fetchProjects.mockClear();
     projectState.selectProject.mockClear();
     chatMock = { title: "My chat", worktreeId: "wt-1", projectId: "p1" };
   });
@@ -111,19 +116,17 @@ describe("MobileChatScreen project alignment", () => {
   it("switches to the chat's own project when it differs from the current one", async () => {
     chatMock = { title: "My chat", worktreeId: "wt-1", projectId: "p2" };
     render(<MobileChatScreen />);
-    await waitFor(() => expect(projectState.selectProject).toHaveBeenCalledWith(p2));
+    await waitFor(() => expect(projectState.selectProject).toHaveBeenCalledWith(p2, { restoreWorkspace: false, restoreChat: false }));
     expect(projectState.selectProject).toHaveBeenCalledTimes(1);
   });
 
   it("loads projects first when the chat's project is not known yet", async () => {
     chatMock = { title: "My chat", worktreeId: "wt-1", projectId: "p2" };
     projectState.projects = [p1];
-    projectState.loadProjects.mockImplementationOnce(async () => {
-      projectState.projects = [p1, p2];
-    });
+    projectState.fetchProjects.mockImplementationOnce(async () => [p1, p2]);
     render(<MobileChatScreen />);
-    await waitFor(() => expect(projectState.selectProject).toHaveBeenCalledWith(p2));
-    expect(projectState.loadProjects).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(projectState.selectProject).toHaveBeenCalledWith(p2, { restoreWorkspace: false, restoreChat: false }));
+    expect(projectState.fetchProjects).toHaveBeenCalledTimes(1);
   });
 
   it("leaves the project alone when the chat is already in it", () => {
@@ -134,7 +137,7 @@ describe("MobileChatScreen project alignment", () => {
   it("does not select anything for a chat whose project the user cannot see", async () => {
     chatMock = { title: "My chat", worktreeId: "wt-1", projectId: "gone" };
     render(<MobileChatScreen />);
-    await waitFor(() => expect(projectState.loadProjects).toHaveBeenCalled());
+    await waitFor(() => expect(projectState.fetchProjects).toHaveBeenCalled());
     expect(projectState.selectProject).not.toHaveBeenCalled();
   });
 });

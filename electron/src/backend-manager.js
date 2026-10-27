@@ -92,6 +92,14 @@ class BackendManager {
     this.resetDaemonCredentialRepair();
     this._credRepairInFlight = false;
     this._credRepairTimer = null;
+    // The repair's only source of time: `now` for the backoff deadlines and
+    // setInterval/clearInterval for the tick. A test hands in a fake so the
+    // attempt count never depends on how fast the machine runs.
+    this.credRepairClock = opts?.credRepairClock ?? {
+      now: () => Date.now(),
+      setInterval: (fn, ms) => setInterval(fn, ms),
+      clearInterval: (handle) => clearInterval(handle),
+    };
 
     // Optional auth-session source for the pre-spawn PAT mint preflight.
     // Null is fine — ensureDaemonCreds() short-circuits silently in that case.
@@ -410,8 +418,8 @@ class BackendManager {
    * The absent case is a normal steady state, not a defect and not an upgrade
    * artifact, so it is not warned about. The Go side derives the field from
    * the data directory's own position under ~/.reliant/instances, and a
-   * container that sets DAEMON_DATA_DIR=/data (docker-compose.yml and
-   * docker-compose.cloud.yml both do) has no such position, so it legitimately
+   * container that sets DAEMON_DATA_DIR to its mounted volume (the workspace
+   * operator's pods do) has no such position, so it legitimately
    * writes no stamp at all. Deriving it from the path rather than the caller
    * is also what makes the field trustworthy here: a record cannot claim one
    * instance while sitting in another's directory.
@@ -594,14 +602,14 @@ class BackendManager {
       }
     };
 
-    this._credRepairTimer = setInterval(tick, this.credRepairTickMs || BackendManager.CRED_REPAIR_TICK_MS);
+    this._credRepairTimer = this.credRepairClock.setInterval(tick, this.credRepairTickMs || BackendManager.CRED_REPAIR_TICK_MS);
     this._credRepairTimer.unref?.();
     tick();
   }
 
   stopDaemonCredentialRepairLoop() {
     if (this._credRepairTimer) {
-      clearInterval(this._credRepairTimer);
+      this.credRepairClock.clearInterval(this._credRepairTimer);
       this._credRepairTimer = null;
     }
   }
@@ -652,7 +660,7 @@ class BackendManager {
     if (this._credRepairInFlight) return;
     if (this._credRepairStopped) return;
     if (!this.authStorage) return;
-    if (Date.now() < this._credRepairNextAt) return;
+    if (this.credRepairClock.now() < this._credRepairNextAt) return;
 
     this._credRepairInFlight = true;
     try {
@@ -669,7 +677,7 @@ class BackendManager {
               'waiting for it to pick them up'
           );
           this._credRepairAttempt += 1;
-          this._credRepairNextAt = Date.now() + this.credRepairBackoffMs();
+          this._credRepairNextAt = this.credRepairClock.now() + this.credRepairBackoffMs();
           return;
 
         case daemonCreds.ENSURE_NO_SESSION:
@@ -683,7 +691,7 @@ class BackendManager {
           // Deliberately does NOT consume an attempt: a long signed-out spell
           // must not leave a later genuine race with only the long tail of
           // the schedule to work with.
-          this._credRepairNextAt = Date.now() + this.credRepairBackoffMs();
+          this._credRepairNextAt = this.credRepairClock.now() + this.credRepairBackoffMs();
           return;
 
         case daemonCreds.ENSURE_ALREADY_CURRENT:
@@ -700,10 +708,10 @@ class BackendManager {
           // teaching this switch about it. Treat the unknown as transient:
           // retrying costs one RPC, while wrongly giving up is the bug.
           this._credRepairAttempt += 1;
-          this._credRepairNextAt = Date.now() + this.credRepairBackoffMs();
+          this._credRepairNextAt = this.credRepairClock.now() + this.credRepairBackoffMs();
           log.warn(
             `[BackendManager] Could not mint credentials for the idling daemon ` +
-              `(outcome: ${outcome}); retrying in ${this._credRepairNextAt - Date.now()}ms`
+              `(outcome: ${outcome}); retrying in ${this._credRepairNextAt - this.credRepairClock.now()}ms`
           );
           return;
       }
@@ -935,19 +943,28 @@ class BackendManager {
    * that keeps us from killing anything.
    */
   isProcessAlive(pid) {
-    const { execSync } = require('child_process');
-    try {
-      if (process.platform === 'win32') {
+    if (process.platform === 'win32') {
+      const { execSync } = require('child_process');
+      try {
         const out = execSync(`tasklist /FI "PID eq ${pid}" /NH`, {
           encoding: 'utf8',
           timeout: 5000
         });
         return out.includes(String(pid));
+      } catch (e) {
+        return true;
       }
-      execSync(`kill -0 ${pid}`, { timeout: 1000 });
+    }
+    // Signal 0 in-process: no shell, so no timeout to lose. This used to
+    // shell out to `kill -0` with a 1s timeout, and on a loaded machine the
+    // timeout fired and read as "dead", which convicted a live owner's daemon
+    // as an orphan. Only ESRCH means the process is gone. EPERM means it
+    // exists but belongs to someone else, and anything else is no answer.
+    try {
+      process.kill(pid, 0);
       return true;
     } catch (e) {
-      return false;
+      return e.code !== 'ESRCH';
     }
   }
 

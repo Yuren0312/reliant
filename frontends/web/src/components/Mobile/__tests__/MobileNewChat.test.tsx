@@ -18,6 +18,12 @@ const startChat = vi.fn()
 const selectChat = vi.fn()
 const navigate = vi.fn()
 
+// Where the project is installed decides which machine a new chat names
+// (lib/chatMachine defaultMachineDaemon); these suites are not about that.
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjectDaemonInstalls: () => ({ data: [], isLoading: false }),
+}));
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, ...props }: { children?: React.ReactNode }) => (
     <a {...props}>{children}</a>
@@ -45,9 +51,13 @@ const worktreeList = vi.hoisted(() => ({
   current: [] as Array<Record<string, unknown>>,
 }))
 const MAIN_WORKTREE = { id: 'wt-main', is_main: true, name: 'main', branch: 'main', status: 1 }
-vi.mock('../../../store/worktreeStore', () => ({
-  useWorktreeStore: (selector: (s: unknown) => unknown) =>
-    selector({ worktrees: worktreeList.current, loadWorktrees: vi.fn() }),
+vi.mock('../../../hooks/worktree-queries', () => ({
+  useWorktreeList: () => ({
+    worktrees: worktreeList.current,
+    hasMore: false,
+    isLoadingMore: false,
+    loadMore: vi.fn(),
+  }),
 }))
 
 // The sheet has its own tests; here it only needs to report a creation.
@@ -70,7 +80,8 @@ vi.mock('../MobileCreateWorkspaceSheet', () => ({
   ),
 }))
 
-vi.mock('../../../store/globalDataStore', () => ({
+vi.mock("../../../hooks/workflow-queries", async (importActual) => ({
+  ...(await importActual<typeof import("../../../hooks/workflow-queries")>()),
   useWorkflows: () => ({
     workflows: [
       { name: 'builtin://agent', description: 'Basic agentic chat' },
@@ -82,15 +93,11 @@ vi.mock('../../../store/globalDataStore', () => ({
   }),
 }))
 
-vi.mock('../../../store/preferencesStore', () => ({
-  DEFAULT_WORKFLOW: 'builtin://agent',
-  usePreferencesStore: (selector: (s: unknown) => unknown) =>
-    selector({
-      preferences: { defaultWorkflow: 'builtin://forge-one-shot' },
-      isLoading: false,
-      loadPreferences: vi.fn(),
-      isWorkflowHidden: () => false,
-    }),
+const hidden = vi.hoisted(() => ({ isWorkflowHidden: () => false, isPresetHidden: () => false }))
+vi.mock('../../../hooks/settings-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../hooks/settings-queries')>()),
+  useDefaultWorkflow: () => 'builtin://forge-one-shot',
+  useHiddenItems: () => hidden,
 }))
 
 vi.mock('../../../lib/analytics', () => ({ trackEvent: vi.fn() }))

@@ -36,14 +36,15 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, Settings2, Shield, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { api } from "@/api/client";
 import { InboxItemKind, type InboxItem as InboxItemData, type InboxStorage as InboxStorageData } from "@/gen/reliant/v1/inbox_pb";
-import { answerQuestion } from "@/hooks/approval-queries";
-import { inboxKeys, removeInboxItems } from "@/hooks/inbox-queries";
+import { useApprove, useDeny } from "@/hooks/approval-service-hooks_gen";
+import { answerQuestion } from "@/hooks/question-queries";
+import { inboxServiceKeys } from "@/hooks/inbox-service-hooks_gen";
+import { removeInboxItems } from "@/hooks/inbox-queries";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import { useSetTriggerEnabled, useTriggerById } from "@/hooks/trigger-queries";
-import { automationHref, workflowPageHref } from "@/lib/workflowsArea";
-import { SetupDialogFor } from "../Automations/SetupDialogFor";
+import { automationHref, automationRedirectPath, workflowPageHref } from "@/lib/workflowsArea";
+import { openAutomationDialog } from "../Automations/dialog/openAutomationDialog";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
@@ -57,6 +58,7 @@ import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
 import { consumerSummary, heavyRefused, pressuredVolume, reclaimSummary, volumeUsage } from "@/lib/machineDisk";
 import { StorageAction, totalHeldBytes } from "./StorageAction";
+import { RecoveryAction } from "./RecoveryAction";
 
 /** How long "Already handled" shows before the row leaves. */
 export const ALREADY_HANDLED_MS = 2000;
@@ -200,6 +202,11 @@ export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
           )}
         </div>
       </div>
+      {item.payload.case === "recovery" && !handled && (
+        <div className="mt-2 pl-7 max-sm:pl-0">
+          <RecoveryAction key={item.payload.value.recoveryId} recovery={item.payload.value} />
+        </div>
+      )}
       {expanded && !handled && (
         <div className="mt-2 pl-7 max-sm:pl-0">
           <Expansion item={item} onRaceOrError={onRaceOrError} />
@@ -226,6 +233,8 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <Settings2 className={cn(className, "text-warning-ink")} aria-label="Automation needs setup" />;
     case InboxItemKind.RUN_FINISHED:
       return <CheckCircle2 className={cn(className, "text-success-ink")} aria-label="Run finished" />;
+    case InboxItemKind.RECOVERY:
+      return <HardDrive className={className} aria-label="Saved workspace recovery" />;
     case InboxItemKind.STORAGE:
       return <HardDrive className={cn(className, "text-warning-ink")} aria-label="Storage" />;
     default:
@@ -235,6 +244,7 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
 
 /** The run's (or the automation's) display name. */
 export function subjectName(item: InboxItemData): string {
+  if (item.payload.case === "recovery") return item.payload.value.sourceWorktreeName || "Saved workspace recovery";
   if (item.payload.case === "storage") {
     return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} storage`;
   }
@@ -298,49 +308,45 @@ function SubjectLink({ item }: { item: InboxItemData }) {
 }
 
 /**
- * An automation item names the automation: a workflow automation opens on its
- * workflow's page, scrolled to it (where it is configured); a custom one on
- * its own page. The trigger is read from the list cache to know which.
+ * An automation item names the trigger, and opens it on its workflow's page
+ * (where every trigger is configured). The trigger is read from the list
+ * cache for its workflow and project; until it has loaded, the link resolves
+ * through the automation redirect, which looks it up.
  */
 function AutomationSubjectLink({ triggerId, name }: { triggerId: string; name: string }) {
   const trigger = useTriggerById(triggerId);
   // Automations are configured on desktop only; on a phone the name is a label.
   const mobile = useSurface() === "mobile";
   if (mobile) return <span className={subjectClass} title={name}>{name}</span>;
-  if (trigger?.workflowTrigger) {
-    return (
-      <a href={automationHref(trigger)} className={subjectClass} title={name}>
-        {name}
-      </a>
-    );
-  }
   return (
-    <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={subjectClass} title={name}>
+    <a href={trigger ? automationHref(trigger) : automationRedirectPath(triggerId)} className={subjectClass} title={name}>
       {name}
-    </Link>
+    </a>
   );
 }
 
-/** "Open settings" for a workflow automation that can't start; its own page for a custom one. */
+/** "Open settings" for a declared trigger that can't start; a hand-made one opens on its workflow's page. */
 function LaunchFailedAction({ triggerId }: { triggerId: string }) {
   const trigger = useTriggerById(triggerId);
-  const [open, setOpen] = useState(false);
   const mobile = useSurface() === "mobile";
   if (mobile) return <OnDesktopNote>Fix on desktop</OnDesktopNote>;
   if (trigger?.workflowTrigger) {
     return (
       <>
-        <button type="button" className={actionButtonClass} onClick={() => setOpen(true)}>
+        <button
+          type="button"
+          className={actionButtonClass}
+          onClick={() => openAutomationDialog({ workflowRef: trigger.workflow, projectId: trigger.projectId, mode: "settings", showOpenWorkflow: true })}
+        >
           Open settings
         </button>
-        {open && <SetupDialogFor workflowRef={trigger.workflow} projectId={trigger.projectId} mode="settings" onClose={() => setOpen(false)} />}
       </>
     );
   }
   return (
-    <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={actionButtonClass}>
-      Edit automation
-    </Link>
+    <a href={trigger ? automationHref(trigger) : automationRedirectPath(triggerId)} className={actionButtonClass}>
+      Open trigger
+    </a>
   );
 }
 
@@ -381,6 +387,10 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
         .filter(Boolean)
         .join(" · ");
       return text ? { node: text, title: text } : null;
+    }
+    case "recovery": {
+      const text = `${payload.value.checkoutCount} repositories · ${payload.value.phase}${payload.value.lastError ? ` · Held: ${payload.value.lastError}` : ""}`;
+      return { node: text, title: text };
     }
     case "storage": {
       const text = storageDetail(payload.value);
@@ -481,6 +491,9 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
           Finish setup
         </a>
       );
+    case "recovery":
+      // The full-width action lives below the row, not inside its nonwrapping controls.
+      return null;
     case "storage":
       return (
         <StorageAction storage={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />
@@ -525,11 +538,13 @@ function ApprovalRowAction({
   onFailure: (verb: string) => (error: unknown) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const approve = useApprove();
+  const deny = useDeny();
   const act = async (verb: "approve" | "deny") => {
     setBusy(true);
     try {
-      if (verb === "approve") await api.approvals.approve(approvalId, undefined);
-      else await api.approvals.deny(approvalId, undefined, undefined);
+      if (verb === "approve") await approve.mutateAsync({ requestId: approvalId });
+      else await deny.mutateAsync({ requestId: approvalId });
       removeInboxItems([itemId]);
     } catch (error) {
       onFailure(verb)(error);
@@ -601,7 +616,7 @@ export function WakeMachineAction({
   daemonName: string;
   label?: string;
 }) {
-  const goToBilling = useGoToBilling();
+  const goToBilling = useGoToBilling("inbox");
   // The error itself, not its message: its reason decides whether Billing is
   // the fix (lib/daemon-resume); the copy is shared.
   const [error, setError] = useState<unknown>(null);
@@ -661,7 +676,7 @@ function FailingAutomationAction({ triggerId, lastRunChatId }: { triggerId: stri
               onSuccess: () => {
                 toast.success("Automation paused");
                 // A paused automation is no longer listed as failing.
-                void queryClient.invalidateQueries({ queryKey: inboxKeys.all });
+                void queryClient.invalidateQueries({ queryKey: inboxServiceKeys.all });
               },
               onError: (error) => toast.error("Could not pause the automation", { description: errorText(error) }),
             },

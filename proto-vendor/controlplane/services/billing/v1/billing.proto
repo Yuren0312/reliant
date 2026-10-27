@@ -14,6 +14,52 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/reliant-labs/control-plane/gen/services/billing/v1;billingv1";
 
+message GetOrganizationCostSummaryRequest {
+  string org_id = 1;
+}
+
+// These independent facts MUST NOT be added into a grand total across periods.
+message GetOrganizationCostSummaryResponse {
+  string org_id = 1;
+  string currency = 2;
+  google.protobuf.Timestamp generated_at = 3;
+  repeated OrganizationCostPeriod periods = 4;
+  repeated OrganizationCostSource sources = 5;
+}
+
+message OrganizationCostPeriod {
+  string id = 1;
+  google.protobuf.Timestamp start = 2;
+  google.protobuf.Timestamp end = 3;
+}
+
+message OrganizationCostAllowance {
+  string id = 1;
+  string unit = 2;
+  double included = 3;
+  optional double consumed = 4;
+}
+
+message OrganizationCostSource {
+  string category = 1;
+  string period_id = 2;
+  // USD nanos. Missing means not measured, never zero.
+  optional int64 list_equivalent_usd_nanos = 3;
+  // Recognized billed consumption; NOT wallet funding or card payments.
+  optional int64 actual_charges_usd_nanos = 4;
+  // Promotional grants, not remaining credit or allocation against calls.
+  optional int64 credits_usd_nanos = 5;
+  optional int64 pending_estimate_usd_nanos = 6;
+  optional int64 pending_count = 7;
+  repeated OrganizationCostAllowance allowances = 8;
+  google.protobuf.Timestamp coverage_start = 9;
+  google.protobuf.Timestamp coverage_end = 10;
+  google.protobuf.Timestamp measured_through = 11;
+  // complete, partial, unavailable, not_measured.
+  string completeness = 12;
+  repeated string limitations = 13;
+}
+
 // === BillingService (public) ===
 //
 // User-facing billing RPCs. Admin-only (org-scoped or arbitrary-user) and
@@ -21,6 +67,15 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/billing/
 // BillingAdminService / BillingGatewayService.
 
 service BillingService {
+  // Canonical current-period organization accounting. Requires billing:read,
+  // not billing management. Unknown amounts stay absent; no historical range.
+  rpc GetOrganizationCostSummary(GetOrganizationCostSummaryRequest) returns (GetOrganizationCostSummaryResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // Read-only catalog.
   rpc ListPlans(ListPlansRequest) returns (ListPlansResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -47,6 +102,20 @@ service BillingService {
   }
   rpc ListCurrentUserInvoices(ListCurrentUserInvoicesRequest) returns (ListCurrentUserInvoicesResponse) {
     option (forge.v1.method) = {auth_required: true};
+  }
+
+  // ListOrgLimitChanges is the org's limit-change history, newest first: who
+  // changed which limit, from what, to what, and when. One list across every
+  // org limit (observability spend cap today; LLM cap, infra overage and wallet
+  // auto-recharge as they adopt it). Any member of org_id may read it.
+  //
+  // forge:custom — hand-written over the shared org_limit_changes table; it is
+  // not an entity list, so it gets no CRUD wiring or admin page.
+  rpc ListOrgLimitChanges(ListOrgLimitChangesRequest) returns (ListOrgLimitChangesResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
   }
 
   // Wallet (per-user).
@@ -288,7 +357,12 @@ message GetPlanResponse {
   Plan plan = 1;
 }
 
-message GetCurrentUserSubscriptionRequest {}
+message GetCurrentUserSubscriptionRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message GetCurrentUserSubscriptionResponse {
   Subscription subscription = 1;
@@ -327,6 +401,10 @@ message CreateCurrentUserCheckoutSessionRequest {
   // session; cards and wallets never leave the iframe. Validated against the
   // redirect allowlist when present.
   string return_url = 5;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 6;
 }
 
 message CreateCurrentUserCheckoutSessionResponse {
@@ -346,6 +424,10 @@ message CreateCurrentUserCheckoutSessionResponse {
 message GetCurrentUserWalletOverviewRequest {
   int32 ledger_page = 1;
   int32 ledger_page_size = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 message GetCurrentUserWalletOverviewResponse {
@@ -361,6 +443,10 @@ message GetCurrentUserComputeSubscriptionResponse {
 message CreateCurrentUserComputeSubscriptionIntentRequest {
   // The compute plan to subscribe to.
   string plan_id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message CreateCurrentUserComputeSubscriptionIntentResponse {
@@ -388,6 +474,10 @@ message CreateCurrentUserWalletTopupSessionRequest {
   string cancel_url = 3;
   CheckoutUiMode ui_mode = 4;
   string return_url = 5;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 6;
 }
 
 message CreateCurrentUserWalletTopupSessionResponse {
@@ -402,6 +492,10 @@ message CreateCurrentUserWalletTopupSessionResponse {
 
 message CreateCurrentUserWalletTopupPaymentIntentRequest {
   int64 amount_cents = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message CreateCurrentUserWalletTopupPaymentIntentResponse {
@@ -442,6 +536,10 @@ message RedeemCouponRequest {
   // code is case-insensitive and trimmed server-side — users paste these from
   // emails and read them aloud, so case must never decide the outcome.
   string code = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 // RedeemedCouponKind tells the client WHAT a redemption granted, so it can say
@@ -485,13 +583,52 @@ message RedeemCouponResponse {
 
 message CreateCurrentUserBillingPortalSessionRequest {
   string return_url = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message CreateCurrentUserBillingPortalSessionResponse {
   string portal_url = 1;
 }
 
-message ListCurrentUserInvoicesRequest {}
+message ListOrgLimitChangesRequest {
+  string org_id = 1;
+  // Only changes to this resource (for example "observability.spend_cap");
+  // empty lists every resource.
+  string resource = 2;
+  // At most 200; unspecified is 50.
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message OrgLimitChange {
+  string id = 1;
+  google.protobuf.Timestamp at = 2;
+  // The email of the person who made the change; empty when it was not a person.
+  string actor_email = 3;
+  // "observability.spend_cap", "observability.alert_thresholds", ...
+  string resource = 4;
+  string field = 5;
+  // Display JSON ("5000", "[50,80,100]"); empty old_value means the limit had
+  // not been set before.
+  string old_value = 6;
+  string new_value = 7;
+}
+
+message ListOrgLimitChangesResponse {
+  repeated OrgLimitChange changes = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+}
+
+message ListCurrentUserInvoicesRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message ListCurrentUserInvoicesResponse {
   repeated Invoice invoices = 1;
@@ -505,14 +642,24 @@ message GetUsageSummaryResponse {
   repeated UsageSummary summaries = 1;
 }
 
-message GetCurrentUserReliantStateRequest {}
+message GetCurrentUserReliantStateRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message GetCurrentUserReliantStateResponse {
   ReliantEntitlement entitlement = 1;
   ManagedReliantAccess managed_access = 2;
 }
 
-message RepairCurrentUserReliantAccessRequest {}
+message RepairCurrentUserReliantAccessRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message RepairCurrentUserReliantAccessResponse {
   ReliantEntitlement entitlement = 1;
@@ -522,6 +669,10 @@ message RepairCurrentUserReliantAccessResponse {
 
 message RotateCurrentUserReliantAccessRequest {
   optional string grace_period = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message RotateCurrentUserReliantAccessResponse {
@@ -531,7 +682,12 @@ message RotateCurrentUserReliantAccessResponse {
   bool replaced = 4;
 }
 
-message GetCurrentUserReliantOverviewRequest {}
+message GetCurrentUserReliantOverviewRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message GetCurrentUserReliantOverviewResponse {
   ReliantOverview overview = 1;
@@ -539,6 +695,10 @@ message GetCurrentUserReliantOverviewResponse {
 
 message SetCurrentUserReliantEnabledRequest {
   bool enabled = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message SetCurrentUserReliantEnabledResponse {
@@ -611,7 +771,12 @@ message SetCurrentUserInfraOverageResponse {
 // to the user who is looking at it — and two round trips to draw one panel is
 // a spinner nobody needs to see. Same reasoning as
 // GetDeployTenantResponse.clusters.
-message GetCurrentUserInfraOverageRequest {}
+message GetCurrentUserInfraOverageRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message GetCurrentUserInfraOverageResponse {
   // Per-dimension state, one entry per infrastructure dimension the caller's
@@ -727,7 +892,12 @@ message SavedPaymentMethod {
   int64 exp_year = 4;
 }
 
-message GetCurrentUserWalletAutoRechargeRequest {}
+message GetCurrentUserWalletAutoRechargeRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 message GetCurrentUserWalletAutoRechargeResponse {
   // Absent when the user has never configured a rule, which is NOT the same as
   // a disabled rule and should not be rendered as one.
@@ -747,12 +917,21 @@ message SetCurrentUserWalletAutoRechargeRequest {
   // REQUIRED when enabled. Unlike the compute overage cap, 0 is not "uncapped"
   // here — it is rejected. An automatic charger must have a wall.
   int64 max_per_month_cents = 4;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 5;
 }
 message SetCurrentUserWalletAutoRechargeResponse {
   WalletAutoRecharge auto_recharge = 1;
 }
 
-message CreateCurrentUserWalletPaymentMethodSetupRequest {}
+message CreateCurrentUserWalletPaymentMethodSetupRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 message CreateCurrentUserWalletPaymentMethodSetupResponse {
   // Set when a card was ALREADY on file at Stripe and has been adopted. The
   // user is not asked to re-enter a card they already gave us.
@@ -764,6 +943,10 @@ message CreateCurrentUserWalletPaymentMethodSetupResponse {
 
 message ConfirmCurrentUserWalletPaymentMethodRequest {
   string payment_method_id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 message ConfirmCurrentUserWalletPaymentMethodResponse {
   SavedPaymentMethod payment_method = 1;
@@ -771,6 +954,10 @@ message ConfirmCurrentUserWalletPaymentMethodResponse {
 
 message GetCurrentUserComputeUsageRequest {
   optional string period = 1; // "current" (default) | "previous"
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 // Every metered figure is read from the one Balance every gate reads
@@ -900,7 +1087,12 @@ enum ComputeIneligibleReason {
   COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION = 4;
 }
 
-message GetCurrentUserComputeEligibilityRequest {}
+message GetCurrentUserComputeEligibilityRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message GetCurrentUserComputeEligibilityResponse {
   // eligible is the single fact a caller needs to enable or disable a

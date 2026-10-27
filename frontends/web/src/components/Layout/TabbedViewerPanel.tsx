@@ -1,11 +1,12 @@
 import { X, ArrowRightFromLine, ArrowLeftToLine, FolderOpen, Terminal, Globe, FolderGit2, Workflow, Lock } from "lucide-react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
 import { isElectron } from "../../lib/constants";
 import { ResizableDiffPanel } from "./ResizableDiffPanel";
 import { useViewerStore, type Viewer, type CommandsViewer, type WorkflowViewer } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
+import { useShortcutLabel, withShortcut } from "../../store/shortcutsStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { MonacoDiffViewer } from "../FileBrowser/MonacoDiffViewer";
 import { FileViewerTab } from "../FileBrowser/FileViewerTab";
@@ -31,7 +32,7 @@ export function TabbedViewerPanel({
   // Project context is now owned by projectStore (single source of truth).
   const currentProjectId = useProjectStore((state) => state.currentProject?.id ?? null);
   // Get current worktree from worktreeStore (single source of truth)
-  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktree?.id ?? null);
+  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktreeId);
   const activeViewerId = useViewerStore((state) => state.activeViewerId);
   const setActiveViewer = useViewerStore((state) => state.setActiveViewer);
   const closeViewer = useViewerStore((state) => state.closeViewer);
@@ -146,7 +147,7 @@ export function TabbedViewerPanel({
           ))}
         </div>
         {/* Fullscreen Toggle Button */}
-        <Tooltip content={isFullscreen ? "Return to side panel" : "Expand to cover chat"} placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+        <Tooltip content={isFullscreen ? "Return to side panel" : "Expand to cover chat"} side="bottom" delay={300} triggerClassName="inline-flex flex-shrink-0">
         <button
           aria-label={isFullscreen ? "Return to side panel" : "Expand to cover chat"}
           onClick={toggleFullscreen}
@@ -200,6 +201,7 @@ interface ViewerTabProps {
 
 function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
   const tabRef = useRef<HTMLDivElement>(null);
+  const closeLabel = withShortcut("Close tab", useShortcutLabel("closeTab"));
 
   const getDiffStatusTitle = () => {
     if (viewer.type !== "diff") return "file";
@@ -277,7 +279,7 @@ function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
           : undefined
       }
       onClick={onSelect}
-      title={isActive ? "Active - Press Cmd+W to close" : viewer.title}
+      title={viewer.title}
     >
       {/* Status Badge */}
       <span
@@ -306,7 +308,7 @@ function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
       )}
 
       {/* Close Button */}
-      <Tooltip content="Close tab (Cmd+W)" placement="bottom" delay={300} wrapperClassName="inline-flex">
+      <Tooltip content={closeLabel} side="bottom" delay={300} triggerClassName="inline-flex">
       <button
         onMouseDown={(e) => {
           e.stopPropagation();
@@ -321,7 +323,7 @@ function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
           "p-0.5 rounded hover:bg-destructive/20 transition-all relative z-10 pointer-events-auto",
           isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         )}
-        aria-label="Close tab (Cmd+W)"
+        aria-label="Close tab"
       >
         <X className="w-3 h-3 pointer-events-none" />
       </button>
@@ -420,15 +422,7 @@ function ViewerContent({ viewer, isActive }: ViewerContentProps) {
   if (viewer.type === "projects") {
     return (
       <div className="h-full overflow-auto">
-        <ProjectPanel
-          onNavigateToProjectPicker={() => {
-            // Close the projects viewer when navigating to project picker
-            const { closeViewer } = useViewerStore.getState();
-            closeViewer(viewer.id);
-            // Navigate to project picker (clear current project)
-            useProjectStore.setState({ currentProject: null });
-          }}
-        />
+        <ProjectPanel />
       </div>
     );
   }

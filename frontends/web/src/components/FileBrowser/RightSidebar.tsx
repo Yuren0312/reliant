@@ -3,8 +3,8 @@ import { Files, GitBranch, ListTodo, Check, Terminal, Globe, PanelBottom } from 
 import { FileTree, type FileTreeHandle } from "./FileTree";
 import { FileTreeToolbar } from "./FileTreeToolbar";
 import { useProjectStore } from "../../store/projectStore";
+import { useShortcutLabel, withShortcut } from "../../store/shortcutsStore";
 import { useViewerStore } from "../../store/viewerStore";
-import { useWorktreeStore, useActiveWorktreeId } from "../../store/worktreeStore";
 import { useUIStore } from "../../store/uiStore";
 import { useBrowserStore } from "../../store/browserStore";
 import { useTerminalStore } from "../../store/terminalStore";
@@ -21,12 +21,13 @@ import { useFileClipboardStore } from "../../store/fileClipboardStore";
 import { useFileDeletionStore } from "../../store/fileDeletionStore";
 import { copyFile, moveFile, copyDirectoryRecursive, createFolder, deleteFileOrFolder } from "../../api/fileSystem";
 import { toast } from "../../lib/toast-manager";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
 import { useGitStatusRefreshTrigger } from "../../store/gitStatusStore";
 import { useFileTreePushRefresh } from "./useFileTreePushRefresh";
 import type { FileNode } from "./index";
+import { useCurrentWorktree, useActiveWorktreeId } from "../../hooks/worktree-queries";
 
 interface RightSidebarProps {
   /** When provided, clicking the active tab again will close the sidebar */
@@ -34,8 +35,16 @@ interface RightSidebarProps {
 }
 
 export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
+  const shortcuts = {
+    files: useShortcutLabel("sidebarFiles"),
+    changes: useShortcutLabel("sidebarChanges"),
+    processes: useShortcutLabel("sidebarProcesses"),
+    tasks: useShortcutLabel("sidebarTasks"),
+    browser: useShortcutLabel("sidebarBrowser"),
+    terminal: useShortcutLabel("toggleTerminal"),
+  };
   const currentProject = useProjectStore((state) => state.currentProject);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
+  const currentWorktree = useCurrentWorktree();
   
   // Get the persisted sidebar tab from workspace state store
   const worktreeState = useCurrentWorktreeState(
@@ -500,7 +509,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
     >
       {/* Tabs */}
       <div className="flex justify-center bg-accent border-b border-border h-10 overflow-visible pt-1">
-        <Tooltip content="Files (Cmd+K F)" placement="bottom" delay={300}>
+        <Tooltip content={withShortcut("Files", shortcuts.files)} side="bottom" delay={300}>
           <button
             aria-label="Files"
             onClick={handleFilesTabClick}
@@ -519,7 +528,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
             <Files className="w-4 h-4" />
           </button>
         </Tooltip>
-        <Tooltip content="Changes (Cmd+K G)" placement="bottom" delay={300}>
+        <Tooltip content={withShortcut("Changes", shortcuts.changes)} side="bottom" delay={300}>
           <button
             aria-label="Changes"
             onClick={() => handleTabClick("changes")}
@@ -538,7 +547,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
             <GitBranch className="w-4 h-4" />
           </button>
         </Tooltip>
-        <Tooltip content="Processes: monitor running commands (Cmd+K R)" placement="bottom" delay={300}>
+        <Tooltip content={withShortcut("Processes: monitor running commands", shortcuts.processes)} side="bottom" delay={300}>
           <button
             aria-label="Processes"
             onClick={() => handleTabClick("processes")}
@@ -562,7 +571,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
             </span>
           </button>
         </Tooltip>
-        <Tooltip content="Tasks (Cmd+K K)" placement="bottom" delay={300}>
+        <Tooltip content={withShortcut("Tasks", shortcuts.tasks)} side="bottom" delay={300}>
           <button
             aria-label="Tasks"
             onClick={() => handleTabClick("tasks")}
@@ -600,7 +609,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
         {/* The in-app browser is an Electron <webview> — hide its sidebar entirely
             in the web build, where it cannot be mounted. */}
         {isElectron() && (
-          <Tooltip content="Browser (Cmd+K V)" placement="bottom" delay={300}>
+          <Tooltip content={withShortcut("Browser", shortcuts.browser)} side="bottom" delay={300}>
             <button
             aria-label="Browser"
               onClick={() => handleTabClick("browser")}
@@ -632,7 +641,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
         {currentProject && (
           <>
             <span className="self-center h-4 w-px bg-border mx-1" />
-            <Tooltip content={isTerminalOpen ? "Hide terminal (Cmd+J)" : "Show terminal (Cmd+J)"} placement="bottom" delay={300}>
+            <Tooltip content={withShortcut(isTerminalOpen ? "Hide terminal" : "Show terminal", shortcuts.terminal)} side="bottom" delay={300}>
               <button
                 onClick={toggleTerminal}
                 tabIndex={-1}

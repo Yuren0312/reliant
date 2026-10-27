@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 func (f *fixture) probeIdle(w Worktree) Result {
@@ -20,6 +22,7 @@ func (f *fixture) probeIdle(w Worktree) Result {
 // An active worktree is reported finished only when everything the automatic
 // removal needs holds, with the longer floor. The daemon never removes it.
 func TestIdleDone_ReportsOnlyAFinishedWorktree(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -92,6 +95,7 @@ func TestIdleDone_RecentlyTouchedIsNotFinished(t *testing.T) {
 }
 
 func TestIdleDone_NeedsTheServerToAsk(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -104,6 +108,7 @@ func TestIdleDone_NeedsTheServerToAsk(t *testing.T) {
 }
 
 func TestIdleDone_AWorktreeBeingRestoredIsNeverProbed(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -215,9 +220,9 @@ func TestOrphan_TipWhoseWorkIsOnBaseDoesNotHold(t *testing.T) {
 	}
 }
 
-// A tip whose work is nowhere else is reported as unreachable history; the
-// automatic pass saves it under a ref before removing (see backup_test.go).
-func TestOrphan_TipWithWorkNotOnBaseIsSavedBeforeRemoval(t *testing.T) {
+// Local refs are not durable recovery. An orphaned tip must stay in its
+// original worktree until the Git recovery protocol proves remote closure.
+func TestOrphan_TipWithWorkNotOnBaseRequiresRemoteRecovery(t *testing.T) {
 	t.Parallel()
 	heavyUnderShort(t, "an orphaned tip saved to a backup ref, then a full reclaim (~84 git processes)")
 	f := newFixture(t)
@@ -235,10 +240,15 @@ func TestOrphan_TipWithWorkNotOnBaseIsSavedBeforeRemoval(t *testing.T) {
 	}
 	w.Fence = "100"
 	first, second := f.both(w)
-	if second.Outcome != OutcomeRemoved {
-		t.Fatalf("got %+v then %+v, want saved and removed", first, second)
+	if first.Outcome != OutcomeHeld || second.Outcome != OutcomeHeld || first.Reason != ReasonUnreachable || second.Reason != ReasonUnreachable || !exists(w.Path) {
+		t.Fatalf("got %+v then %+v, want retained original with unreachable history", first, second)
 	}
-	savedAt(t, f, first.SnapshotRefs, "reflog", lost)
+	if len(first.SnapshotRefs) != 0 || len(second.SnapshotRefs) != 0 {
+		t.Fatal("local snapshot refs must not imply remote recovery")
+	}
+	if got := run(t, w.Path, "cat-file", "-t", lost); got != "commit" {
+		t.Fatalf("original orphaned commit lost: %s", got)
+	}
 }
 
 // With three repos per workspace and dozens of workspaces, the same origin was

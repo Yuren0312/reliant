@@ -22,6 +22,7 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   DashboardService,
   DashboardSource as WireSource,
+  DashboardViewKind as WireViewKind,
   type DashboardRef as WireRef,
   type DashboardSummary as WireSummary,
   type DashboardUser as WireUser,
@@ -61,6 +62,7 @@ const SOURCE_OF_WIRE: Record<WireSource, DashboardSource | null> = {
   [WireSource.REPO]: "repo",
   [WireSource.WORKSPACE]: "workspace",
   [WireSource.TEMPLATE]: "template",
+  [WireSource.BUILTIN]: "builtin",
 };
 
 /** A release ref is sent as GENERATED: the server resolves a release dashboard by key whichever of the two it is. */
@@ -68,6 +70,7 @@ const WIRE_OF_KIND: Record<DashboardKind, WireSource> = {
   release: WireSource.GENERATED,
   workspace: WireSource.WORKSPACE,
   template: WireSource.TEMPLATE,
+  builtin: WireSource.BUILTIN,
 };
 
 function refInit(ref: DashboardRef) {
@@ -88,6 +91,7 @@ function mapSummary(s: WireSummary): DashboardSummary {
   return {
     ref: mapRef(s.ref, source),
     source,
+    viewKind: s.viewKind === WireViewKind.ORGANIZATION_COSTS ? "organization-costs" : undefined,
     title: s.title,
     description: s.description,
     readOnly: s.readOnly,
@@ -170,9 +174,17 @@ export function dashboardToJson(dashboard: Dashboard): JsonObject {
 
 // ── RPCs ─────────────────────────────────────────────────────────────────────
 
-/** The merged index for a project and (optionally) one environment: release dashboards, then workspace ones. */
+/**
+ * The merged index for a project and (optionally) one environment: release
+ * dashboards, then workspace ones. No project is the whole org: the field is
+ * left off the request, because "" would mean only the project-less ones.
+ */
 export async function listDashboards(req: ListDashboardsInput): Promise<DashboardIndex> {
-  const res = await client().listDashboards({ orgId: req.orgId, projectId: req.projectId, envId: req.envId });
+  const res = await client().listDashboards({
+    orgId: req.orgId,
+    ...(req.projectId === undefined ? {} : { projectId: req.projectId }),
+    envId: req.envId,
+  });
   return { dashboards: res.dashboards.map(mapSummary), canWrite: res.canWrite };
 }
 

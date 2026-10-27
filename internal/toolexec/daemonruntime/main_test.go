@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 )
 
@@ -38,6 +39,10 @@ func TestMain(m *testing.M) {
 	// This test binary also stands in for the reliant binary as the
 	// heavy-slot wrapper (cmd_exec_heavy_test.go).
 	heavyjob.Dispatch()
+	// credentials: none runs in a sandbox that is this binary re-executed; on a
+	// host that does not allow it the sandbox is turned off, so the tests that
+	// only use credentials: none still check what they were written to check.
+	credsandbox.DispatchForTest()
 	os.Exit(runIsolated(m))
 }
 
@@ -62,6 +67,9 @@ func runIsolated(m *testing.M) int {
 	}
 	// A real workspace's repositories live here; the managed heal scans it.
 	managedProjectsDir = filepath.Join(root, "managed-projects")
+	// Pushes go where the production check allows, plus the fixtures a test
+	// opted in to (allowFileRemotes), so the publish tests can run in parallel.
+	publishURLAllowed = allowTestRemotes(publishURLAllowed)
 
 	gitconfig := filepath.Join(home, ".gitconfig")
 	if err := os.WriteFile(gitconfig, []byte(noAutoMaintenanceConfig), 0o644); err != nil {

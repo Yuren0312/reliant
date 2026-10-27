@@ -37,7 +37,7 @@ import { useProjectStore } from "@/store/projectStore";
 import Card from "../forge-ui/card";
 import PageHeader from "../forge-ui/page_header";
 import SkeletonLoader from "../forge-ui/skeleton_loader";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { AreaShell } from "../Layout/AreaShell";
 import { InboxItem, subjectName } from "./InboxItem";
 
@@ -66,6 +66,7 @@ const SECTION_TITLE: Record<InboxItemKind, string> = {
   [InboxItemKind.AUTOMATION_LAUNCH_FAILED]: "Automations that could not start",
   [InboxItemKind.RUN_FINISHED]: "Finished runs",
   [InboxItemKind.STORAGE]: "Storage",
+  [InboxItemKind.RECOVERY]: "Saved workspace recoveries",
   [InboxItemKind.AUTOMATION_NEEDS_SETUP]: "Automations that need setup",
 };
 
@@ -100,12 +101,12 @@ export function InboxView({ titled = true }: { titled?: boolean } = {}) {
 
   const onDismiss = (dismissed: InboxItemData[], what: string) => {
     const ids = dismissed.map((item) => item.itemId);
-    dismiss.mutate(ids, {
+    dismiss.mutate({ itemIds: ids }, {
       onSuccess: () =>
         toast.notify(`Dismissed ${what}`, {
           // Long enough to notice and reach for Undo; the default 4s is not.
           duration: 8000,
-          action: { label: "Undo", onClick: () => restore.mutate(ids) },
+          action: { label: "Undo", onClick: () => restore.mutate({ itemIds: ids }) },
         }),
       onError: (error) => void toast.error(error),
     });

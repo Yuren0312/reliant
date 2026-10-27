@@ -18,8 +18,8 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Search } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
-import { useIssues, type IssueFilters } from "@/hooks/observability-queries";
+import Button from "@/components/forge-ui/button";
+import { useCurrentIssueUser, useIssues, useOrgMembers, type IssueFilters } from "@/hooks/observability-queries";
 import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
 import {
   ISSUE_PLATFORMS,
@@ -38,11 +38,12 @@ import { cn } from "@/lib/utils";
 import { formatAgo, formatCount, formatWhen } from "../format";
 import { ServiceSelect } from "../LogsView";
 import { issueStatusParam, type ObsNavigate } from "../obsSearch";
-import { ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
 import { IssueDetail } from "./IssueDetail";
 import { IssuesNotConfigured } from "./IssueStates";
 import { StatusBadge, Trend } from "./IssueBits";
 import { affectedNoun, PLATFORM_LABEL, SORT_LABEL, STATUS_LABEL } from "./issueModel";
+import { assigneeFilterOf, assigneeFilterWaitsForMe, assigneeParam, serverAssignee } from "./issueTimelineModel";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface ErrorsViewProps {
@@ -56,6 +57,8 @@ export interface ErrorsViewProps {
   statuses: IssueStatus[];
   platform: IssuePlatform | undefined;
   sort: IssueSort;
+  /** `me` or a user id; absent: anyone's. */
+  assignee: string | undefined;
   /** The issue open in detail. */
   issueId: string | undefined;
   navigate: ObsNavigate;
@@ -81,17 +84,34 @@ export function issueScopeOf(scope: ObsScope): IssueScope {
   return { orgId: scope.orgId, projectId: scope.projectId, envIds: scope.envIds };
 }
 
-function IssueList({ scope, subject, range, text, service, statuses, platform, sort, navigate }: ErrorsViewProps) {
+function IssueList({ scope, subject, range, text, service, statuses, platform, sort, assignee, navigate }: ErrorsViewProps) {
   const issueScope = useMemo(() => issueScopeOf(scope), [scope]);
-  const filters: IssueFilters = useMemo(() => ({ range, statuses, platform, service, sort, text }), [range, statuses, platform, service, sort, text]);
-  const issues = useIssues(issueScope, filters);
+  const me = useCurrentIssueUser();
+  const assigneeFilter = useMemo(() => assigneeFilterOf(assignee), [assignee]);
+  // "Mine" is a user id to the server, so the list waits until the reader is known rather than showing everyone's.
+  const waitingForMe = assigneeFilterWaitsForMe(assigneeFilter, me.data?.id) && !me.isError && me.data !== null;
+  const meUnknown = assigneeFilter.kind === "me" && !me.isLoading && !me.data?.id;
+  const serverUser = serverAssignee(assigneeFilter, me.data?.id);
+  const filters: IssueFilters = useMemo(
+    () => ({ range, statuses, platform, service, assignee: serverUser, sort, text }),
+    [range, statuses, platform, service, serverUser, sort, text]
+  );
+  const issues = useIssues(waitingForMe || meUnknown ? null : issueScope, filters);
   const rows = useMemo(() => issues.data?.pages.flatMap((page) => page.issues) ?? [], [issues.data]);
-  const filtered = statuses.length > 0 || !!platform || !!service || !!text;
+  const filtered = statuses.length > 0 || !!platform || !!service || !!text || assigneeFilter.kind !== "anyone";
 
   return (
     <div className="space-y-3" data-testid="obs-errors">
-      <IssueToolbar scope={scope} range={range} text={text} service={service} statuses={statuses} platform={platform} sort={sort} navigate={navigate} />
-      {issues.isLoading ? (
+      <IssueToolbar scope={scope} range={range} text={text} service={service} statuses={statuses} platform={platform} sort={sort} assignee={assignee} navigate={navigate} />
+      {issues.data && <ObsAsOf updatedAt={issues.dataUpdatedAt} />}
+      {meUnknown ? (
+        <p className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted" data-testid="obs-errors-mine-unknown">
+          Reliant can&apos;t tell who you are here, so &ldquo;Assigned to me&rdquo; has nothing to match.{" "}
+          <button type="button" className="underline underline-offset-2" onClick={() => navigate({ assignee: undefined }, { replace: true })}>
+            Show everyone&apos;s
+          </button>
+        </p>
+      ) : issues.isLoading || waitingForMe ? (
         <Card padding="none">
           <ObsLoadingRows testId="obs-errors-loading" />
         </Card>
@@ -106,8 +126,9 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
           what={statuses.length ? "issues" : "open issues"}
           range={range}
           filtered={filtered}
+          topic="errors"
           onWiden={() => navigate({ range: "7d" })}
-          onClearFilters={() => navigate({ istatus: undefined, platform: undefined, service: undefined, q: undefined })}
+          onClearFilters={() => navigate({ istatus: undefined, platform: undefined, service: undefined, assignee: undefined, q: undefined })}
         />
       ) : (
         <IssueTable
@@ -122,7 +143,7 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
   );
 }
 
-const SELECT = "h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const SELECT = "h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function IssueToolbar({
   scope,
@@ -132,6 +153,7 @@ function IssueToolbar({
   statuses,
   platform,
   sort,
+  assignee,
   navigate,
 }: {
   scope: ObsScope;
@@ -141,8 +163,15 @@ function IssueToolbar({
   statuses: IssueStatus[];
   platform: IssuePlatform | undefined;
   sort: IssueSort;
+  assignee: string | undefined;
   navigate: ObsNavigate;
 }) {
+  const members = useOrgMembers(scope.orgId);
+  const me = useCurrentIssueUser();
+  const filter = assigneeFilterOf(assignee);
+  const people = (members.data?.users ?? []).filter((m) => m.id !== me.data?.id);
+  // A person named in the URL who the roster does not list (or cannot be read) is still selectable.
+  const named = filter.kind === "user" && !people.some((p) => p.id === filter.userId) && filter.userId !== me.data?.id;
   const [draft, setDraft] = useState(text);
   useEffect(() => setDraft(text), [text]);
   const submit = (event: FormEvent) => {
@@ -156,7 +185,7 @@ function IssueToolbar({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <div role="group" aria-label="Status" className="inline-flex flex-wrap rounded-lg border border-border bg-background p-0.5" data-testid="obs-errors-status">
+        <div role="group" aria-label="Status" className="inline-flex flex-wrap rounded-lg border border-border bg-surface-sunken p-0.5" data-testid="obs-errors-status">
           <button
             type="button"
             aria-pressed={statuses.length === 0}
@@ -197,6 +226,25 @@ function IssueToolbar({
             </option>
           ))}
         </select>
+        <label htmlFor="obs-errors-assignee" className="sr-only">
+          Assignee
+        </label>
+        <select
+          id="obs-errors-assignee"
+          value={assignee ?? ""}
+          onChange={(event) => navigate({ assignee: event.target.value || undefined }, { replace: true })}
+          className={SELECT}
+          data-testid="obs-errors-assignee"
+        >
+          <option value="">Anyone</option>
+          <option value="me">Assigned to me</option>
+          {people.map((person) => (
+            <option key={person.id} value={assigneeParam({ kind: "user", userId: person.id })}>
+              {person.name}
+            </option>
+          ))}
+          {named && <option value={assignee}>{assignee}</option>}
+        </select>
         <ServiceSelect scope={scope} range={range} value={service} onChange={(next) => navigate({ service: next }, { replace: true })} id="obs-errors-service" />
         <label htmlFor="obs-errors-sort" className="sr-only">
           Sort
@@ -220,14 +268,14 @@ function IssueToolbar({
           Title or culprit contains
         </label>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-ink-muted" aria-hidden="true" />
           <input
             id="obs-errors-query"
             type="search"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="Title or culprit contains, e.g. TypeError or checkout.tsx"
-            className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-8 w-full rounded-md border border-border bg-surface-sunken pl-8 pr-3 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             data-testid="obs-errors-query"
           />
         </div>
@@ -239,7 +287,7 @@ function IssueToolbar({
 function chip(active: boolean) {
   return cn(
     "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-    active ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+    active ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
   );
 }
 
@@ -263,9 +311,10 @@ function IssueTable({
         <StackedTable className="w-full text-sm">
           <caption className="sr-only">Issues in scope</caption>
           <thead>
-            <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
               <th scope="col" className="px-4 py-2 font-medium">Issue</th>
               <th scope="col" className="px-4 py-2 font-medium">Status</th>
+              <th scope="col" className="px-4 py-2 font-medium">Assignee</th>
               <th scope="col" className="px-4 py-2 text-right font-medium">Events</th>
               <th scope="col" className="px-4 py-2 text-right font-medium">Affected</th>
               <th scope="col" className="px-4 py-2 font-medium">Trend</th>
@@ -275,18 +324,18 @@ function IssueTable({
           </thead>
           <tbody>
             {issues.map((issue) => (
-              <tr key={issue.id} className="border-b border-border/50 align-top last:border-b-0 hover:bg-muted/40" data-testid={`obs-issue-${issue.id}`} data-status={issue.status ?? ""}>
+              <tr key={issue.id} className="border-b border-border/50 align-top last:border-b-0 hover:bg-ink/5" data-testid={`obs-issue-${issue.id}`} data-status={issue.status ?? ""}>
                 <th scope="row" className="max-w-[32rem] px-4 py-2 text-left font-normal">
                   <button
                     type="button"
                     onClick={() => onOpen(issue.id)}
-                    className="block max-w-full truncate text-left font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="block max-w-full truncate text-left font-medium text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     data-testid={`obs-issue-open-${issue.id}`}
                   >
                     {issue.title || issue.exceptionType || issue.fingerprint}
                   </button>
-                  {issue.culprit && <p className="truncate font-mono text-xs text-muted-foreground">{issue.culprit}</p>}
-                  <p className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+                  {issue.culprit && <p className="truncate font-mono text-xs text-ink-muted">{issue.culprit}</p>}
+                  <p className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-ink-muted">
                     <span className="font-mono">{issue.service || "(unnamed)"}</span>
                     {issue.platform && <span>{PLATFORM_LABEL[issue.platform]}</span>}
                     {issue.envName && <span>{issue.envName}</span>}
@@ -294,18 +343,26 @@ function IssueTable({
                 </th>
                 <td className="px-4 py-2">
                   <StatusBadge status={issue.status} />
+                  {issue.relatedCount > 0 && (
+                    <span className="mt-1 block text-xs text-ink-muted" data-testid={`obs-issue-related-count-${issue.id}`} title="Other issues of the same incident">
+                      +{issue.relatedCount} related
+                    </span>
+                  )}
                 </td>
-                <td className="px-4 py-2 text-right tabular-nums text-foreground">{formatCount(issue.events)}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-foreground" title={affectedNoun(issue.platform, issue.affected)}>
-                  {formatCount(issue.affected)} <span className="text-xs text-muted-foreground">{affectedNoun(issue.platform, issue.affected)}</span>
+                <td className="px-4 py-2 text-xs" data-testid={`obs-issue-assignee-${issue.id}`}>
+                  {issue.assignee ? <span className="text-ink">{issue.assignee.name}</span> : <span className="text-ink-muted">—</span>}
+                </td>
+                <td className="px-4 py-2 text-right tabular-nums text-ink">{formatCount(issue.events)}</td>
+                <td className="px-4 py-2 text-right tabular-nums text-ink" title={affectedNoun(issue.platform, issue.affected)}>
+                  {formatCount(issue.affected)} <span className="text-xs text-ink-muted">{affectedNoun(issue.platform, issue.affected)}</span>
                 </td>
                 <td className="px-4 py-2">
                   <Trend points={issue.trend} label={`${formatCount(issue.events)} events, by hour`} />
                 </td>
-                <td className="whitespace-nowrap px-4 py-2 text-xs text-muted-foreground" title={issue.lastSeenMs ? formatWhen(issue.lastSeenMs, now) : undefined}>
+                <td className="whitespace-nowrap px-4 py-2 text-xs text-ink-muted" title={issue.lastSeenMs ? formatWhen(issue.lastSeenMs, now) : undefined}>
                   {issue.lastSeenMs ? formatAgo(issue.lastSeenMs, now) : "—"}
                 </td>
-                <td className="whitespace-nowrap px-4 py-2 text-xs text-muted-foreground" title={issue.firstSeenMs ? formatWhen(issue.firstSeenMs, now) : undefined}>
+                <td className="whitespace-nowrap px-4 py-2 text-xs text-ink-muted" title={issue.firstSeenMs ? formatWhen(issue.firstSeenMs, now) : undefined}>
                   {issue.firstSeenMs ? formatAgo(issue.firstSeenMs, now) : "—"}
                   {(issue.firstRelease || issue.firstVersion) && <span className="block font-mono">{issue.firstRelease || issue.firstVersion}</span>}
                 </td>

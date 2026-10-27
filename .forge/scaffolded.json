@@ -32,6 +32,9 @@
     "deploy/kcl/dev/config.k": {
       "scaffolded_at": "2026-10-22T23:48:18Z"
     },
+    "frontends/web/src/hooks/account-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-25T18:02:36Z"
+    },
     "frontends/web/src/hooks/approval-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-22T21:38:55Z"
     },
@@ -101,6 +104,9 @@
     "frontends/web/src/hooks/run-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-22T21:38:55Z"
     },
+    "frontends/web/src/hooks/scenario-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-26T23:14:44Z"
+    },
     "frontends/web/src/hooks/settings-service-hooks.test.tsx": {
       "scaffolded_at": "2026-10-22T21:38:55Z"
     },
@@ -144,6 +150,9 @@
     "internal/app/auth.go": {},
     "internal/app/providers.go": {
       "scaffolded_at": "2026-10-21T14:18:41Z"
+    },
+    "internal/egresslimit/contract_test.go": {
+      "scaffolded_at": "2026-10-24T00:46:19Z"
     },
     "internal/handlers/account/handlers_scaffold_delete_account_test.go": {
       "scaffolded_at": "2026-10-13T12:24:49Z"
@@ -231,6 +240,9 @@
     },
     "internal/handlers/chat/handlers_scaffold_get_thread_workflow_inputs_test.go": {
       "scaffolded_at": "2026-10-14T18:19:00Z"
+    },
+    "internal/handlers/chat/handlers_scaffold_get_tool_result_test.go": {
+      "scaffolded_at": "2026-10-26T03:58:11Z"
     },
     "internal/handlers/chat/handlers_scaffold_get_workflow_executions_test.go": {
       "scaffolded_at": "2026-10-14T18:19:00Z"
@@ -1265,13 +1277,18 @@
     "internal/store/workflow_scenario_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:02Z"
     },
+    "internal/store/worktree_recovery_checkout_repo_ext.go": {
+      "scaffolded_at": "2026-10-25T18:54:33Z"
+    },
+    "internal/store/worktree_recovery_repo_ext.go": {
+      "scaffolded_at": "2026-10-25T18:54:33Z"
+    },
     "internal/store/worktree_repo_ext.go": {
       "scaffolded_at": "2026-10-20T23:27:02Z"
     }
   },
   "absent_reported": [
     ".github/dependabot.yml",
-    ".github/workflows/ci.yml",
     ".github/workflows/deploy.yml",
     ".github/workflows/e2e.yml",
     ".github/workflows/proto-breaking.yml",

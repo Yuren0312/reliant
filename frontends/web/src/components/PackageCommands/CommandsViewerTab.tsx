@@ -1,23 +1,40 @@
 import { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext, type ReactNode } from "react";
-import { Tooltip } from "../ui/Tooltip";
-import { packageCommandsGrpc } from "../../api/package-commands-grpc";
+import Tooltip from "../forge-ui/tooltip";
+import { useQueryClient } from "@tanstack/react-query";
 import { Play, Square, ChevronDown, ChevronRight, RefreshCw, Terminal, Loader2, CheckCircle, XCircle, ExternalLink, Hammer, Package, Zap, Clock, Activity, RotateCw, Star, X, Globe, Layers } from "lucide-react";
 import { useContainerWidth } from "../../hooks/useContainerWidth";
 import { useUnifiedProcessCounts } from "../../hooks/useUnifiedProcesses";
-import { usePackageCommands, usePackageProcesses, useRunCommand, useKillProcess, type PackageCommand, type PackageType, type PackageProcess } from "../../hooks/package-queries";
-import { useProcessStore, type BackgroundProcess } from "../../store/processStore";
+import {
+  runCommandRequest,
+  useCommandFavorites,
+  useKillPackageProcess,
+  usePackageCommands,
+  usePackageProcesses,
+  useRunCommand,
+  useToggleCommandFavorite,
+  type PackageCommand,
+  type PackageType,
+  type PackageProcess,
+} from "../../hooks/package-queries";
+import {
+  BackgroundProcessStatus,
+  useBackgroundProcesses,
+  useBackgroundProcessOutput,
+  useKillBackgroundProcess,
+  type BackgroundProcess,
+} from "../../hooks/background-queries";
+import { backgroundServiceKeys } from "../../hooks/background-service-hooks_gen";
+import { hasErrorReason } from "../../lib/errorReasons";
 import { useProjectStore } from "../../store/projectStore";
 import { useBrowserStore } from "../../store/browserStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { isElectron } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
-import { useWorktreeStore } from "../../store/worktreeStore";
 import { ProcessLogsViewer } from "./ProcessLogsViewer";
 import { TerminalOutput, type ProcessInfo } from "../shared/TerminalOutput";
 import { PortsDisplay } from "../shared/PortsDisplay";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
-import { BackgroundProcessStatus } from "../../api/background-grpc";
 import { processMatchesCommand, findCommandForProcess as findCommandForProcessUtil } from "./commandMatching";
 import {
   SidebarHeader,
@@ -25,6 +42,7 @@ import {
   SidebarSearchInput,
   SidebarEmptyState,
 } from "../RightSidebar/shared";
+import { useCachedWorktrees, useWorktreeById, ALL_PROJECTS } from "../../hooks/worktree-queries";
 
 interface CommandsViewerTabProps {
   worktreeId?: string;
@@ -350,15 +368,14 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     isCompact: width > 0 && width < 320, // Compact mode for narrow containers
   }), [width]);
 
-  // Background processes
-  const backgroundProcesses = useProcessStore((state) => state.processes);
-  const isLoadingBackground = useProcessStore((state) => state.isLoading);
-  const backgroundError = useProcessStore((state) => state.error);
-  const fetchBackgroundProcesses = useProcessStore((state) => state.fetchProcesses);
-  const killBackgroundProcess = useProcessStore((state) => state.killProcess);
-  const fetchProcessOutput = useProcessStore((state) => state.fetchProcessOutput);
-  const processOutput = useProcessStore((state) => state.processOutput);
-  const isLoadingOutput = useProcessStore((state) => state.isLoadingOutput);
+  const queryClient = useQueryClient();
+
+  // Background processes (BackgroundService, kept live by the stream)
+  const backgroundQuery = useBackgroundProcesses();
+  const backgroundProcesses = backgroundQuery.data;
+  const isLoadingBackground = backgroundQuery.isLoading;
+  const backgroundError = backgroundQuery.error?.message ?? null;
+  const killBackgroundProcess = useKillBackgroundProcess();
 
   // Get project path as fallback when no worktree is selected
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -369,12 +386,12 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   const openBrowserViewer = useViewerStore((state) => state.openBrowserViewer);
   const getWorktreeTabs = useBrowserStore((state) => state.getWorktreeTabs);
 
-  // Get workspace name from worktree store
+  // Get workspace names from the workspaces the app holds.
   // Default to main worktree when no worktreeId is provided
-  const worktrees = useWorktreeStore((state) => state.worktrees);
+  const worktrees = useCachedWorktrees(ALL_PROJECTS);
   const mainWorktree = worktrees.find(w => w.is_main);
   const effectiveWorktreeId = worktreeId || mainWorktree?.id;
-  const currentWorktree = effectiveWorktreeId ? worktrees.find(w => w.id === effectiveWorktreeId) : null;
+  const currentWorktree = useWorktreeById(effectiveWorktreeId) ?? null;
 
   // Package commands via React Query (needs effectiveWorktreeId/projectPath)
   const commandsQuery = usePackageCommands(effectiveWorktreeId, projectPath);
@@ -385,26 +402,34 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
 
   // Package processes via React Query
   const processesQuery = usePackageProcesses();
-  const packageProcesses = processesQuery.data ?? [];
+  const packageProcesses = processesQuery.data;
   const isLoadingPackageProcesses = processesQuery.isLoading;
 
   // Mutations
   const runCommandMutation = useRunCommand();
-  const killProcessMutation = useKillProcess();
+  const killProcessMutation = useKillPackageProcess();
+  const toggleFavoriteMutation = useToggleCommandFavorite();
 
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(initialProcessId || null);
   const [selectedProcessSource, setSelectedProcessSource] = useState<"package" | "background" | null>(null);
   const [expandedTypes, setExpandedTypes] = useState<Set<PackageType>>(() => getExpandedTypes());
   const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(() => getCollapsedDirs());
   const [runningCommandKey, setRunningCommandKey] = useState<string | null>(null);
-  const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const [, setFavoritesLoading] = useState(false);
   const [favoritesExpanded, setFavoritesExpanded] = useState(() => getFavoritesExpanded());
   const [recentExpanded, setRecentExpanded] = useState(() => getRecentExpanded());
   const [runningExpanded, setRunningExpanded] = useState(() => getRunningExpanded());
   const [dismissedProcesses, setDismissedProcesses] = useState<Set<string>>(() => getDismissedProcesses());
   const [searchQuery, setSearchQuery] = useState("");
   const [showAllWorkspaces, setShowAllWorkspaces] = useState(false);
+
+  // A background process's captured output, while one is open.
+  const outputQuery = useBackgroundProcessOutput(selectedProcessSource === "background" ? selectedProcessId : null);
+  const processOutput = outputQuery.data ?? (outputQuery.isError ? { stdout: "", stderr: "Failed to fetch output" } : null);
+  const isLoadingOutput = outputQuery.isLoading;
+
+  // The project's favorite commands.
+  const favoritesQuery = useCommandFavorites(currentProject?.id);
+  const favorites = favoritesQuery.data;
 
   // When searching, we temporarily auto-expand relevant accordions and then restore.
   const preSearchExpansionRef = useRef<{
@@ -542,46 +567,6 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     return map;
   }, [commands, detectedTypes, allProcesses]);
 
-  // Load background processes on mount
-  // Package commands and processes are auto-fetched by React Query hooks above
-  useEffect(() => {
-    fetchBackgroundProcesses(undefined, false);
-  }, [fetchBackgroundProcesses]);
-
-  // Load command favorites from backend when project changes
-  useEffect(() => {
-    const projectId = currentProject?.id;
-    if (!projectId) {
-      setFavorites(new Set());
-      return;
-    }
-
-    let cancelled = false;
-    setFavoritesLoading(true);
-
-    packageCommandsGrpc.getCommandFavorites(projectId)
-      .then((commandKeys) => {
-        if (!cancelled) {
-          setFavorites(new Set(commandKeys));
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to load command favorites:', err);
-        if (!cancelled) {
-          setFavorites(new Set());
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setFavoritesLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentProject?.id]);
-
   // Process list updates are now handled via WebSocket events in globalUpdatesStore
   // No polling needed - process_started/completed/failed events update the stores in real-time
 
@@ -600,22 +585,24 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     setRunningCommandKey(key);
     try {
       // Pass the command's working_dir so it runs from the correct directory
-      const result = await runCommandMutation.mutateAsync({
-        worktreeId: effectiveWorktreeId,
-        path: projectPath,
-        commandName: cmd.name,
-        packageType: cmd.package_type,
-        workingDir: cmd.working_dir,
-      });
+      const result = await runCommandMutation.mutateAsync(
+        runCommandRequest({
+          worktreeId: effectiveWorktreeId,
+          path: projectPath,
+          commandName: cmd.name,
+          packageType: cmd.package_type,
+          workingDir: cmd.working_dir,
+        }),
+      );
       
-      if (result.process_id) {
+      if (result.processId) {
         const displayName = cmd.relative_path ? `${cmd.relative_path}/${cmd.name}` : cmd.name;
         toast.success(`Started: ${displayName}`, {
           duration: 4000,
           action: {
             label: "View Logs",
             onClick: () => {
-              setSelectedProcessId(result.process_id);
+              setSelectedProcessId(result.processId);
               setSelectedProcessSource("package");
             },
           },
@@ -626,27 +613,27 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     }
   }, [runCommandMutation, effectiveWorktreeId, projectPath]);
 
-  const handleKillProcess = useCallback(async (processId: string, source: "package" | "background", processWorktreeId?: string) => {
+  const handleKillProcess = useCallback(async (processId: string, source: "package" | "background", _processWorktreeId?: string) => {
     if (source === "package") {
-      await killProcessMutation.mutateAsync(processId);
-    } else {
-      // Use the process's own worktree_id, falling back to effectiveWorktreeId
-      const wtId = processWorktreeId || effectiveWorktreeId;
-      if (wtId) {
-        await killBackgroundProcess(processId, wtId);
-      } else {
-        toast.error('Cannot stop process: unknown workspace');
-      }
+      await killProcessMutation.mutateAsync({ processId });
+      return;
     }
-  }, [killProcessMutation, killBackgroundProcess, effectiveWorktreeId]);
+    try {
+      await killBackgroundProcess.mutateAsync({ processId });
+    } catch (error) {
+      // Already stopped is not a failure: refetch so the list says so.
+      if (hasErrorReason(error, "process_not_running")) {
+        void queryClient.invalidateQueries({ queryKey: backgroundServiceKeys.all });
+        return;
+      }
+      throw error;
+    }
+  }, [killProcessMutation, killBackgroundProcess, queryClient]);
 
   const handleSelectProcess = useCallback((process: UnifiedProcess) => {
     setSelectedProcessId(process.id);
     setSelectedProcessSource(process.source);
-    if (process.source === "background") {
-      fetchProcessOutput(process.id, false);
-    }
-  }, [fetchProcessOutput]);
+  }, []);
 
   const toggleType = (type: PackageType) => {
     const isSearching = !!searchQuery.trim();
@@ -729,20 +716,11 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   };
 
   const handleRefresh = useCallback(async () => {
-    commandsQuery.refetch();
-    processesQuery.refetch();
-    fetchBackgroundProcesses(undefined, false);
-    // Reload favorites from backend
-    const projectId = currentProject?.id;
-    if (projectId) {
-      try {
-        const commandKeys = await packageCommandsGrpc.getCommandFavorites(projectId);
-        setFavorites(new Set(commandKeys));
-      } catch (err) {
-        console.error('Failed to refresh command favorites:', err);
-      }
-    }
-  }, [commandsQuery, processesQuery, fetchBackgroundProcesses, currentProject?.id]);
+    void commandsQuery.refetch();
+    void processesQuery.refetch();
+    void backgroundQuery.refetch();
+    void favoritesQuery.refetch();
+  }, [commandsQuery, processesQuery, backgroundQuery, favoritesQuery]);
 
   const toggleFavorite = useCallback(async (commandKey: string) => {
     const projectId = currentProject?.id;
@@ -751,37 +729,17 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
       return;
     }
 
-    const isCurrentlyFavorite = favorites.has(commandKey);
-    const newIsFavorite = !isCurrentlyFavorite;
-
-    // Optimistically update UI
-    setFavorites(prev => {
-      const next = new Set(prev);
-      if (newIsFavorite) {
-        next.add(commandKey);
-      } else {
-        next.delete(commandKey);
-      }
-      return next;
-    });
-
-    try {
-      await packageCommandsGrpc.setCommandFavorite(projectId, commandKey, newIsFavorite);
-    } catch (err) {
-      console.error('Failed to update command favorite:', err);
-      // Revert on error
-      setFavorites(prev => {
-        const next = new Set(prev);
-        if (isCurrentlyFavorite) {
-          next.add(commandKey);
-        } else {
-          next.delete(commandKey);
-        }
-        return next;
-      });
-      toast.error('Failed to update favorite');
-    }
-  }, [currentProject?.id, favorites]);
+    // Shown at once: the mutation patches the cached favorites and restores them on failure.
+    toggleFavoriteMutation.mutate(
+      { projectId, commandKey, isFavorite: !favorites.has(commandKey) },
+      {
+        onError: (err) => {
+          console.error('Failed to update command favorite:', err);
+          toast.error('Failed to update favorite');
+        },
+      },
+    );
+  }, [currentProject?.id, favorites, toggleFavoriteMutation]);
 
   const dismissProcess = useCallback((processId: string) => {
     setDismissedProcesses(prev => {
@@ -1035,7 +993,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
       );
     }
     
-    // For background processes, use TerminalOutput with processStore output
+    // For background processes, use TerminalOutput with the GetProcessOutput read
     const selectedProcess = backgroundProcesses.find(p => p.id === selectedProcessId);
     if (selectedProcess) {
       const processInfo: ProcessInfo = {
@@ -1058,7 +1016,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
             setSelectedProcessId(null);
             setSelectedProcessSource(null);
           }}
-          onRefresh={() => fetchProcessOutput(selectedProcessId, false)}
+          onRefresh={() => void outputQuery.refetch()}
           onKill={
             selectedProcess.status === BackgroundProcessStatus.RUNNING
               ? () => handleKillProcess(selectedProcessId, "background")
@@ -1564,7 +1522,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
       getLeftPadding()
     )}>
       {/* Run button */}
-      <Tooltip content={isRunning ? `${command.name} is running` : `Run ${command.name}`} placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+      <Tooltip content={isRunning ? `${command.name} is running` : `Run ${command.name}`} side="bottom" delay={300} triggerClassName="inline-flex flex-shrink-0">
 <button
         onClick={onRun}
         disabled={isDisabled}
@@ -1596,7 +1554,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
               {command.relative_path}
             </span>
           )}
-          <Tooltip content={isFavorite ? "Remove from favorites" : "Add to favorites"} placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content={isFavorite ? "Remove from favorites" : "Add to favorites"} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
             className={cn(
@@ -1611,7 +1569,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
           {runningProcess?.ports && runningProcess.ports.length > 0 && !isCompact && (
             <span className="flex items-center gap-1">
               {runningProcess.ports.slice(0, 2).map((p) => (
-                <Tooltip content={`Open localhost:${p.port} in browser`} placement="bottom" delay={300} wrapperClassName="inline-flex">
+                <Tooltip content={`Open localhost:${p.port} in browser`} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                   key={p.port}
                   onClick={(e) => { e.stopPropagation(); onOpenPort(p.port); }}
@@ -1634,7 +1592,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
       {/* Actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
         {(runningProcess || recentProcess) && (
-          <Tooltip content="View logs" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="View logs" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={() => onViewLogs(runningProcess || recentProcess!)}
             className={cn(
@@ -1842,7 +1800,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
       {/* Actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
         {!isRunning && canRerun && onRerun && (
-          <Tooltip content="Rerun command" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Rerun command" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={(e) => { e.stopPropagation(); onRerun(); }}
             className={cn("rounded hover:bg-primary/20 text-primary transition-colors", isCompact ? "p-1" : "p-1.5")} aria-label="Rerun command">
@@ -1850,7 +1808,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
           </button>
 </Tooltip>
         )}
-        <Tooltip content="View logs" placement="bottom" delay={300} wrapperClassName="inline-flex">
+        <Tooltip content="View logs" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
           onClick={(e) => { e.stopPropagation(); onViewLogs(); }}
           className={cn(
@@ -1863,7 +1821,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
         </button>
 </Tooltip>
         {isRunning && onKill && (
-          <Tooltip content={isCanceling ? "Stopping..." : "Stop process"} placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content={isCanceling ? "Stopping..." : "Stop process"} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={handleKill}
             disabled={isCanceling}
@@ -1881,7 +1839,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
 </Tooltip>
         )}
         {!isRunning && onDismiss && (
-          <Tooltip content="Remove from list" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Remove from list" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={(e) => { e.stopPropagation(); onDismiss(); }}
             className={cn(

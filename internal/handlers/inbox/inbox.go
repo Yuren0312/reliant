@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -43,12 +44,13 @@ const (
 	inboxRunFinishedPrefix       = "run_finished:"
 	inboxStoragePrefix           = "storage:"
 	inboxNeedsSetupPrefix        = "automation_needs_setup:"
+	inboxRecoveryPrefix          = "recovery:"
 )
 
 var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
 	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxRunFinishedPrefix, inboxStoragePrefix,
-	inboxNeedsSetupPrefix,
+	inboxNeedsSetupPrefix, inboxRecoveryPrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -91,7 +93,7 @@ func (s *Service) ListInbox(
 	}
 	// The read may be shared with concurrent calls (sharedRead): this
 	// response gets its own copies.
-	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.needsSetup} {
+	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.needsSetup, read.recovery} {
 		for _, it := range shared {
 			items = append(items, proto.CloneOf(it))
 		}
@@ -157,6 +159,7 @@ type inboxReads struct {
 	failing    []*reliantv1.InboxItem
 	storage    []*reliantv1.InboxItem
 	needsSetup []*reliantv1.InboxItem
+	recovery   []*reliantv1.InboxItem
 }
 
 // inboxReadTimeout bounds a shared read (sharedRead), which runs detached
@@ -251,12 +254,43 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 		advisory("Failed to compute storage inbox items", err)
 		return nil
 	})
+	// Recoveries are durable catalog entries, NOT machine storage observations.
+	// A missing source row or disconnected/deleted daemon cannot hide them.
+	g.Go(func() error {
+		return lim.do(gctx, func() error {
+			rows, err := s.deps.Repo.ListWorktreeRecoveries(gctx, userID, "")
+			if err != nil {
+				return err
+			}
+			for _, row := range rows {
+				if row.Phase == "refs_deleted" {
+					continue
+				}
+				out.recovery = append(out.recovery, recoveryInboxItem(row))
+			}
+			return nil
+		})
+	})
 	// The group's FIRST error is the cause; reads that failed after it only
 	// saw the cancellation it triggered.
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 	return &out, nil
+}
+
+// recoveryInboxItem intentionally requires no source/project/daemon joins.
+func recoveryInboxItem(row *core.WorktreeRecovery) *reliantv1.InboxItem {
+	detail := row.LastError
+	for _, checkout := range row.Checkouts {
+		if checkout.LastError != "" {
+			if detail != "" {
+				detail += "; "
+			}
+			detail += checkout.RepoID + ": " + checkout.LastError
+		}
+	}
+	return &reliantv1.InboxItem{ItemId: inboxRecoveryPrefix + row.ID, Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_RECOVERY, ProjectId: row.ProjectID, WaitingSince: row.CreatedAt.UTC().Format(time.RFC3339Nano), Payload: &reliantv1.InboxItem_Recovery{Recovery: &reliantv1.RecoveryInboxItem{RecoveryId: row.ID, SourceWorktreeId: row.SourceWorktreeID, ProjectId: row.ProjectID, Phase: row.Phase, CheckoutCount: int32(len(row.Checkouts)), LastError: detail, Operation: row.Operation, OperationKey: row.OperationKey, TargetDaemonId: row.TargetDaemonID}}}
 }
 
 // inboxItemBlocks reports whether an item blocks a live run: an approval, a
@@ -788,6 +822,9 @@ func (s *Service) CleanupStorage(
 		resp.Results = append(resp.Results, &reliantv1.CleanupStorageResult{
 			WorktreeId: r.WorktreeID, Outcome: reliantv1.CleanupStorageOutcome_CLEANUP_STORAGE_OUTCOME_SKIPPED, Message: r.Message,
 		})
+	}
+	if len(accepted) == 0 {
+		activity.Skip(ctx) // every worktree was skipped: nothing is being cleaned up
 	}
 	return connect.NewResponse(resp), nil
 }

@@ -80,6 +80,9 @@ func (s *LocalStore) MintForUser(ctx context.Context, req MintRequest) (Minted, 
 	if strings.TrimSpace(req.UserID) == "" {
 		return Minted{}, fmt.Errorf("%w: user id is required", fat.ErrInvalidGrant)
 	}
+	if req.OrgID != "" && req.OrgID != req.UserID {
+		return Minted{}, fmt.Errorf("%w: a self-hosted server has no organizations to mint in", fat.ErrInvalidGrant)
+	}
 	if err := grant.Validate(s.now()); err != nil {
 		return Minted{}, err
 	}
@@ -133,7 +136,8 @@ func (s *LocalStore) insert(ctx context.Context, g fat.Grant) (Minted, error) {
 	if err := store.InsertAccessToken(ctx, s.db, t); err != nil {
 		return Minted{}, fmt.Errorf("tokenauthority: storing token: %w", err)
 	}
-	return Minted{TokenID: t.ID, Plaintext: minted.Plaintext, DisplayPrefix: minted.DisplayPrefix, ExpiresAt: g.ExpiresAt}, nil
+	return Minted{TokenID: t.ID, Plaintext: minted.Plaintext, DisplayPrefix: minted.DisplayPrefix,
+		ExpiresAt: g.ExpiresAt, Scopes: g.Scopes.Strings()}, nil
 }
 
 func tokenInfo(r store.AccessTokenRecord) TokenInfo {

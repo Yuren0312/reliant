@@ -4,7 +4,7 @@
  * Observability › Dashboards against the in-memory DashboardService: the
  * shelves (starred with previews, recently viewed, from your releases,
  * workspace), the filters, starring, the template gallery and New dashboard —
- * each write naming its environment (D1) — and the read-only, empty and
+ * each write naming its environment — and the read-only, empty and
  * failed states.
  */
 
@@ -50,6 +50,20 @@ function renderList(options: FixtureOptions = {}, env = "prod") {
 }
 
 describe("Dashboards", () => {
+  it("discovers organization accounting without any deployed environments or authoring rights", async () => {
+    const api = createFixtureApi();
+    api.listDashboards = vi.fn().mockResolvedValue({ canWrite: false, dashboards: [{
+      ref: { kind: "builtin", projectId: "", key: "org-costs" }, source: "builtin", viewKind: "organization-costs",
+      title: "Organization costs", description: "Canonical current-period accounting", readOnly: true, starred: false,
+      lastViewedAtMs: null, panelCount: 0, previewPanels: [], release: null, workspace: null, category: "organization",
+    }] });
+    renderWithApi(api, <DashboardsList project={FIXTURE_PROJECT} env="all" environments={[]} search={{}} onSearch={vi.fn()} hrefs={hrefs} navigateTo={vi.fn()} />);
+    const builtin = await screen.findByTestId("dashboards-builtin");
+    expect(within(builtin).getByRole("link", { name: "Organization costs" })).toHaveAttribute("href", "/d/builtin/org-costs");
+    expect(builtin).toHaveTextContent("Requires cost-read permission, not billing management");
+    expect(screen.queryByTestId("dashboards-empty")).not.toBeInTheDocument();
+  });
+
   it("lists the project's dashboards for the scoped environment, on four shelves", async () => {
     const { onCall } = renderList();
     const starred = await screen.findByTestId("dashboards-starred");
@@ -128,7 +142,11 @@ describe("Dashboards", () => {
 
   it("explains an empty project, and a failure", async () => {
     renderList({ dashboardsEmpty: true });
-    expect(await screen.findByTestId("dashboards-empty")).toHaveTextContent("Dashboards ship with your releases");
+    const empty = await screen.findByTestId("dashboards-empty");
+    expect(empty).toHaveTextContent("Dashboards ship with your releases");
+    expect(within(empty).getByTestId("dashboards-getting-started-about")).toHaveTextContent("the dashboards forge generates");
+    expect(within(empty).getByText("forge obs dashboards add-panel <slug> --panel <panel.json>")).toBeInTheDocument();
+    expect(within(empty).getByTestId("dashboards-getting-started-docs")).toHaveAttribute("href", expect.stringContaining("#dashboards"));
     expect(await screen.findByTestId("dashboards-templates")).toBeInTheDocument();
   });
 

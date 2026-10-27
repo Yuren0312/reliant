@@ -13,13 +13,13 @@
  * ── WHAT THE LEDGER CAN AND CANNOT SAY ──────────────────────────────────────
  *
  *   - A release's commit subject and author are what forge recorded at cut
- *     time (decision D4). A release cut by an older forge has neither, and
+ *     time. A release cut by an older forge has neither, and
  *     the pages show the short sha alone rather than inventing a subject.
  *   - A commit range is CAPPED. `truncated` says the list is not the whole
  *     range (a shallow clone could not count it); it is never rendered as
  *     complete.
  *   - A promotion with `targets` moved only those components (a scoped
- *     deploy, decision D5). It must not be read as the environment running
+ *     deploy). It must not be read as the environment running
  *     the whole release.
  *   - There is no rollback kind any more: promoting an older release is an
  *     ordinary promote, and the pages work out "rolled back" from the order

@@ -49,6 +49,17 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
+// GetLiveChatIDForWorktree returns one non-archived bound chat, or an empty
+// string. Query the base table by its indexed binding, never a project-sized list.
+func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID string) (string, error) {
+	var id string
+	err := db.Bun().NewRaw(`SELECT id FROM chats WHERE worktree_id = ? AND state <> ? LIMIT 1`, worktreeID, core.ChatStateArchived).Scan(ctx, &id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
 // The chats writes (P5b L1b). Reads go through the view — see
 // chats_with_activity_repo_ext.go.
 
@@ -56,10 +67,34 @@ import (
 // last_active (the generated Create keeps a caller-set timestamp). An unset
 // State is IDLE (the column DEFAULT).
 func InsertChat(ctx context.Context, db orm.Context, chat *core.Chat) error {
-	if err := CreateChat(ctx, db, chatToRow(chat)); err != nil {
-		return fmt.Errorf("failed to create chat: %w", err)
-	}
-	return nil
+	return withChatWorktreeAdmission(ctx, db, chat.ID, chat.WorktreeID, func(ctx context.Context) error {
+		if err := CreateChat(ctx, db, chatToRow(chat)); err != nil {
+			return fmt.Errorf("failed to create chat: %w", recoveryAdmissionError(err))
+		}
+		return nil
+	})
+}
+
+// Parent before child is the common lock order for chat admission and reclaim.
+// The SQL trigger is a backstop for other writers, not a handler-only guard.
+func withChatWorktreeAdmission(ctx context.Context, db orm.Context, chatID string, worktreeID *string, fn func(context.Context) error) error {
+	return recoveryTx(ctx, db, func(ctx context.Context) error {
+		// A rebind locks old and new parents in the same stable order as the
+		// trigger. The trigger still protects against a concurrently moved row.
+		//
+		// FOR NO KEY UPDATE, as the trigger takes, not FOR UPDATE: it still
+		// excludes another admission and the recovery claim's FOR UPDATE,
+		// but not the FOR KEY SHARE of a foreign-key check. FOR UPDATE made
+		// a user_updates insert for this worktree wait behind every chat
+		// admission in it, which deadlocked concurrent StartChats in one
+		// worktree against their own activity announcements (see
+		// 20261026040257_recovery_admission_no_key_update.up.sql).
+		var ids []string
+		if err := db.Bun().NewRaw(`SELECT id FROM worktrees WHERE id=? OR id=(SELECT worktree_id FROM chats WHERE id=?) ORDER BY id FOR NO KEY UPDATE`, worktreeID, chatID).Scan(ctx, &ids); err != nil {
+			return err
+		}
+		return fn(ctx)
+	})
 }
 
 // chatUpdateColumns are the columns SaveChat writes; updated_at is stamped
@@ -74,11 +109,13 @@ var chatUpdateColumns = []string{
 // that does not exist is left alone, as the statement it replaced did. The
 // caller holds the row it wrote, so nothing is read back.
 func SaveChat(ctx context.Context, db orm.Context, chat *core.Chat) error {
-	err := UpdateChatMasked(ctx, db, chatToRow(chat), chatUpdateColumns, crud.NoReadBack())
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("failed to update chat: %w", err)
-	}
-	return nil
+	return withChatWorktreeAdmission(ctx, db, chat.ID, chat.WorktreeID, func(ctx context.Context) error {
+		err := UpdateChatMasked(ctx, db, chatToRow(chat), chatUpdateColumns, crud.NoReadBack())
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("failed to update chat: %w", recoveryAdmissionError(err))
+		}
+		return nil
+	})
 }
 
 // UpdateChatState moves a chat to state, capturing archivedWorktreeName onto
@@ -86,17 +123,23 @@ func SaveChat(ctx context.Context, db orm.Context, chat *core.Chat) error {
 // worktree after the worktree row is gone), and stamps updated_at and
 // last_active with now.
 func UpdateChatState(ctx context.Context, db orm.Context, chatID string, state core.ChatState, archivedWorktreeName *string, now time.Time) error {
-	_, err := db.Bun().NewRaw(`
+	var worktreeID *string
+	if err := db.Bun().NewRaw(`SELECT worktree_id FROM chats WHERE id=?`, chatID).Scan(ctx, &worktreeID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	return withChatWorktreeAdmission(ctx, db, chatID, worktreeID, func(ctx context.Context) error {
+		_, err := db.Bun().NewRaw(`
 UPDATE chats
 SET state = ?0,
     archived_worktree_name = COALESCE(archived_worktree_name, ?1),
     updated_at = ?2,
     last_active = ?2
 WHERE id = ?3`, state, archivedWorktreeName, now, chatID).Exec(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to update chat state: %w", err)
-	}
-	return nil
+		if err != nil {
+			return fmt.Errorf("failed to update chat state: %w", recoveryAdmissionError(err))
+		}
+		return nil
+	})
 }
 
 // UpdateChatUnread sets the chat's unread flag and stamps updated_at. A chat
@@ -129,6 +172,48 @@ WHERE id = ?1`
 func UpdateChatActiveDaemon(ctx context.Context, db orm.Context, chatID string, daemonID *string) error {
 	_, err := db.Bun().NewRaw(updateChatActiveDaemonSQL, daemonID, chatID).Exec(ctx)
 	return err
+}
+
+// pinChatDaemonIfUnsetSQL pins an unpinned chat that is on a machine. A
+// no-machine chat has no daemon by constraint, so it is never matched. Neither
+// updated_at nor last_active moves: choosing where a chat runs is not
+// something the user did to it, and the sidebar orders by them.
+const pinChatDaemonIfUnsetSQL = `
+UPDATE chats SET active_daemon_id = ?0
+WHERE id = ?1 AND NOT no_machine AND (active_daemon_id IS NULL OR active_daemon_id = '')
+RETURNING user_id, project_id, worktree_id`
+
+// PinnedChat is the chat PinChatDaemonIfUnset pinned.
+type PinnedChat struct {
+	UserID     string  `bun:"user_id"`
+	ProjectID  string  `bun:"project_id"`
+	WorktreeID *string `bun:"worktree_id"`
+}
+
+// PinChatDaemonIfUnset pins the chat to daemonID only when it has no pin and
+// is not a no-machine chat, and returns the pin the row holds afterwards ("" for
+// none). pinned is non-nil only when THIS call wrote it, so of two racing
+// callers exactly one announces the pin and both return the same machine.
+func PinChatDaemonIfUnset(ctx context.Context, db orm.Context, chatID, daemonID string) (stored string, pinned *PinnedChat, err error) {
+	var rows []PinnedChat
+	if err := db.Bun().NewRaw(pinChatDaemonIfUnsetSQL, daemonID, chatID).Scan(ctx, &rows); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", nil, fmt.Errorf("pinning chat %s to daemon %s: %w", chatID, daemonID, err)
+	}
+	if len(rows) > 0 {
+		return daemonID, &rows[0], nil
+	}
+	// Not written: the chat already had a pin (a concurrent send won), has no
+	// machine by design, or is gone. A second statement, so under READ
+	// COMMITTED it reads what the winner committed.
+	var existing *string
+	err = db.Bun().NewRaw(`SELECT active_daemon_id FROM chats WHERE id = ?0`, chatID).Scan(ctx, &existing)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", nil, fmt.Errorf("reading chat %s pin: %w", chatID, err)
+	}
+	if existing == nil {
+		return "", nil, nil
+	}
+	return *existing, nil, nil
 }
 
 // UnpinnedChat is a chat UnpinChatsFromDaemon released.

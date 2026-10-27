@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * THE ENVIRONMENT SCOPE (decision D1): environment is a filter in the top
+ * THE ENVIRONMENT SCOPE: environment is a filter in the top
  * bar, on every page, not a place.
  *
  *   - It is `?env=<name>` or `?env=all`, the one scope param every list page

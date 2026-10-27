@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "./Sidebar";
@@ -9,23 +9,14 @@ import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { useChatStore } from "../../store/chatStore";
 import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 
-vi.mock("../ui/Tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+vi.mock("../forge-ui/tooltip", () => ({
+  default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("../ui/Button", () => ({
-  Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
-  ),
-}));
-
-vi.mock("../ui/ContextMenu", () => ({
-  ContextMenu: () => null,
-}));
+vi.mock("../forge-ui/context_menu", () => ({ default: () => null }));
 
 // The real Dropdown is used here on purpose: these tests assert open/close
 // behavior (choose-an-option and Escape), which a passthrough mock would fake.
@@ -54,7 +45,7 @@ const mockChatListData = [
     updatedAt: "2024-01-01T00:00:00.000Z",
     lastMessageAt: "2024-01-01T00:00:00.000Z",
     unread: false,
-    state: ChatState.ACTIVE,
+    state: ChatState.IDLE,
     worktreeId: "worktree-1",
     projectId: "project-1",
   },
@@ -62,9 +53,13 @@ const mockChatListData = [
 
 const mockArchivedChatData: Array<Record<string, unknown>> = [];
 
+// Stable, as a query result is: a new array each render would re-run the
+// sidebar's effects on every render.
+const NO_MAIN_WORKTREES: never[] = [];
+
 vi.mock("../../hooks/chat-queries", () => ({
   useChatListWithWorkspaces: () => ({
-    data: { chats: mockChatListData, lastUserUpdateSequence: 0, mainWorktree: undefined },
+    data: { chats: mockChatListData, lastUserUpdateSequence: 0, mainWorktrees: NO_MAIN_WORKTREES },
     isLoading: false,
   }),
   useArchivedChats: () => ({ data: mockArchivedChatData, isFetched: true }),
@@ -94,7 +89,6 @@ vi.mock("../../hooks/message-queries", () => ({
 }));
 
 describe("Sidebar selected chat scroll", () => {
-  const fetchProcesses = vi.fn();
   const switchWorktreeContext = vi.fn(async () => undefined);
   const scrollIntoViewMock = vi.fn();
 
@@ -119,7 +113,7 @@ describe("Sidebar selected chat scroll", () => {
             updatedAt: "2024-01-01T00:00:00.000Z",
             lastMessageAt: "2024-01-01T00:00:00.000Z",
             unread: false,
-            state: ChatState.ACTIVE,
+            state: ChatState.IDLE,
             worktreeId: "worktree-1",
             projectId: "project-1",
           },
@@ -135,14 +129,10 @@ describe("Sidebar selected chat scroll", () => {
 
     // Empty on purpose: the sidebar groups from the chat list alone.
     useWorktreeStore.setState({
-      worktrees: [],
-      currentWorktree: null,
+      currentWorktreeId: null,
+      currentWorktreeProjectId: null,
       switchWorktreeContext,
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
-
-    useProcessStore.setState({
-      fetchProcesses,
-    } as Partial<ReturnType<typeof useProcessStore.getState>>);
 
     useProjectStore.setState({
       currentProject: {
@@ -150,7 +140,7 @@ describe("Sidebar selected chat scroll", () => {
         name: "Project",
         path: "/tmp/project",
         is_git_repo: true,
-        worktree_count: 1,
+        is_forge: false,
         created_at: "2024-01-01T00:00:00.000Z",
         updated_at: "2024-01-01T00:00:00.000Z",
         last_active: "2024-01-01T00:00:00.000Z",
@@ -274,7 +264,6 @@ describe("Sidebar selected chat scroll", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const onNavigateToProjectPicker = vi.fn();
     const onOpenWorkflows = vi.fn();
     const onOpenChatSearch = vi.fn();
     const onNavigateToSettings = vi.fn();
@@ -283,7 +272,6 @@ describe("Sidebar selected chat scroll", () => {
     render(
       <QueryClientProvider client={queryClient}>
         <Sidebar
-          onNavigateToProjectPicker={onNavigateToProjectPicker}
           onOpenWorkflows={onOpenWorkflows}
           onOpenChatSearch={onOpenChatSearch}
           onNavigateToSettings={onNavigateToSettings}
@@ -297,7 +285,9 @@ describe("Sidebar selected chat scroll", () => {
     const nav = screen.getByRole("navigation", { name: "Chat sidebar navigation" });
     expect(nav).toContainElement(screen.getByTestId("sidebar-inbox-button"));
     expect(screen.getByTestId("inbox-badge-count")).toHaveTextContent("2");
-    expect(screen.getByRole("button", { name: "Projects" })).toBeInTheDocument();
+    // No "Projects" page to go to: the project is the chat list's filter.
+    expect(screen.queryByRole("button", { name: "Projects" })).toBeNull();
+    expect(screen.getByTestId("project-filter-label")).toHaveTextContent("All projects");
     expect(screen.getByRole("button", { name: "Workflows" })).toBeInTheDocument();
     // Automations and Runs are tabs of the Workflows area now (§1.2), not
     // sidebar entries of their own.
@@ -310,14 +300,12 @@ describe("Sidebar selected chat scroll", () => {
       "workflow-button"
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
     fireEvent.click(screen.getByRole("button", { name: "Workflows" }));
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByTestId("sidebar-inbox-button"));
 
     expect(onOpenInbox).toHaveBeenCalledTimes(1);
-    expect(onNavigateToProjectPicker).toHaveBeenCalledTimes(1);
     expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
     expect(onOpenChatSearch).toHaveBeenCalledTimes(1);
     expect(onNavigateToSettings).toHaveBeenCalledTimes(1);

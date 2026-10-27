@@ -38,7 +38,8 @@ import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { InterleavedTimeline } from "./thread-views";
 import { WorkflowViewerPanel } from "../workflow/WorkflowViewerPanel";
 
-import type { Message, ToolApprovalRequest } from "../../api/client";
+import type { Message } from "../../api/client";
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import type {
   ErrorUpdate,
   InfoUpdate,
@@ -55,9 +56,11 @@ import { useChat } from "../../hooks/chat-queries";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { isUnadoptedAutomation } from "../../lib/sidebarChatList";
 import { unansweredMessage } from "../../lib/awaitingReply";
-import { usePendingQuestions } from "../../hooks/approval-queries";
+import { usePendingQuestions } from "../../hooks/question-queries";
 import { questionForThread } from "../../lib/pendingQuestions";
 import { chatMachineNotice, resolveChatMachine } from "../../lib/chatMachineNotice";
+import { installedDaemonIds } from "../../lib/chatMachine";
+import { useProjectDaemonInstalls } from "../../hooks/project-queries";
 import { useWakingMachines } from "../../lib/machineWake";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { useChatActivity } from "../../store/activityStore";
@@ -66,7 +69,7 @@ import { TakeOverRunBar, useAdoptOnSend } from "./TakeOverRunBar";
 interface ChatPresenterProps {
   // Message data
   messages: Message[];
-  approvals: ToolApprovalRequest[];
+  approvals: Approval[];
   errorEvents: ErrorUpdate[];
   infoEvents: InfoUpdate[];
   runOutputs: RunOutputUpdate[];
@@ -74,7 +77,7 @@ interface ChatPresenterProps {
   // Chat state
   chatId: string | null;
   isChatBusy: boolean;
-  pendingApprovals: ToolApprovalRequest[];
+  pendingApprovals: Approval[];
   connectionStatus: string;
 
   // Chat metadata
@@ -193,7 +196,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   // background-work pill instead.
   const { data: pendingQuestions } = usePendingQuestions(chatId || undefined);
   const hasPendingQuestion = !!questionForThread(
-    pendingQuestions,
+    pendingQuestions?.questions,
     chatId || undefined,
     selectedThreadId,
     chatForQueue?.workflowId,
@@ -508,7 +511,10 @@ export const ChatPresenter = memo(function ChatPresenter({
     (isAgentWorking || heldForMachine || sendingThisChat || usageLimitWait !== undefined);
   const { data: daemons } = useDaemonList({ enabled: workWaitsOnMachine });
   const wakes = useWakingMachines();
-  const chatMachineDaemon = workWaitsOnMachine ? resolveChatMachine(daemons, currentChat?.activeDaemonId) : undefined;
+  const installs = useProjectDaemonInstalls(workWaitsOnMachine && !currentChat?.activeDaemonId);
+  const chatMachineDaemon = workWaitsOnMachine
+    ? resolveChatMachine(daemons, currentChat?.activeDaemonId, installedDaemonIds(installs.data ?? [], projectId ?? undefined))
+    : undefined;
   const chatMachineWakeStartedAt = chatMachineDaemon ? wakes.get(chatMachineDaemon.daemonId) : undefined;
   const unansweredSentAt = unanswered ? Date.parse(unanswered.createdAt) : NaN;
   const machineNotice = useMemo(

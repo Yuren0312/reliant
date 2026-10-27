@@ -24,10 +24,11 @@
  */
 
 import { useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, ChevronRight, Code2, Copy, ExternalLink, Lock, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, BellOff, CheckCircle2, ChevronDown, ChevronRight, Code2, Copy, ExternalLink, LineChart, Lock, ShieldCheck } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
+import { CommandLine, DOCS } from "@/components/Forge/GettingStarted";
 import { useAlertHistory, useAlerts } from "@/hooks/observability-queries";
 import type { AlertEvent, AlertInstance, DeclaredAlertRule } from "@/services/controlPlane/observability/alertingTypes";
 import { alertingErrorKind } from "@/services/controlPlane/observability/errors";
@@ -35,11 +36,14 @@ import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observab
 import { cn } from "@/lib/utils";
 
 import { AlertReceivers } from "./AlertReceivers";
+import { AskReliantButton } from "./AskReliant/AskReliant";
 import { AlertSilences, SilenceDialog } from "./AlertSilences";
 import { ruleAsCode, starterRuleKcl, type RuleAsCode } from "./alertsAsCode";
 import { formatAgo, formatTimestamp } from "./format";
+import { alertPivot, alertRange, useExploreHref } from "./Metrics/pivots";
 import { placeEnvironments, type ObsEnvironment, type ObsPlace } from "./obsPlace";
 import { ALERTS_TABS, type AlertsTab, type ObsNavigate } from "./obsSearch";
+import { ExploreLink } from "./Metrics/ExploreLink";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
@@ -108,7 +112,7 @@ export function AlertsView({ orgId, place, envIds, range, tab, rule, navigate }:
   return (
     <div className="space-y-4" data-testid="obs-alerts" data-tab={tab}>
       <div className="flex flex-wrap items-center gap-3">
-        <div role="tablist" aria-label="Alerts" className="inline-flex flex-wrap rounded-lg border border-border bg-background p-0.5">
+        <div role="tablist" aria-label="Alerts" className="inline-flex flex-wrap rounded-lg border border-border bg-surface-sunken p-0.5">
           {ALERTS_TABS.map((id) => (
             <button
               key={id}
@@ -119,7 +123,7 @@ export function AlertsView({ orgId, place, envIds, range, tab, rule, navigate }:
               data-testid={`obs-alerts-tab-${id}`}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                id === tab ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                id === tab ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
               )}
             >
               {ALERTS_TAB_LABELS[id]}
@@ -127,7 +131,7 @@ export function AlertsView({ orgId, place, envIds, range, tab, rule, navigate }:
                 <span
                   className={cn(
                     "rounded-full px-1.5 text-2xs tabular-nums",
-                    id === "firing" ? "bg-destructive/15 text-destructive" : "bg-border/60 text-muted-foreground"
+                    id === "firing" ? "bg-danger-surface text-danger-ink" : "bg-border/60 text-ink-muted"
                   )}
                 >
                   {count[id]}
@@ -137,7 +141,7 @@ export function AlertsView({ orgId, place, envIds, range, tab, rule, navigate }:
           ))}
         </div>
         {readOnly && (
-          <p className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status" data-testid="obs-alerts-read-only">
+          <p className="inline-flex items-center gap-1.5 text-xs text-ink-muted" role="status" data-testid="obs-alerts-read-only">
             <Lock className="h-3.5 w-3.5" aria-hidden="true" />
             You can view alerting. Changing receivers and silences needs an organization admin.
           </p>
@@ -203,13 +207,13 @@ export function silenceMatchersFor(alert: Pick<AlertInstance, "rule" | "labels">
 
 function Frame({ icon, title, children, testId, tone = "neutral" }: { icon: ReactNode; title: string; children?: ReactNode; testId: string; tone?: "neutral" | "good" }) {
   return (
-    <div data-testid={testId} role="status" className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-background px-4 py-5">
-      <span className={cn("mt-0.5 shrink-0", tone === "good" ? "text-success" : "text-muted-foreground")} aria-hidden="true">
+    <div data-testid={testId} role="status" className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5">
+      <span className={cn("mt-0.5 shrink-0", tone === "good" ? "text-success-ink" : "text-ink-muted")} aria-hidden="true">
         {icon}
       </span>
       <div className="min-w-0 space-y-1.5">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        {children && <div className="space-y-1.5 text-xs text-muted-foreground">{children}</div>}
+        <p className="text-sm font-medium text-ink">{title}</p>
+        {children && <div className="space-y-1.5 text-xs text-ink-muted">{children}</div>}
       </div>
     </div>
   );
@@ -242,9 +246,9 @@ function AlertingNotConfigured({ ruleCount, onRules }: { ruleCount: number; onRu
 // ── Firing ───────────────────────────────────────────────────────────────────
 
 const SEVERITY_TONE: Record<string, string> = {
-  critical: "bg-destructive/10 text-destructive ring-destructive/30",
-  warning: "bg-warning/10 text-warning ring-warning/30",
-  info: "text-muted-foreground ring-border",
+  critical: "bg-danger-surface text-danger-ink ring-danger/30",
+  warning: "bg-warning-surface text-warning-ink ring-warning/30",
+  info: "text-ink-muted ring-border",
 };
 
 export function SeverityChip({ severity }: { severity: string }) {
@@ -260,7 +264,7 @@ function SourceChip({ rule }: { rule: DeclaredAlertRule | undefined }) {
   if (!rule) return null;
   return (
     <span
-      className="rounded border border-border px-1.5 py-px text-2xs text-muted-foreground"
+      className="rounded border border-border px-1.5 py-px text-2xs text-ink-muted"
       title={rule.source === "user" ? "Declared by your project (forge.AlertRule)" : `forge default "${rule.defaultId}", tuned in forge.Alerts.defaults`}
       data-testid="obs-rule-source"
     >
@@ -275,8 +279,8 @@ function LabelChips({ labels, skip = [] }: { labels: Record<string, string>; ski
   return (
     <span className="flex flex-wrap gap-1">
       {keys.map((k) => (
-        <span key={k} className="rounded bg-background px-1.5 py-px font-mono text-2xs text-muted-foreground ring-1 ring-inset ring-border/60">
-          {k}=<span className="text-foreground">{labels[k]}</span>
+        <span key={k} className="rounded bg-surface-sunken px-1.5 py-px font-mono text-2xs text-ink-muted ring-1 ring-inset ring-border/60">
+          {k}=<span className="text-ink">{labels[k]}</span>
         </span>
       ))}
     </span>
@@ -303,6 +307,9 @@ function FiringTab({
   onRules: () => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
+  const exploreHref = useExploreHref();
+  const exploreAlert = (a: AlertInstance, rule: DeclaredAlertRule | undefined) =>
+    rule ? (exploreHref?.(alertPivot(rule.expr, a.labels), { env: envName(a.envId), range: alertRange(a.firingAtMs ?? a.activeAtMs, Date.now()) }) ?? null) : null;
   const ruleOf = (a: AlertInstance) => rules.find((r) => r.env.id === a.envId && r.rule.alert === a.rule);
   if (alerts.length === 0) {
     const evaluated = rules.filter((r) => !observabilityOff(r.env)).length;
@@ -343,25 +350,25 @@ function FiringTab({
                   onClick={() => setOpen(expanded ? null : key)}
                   aria-expanded={expanded}
                   aria-label={`${expanded ? "Hide" : "Show"} details of ${a.rule}`}
-                  className="mt-0.5 rounded p-0.5 text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="mt-0.5 rounded p-0.5 text-ink-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                 </button>
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span
-                      className={cn("inline-flex items-center gap-1 text-xs font-medium", a.state === "firing" ? "text-destructive" : "text-warning")}
+                      className={cn("inline-flex items-center gap-1 text-xs font-medium", a.state === "firing" ? "text-danger-ink" : "text-warning-ink")}
                     >
-                      <span className={cn("h-2 w-2 rounded-full", a.state === "firing" ? "bg-destructive" : "bg-warning")} aria-hidden="true" />
+                      <span className={cn("h-2 w-2 rounded-full", a.state === "firing" ? "bg-danger" : "bg-warning")} aria-hidden="true" />
                       {a.state === "firing" ? "Firing" : "Pending"}
                     </span>
-                    <span className="font-mono text-sm font-medium text-foreground">{a.rule}</span>
+                    <span className="font-mono text-sm font-medium text-ink">{a.rule}</span>
                     <SeverityChip severity={a.labels.severity ?? ""} />
-                    <span className="font-mono text-xs text-muted-foreground">{envName(a.envId)}</span>
+                    <span className="font-mono text-xs text-ink-muted">{envName(a.envId)}</span>
                     <SourceChip rule={declared?.rule} />
                   </div>
-                  {summary && <p className="text-sm text-foreground">{summary}</p>}
-                  <p className="text-xs text-muted-foreground">
+                  {summary && <p className="text-sm text-ink">{summary}</p>}
+                  <p className="text-xs text-ink-muted">
                     {a.state === "firing" && a.firingAtMs
                       ? `Firing since ${formatAgo(a.firingAtMs)}`
                       : a.activeAtMs
@@ -372,10 +379,17 @@ function FiringTab({
                   <LabelChips labels={a.labels} skip={["alertname", "severity"]} />
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  <AskReliantButton subject={{ kind: "alert", rule: a.rule, fingerprint: a.fingerprint, env: environments.find((env) => env.id === a.envId)?.name ?? null }} />
                   {declared && (
                     <Button variant="ghost" size="sm" leftIcon={<Code2 className="h-3.5 w-3.5" />} onClick={() => onOpenRule(declared.key)}>
                       Rule
                     </Button>
+                  )}
+                  {exploreAlert(a, declared?.rule) && (
+                    <ExploreLink href={exploreAlert(a, declared?.rule)!} testId={`obs-alert-explore-${a.rule}`}>
+                      <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
+                      Explore
+                    </ExploreLink>
                   )}
                   <Button
                     variant="outline"
@@ -390,7 +404,7 @@ function FiringTab({
                 </div>
               </div>
               {expanded && (
-                <dl className="grid gap-x-6 gap-y-1 border-t border-border/60 bg-background px-12 py-3 text-xs sm:grid-cols-[auto_1fr]" data-testid="obs-alert-details">
+                <dl className="grid gap-x-6 gap-y-1 border-t border-border/60 bg-surface-sunken px-12 py-3 text-xs sm:grid-cols-[auto_1fr]" data-testid="obs-alert-details">
                   {Object.keys(a.annotations)
                     .sort()
                     .map((k) => (
@@ -416,8 +430,8 @@ function AnnotationRow({ name, value }: { name: string; value: string }) {
   const link = /^https?:\/\//.test(value);
   return (
     <>
-      <dt className="text-muted-foreground">{name}</dt>
-      <dd className="min-w-0 break-words text-foreground">
+      <dt className="text-ink-muted">{name}</dt>
+      <dd className="min-w-0 break-words text-ink">
         {link ? (
           <a href={value} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline">
             {value}
@@ -434,11 +448,11 @@ function AnnotationRow({ name, value }: { name: string; value: string }) {
 // ── History ──────────────────────────────────────────────────────────────────
 
 const TRANSITION_TONE: Record<AlertEvent["transition"], string> = {
-  firing: "text-destructive",
-  pending: "text-warning",
-  resolved: "text-success",
-  inactive: "text-muted-foreground",
-  removed: "text-muted-foreground",
+  firing: "text-danger-ink",
+  pending: "text-warning-ink",
+  resolved: "text-success-ink",
+  inactive: "text-ink-muted",
+  removed: "text-ink-muted",
 };
 
 function HistoryTab({
@@ -481,8 +495,8 @@ function HistoryTab({
       <div className="max-h-[32rem] overflow-auto">
         <StackedTable className="w-full text-sm">
           <caption className="sr-only">Alert state changes, newest first</caption>
-          <thead className="sticky top-0 bg-card">
-            <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <thead className="sticky top-0 bg-surface">
+            <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
               <th scope="col" className="px-4 py-2 font-medium">When</th>
               <th scope="col" className="px-4 py-2 font-medium">Change</th>
               <th scope="col" className="px-4 py-2 font-medium">Rule</th>
@@ -494,12 +508,12 @@ function HistoryTab({
           <tbody>
             {events.map((e, i) => (
               <tr key={`${e.fingerprint}-${e.atMs}-${i}`} className="border-b border-border/50 align-top last:border-b-0" data-testid="obs-alert-event" data-transition={e.transition}>
-                <td className="whitespace-nowrap px-4 py-1.5 text-xs tabular-nums text-muted-foreground" title={formatTimestamp(e.atMs)}>
+                <td className="whitespace-nowrap px-4 py-1.5 text-xs tabular-nums text-ink-muted" title={formatTimestamp(e.atMs)}>
                   {formatAgo(e.atMs)}
                 </td>
                 <td className={cn("px-4 py-1.5 text-xs font-medium capitalize", TRANSITION_TONE[e.transition])}>{e.transition}</td>
-                <td className="px-4 py-1.5 font-mono text-xs text-foreground">{e.rule}</td>
-                <td className="px-4 py-1.5 font-mono text-xs text-muted-foreground">{envName(e.envId)}</td>
+                <td className="px-4 py-1.5 font-mono text-xs text-ink">{e.rule}</td>
+                <td className="px-4 py-1.5 font-mono text-xs text-ink-muted">{envName(e.envId)}</td>
                 <td className="px-4 py-1.5">
                   <LabelChips labels={e.labels} />
                 </td>
@@ -539,6 +553,20 @@ function RulesTab({
             Rules live in your code, per environment, and arrive with its next deploy. forge adds best-practice defaults (error rate, a
             service going silent, containers killed for memory) to every environment that has services; add your own beside them.
           </p>
+          <p>Start from the rule below, then see what your rules would fire right now against the local stack that forge env up runs:</p>
+          <CommandLine command="forge obs alerts check" />
+          <p>
+            <a
+              href={DOCS.alerts}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-sm font-medium text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              data-testid="obs-rules-none-docs"
+            >
+              How alerts work
+              <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+            </a>
+          </p>
         </Frame>
         <CodeSnippet snippet={starterRuleKcl(env)} />
       </div>
@@ -548,7 +576,7 @@ function RulesTab({
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
       <div className="space-y-2">
         {off.length > 0 && (
-          <p className="rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-muted-foreground" data-testid="obs-rules-observability-off">
+          <p className="rounded-lg border border-border/60 bg-surface-sunken px-3 py-2 text-xs text-ink-muted" data-testid="obs-rules-observability-off">
             Observability is off for {off.map((e) => e.name).join(", ")}, so nothing is collected there and no rule is evaluated.
           </p>
         )}
@@ -564,15 +592,15 @@ function RulesTab({
                     aria-current={key === selected ? "true" : undefined}
                     data-testid={`obs-rule-${key}`}
                     className={cn(
-                      "flex w-full flex-wrap items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                      key === selected && "bg-muted/60"
+                      "flex w-full flex-wrap items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                      key === selected && "bg-surface-sunken"
                     )}
                   >
-                    <span className="font-mono text-sm text-foreground">{rule.alert}</span>
+                    <span className="font-mono text-sm text-ink">{rule.alert}</span>
                     <SeverityChip severity={rule.labels.severity ?? "warning"} />
                     <SourceChip rule={rule} />
-                    <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-                      {active.length > 0 && <span className="font-medium text-destructive">{active.length} firing</span>}
+                    <span className="ml-auto flex items-center gap-2 text-xs text-ink-muted">
+                      {active.length > 0 && <span className="font-medium text-danger-ink">{active.length} firing</span>}
                       <span className="font-mono">{env.name}</span>
                     </span>
                   </button>
@@ -585,7 +613,7 @@ function RulesTab({
       {open ? (
         <RuleDetail entry={open} />
       ) : (
-        <p className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground" data-testid="obs-rule-pick">
+        <p className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted" data-testid="obs-rule-pick">
           Choose a rule to see its query and the code that declares it.
         </p>
       )}
@@ -595,16 +623,24 @@ function RulesTab({
 
 function RuleDetail({ entry }: { entry: EnvRule }) {
   const { rule, env } = entry;
+  const exploreHref = useExploreHref();
+  const explore = exploreHref?.(alertPivot(rule.expr), { env: env.name, range: "1h" }) ?? null;
   return (
     <Card padding="md" data-testid="obs-rule-detail">
       <div className="space-y-4">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-mono text-sm font-semibold text-foreground">{rule.alert}</h3>
+            <h3 className="font-mono text-sm font-semibold text-ink">{rule.alert}</h3>
             <SeverityChip severity={rule.labels.severity ?? "warning"} />
             <SourceChip rule={rule} />
+            {explore && (
+              <ExploreLink href={explore} testId="obs-rule-explore" className="ml-auto">
+                <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
+                Explore
+              </ExploreLink>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-ink-muted">
             Declared for <span className="font-mono">{env.name}</span>
             {rule.source === "default" ? ` by forge's default "${rule.defaultId}"` : " by your project"} · holds {rule.for || "5m"} before firing ·
             evaluated every {rule.interval || "1m"}
@@ -612,11 +648,11 @@ function RuleDetail({ entry }: { entry: EnvRule }) {
           </p>
         </div>
         <div>
-          <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Query</h4>
-          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-background p-2 font-mono text-2xs text-foreground">
+          <h4 className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-muted">Query</h4>
+          <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/60 bg-surface-sunken p-2 font-mono text-2xs text-ink">
             {rule.expr}
           </pre>
-          <p className="mt-1 text-2xs text-muted-foreground">Every row it returns is a firing instance; its non-value columns are the labels.</p>
+          <p className="mt-1 text-2xs text-ink-muted">Every row it returns is a firing instance; its non-value columns are the labels.</p>
         </div>
         {Object.keys(rule.annotations).length > 0 && (
           <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">
@@ -628,11 +664,11 @@ function RuleDetail({ entry }: { entry: EnvRule }) {
           </dl>
         )}
         <div className="space-y-3 border-t border-border/60 pt-3" data-testid="obs-rule-as-code">
-          <h4 className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+          <h4 className="flex items-center gap-1.5 text-sm font-medium text-ink">
             <Code2 className="h-4 w-4" aria-hidden="true" />
             Edit as code
           </h4>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-ink-muted">
             Rules are declared in your repository and take effect with the environment&apos;s next deploy. There is nothing to change here.
           </p>
           {ruleAsCode(rule, env.name).map((snippet) => (
@@ -649,8 +685,8 @@ function CodeSnippet({ snippet }: { snippet: RuleAsCode }) {
   return (
     <div className="space-y-1" data-testid="obs-code-snippet">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-foreground">
-          {snippet.title} — in <code className="font-mono text-muted-foreground">{snippet.path}</code>
+        <p className="text-xs text-ink">
+          {snippet.title} — in <code className="font-mono text-ink-muted">{snippet.path}</code>
         </p>
         <Button
           variant="ghost"
@@ -666,7 +702,7 @@ function CodeSnippet({ snippet }: { snippet: RuleAsCode }) {
           {copied ? "Copied" : "Copy"}
         </Button>
       </div>
-      <pre className="max-h-72 overflow-auto rounded-md border border-border/60 bg-background p-3 font-mono text-2xs leading-relaxed text-foreground" tabIndex={0}>
+      <pre className="max-h-72 overflow-auto rounded-md border border-border/60 bg-surface-sunken p-3 font-mono text-2xs leading-relaxed text-ink" tabIndex={0}>
         {snippet.kcl}
       </pre>
     </div>

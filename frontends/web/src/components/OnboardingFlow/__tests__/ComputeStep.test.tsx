@@ -24,7 +24,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ConnectError, Code } from "@connectrpc/connect";
+import { ConnectError } from "@connectrpc/connect";
 import type { ReactNode } from "react";
 
 import {
@@ -118,19 +118,12 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
   // omits is `undefined` at runtime. Leaving it out made the resume-denial
   // path throw "isEntitlementDenial is not a function" as an unhandled error.
   //
-  // Real behavior (keyed on the x-reliant-reason header the server sets on
+  // Real behavior (keyed on the x-forge-error-reason header the server sets on
   // every deliberate denial) rather than a constant, so the resume-denial
   // test exercises the same branch production does.
   isEntitlementDenial: (err: unknown) =>
-    err instanceof ConnectError && !!err.metadata.get("x-reliant-reason"),
+    err instanceof ConnectError && !!err.metadata.get("x-forge-error-reason"),
 }));
-
-/** Builds the shape the server really returns for an entitlement denial. */
-function deniedError(message: string, code: Code, reason: string): ConnectError {
-  const headers = new Headers();
-  headers.set("x-reliant-reason", reason);
-  return new ConnectError(message, code, headers);
-}
 
 // Redeem-coupon mutation, mocked so the coupon UI can be driven
 // deterministically without a network layer. `mutate` mimics TanStack's
@@ -299,7 +292,7 @@ describe("ComputeStep loading gate", () => {
 
     await act(async () => {
       renderComputeStep({
-        daemons: [makeDaemon({ id: "d-1", status: DaemonStatus.ACTIVE })],
+        daemons: [makeDaemon({ daemonId: "d-1", status: DaemonStatus.ACTIVE })],
         loading: false,
         onNext,
         updatePlan,

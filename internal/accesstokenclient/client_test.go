@@ -133,24 +133,24 @@ func TestIntrospect_TransportErrorIsNotInactive(t *testing.T) {
 
 func TestMintForUser_SendsTheGrantAndDecodes(t *testing.T) {
 	srv := fakeCP(t, func(method string, body map[string]any) (int, string) {
-		if method != "MintForUser" || body["userId"] != "u-1" || body["name"] != "laptop" || body["rotate"] != true {
+		if method != "MintForUser" || body["userId"] != "u-1" || body["name"] != "laptop" || body["rotate"] != true || body["orgId"] != "org-b" {
 			t.Fatalf("got %s %v", method, body)
 		}
 		res, _ := body["resource"].(map[string]any)
 		if res["kind"] != "daemon" || res["id"] != "d-1" {
 			t.Fatalf("resource %v", body["resource"])
 		}
-		return 200, `{"tokenId":"tok-9","secret":"` + liveToken + `","displayPrefix":"rlat_A1b2A1b2","rotated":true}`
+		return 200, `{"tokenId":"tok-9","secret":"` + liveToken + `","displayPrefix":"rlat_A1b2A1b2","rotated":true,"scopes":["daemon:connect"]}`
 	})
 	defer srv.Close()
 	m, err := New(Deps{BaseURL: srv.URL, Sign: sign}).MintForUser(context.Background(), MintRequest{
-		UserID: "u-1", Name: "laptop", Scopes: []fat.Scope{fat.ScopeDaemonConnect},
-		Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "d-1"}, Rotate: true,
+		UserID: "u-1", Name: "laptop", Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeDeployWrite},
+		Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "d-1"}, Rotate: true, OrgID: "org-b",
 	})
 	if err != nil {
 		t.Fatalf("MintForUser: %v", err)
 	}
-	if m.TokenID != "tok-9" || m.Plaintext != liveToken || !m.Rotated {
+	if m.TokenID != "tok-9" || m.Plaintext != liveToken || !m.Rotated || strings.Join(m.Scopes, ",") != "daemon:connect" {
 		t.Fatalf("minted %+v", m)
 	}
 }

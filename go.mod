@@ -15,7 +15,7 @@ require (
 	github.com/aymanbagabas/go-pty v0.2.3
 	github.com/aymanbagabas/go-udiff v0.4.1
 	github.com/bmatcuk/doublestar/v4 v4.10.0
-	github.com/getsentry/sentry-go v0.49.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-chi/cors v1.2.2
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0
@@ -29,7 +29,7 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/klauspost/compress v1.20.1
 	github.com/lib/pq v1.12.3
-	github.com/modelcontextprotocol/go-sdk v1.7.0
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/nats-io/nats-server/v2 v2.15.1
 	github.com/nats-io/nats.go v1.54.0
 	github.com/oklog/ulid/v2 v2.1.2
@@ -39,7 +39,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
-	github.com/reliant-labs/forge v0.1.47-0.20261023173404-df09b730b6b6
+	github.com/reliant-labs/forge v0.1.47-0.20261027025742-2372776cf3d4
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -52,6 +52,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.47.0
 	go.temporal.io/api v1.63.5
 	go.temporal.io/sdk v1.50.0
+	golang.org/x/mod v0.42.0
 	golang.org/x/net v0.61.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.24.0
@@ -87,7 +88,7 @@ require (
 	cloud.google.com/go/iam v1.13.0 // indirect
 	cloud.google.com/go/monitoring v1.30.0 // indirect
 	cloud.google.com/go/storage v1.66.0 // indirect
-	connectrpc.com/connect/v2 v2.0.0 // indirect
+	connectrpc.com/connect/v2 v2.0.1 // indirect
 	connectrpc.com/vanguard v0.5.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
@@ -167,7 +168,6 @@ require (
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fergusstrange/embedded-postgres v1.34.0 // indirect
-	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.3 // indirect
 	github.com/go-chi/chi/v5 v5.2.2 // indirect
 	github.com/go-delve/delve v1.27.2 // indirect
@@ -261,7 +261,7 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
-	github.com/prometheus/common v0.72.0 // indirect
+	github.com/prometheus/common v0.72.1 // indirect
 	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
@@ -278,7 +278,7 @@ require (
 	github.com/spiffe/go-spiffe/v2 v2.8.1 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
-	github.com/tdewolff/parse/v2 v2.8.18 // indirect
+	github.com/tdewolff/parse/v2 v2.8.19 // indirect
 	github.com/tetratelabs/wazero v1.9.0 // indirect
 	github.com/thoas/go-funk v0.9.3 // indirect
 	github.com/tidwall/gjson v1.19.0 // indirect
@@ -334,7 +334,6 @@ require (
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba // indirect
 	golang.org/x/image v0.45.0 // indirect
-	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/telemetry v0.0.0-20261009151841-97e8ea77aa2a // indirect
 	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/tools v0.52.0 // indirect

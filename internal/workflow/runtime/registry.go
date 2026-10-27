@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"reflect"
 	"sort"
 	"strings"
@@ -21,12 +22,12 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow/lifecycle"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -105,6 +106,10 @@ func classifyError(err error) error {
 		return nil
 	}
 
+	var app *temporal.ApplicationError
+	if errors.As(err, &app) && app.Type() == "ProviderSwitchHold" {
+		return err
+	}
 	// Check if already classified as TerminalError
 	var terminalErr *TerminalError
 	if errors.As(err, &terminalErr) {
@@ -787,28 +792,19 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	defer func() {
 		// Recover from panics
 		if r := recover(); r != nil {
-			logging.ErrorContext(ctx, "[ActivityWrapper] Activity panicked",
-				"activityType", activityType,
-				"activityID", activityID,
-				"panic", r)
+			// An ERROR record located at the panicking frame, with its stack
+			// and type: the issues worker groups it by where it panicked.
+			observe.LogPanic(ctx, slog.Default(), "[ActivityWrapper] Activity panicked", r,
+				slog.String("activityType", activityType),
+				slog.String("activityID", activityID),
+				slog.String("workflowID", workflowID),
+				slog.String("chatID", chatID),
+				slog.String("stepID", stepID),
+				slog.Int("attemptNumber", attemptNumber))
 
 			// Best-effort: Write error event to chat_updates on panic
 			panicErr := fmt.Errorf("panic: %v", r)
 			w.writeErrorEvent(ctx, input, activityType, activityID, attemptNumber, workflowID, panicErr, maxAttempts)
-
-			// Report panic to telemetry with context (non-blocking)
-			go func() {
-				telemetry.CaptureExceptionWithContext(panicErr, map[string]string{
-					"activity_type": activityType,
-					"activity_id":   activityID,
-					"workflow_id":   workflowID,
-					"chat_id":       chatID,
-					"step_id":       stepID,
-					"error_type":    "panic",
-				}, map[string]interface{}{
-					"attempt_number": attemptNumber,
-				})
-			}()
 
 			// Emit node execution "failed" event
 			endTime := time.Now()
@@ -940,17 +936,20 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 				"attemptNumber", attemptNumber,
 				"durationMs", durationMs)
 		case isTerminal(execErr):
-			// Terminal errors stay at Error level (Sentry).
+			// Terminal errors stay at Error level: each is an issue.
 			logging.ErrorContext(ctx, "[ActivityWrapper] Activity execution failed",
 				"activityType", activityType,
 				"activityID", activityID,
+				"workflowID", workflowID,
+				"chatID", chatID,
+				"stepID", stepID,
 				"error", execErr,
+				"errorCategory", categorizeError(execErr),
 				"attemptNumber", attemptNumber,
 				"durationMs", durationMs)
 		default:
 			// Warn for non-terminal errors (e.g. YAML validation failures,
-			// missing API keys) so they don't trigger Sentry via the sentry
-			// log handler.
+			// missing API keys) so they don't become issues.
 			logging.WarnContext(ctx, "[ActivityWrapper] Activity execution failed",
 				"activityType", activityType,
 				"activityID", activityID,
@@ -961,26 +960,6 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 
 		// Best-effort: Write error event to chat_updates
 		w.writeErrorEvent(ctx, input, activityType, activityID, attemptNumber, workflowID, execErr, maxAttempts)
-
-		// Report error to telemetry with context (non-blocking)
-		// Only report terminal errors to avoid noise from transient failures,
-		// and never a cancellation.
-		if isTerminal(execErr) && !ctxEnded {
-			go func() {
-				telemetry.CaptureExceptionWithContext(execErr, map[string]string{
-					"activity_type":  activityType,
-					"activity_id":    activityID,
-					"workflow_id":    workflowID,
-					"chat_id":        chatID,
-					"step_id":        stepID,
-					"error_type":     "terminal",
-					"error_category": categorizeError(execErr),
-				}, map[string]interface{}{
-					"attempt_number": attemptNumber,
-					"duration_ms":    durationMs,
-				})
-			}()
-		}
 
 		// Best-effort: Write step execution record for history tracking
 		recordAttempt(nil, execErr)
@@ -1253,6 +1232,13 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 	}
 
 	errorID := activityErrorEventID(workflowID, activityID)
+	if isProviderSwitchHold(err) {
+		// The workflow's visible hold card and every held retry are the
+		// same event, not one wrapper card plus another workflow card.
+		if thread := extractThread(input); thread != "" {
+			errorID = "provider-switch-hold/" + chatID + "/" + thread
+		}
+	}
 
 	// Build error data matching the ErrorUpdate interface expected by frontend
 	// See frontends/web/src/types/streaming.ts ErrorUpdate interface

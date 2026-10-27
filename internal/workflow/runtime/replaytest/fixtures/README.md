@@ -46,6 +46,8 @@ fixtures make that class of change fail at **test time** instead.
 | `ask_user_async_by_default.json` | `builtin://agent` (`tools: [ask_user]`) | ask_user's default: a call with no flag records `ask-user-async/<tool call>` at `askUserAsyncByDefault`, posts an async question (`QuestionCreate`) and returns with no timer or signal wait; the next `CallLLM` carries on and the run completes with the question still pending. |
 | `capacity_wake_resumes_stopped_agent.json` | `builtin://agent` | A chat-wide capacity wake (`capacity-wake-resumes-chat` marker at run start): the spawned agent's first `CallLLM` is refused for spent credit and fails at once, the agent stops and reports to its parent, and while the parent reads the failure "Retry now" goes through the production `RetryUsageLimitWait` handler. The wake (`signal.usage_limit.retry`) resumes the stopped agent (its row back to "started") with no message to it; its next `CallLLM` is served, it reports a completion under a fresh slot, and the parent finishes. |
 
+| `provider_switch_waiting_spawn.json` | `builtin://agent` | A root model picker update while a general spawn waits on a usage limit. `chat-provider-switch-preserve-tags/update/<n>` binds descendant routing to the chosen provider without creating the old concrete-root-model fallback lease. Durable stopped-descendant lookup and the wait retry are versioned. |
+
 ## Frozen sets
 
 `frozen/<set>/*.json` are histories that runs ALREADY IN FLIGHT were recorded
@@ -55,7 +57,7 @@ bytes (each set's `SHA256SUMS`). Each set has a README naming the shape it
 pins and the `workflow.GetVersion` gate that keeps it replaying.
 
 They exist because the current set cannot catch a break on its own: it is
-rewritten by `make replay-fixtures`, so it only proves the code replays
+rewritten by `task replay-fixtures`, so it only proves the code replays
 histories the same code just recorded. #641 reordered the run's startup
 (preflight after "started"), regenerated every fixture, passed this suite, and
 on the 2026-10-09 deploy wedged every run in flight with the old order —
@@ -119,11 +121,11 @@ with the old code, freeze it, and replay it against the new.
    in-flight runs have:
 
    ```
-   make freeze-replay-fixtures NAME=<yyyy-mm-dd>-<what-changed>
+   task replay-fixtures:freeze NAME=<yyyy-mm-dd>-<what-changed>
    ```
 
    and add a README to the new set (shape, gate, incident if any).
-3. Regenerate the current set: `make replay-fixtures`. The new fixtures carry
+3. Regenerate the current set: `task replay-fixtures`. The new fixtures carry
    your marker; the frozen set still replays without it.
 
 ### Marker-less histories of two different shapes
@@ -144,7 +146,7 @@ interruption, which is why the gate comes first.
 
 ## Regenerating
 
-`make replay-fixtures` — runs the build-tagged generator
+`task replay-fixtures` — runs the build-tagged generator
 (`go test -tags replayfixtures ./internal/workflow/runtime/replaytest/`, which
 boots an ephemeral Temporal dev server per run and drives every scenario with
 the scripted LLM — no model is ever called), rewrites every `fixtures/*.json`,

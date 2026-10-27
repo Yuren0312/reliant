@@ -9,46 +9,23 @@
  *  - An adopted automation row carries an origin glyph naming its automation.
  *  - "Move back to Runs" un-adopts, and the row leaves — even while open.
  */
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { act, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "./Sidebar";
 import { ChatState } from "../../gen/reliant/v1/chat_pb";
-import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { useChatStore } from "../../store/chatStore";
 import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
-import type { ContextMenuItem } from "../ui/ContextMenu";
 
-vi.mock("../ui/Tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
-
-vi.mock("../ui/Button", () => ({
-  Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
-  ),
-}));
-
-// The menu renders its items as plain buttons so a test can pick one.
-vi.mock("../ui/ContextMenu", () => ({
-  ContextMenu: ({ items }: { items: ContextMenuItem[] }) => (
-    <div data-testid="context-menu">
-      {items
-        .filter((item) => !item.separator)
-        .map((item) => (
-          <button key={item.label} type="button" onClick={item.onClick}>
-            {item.label}
-          </button>
-        ))}
-    </div>
-  ),
+vi.mock("../forge-ui/tooltip", () => ({
+  default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("../../hooks/useDebounce", () => ({
@@ -69,14 +46,17 @@ vi.mock("../../hooks/chat-queries", () => ({
     data: {
       chats: fixtures.listed,
       lastUserUpdateSequence: 0,
-      mainWorktree: {
-        id: "worktree-main",
-        name: "main",
-        branch: "main",
-        path: "/tmp/project",
-        isMain: true,
-        status: 1,
-      },
+      mainWorktrees: [
+        {
+          id: "worktree-main",
+          name: "main",
+          branch: "main",
+          path: "/tmp/project",
+          isMain: true,
+          status: 1,
+          projectId: "project-1",
+        },
+      ],
     },
     isLoading: false,
   }),
@@ -91,7 +71,7 @@ vi.mock("../../hooks/run-queries", () => ({
   useAdoptRun: () => ({ mutate: fixtures.adopt }),
   useUnadoptRun: () => ({ mutate: fixtures.unadopt }),
   useLiveRuns: () => ({ data: undefined }),
-  summarizeLiveAutomations: () => ({ running: 0, needsYou: 0, truncated: false }),
+  summarizeLiveAutomations: () => ({ running: 0, truncated: false }),
 }));
 
 vi.mock("../../hooks/trigger-queries", () => ({
@@ -124,7 +104,7 @@ function chat(overrides: Partial<ChatFixture> & { id: string }): ChatFixture {
     updatedAt: "2024-01-01T00:00:00.000Z",
     lastMessageAt: "2024-01-01T00:00:00.000Z",
     unread: false,
-    state: ChatState.ACTIVE,
+    state: ChatState.IDLE,
     worktreeId: WORKTREE_ID,
     projectId: PROJECT_ID,
     ...overrides,
@@ -176,18 +156,17 @@ beforeEach(() => {
   useActivityStore.setState({ activities: new Map() } as Partial<ReturnType<typeof useActivityStore.getState>>);
   // Empty on purpose: the sidebar groups from the chat list alone.
   useWorktreeStore.setState({
-    worktrees: [],
-    currentWorktree: null,
+    currentWorktreeId: null,
+    currentWorktreeProjectId: null,
     switchWorktreeContext: vi.fn(async () => undefined),
   } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
-  useProcessStore.setState({ fetchProcesses: vi.fn() } as Partial<ReturnType<typeof useProcessStore.getState>>);
   useProjectStore.setState({
     currentProject: {
       id: PROJECT_ID,
       name: "Project",
       path: "/tmp/project",
       is_git_repo: true,
-      worktree_count: 1,
+      is_forge: false,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
       last_active: "2024-01-01T00:00:00.000Z",
@@ -243,12 +222,23 @@ describe("the open chat stays in the sidebar (L2)", () => {
     expect(rowFor(scheduledRun.id)).toBeNull();
   });
 
-  it("does not pin a chat from another project", () => {
+  it("does not pin a chat from another project into a one-project list", () => {
+    useWorkspaceStateStore.setState({ projectFilterId: "project-1" });
     fixtures.detail = { ...scheduledRun, projectId: "project-other" };
     openChat(scheduledRun.id);
     renderSidebar();
 
     expect(rowFor(scheduledRun.id)).toBeNull();
+    useWorkspaceStateStore.setState({ projectFilterId: null });
+  });
+
+  it("pins a chat from any project into the All projects list", () => {
+    useWorkspaceStateStore.setState({ projectFilterId: null });
+    fixtures.detail = { ...scheduledRun, projectId: "project-other" };
+    openChat(scheduledRun.id);
+    renderSidebar();
+
+    expect(rowFor(scheduledRun.id)).not.toBeNull();
   });
 });
 
@@ -277,7 +267,7 @@ describe("Move back to Runs", () => {
     act(() => {
       row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
     });
-    return screen.getByTestId("context-menu");
+    return screen.getByRole("menu", { name: "Chat actions" });
   }
 
   it("is offered on an adopted run and not on an interactive chat", () => {
@@ -296,7 +286,7 @@ describe("Move back to Runs", () => {
 
     const moveBack = within(openMenuFor(adoptedRun.id)).getByText("Move back to Runs");
     act(() => moveBack.click());
-    expect(fixtures.unadopt).toHaveBeenCalledWith(adoptedRun.id, expect.anything());
+    expect(fixtures.unadopt).toHaveBeenCalledWith({ chatId: adoptedRun.id }, expect.anything());
 
     // The server no longer lists it, and it is still the open chat: without
     // the release it would stay pinned and the action would look broken.

@@ -3,7 +3,7 @@
 /**
  * The Releases list against the fixture ledger (releaseFixtures.ts): the
  * pipeline, the env columns, the DORA strip, the filters, the row menu's
- * env-naming actions (D1), and the empty / loading / error / degraded states.
+ * env-naming actions, and the empty / loading / error / degraded states.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -54,7 +54,7 @@ describe("the list", () => {
     expect(within(row(V[1]!)).getByText("ran before in prod")).toBeInTheDocument();
   });
 
-  it("carries the commit subject and author (D4), and tags scoped and rolled-back releases (D5)", async () => {
+  it("carries the commit subject and author, and tags scoped and rolled-back releases", async () => {
     renderList(createReleasesFixtureApi());
     await ready();
     expect(row(V[0]!)).toHaveTextContent(RELEASES[0]!.subject);
@@ -126,7 +126,7 @@ describe("the list", () => {
   });
 });
 
-describe("row actions name their environment (D1)", () => {
+describe("row actions name their environment", () => {
   it("promotes through the target dialog, defaulting to the scoped env", async () => {
     const user = userEvent.setup();
     const harness = renderList(createReleasesFixtureApi());
@@ -216,7 +216,20 @@ describe("states", () => {
     renderList(createReleasesFixtureApi({ state: "empty" }));
     await waitFor(() => expect(screen.getByTestId("releases")).toHaveAttribute("data-state", "empty"));
     expect(screen.getByText("No releases yet")).toBeInTheDocument();
-    expect(screen.getByText(/forge env deploy/)).toBeInTheDocument();
+    const state = screen.getByTestId("releases-getting-started");
+    expect(within(state).getByTestId("releases-getting-started-about")).toHaveTextContent("every build of");
+    expect(within(state).getByText("forge env deploy prod")).toBeInTheDocument();
+    expect(within(state).getByText("forge env deploy prod --from staging")).toBeInTheDocument();
+    // A local environment's missing releases are by design, and the page says so.
+    expect(state).toHaveTextContent("A local environment (forge env up) runs your working tree and never has releases");
+    expect(within(state).getByTestId("releases-getting-started-docs")).toHaveAttribute("href", "https://docs.reliantlabs.io/forge/environments-and-deploys");
+  });
+
+  it("says a local environment has no releases by design, not that none has run yet", async () => {
+    // A local environment is never one of the release envs (ReleasesPages drops it).
+    renderList(createReleasesFixtureApi(), { env: "laptop", scopeIsLocal: true });
+    expect(await screen.findByTestId("releases-local-env")).toHaveTextContent("laptop runs locally from your working tree (forge env up), so it never has releases");
+    expect(screen.queryByText(/No release has run in laptop yet/)).not.toBeInTheDocument();
   });
 
   it("explains a failed read and retries", async () => {
@@ -231,7 +244,13 @@ describe("states", () => {
   it("falls back to the live view when promotion history is unreadable, and says so", async () => {
     renderList(createReleasesFixtureApi({ promotionsFail: true }));
     await ready();
-    expect(await screen.findByTestId("releases-ledger-failed", undefined, { timeout: 5000 })).toHaveTextContent("prod, e2e, dev");
+    // Each env's promotion read fails on its own (after forgeRetry's retry),
+    // so the note appears with the first and names the rest as they fail:
+    // wait for the whole list, not just the note.
+    await waitFor(
+      () => expect(screen.getByTestId("releases-ledger-failed")).toHaveTextContent("prod, e2e, dev"),
+      { timeout: 5000 },
+    );
     expect(within(row(V[0]!)).getByText("live in prod")).toBeInTheDocument();
   });
 });

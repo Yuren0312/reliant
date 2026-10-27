@@ -13,7 +13,7 @@
  *    project here declares is still a scope: the pages read the control plane
  *    by it, with no daemon.
  *
- * 2. THE ENVIRONMENT SCOPE (envScope.ts, decision D1): resolved from `?env=`,
+ * 2. THE ENVIRONMENT SCOPE (envScope.ts): resolved from `?env=`,
  *    the project's remembered scope, then prod; reflected back into the URL
  *    on every list page (replace, so it costs no history entry), remembered
  *    when the reader picks one.
@@ -37,13 +37,16 @@ import { getParentRouteNavigateOptions } from "@/lib/routeParent";
 import { isQueued, queuedOnLabel } from "@/services/forge/live";
 import { useAuthStore } from "@/store/authStore";
 import { useProjectStore, type Project } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 
 import { ForgeCloseButton } from "../ForgeHeader";
+import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitcher";
+import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { ConsoleShell, type ConsoleNavEnv } from "./ConsoleShell";
 import { ForgeConsoleContext, type ForgeConsole } from "./consoleContext";
 import { ENV_ALL, rememberedEnv, rememberEnv, resolveEnvScope, scopeOptions } from "./envScope";
-import { consolePageOf, consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
+import { APPS_PATH, consolePageOf, consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
 
 const RAIL_KEY = "forge.console.rail";
 
@@ -61,10 +64,8 @@ export function projectDeclaring(
   return projects.find(declares) ?? null;
 }
 
-/** Where switching to `project` lands: the same page there, when it has a forge name to address it by. */
-export function switchTarget(project: Project, page: ConsolePage): string {
-  const name = (project.forge_project_name ?? "").trim();
-  if (!name) return withSearch("/forge", { project: project.id });
+/** Where switching to the forge app `app` lands: the same page there. */
+export function switchTarget(app: string, page: ConsolePage): string {
   // An environment's page is about an environment the other project may not
   // have, and a release's, a workload's (or a dashboard's) about one it cannot
   // have: land on the list.
@@ -78,7 +79,7 @@ export function switchTarget(project: Project, page: ConsolePage): string {
           : page.kind === "dashboard"
             ? { kind: "obs-view", view: "dashboards" }
             : page;
-  return consolePath(name, same);
+  return consolePath(app, same);
 }
 
 export function ConsoleLayout() {
@@ -90,21 +91,12 @@ export function ConsoleLayout() {
   const pinnedEnv = pinnedEnvOf(page);
 
   // ── 1. The Reliant project. ──
-  const projects = useProjectStore((state) => state.projects);
+  // `listed` once the project list has answered (or failed): until then a
+  // forge name matches nothing only because nothing is loaded yet.
+  const { projects, isLoading: listing } = useProjects();
+  const listed = projects.length > 0 || !listing;
   const currentProject = useProjectStore((state) => state.currentProject);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
   const selectProject = useProjectStore((state) => state.selectProject);
-  const [listed, setListed] = useState(projects.length > 0);
-  useEffect(() => {
-    if (listed) return;
-    let live = true;
-    void loadProjects().finally(() => {
-      if (live) setListed(true);
-    });
-    return () => {
-      live = false;
-    };
-  }, [listed, loadProjects]);
 
   const match = listed ? projectDeclaring(forgeProject, projects, currentProject) : null;
   useEffect(() => {
@@ -219,6 +211,7 @@ export function ConsoleLayout() {
   return (
     <ConsoleShell
       project={forgeProject}
+      orgSwitcher={<OrgSwitcher />}
       page={page}
       env={env}
       envs={navEnvs}
@@ -235,7 +228,8 @@ export function ConsoleLayout() {
           <ForgeCloseButton onClose={onClose} />
           <ConsoleProjectSwitcher
             forgeProject={forgeProject}
-            onSelect={(project) => void navigate({ href: switchTarget(project, page) })}
+            onSelect={(app) => void navigate({ href: switchTarget(app, page) })}
+            onSelectAll={() => void navigate({ href: APPS_PATH })}
           />
         </div>
       }
@@ -243,6 +237,9 @@ export function ConsoleLayout() {
     >
       {listed ? (
         <ForgeConsoleContext.Provider value={value}>
+          <div className="empty:hidden [&:not(:empty)]:mb-4">
+            <ObsQuotaBanner />
+          </div>
           <Outlet />
         </ForgeConsoleContext.Provider>
       ) : (

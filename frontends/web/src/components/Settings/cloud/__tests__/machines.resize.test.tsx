@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 /**
@@ -34,6 +34,9 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }))
 
+// The Add machine sheet (billing checkout, catalog) is not under test here.
+vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
+vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
 vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { includedSmallDaemonSeconds: 576000n, remainingSmallDaemonSeconds: 3600n } }), usePlans: () => ({ data: { daemonPricing: { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 120 }, { size: 'large', multiplier: 4, hourlyPriceCents: '52', storageGib: 180 }], storageCentsPerGibMonth: '25', placeholder: false } } }) }));
 
 vi.mock('@/services/controlPlane/billing', () => ({
@@ -85,14 +88,14 @@ vi.mock('@/services/controlPlane/environments', () => ({
   removePortAccess: vi.fn(),
 }))
 
-vi.mock('@/api/grpc-client', () => ({
-  grpcClient: {
-    daemonRegistry: () => ({ listDaemons: async () => mocks.listDaemons() }),
-  },
-}))
-
 import { MachinesSection } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
+import { setTransport } from '@/lib/connect'
+import { daemonRegistryTransport } from '@/test/daemonRegistry'
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+afterEach(() => setTransport(null))
 
 const LARGE = 3
 const XL = 4

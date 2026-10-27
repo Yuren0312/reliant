@@ -9,7 +9,8 @@ import React, {
 } from "react";
 import { ChatState } from "../../gen/reliant/v1/chat_pb";
 import type { WorktreeSummary } from "../../gen/reliant/v1/worktree_pb";
-import { isWorkspaceClosed, workspaceOfChat } from "../../lib/chatWorkspace";
+import { workspaceOfChat } from "../../lib/chatWorkspace";
+import { activeWorkspaceChats, groupByProject, groupByWorkspace, type WorkspaceGroup } from "../../lib/sidebarGroups";
 import {
   Plus,
   Trash2,
@@ -31,9 +32,7 @@ import {
   SortDesc,
   Bell,
   GitBranch,
-  Check,
   MessageSquare,
-  FolderOpen,
   Search,
   Settings,
   Workflow,
@@ -50,26 +49,34 @@ import { useSidebarPinStore } from "../../store/sidebarPinStore";
 import { LaunchKindIcon } from "../runs/LaunchKindIcon";
 import { AutomationActivityPill } from "./AutomationActivityPill";
 import { InboxNavItem } from "../inbox/InboxNavItem";
+import { SidebarApps } from "../Apps/SidebarApps";
+import { OrgSwitcher } from "../Orgs/OrgSwitcher";
 import type { RunsSearch } from "../../routeSchemas";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
-import { activityNeedsAttention, useChatNavigationStore } from "../../store/chatNavigationStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
-import { useProcessStore } from "../../store/processStore";
+import { activityNeedsAttention } from "../../store/chatNavigationStore";
 import { useProjectStore } from "../../store/projectStore";
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { openChat, openNewChat } from "../../store/openChat";
+import { openAddProject } from "../../store/addProjectDialogStore";
+import { useProjects } from "../../hooks/project-queries";
+import { ProjectFilterMenu } from "./ProjectFilterMenu";
+import { useShortcutLabel } from "../../store/shortcutsStore";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
-import { Tooltip } from "../ui/Tooltip";
-import { Button } from "../ui/Button";
-import { ContextMenu } from "../ui/ContextMenu";
-import type { ContextMenuItem } from "../ui/ContextMenu";
+import Tooltip from "../forge-ui/tooltip";
+import Button from "@/components/forge-ui/button";
+import ContextMenu from "../forge-ui/context_menu";
+import type { MenuGroup } from "../forge-ui/dropdown_menu";
+import { contextMenuOpening, type ContextMenuOpening } from "../../lib/contextMenuOpening";
+import { focusChatInput, isInputFocused } from "../../hooks/useFocusManager";
 import type { Chat } from "../../api/client";
 import {
   useChatListPreferencesStore,
   type ChatSortOption,
 } from "../../store/chatListPreferencesStore";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
-import { Dropdown } from "../ui/Dropdown";
+import DropdownMenu from "../forge-ui/dropdown_menu";
 import { RunStatusDot } from "../runs/RunStatusIndicator";
 import { chatListIndicators, launchKindDisplay } from "../../lib/runStatus";
 import {
@@ -78,6 +85,8 @@ import {
   ChatActivity,
   type DotState as ChatActivityState,
 } from "../../store/activityStore";
+
+import { archiveWorktree } from "../../hooks/worktree-actions";
 
 const CHAT_HEADER_ACTION_BUTTON_CLASS =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40";
@@ -124,16 +133,15 @@ const SORT_OPTIONS: {
 
 interface SidebarProps {
   paddingClass?: string;
-  onNavigateToProjectPicker?: () => void;
-  /** Open the Workflows area (Library · Runs · Automations). */
+  /** Open the Workflows area (Workflows · Runs). */
   onOpenWorkflows?: () => void;
   /** Open the Runs tab with filters; the footer pill passes "live". */
   onOpenRuns?: (search?: RunsSearch) => void;
   onOpenChatSearch?: () => void;
   onNavigateToSettings?: () => void;
+  /** Settings → Projects, where projects are renamed and removed. */
+  onManageProjects?: () => void;
   onOpenForge?: () => void;
-  /** The project's Observability area (/forge/observability). */
-  onOpenObservability?: () => void;
   onOpenInbox?: () => void;
 }
 
@@ -150,7 +158,7 @@ function AutomationOriginGlyph({ chat }: { chat: Chat }) {
     ? launch.startedByLine
     : `${launch.startedByLine}. Shown while open; reply to keep it in your chats.`;
   return (
-    <Tooltip content={label} placement="top" delay={300}>
+    <Tooltip content={label} side="top" delay={300}>
       <span
         role="img"
         aria-label={label}
@@ -170,9 +178,11 @@ interface SidebarNavButtonProps {
   onClick?: () => void;
   testId?: string;
   onboardingId?: string;
+  /** The action's shortcut, formatted (useShortcutLabel); shown at the end. */
+  shortcut?: string;
 }
 
-function SidebarNavButton({ icon, label, onClick, testId, onboardingId }: SidebarNavButtonProps) {
+function SidebarNavButton({ icon, label, onClick, testId, onboardingId, shortcut }: SidebarNavButtonProps) {
   return (
     <button
       type="button"
@@ -186,24 +196,24 @@ function SidebarNavButton({ icon, label, onClick, testId, onboardingId }: Sideba
       )}
       data-testid={testId}
       data-onboarding={onboardingId}
+      // The label alone names the button; the key cap is a visual hint.
+      aria-label={label}
     >
       <span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
         {icon}
       </span>
       <span className="min-w-0 truncate">{label}</span>
+      {shortcut && (
+        <kbd aria-hidden="true" className="ml-auto shrink-0 font-mono text-xs text-muted-foreground">
+          {shortcut}
+        </kbd>
+      )}
     </button>
   );
 }
 
-// Worktree group structure
-interface ChatGroup {
-  worktreeId: string;
-  worktreeName: string;
-  worktreeBranch: string;
-  chats: ChatWithActivity[];
-  hasActivity: boolean;
-  isMain: boolean;
-}
+// Workspace group structure (lib/sidebarGroups)
+type ChatGroup = WorkspaceGroup<ChatWithActivity>;
 
 // Archived worktree group structure
 interface ArchivedChatGroup {
@@ -308,7 +318,7 @@ const ChatItem = memo(function ChatItem({
       onContextMenu={(e) => onContextMenu(e, chat)}
     >
       {unread && (
-        <Tooltip content="Unread messages" placement="top" delay={300}>
+        <Tooltip content="Unread messages" side="top" delay={300} triggerClassName="block">
           <div
             className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-card"
             data-testid={`chat-unread-dot-${chat.id}`}
@@ -324,7 +334,7 @@ const ChatItem = memo(function ChatItem({
           data-testid={`chat-needs-input-${chat.id}`}
           data-activity-state={chat.activityState}
         >
-          <Tooltip content={needsInput.label} placement="left" delay={300}>
+          <Tooltip content={needsInput.label} side="left" delay={300}>
             <span role="img" aria-label={needsInput.label} className="flex">
               <MessageCircleQuestion className="h-3.5 w-3.5 text-warning-ink" aria-hidden="true" />
               {/* Agents still running beside the question: the running dot,
@@ -347,7 +357,7 @@ const ChatItem = memo(function ChatItem({
           data-testid={`chat-activity-dot-${chat.id}`}
           data-activity-state={chat.activityState}
         >
-          <Tooltip content={runStatus.label} placement="left" delay={300}>
+          <Tooltip content={runStatus.label} side="left" delay={300}>
             <RunStatusDot status={runStatus} size="lg" />
           </Tooltip>
         </div>
@@ -392,8 +402,10 @@ const ChatItem = memo(function ChatItem({
       </div>
 
       <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <Tooltip content="More options" placement="left" delay={300}>
+        <Tooltip content="More options" side="left" delay={300} type="label">
           <button
+            type="button"
+            aria-haspopup="menu"
             onClick={(e) => onContextMenu(e, chat)}
             className="hover:bg-muted/70 rounded p-1 flex items-center justify-center"
           >
@@ -406,7 +418,7 @@ const ChatItem = memo(function ChatItem({
         <span className="text-xs text-muted-foreground group-hover:opacity-0 transition-opacity duration-200">
           {relativeTime}
         </span>
-        <Tooltip content="Archive chat" placement="left" delay={300}>
+        <Tooltip content="Archive chat" side="left" delay={300}>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -437,25 +449,9 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
   const deleteChatMutation = useDeleteChat();
   const unarchiveMutation = useUnarchiveChat();
 
-  const handleViewChat = async () => {
-    const currentProject = useProjectStore.getState().currentProject;
-    const worktreeStore = useWorktreeStore.getState();
-
-    if (currentProject?.id) {
-      if (chat.worktreeId) {
-        const targetWorktree = await worktreeStore.resolveWorktree(chat.worktreeId);
-        if (targetWorktree) {
-          await worktreeStore.switchWorktreeContext(currentProject.id, targetWorktree);
-        }
-      } else {
-        await worktreeStore.switchWorktreeContext(currentProject.id, null);
-      }
-    }
-
-    const { selectChat } = useChatStore.getState();
-    selectChat(chat);
-    const { navigateToChat } = useChatNavigationStore.getState();
-    navigateToChat(chatId);
+  const handleViewChat = () => {
+    // The chat may be in another project: openChat moves the context there.
+    openChat(chat).catch((error) => void toast.error(error));
   };
 
   const handleRestore = () => {
@@ -485,7 +481,7 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
       </div>
 
       <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-        <Tooltip content="Restore chat" placement="left" delay={300}>
+        <Tooltip content="Restore chat" side="left" delay={300}>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -502,7 +498,7 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
         <span className="text-xs text-muted-foreground group-hover:opacity-0 transition-opacity duration-200">
           {relativeTime}
         </span>
-        <Tooltip content="Delete chat" placement="left" delay={300}>
+        <Tooltip content="Delete chat" side="left" delay={300}>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -618,7 +614,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
           {onNewChat && (
             <Tooltip
               content="New chat in this workspace"
-              placement="left"
+              side="left"
               delay={300}
             >
               <button
@@ -637,7 +633,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
           {onArchiveWorktree && (
             <Tooltip
               content="Archive this workspace"
-              placement="left"
+              side="left"
               delay={300}
             >
               <button
@@ -695,28 +691,37 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
 
 function SidebarComponent({
   paddingClass = "",
-  onNavigateToProjectPicker,
   onOpenWorkflows,
   onOpenRuns,
   onOpenInbox,
   onOpenChatSearch,
   onNavigateToSettings,
+  onManageProjects,
   onOpenForge,
-  onOpenObservability,
 }: SidebarProps) {
-  const currentProject = useProjectStore((state) => state.currentProject);
-  const { data: chatList } = useChatListWithWorkspaces(currentProject?.id);
+  // The project filter (null: All projects) decides what the list shows; the
+  // context project (the open chat's) does not, so opening a chat elsewhere
+  // never re-scopes or unmounts the list.
+  const projectFilterId = useWorkspaceStateStore((state) => state.projectFilterId);
+  const setProjectFilter = useProjectStore((state) => state.setProjectFilter);
+  const { projects } = useProjects();
+  const { data: chatList } = useChatListWithWorkspaces(projectFilterId);
+  const newChatShortcut = useShortcutLabel("newChat");
   const listedChats = useMemo(() => chatList?.chats ?? [], [chatList?.chats]);
-  // The list carries each chat's workspace and the project's main one, so the
-  // sidebar groups from this response alone.
-  const mainWorktree = chatList?.mainWorktree;
+  // The list carries each chat's workspace and every listed project's main
+  // one, so the sidebar groups from this response alone.
+  const mainWorktrees = chatList?.mainWorktrees;
+  const scopedProjects = useMemo(
+    () => (projectFilterId ? projects.filter((p) => p.id === projectFilterId) : projects),
+    [projects, projectFilterId],
+  );
   // Get active chat from navigation store
   const activeChatId = useChatStore((state) => state.activeChatId);
   // The open chat stays in the list even when the server left it out (§6.2
   // rule 4, the L2 fix). Read from the detail cache, which selectChat seeds
   // and the update stream keeps current, so a run opened from Runs or the
   // Inbox has a row, and one whose question was just answered keeps it.
-  const { data: openChat } = useChat(activeChatId ?? undefined);
+  const { data: openedChat } = useChat(activeChatId ?? undefined);
   const releasedChatId = useSidebarPinStore((state) => state.releasedChatId);
   const forgetReleasedUnless = useSidebarPinStore((state) => state.forgetUnless);
   useEffect(() => {
@@ -724,11 +729,11 @@ function SidebarComponent({
   }, [activeChatId, forgetReleasedUnless]);
   const chats = useMemo(
     () =>
-      withOpenChatPinned(listedChats, openChat?.id === activeChatId ? openChat : undefined, {
-        projectId: currentProject?.id,
+      withOpenChatPinned(listedChats, openedChat?.id === activeChatId ? openedChat : undefined, {
+        scope: projectFilterId,
         releasedChatId,
       }),
-    [listedChats, openChat, activeChatId, currentProject?.id, releasedChatId],
+    [listedChats, openedChat, activeChatId, projectFilterId, releasedChatId],
   );
   const listedChatIds = useMemo(() => new Set(listedChats.map((chat) => chat.id)), [listedChats]);
   // ONE condition: the experimental gate. While the forge UI is unreleased this
@@ -736,13 +741,12 @@ function SidebarComponent({
   // not opted in.
   //
   // IT IS DELIBERATELY NOT ALSO GATED ON THE PROJECT BEING A FORGE PROJECT,
-  // and that is a reversal. Forge is a top-level feature, so the entry sits
-  // beside New chat / Projects / Workflows and stays PUT — a nav item that
-  // appears and disappears as you switch projects is harder to learn than one
-  // that is always there, and "is this a forge project?" is a question the
-  // destination can answer better than the nav can. Clicking it in a non-forge
-  // project lands on ForgeStates' NotForgeProject screen, which says so
-  // plainly.
+  // and that is a reversal. Apps and Observability are ORG-level surfaces
+  // (every app the org runs; telemetry across all of them), not views of the
+  // current project, so the entries sit beside New chat / Projects / Workflows
+  // and stay PUT — a nav item that appears and disappears as you switch
+  // projects is harder to learn than one that is always there, and which
+  // project is current has no bearing on where they lead.
   //
   // It also removes a failure mode that actually bit us: the old gate required
   // a LIVE GetTopology call to succeed, so when that RPC broke (a report-type
@@ -761,7 +765,6 @@ function SidebarComponent({
   }, []);
 
   // Activity from activityStore (SINGLE SOURCE OF TRUTH)
-  const selectChat = useChatStore((state) => state.selectChat);
   const deleteChatMutation = useDeleteChat();
   const renameChatMutation = useRenameChat();
   const markUnreadMutation = useMarkUnread();
@@ -771,10 +774,6 @@ function SidebarComponent({
   // Archived chats from React Query (auto-fetches)
   const { data: archivedChats = [] } = useArchivedChats();
   
-  const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
-  const fetchProcesses = useProcessStore(
-    (state) => state.fetchProcesses
-  );
   const adoptRunMutation = useAdoptRun();
   const unadoptRunMutation = useUnadoptRun();
 
@@ -785,30 +784,21 @@ function SidebarComponent({
   const setViewMode = useChatListPreferencesStore((state) => state.setViewMode);
 
   // UI State
-  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
-  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [chatListTab, setChatListTab] = useState<"active" | "archived">("active");
 
   const [expandedWorktreeGroups, setExpandedWorktreeGroups] = useState<
     Record<string, boolean>
   >({});
   const [isNoWorktreeExpanded, setIsNoWorktreeExpanded] = useState(true);
+  // Project sections of the All projects view. Unset: open while the project
+  // has chats, closed while it has none.
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const [expandedArchivedGroups, setExpandedArchivedGroups] = useState<
     Record<string, boolean>
   >({});
   const [contextMenu, setContextMenu] = useState<
-    | {
-        x: number;
-        y: number;
-        type: "chat";
-        chatId: string;
-      }
-    | {
-        x: number;
-        y: number;
-        type: "worktree";
-        worktreeId: string;
-      }
+    | ({ type: "chat"; chatId: string } & ContextMenuOpening)
+    | ({ type: "worktree"; worktreeId: string } & ContextMenuOpening)
     | null
   >(null);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
@@ -817,22 +807,11 @@ function SidebarComponent({
   // Ref for scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Filter archived chats by current project
+  // Archived chats in the filter's scope
   const projectArchivedChats = useMemo(() => {
-    if (!currentProject) return [];
-    return archivedChats.filter((c) => c.projectId === currentProject.id);
-  }, [archivedChats, currentProject]);
-
-  // Initialize background tasks monitoring for all chats
-  // Fetch processes once on mount - subsequent updates come through gRPC stream
-  // (process_started, process_completed, process_failed events in globalUpdatesStore)
-  const hasInitializedProcesses = useRef(false);
-  useEffect(() => {
-    if (!hasInitializedProcesses.current && chats.length > 0) {
-      hasInitializedProcesses.current = true;
-      fetchProcesses();
-    }
-  }, [chats.length, fetchProcesses]);
+    if (!projectFilterId) return archivedChats;
+    return archivedChats.filter((c) => c.projectId === projectFilterId);
+  }, [archivedChats, projectFilterId]);
 
   // Activity detection - reads directly from activityStore (SINGLE SOURCE OF TRUTH)
   const getChatActivity = useCallback(
@@ -882,48 +861,27 @@ function SidebarComponent({
   // read a path from here.
   const workspacesById = useMemo(() => {
     const byId = new Map<string, WorktreeSummary>();
-    if (mainWorktree) byId.set(mainWorktree.id, mainWorktree);
+    for (const main of mainWorktrees ?? []) byId.set(main.id, main);
     for (const chat of listedChats) {
       if (chat.worktree) byId.set(chat.worktree.id, chat.worktree);
     }
     return byId;
-  }, [listedChats, mainWorktree]);
+  }, [listedChats, mainWorktrees]);
 
-  // The workspace a chat is grouped under: its own summary, or the project's
+  // The workspace a chat is grouped under: its own summary, or its project's
   // main workspace for a chat with no worktree. Undefined only when the server
   // could not find the chat's worktree row.
   const getWorktreeForChat = useCallback(
-    (chat: Chat) => workspaceOfChat(chat, mainWorktree),
-    [mainWorktree]
+    (chat: Chat) => workspaceOfChat(chat, mainWorktrees),
+    [mainWorktrees]
   );
 
-  // Filtered and sorted chats grouped by worktree (or flat list)
-  const { activeGroups, flatList, archivedChats: filteredArchivedChats, archivedGroups } = useMemo(() => {
-    const filtered = chatsWithActivity;
-
-    // Categorize chats - ONLY use active (non-archived) chats from the main list
-    // All chats now have worktree_id, no null handling needed
-    const activeWorktreeChats: ChatWithActivity[] = [];
-
-    filtered.forEach((chat) => {
-      const worktree = getWorktreeForChat(chat);
-
-      // A chat's own state says whether it is archived (chatsWithActivity
-      // already dropped those). A worktree row the server could not find says
-      // nothing about it, so the chat stays visible under a fallback group.
-      if (!worktree) {
-        activeWorktreeChats.push(chat);
-        return;
-      }
-
-      // Skip if worktree is completed/abandoned (these are archived)
-      if (isWorkspaceClosed(worktree)) {
-        return;
-      }
-
-      // Active worktree → Active Chats
-      activeWorktreeChats.push(chat);
-    });
+  // Filtered and sorted chats grouped by project → workspace (or flat list)
+  const { projectGroups, activeGroups, flatList, archivedChats: filteredArchivedChats, archivedGroups } = useMemo(() => {
+    // ONLY active (non-archived) chats from the main list; a chat on a closed
+    // workspace is not listed as active (chatsWithActivity already dropped the
+    // archived ones).
+    const activeWorktreeChats = activeWorkspaceChats(chatsWithActivity, mainWorktrees);
 
     // Convert archived chats from store to ChatWithActivity format
     const archivedList: ChatWithActivity[] = projectArchivedChats.map((chat) => ({
@@ -935,81 +893,21 @@ function SidebarComponent({
       lastActivity: chat.updatedAt,
     }));
 
-    // Group active chats by worktree - simple grouping now that all chats have worktree_id
-    const worktreeGroupsMap = new Map<string, ChatGroup>();
-
-    activeWorktreeChats.forEach((chat) => {
-      const worktree = getWorktreeForChat(chat);
-      const groupId = worktree?.id ?? (chat.worktreeId || "no-worktree");
-
-      if (!worktreeGroupsMap.has(groupId)) {
-        worktreeGroupsMap.set(groupId, {
-          worktreeId: groupId,
-          worktreeName: worktree?.name ?? "Unknown workspace",
-          worktreeBranch: worktree?.branch ?? "Unknown workspace",
-          chats: [],
-          hasActivity: false,
-          isMain: worktree?.isMain ?? false,
-        });
-      }
-
-      const group = worktreeGroupsMap.get(groupId)!;
-      group.chats.push(chat);
-
-      // Check if any chat in group requires immediate action (awaiting_input)
-      // Only awaiting_input should cause groups to float - other activity states
-      // get visual indicators but don't change sort order
-      if (chat.activityState === "awaiting_input") {
-        group.hasActivity = true;
-      }
-    });
-
     // Sort chats based on user preference. The comparator is shared with the
     // navigation store so keyboard next/prev walks the list in the order it is
     // rendered in.
     const sortChatList = (chats: ChatWithActivity[]) =>
       sortChats(chats, sortOrder, chatNeedsAttention);
+    const groupOptions = { sortOrder, needsAttention: chatNeedsAttention };
 
-    // Sort chats within each group
-    worktreeGroupsMap.forEach((group) => {
-      group.chats = sortChatList([...group.chats]);
-    });
-
-    // Ensure main workspace is always present in grouped view, even with zero chats
-    if (
-      mainWorktree &&
-      !mainWorktree.deletedAt &&
-      !isWorkspaceClosed(mainWorktree) &&
-      !worktreeGroupsMap.has(mainWorktree.id)
-    ) {
-      worktreeGroupsMap.set(mainWorktree.id, {
-        worktreeId: mainWorktree.id,
-        worktreeName: mainWorktree.name,
-        worktreeBranch: mainWorktree.branch,
-        chats: [],
-        hasActivity: false,
-        isMain: true,
-      });
-    }
-
-    // Convert to array and sort groups. Groups rank by their leading chat under
-    // the selected sort order, so a group only moves when the chat at its top
-    // moves — an incoming message no longer reshuffles the workspaces.
-    const groupsArray = Array.from(worktreeGroupsMap.values());
-    groupsArray.sort((a, b) => {
-      // Main workspace should be first when it has no chats so users can always switch to it
-      if (a.isMain && a.chats.length === 0) return -1;
-      if (b.isMain && b.chats.length === 0) return 1;
-
-      // If one group is empty, put non-empty first (except main empty special-case above)
-      if (a.chats.length === 0 && b.chats.length > 0) return 1;
-      if (b.chats.length === 0 && a.chats.length > 0) return -1;
-      if (a.chats.length === 0 && b.chats.length === 0) {
-        return a.worktreeId.localeCompare(b.worktreeId);
-      }
-
-      return compareChatGroups(a.chats, b.chats, sortOrder, chatNeedsAttention);
-    });
+    // All projects: project sections, each grouped by workspace. One project:
+    // its workspace groups directly.
+    const projectGroups = projectFilterId
+      ? []
+      : groupByProject(activeWorktreeChats, mainWorktrees, scopedProjects, groupOptions);
+    const groupsArray: ChatGroup[] = projectFilterId
+      ? groupByWorkspace(projectFilterId, activeWorktreeChats, mainWorktrees, groupOptions)
+      : projectGroups.flatMap((group) => group.workspaces);
 
     // Create flat list for flat view mode
     const flatList = sortChatList(activeWorktreeChats);
@@ -1046,6 +944,7 @@ function SidebarComponent({
     );
 
     return {
+      projectGroups,
       activeGroups: groupsArray,
       flatList,
       archivedChats: sortChatList([...archivedList]),
@@ -1053,56 +952,59 @@ function SidebarComponent({
     };
   }, [
     chatsWithActivity,
-    getWorktreeForChat,
     projectArchivedChats,
     sortOrder,
-    mainWorktree,
+    mainWorktrees,
+    projectFilterId,
+    scopedProjects,
   ]);
 
-  const handleNewChat = async () => {
-    // Clear active chat to show new chat view
-    // Preserve current worktree context from active chat or current worktree store
-    const worktreeStore = useWorktreeStore.getState();
-    const activeChat = activeChatId ? chats.find(c => c.id === activeChatId) ?? null : null;
-    const currentWorktreeId = activeChat?.worktreeId || worktreeStore.currentWorktree?.id || null;
-    useChatStore.getState().clearCurrentChat(currentWorktreeId);
+  // The global New chat: the filter's project, else the open chat's, else the
+  // last one used (openNewChat).
+  const handleNewChat = () => {
+    void openNewChat();
   };
 
   const handleSwitchToWorktreeNewChat = useCallback(
-    async (worktreeId: string) => {
-      if (!currentProject?.id) return;
-
-      const targetWorktree = await useWorktreeStore.getState().resolveWorktree(worktreeId);
-      if (!targetWorktree) return;
-
-      await switchWorktreeContext(currentProject.id, targetWorktree);
-
-      // Show New Chat page with the target workspace selected
-      useChatStore.getState().clearCurrentChat(targetWorktree.id);
+    async (worktreeId: string, projectId: string) => {
+      // Show New Chat page with the target workspace (and its project) selected
+      await openNewChat({ projectId, worktreeId });
     },
-    [currentProject?.id, switchWorktreeContext]
+    []
   );
 
   const handleChatClick = useCallback(async (chat: Chat) => {
-    // Switch worktree context first to save/restore viewer state
-    if (chat.worktreeId && currentProject?.id) {
-      const worktree = await useWorktreeStore.getState().resolveWorktree(chat.worktreeId);
-      if (worktree) {
-        await switchWorktreeContext(currentProject.id, worktree);
-      }
-    } else if (currentProject?.id) {
-      await switchWorktreeContext(currentProject.id, null);
+    // openChat switches the context project and workspace to the chat's (and
+    // saves/restores viewer state), then selects it.
+    try {
+      await openChat(chat);
+    } catch (error) {
+      void toast.error(error);
     }
-    
-    selectChat(chat);
-    const { navigateToChat } = useChatNavigationStore.getState();
-    navigateToChat(chat.id);
-  }, [currentProject?.id, switchWorktreeContext, selectChat]);
+  }, []);
+
+  const handleFilterChange = useCallback(
+    (projectId: string | null) => {
+      void setProjectFilter(projectId);
+    },
+    [setProjectFilter],
+  );
+
+  // Chats waiting on the user, per project: the switcher shows them so a
+  // filtered list never hides that another project needs you.
+  const needsYouByProject = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const chat of chatsWithActivity) {
+      if (!chatNeedsAttention(chat)) continue;
+      counts.set(chat.projectId, (counts.get(chat.projectId) ?? 0) + 1);
+    }
+    return counts;
+  }, [chatsWithActivity]);
 
   const handleChatContextMenu = useCallback((e: React.MouseEvent, chat: Chat) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, type: "chat", chatId: chat.id });
+    setContextMenu({ ...contextMenuOpening(e), type: "chat", chatId: chat.id });
   }, []);
 
   const handleWorktreeContextMenu = useCallback((e: React.MouseEvent, worktreeId: string) => {
@@ -1111,12 +1013,7 @@ function SidebarComponent({
 
     if (!workspacesById.get(worktreeId)?.path) return;
 
-    setContextMenu({
-      x: e.clientX,
-      y: e.clientY,
-      type: "worktree",
-      worktreeId,
-    });
+    setContextMenu({ ...contextMenuOpening(e), type: "worktree", worktreeId });
   }, [workspacesById]);
 
   const copyToClipboard = (text: string) => {
@@ -1167,11 +1064,11 @@ function SidebarComponent({
     setEditingTitle("");
   }, []);
 
-  const getChatContextMenuItems = (chatId: string): ContextMenuItem[] => {
+  const getChatContextMenuItems = (chatId: string): MenuGroup[] => {
     const chat = chats.find((c) => c.id === chatId);
     if (!chat) return [];
 
-    const menuItems: ContextMenuItem[] = [
+    const menuItems: MenuGroup["items"] = [
       {
         label: "Rename",
         icon: <Edit className="w-4 h-4" />,
@@ -1214,28 +1111,34 @@ function SidebarComponent({
       });
     }
 
-    menuItems.push(
-      { label: "", onClick: () => {}, separator: true },
+    return [
+      { items: menuItems },
       {
-        label: "Delete",
-        icon: <Trash2 className="w-4 h-4" />,
-        onClick: () => deleteChatMutation.mutate(chatId),
-        danger: true,
-      }
-    );
-
-    return menuItems;
+        items: [
+          {
+            label: "Delete",
+            icon: <Trash2 className="w-4 h-4" />,
+            onClick: () => deleteChatMutation.mutate(chatId),
+            variant: "danger",
+          },
+        ],
+      },
+    ];
   };
 
-  const getWorktreeContextMenuItems = (worktreeId: string): ContextMenuItem[] => {
+  const getWorktreeContextMenuItems = (worktreeId: string): MenuGroup[] => {
     const worktree = workspacesById.get(worktreeId);
     if (!worktree?.path) return [];
 
     return [
       {
-        label: "Copy Workspace Path",
-        icon: <Copy className="w-4 h-4" />,
-        onClick: () => copyToClipboard(worktree.path),
+        items: [
+          {
+            label: "Copy Workspace Path",
+            icon: <Copy className="w-4 h-4" />,
+            onClick: () => copyToClipboard(worktree.path),
+          },
+        ],
       },
     ];
   };
@@ -1245,12 +1148,12 @@ function SidebarComponent({
       // Released first: the chat may be the open one, and pinning it would
       // keep the row the user just asked to move.
       useSidebarPinStore.getState().release(chatId);
-      unadoptRunMutation.mutate(chatId, {
+      unadoptRunMutation.mutate({ chatId }, {
         onSuccess: () => {
           toast.notify("Moved back to Runs", {
             action: {
               label: "Undo",
-              onClick: () => adoptRunMutation.mutate(chatId),
+              onClick: () => adoptRunMutation.mutate({ chatId }),
             },
           });
         },
@@ -1314,12 +1217,16 @@ function SidebarComponent({
 
     setChatListTab(isArchived ? "archived" : "active");
 
-    // If in grouped view and not archived, expand the worktree group containing this chat
+    // If in grouped view and not archived, expand the project section and the
+    // worktree group containing this chat
     if (!isArchived && viewMode === "grouped") {
+      if (chat.projectId && expandedProjects[chat.projectId] === false) {
+        setExpandedProjects((prev) => ({ ...prev, [chat.projectId]: true }));
+      }
       const worktree = getWorktreeForChat(chat);
       if (worktree) {
         const worktreeId = worktree.id;
-        const isNoWorktree = worktreeId === "no-worktree" || !worktreeId;
+        const isNoWorktree = worktreeId.startsWith("no-worktree") || !worktreeId;
         
         if (isNoWorktree) {
           if (!isNoWorktreeExpanded) {
@@ -1393,7 +1300,7 @@ function SidebarComponent({
   const renderWorktreeGroup = useCallback(
     (group: ChatGroup) => {
       // Handle main branch (no worktree) special case
-      const isNoWorktree = group.worktreeId === "no-worktree";
+      const isNoWorktree = group.worktreeId.startsWith("no-worktree");
       const isExpanded = isNoWorktree
         ? isNoWorktreeExpanded
         : expandedWorktreeGroups[group.worktreeId] ?? true;
@@ -1415,13 +1322,13 @@ function SidebarComponent({
       const handleNewChat = isNoWorktree
         ? undefined
         : () => {
-            void handleSwitchToWorktreeNewChat(group.worktreeId);
+            void handleSwitchToWorktreeNewChat(group.worktreeId, group.projectId);
           };
 
       const handleArchiveWorktree = (isNoWorktree || group.isMain)
         ? undefined
         : async () => {
-            const { archiveWorktree } = useWorktreeStore.getState();
+            
             await archiveWorktree(group.worktreeId);
           };
 
@@ -1434,7 +1341,7 @@ function SidebarComponent({
             message: "No chats",
             onClick: group.isMain
               ? () => {
-                  void handleSwitchToWorktreeNewChat(group.worktreeId);
+                  void handleSwitchToWorktreeNewChat(group.worktreeId, group.projectId);
                 }
               : undefined,
           }
@@ -1491,6 +1398,62 @@ function SidebarComponent({
     ]
   );
 
+  // A project section of the All projects view: the project's name, its chat
+  // count, New chat in this project, and its workspace groups.
+  const renderProjectSection = (group: (typeof projectGroups)[number]) => {
+    const isExpanded = expandedProjects[group.projectId] ?? group.chats.length > 0;
+    const hasActiveChat = group.chats.some((chat) => chat.id === activeChatId);
+    const toggle = () =>
+      setExpandedProjects((prev) => ({ ...prev, [group.projectId]: !isExpanded }));
+    return (
+      <section
+        key={group.projectId}
+        aria-label={group.projectName}
+        data-testid={`sidebar-project-${group.projectId}`}
+      >
+        <div className="group/project flex h-7 items-center gap-1">
+          <button
+            type="button"
+            onClick={toggle}
+            aria-expanded={isExpanded}
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 text-left text-xs font-semibold transition-colors",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+              hasActiveChat ? "text-primary" : "text-foreground/80 hover:text-foreground",
+            )}
+          >
+            {isExpanded ? (
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            )}
+            <span className="min-w-0 truncate">{group.projectName}</span>
+          </button>
+          {group.chats.length > 0 && (
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium text-muted-foreground">
+              {group.chats.length}
+            </span>
+          )}
+          <Tooltip content="New chat in this project" side="left" delay={300}>
+            <button
+              type="button"
+              aria-label={`New chat in ${group.projectName}`}
+              onClick={() => void openNewChat({ projectId: group.projectId })}
+              className="flex-shrink-0 rounded p-1 opacity-0 transition-opacity duration-150 hover:bg-muted/70 focus:opacity-100 group-hover/project:opacity-100"
+            >
+              <Plus className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </Tooltip>
+        </div>
+        {isExpanded && (
+          <div className="space-y-1.5 pl-2 pt-0.5">
+            {group.workspaces.map((workspace) => renderWorktreeGroup(workspace))}
+          </div>
+        )}
+      </section>
+    );
+  };
+
   // Toggle archived workspace group expansion
   const toggleArchivedGroup = (groupKey: string) => {
     setExpandedArchivedGroups((prev) => ({
@@ -1516,7 +1479,7 @@ function SidebarComponent({
 
       // Icon showing this workspace is archived
       const subtitle = group.isWorktreeArchived ? (
-        <Tooltip content="Workspace archived" placement="right" delay={300}>
+        <Tooltip content="Workspace archived" side="right" delay={300}>
           <Archive className="w-3 h-3 text-muted-foreground/60" />
         </Tooltip>
       ) : null;
@@ -1581,10 +1544,13 @@ function SidebarComponent({
             label="New chat"
             onClick={handleNewChat}
             testId="create-chat-button"
+            shortcut={newChatShortcut}
           />
-          {/* Apps is the running side of a project (environments, releases,
-              observability), so it sits directly under New chat: after
-              writing code, the next place to go is what that code runs as. */}
+          {/* Apps (/apps) is the org's index of every app it runs, each one a
+              drill-in to its console (environments, releases, observability) —
+              the ONE entry into the running side — so it sits directly under
+              New chat: after writing code, the next place to go is what that
+              code runs as. */}
           {showForgeEntry && (
             <SidebarNavButton
               icon={<Boxes className="h-4 w-4" />}
@@ -1594,28 +1560,16 @@ function SidebarComponent({
               onboardingId="apps-button"
             />
           )}
-          {/* Same gate as Apps: it is the same forge surface. */}
-          {showForgeEntry && onOpenObservability && (
-            <SidebarNavButton
-              icon={<Activity className="h-4 w-4" />}
-              label="Observability"
-              onClick={onOpenObservability}
-              testId="sidebar-observability-button"
-            />
-          )}
+          {/* What is live, one click from anywhere: each app's console and its site. */}
+          {showForgeEntry && <SidebarApps />}
           <InboxNavItem onOpen={onOpenInbox} />
-          {/* One entry for the whole area: Library, Runs and Automations are
+          {/* One entry for the whole area: Workflows and Runs are
               its tabs (WORKFLOW_UI.md §1.2), so they get no entries here. */}
           <SidebarNavButton
             icon={<Workflow className="h-4 w-4" />}
             label="Workflows"
             onClick={onOpenWorkflows}
             onboardingId="workflow-button"
-          />
-          <SidebarNavButton
-            icon={<FolderOpen className="h-4 w-4" />}
-            label="Projects"
-            onClick={onNavigateToProjectPicker}
           />
           <SidebarNavButton
             icon={<Search className="h-4 w-4" />}
@@ -1627,26 +1581,33 @@ function SidebarComponent({
 
       <div className="bg-card px-3 pb-2 pt-3">
         <div className="mb-2 flex items-center gap-2">
-          <div className="flex min-w-0 flex-1 items-center px-2">
-            <div className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Chats
-            </div>
+          {/* The project is a filter on the list, never a gate in front of it. */}
+          <div className="flex min-w-0 flex-1 items-center" data-onboarding="project-filter">
+            <ProjectFilterMenu
+              filterId={projectFilterId}
+              projects={projects}
+              onChange={handleFilterChange}
+              onAddProject={() => openAddProject()}
+              onManageProjects={() => onManageProjects?.()}
+              needsYouByProject={needsYouByProject}
+            />
           </div>
 
-          <Dropdown
-            isOpen={isSortMenuOpen}
-            onOpenChange={setIsSortMenuOpen}
+          <DropdownMenu
             align="right"
-            trigger={
+            density="compact"
+            label="Sort chats"
+            menuClassName="min-w-[190px]"
+            trigger={(props) => (
               <Tooltip
                 content={`Sort: ${currentSortOption.label}`}
-                placement="bottom"
+                side="bottom"
                 delay={300}
-                wrapperClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
+                triggerClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
               >
                 <button
                   type="button"
-                  onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+                  {...props}
                   className={cn(
                     CHAT_HEADER_ACTION_BUTTON_CLASS,
                     "h-6 w-6 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -1656,85 +1617,54 @@ function SidebarComponent({
                   {currentSortOption.icon}
                 </button>
               </Tooltip>
-            }
-            contentClassName="min-w-[190px]"
-          >
-            <div className="py-1">
-              <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-                List
-              </div>
-              <button
-                onClick={() => {
-                  setChatListTab("active");
-                  setIsSortMenuOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
-                  chatListTab === "active" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  <span>Active chats</span>
-                </div>
-                {chatListTab === "active" && <Check className="h-3.5 w-3.5 text-primary" />}
-              </button>
-              <button
-                onClick={() => {
-                  setChatListTab("archived");
-                  setIsSortMenuOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
-                  chatListTab === "archived" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <Archive className="h-3.5 w-3.5" />
-                  <span>Archived chats</span>
-                </div>
-                {chatListTab === "archived" && <Check className="h-3.5 w-3.5 text-primary" />}
-              </button>
-              <div className="my-1 h-px bg-border/60" />
-              <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Sort by
-              </div>
-              {SORT_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => {
-                    setSortOrder(option.value);
-                    setIsSortMenuOpen(false);
-                  }}
-                  className={cn(
-                    "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
-                    sortOrder === option.value ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-3.5 w-3.5 items-center justify-center">{option.icon}</span>
-                    <span>{option.label}</span>
-                  </div>
-                  {sortOrder === option.value && <Check className="h-3.5 w-3.5 text-primary" />}
-                </button>
-              ))}
-            </div>
-          </Dropdown>
+            )}
+            groups={[
+              {
+                label: "List",
+                selection: "single",
+                items: [
+                  {
+                    label: "Active chats",
+                    icon: <MessageSquare className="h-3.5 w-3.5" />,
+                    checked: chatListTab === "active",
+                    onClick: () => setChatListTab("active"),
+                  },
+                  {
+                    label: "Archived chats",
+                    icon: <Archive className="h-3.5 w-3.5" />,
+                    checked: chatListTab === "archived",
+                    onClick: () => setChatListTab("archived"),
+                  },
+                ],
+              },
+              {
+                label: "Sort by",
+                selection: "single",
+                items: SORT_OPTIONS.map((option) => ({
+                  label: option.label,
+                  icon: option.icon,
+                  checked: sortOrder === option.value,
+                  onClick: () => setSortOrder(option.value),
+                })),
+              },
+            ]}
+          />
 
-          <Dropdown
-            isOpen={isViewMenuOpen}
-            onOpenChange={setIsViewMenuOpen}
+          <DropdownMenu
             align="right"
-            trigger={
+            density="compact"
+            label="View options"
+            menuClassName="min-w-[220px]"
+            trigger={(props) => (
               <Tooltip
                 content="View options"
-                placement="bottom"
+                side="bottom"
                 delay={300}
-                wrapperClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
+                triggerClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
               >
                 <button
                   type="button"
-                  onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
+                  {...props}
                   className={cn(
                     CHAT_HEADER_ACTION_BUTTON_CLASS,
                     "h-6 w-6 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -1748,47 +1678,28 @@ function SidebarComponent({
                   )}
                 </button>
               </Tooltip>
-            }
-            contentClassName="min-w-[220px]"
-          >
-            <div className="py-1">
-              <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-                View
-              </div>
-              <button
-                onClick={() => {
-                  setViewMode("grouped");
-                  setIsViewMenuOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
-                  viewMode === "grouped" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  <span>Grouped by workspace</span>
-                </div>
-                {viewMode === "grouped" && <Check className="h-3.5 w-3.5 text-primary" />}
-              </button>
-              <button
-                onClick={() => {
-                  setViewMode("flat");
-                  setIsViewMenuOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
-                  viewMode === "flat" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <LayoutList className="h-3.5 w-3.5" />
-                  <span>Flat list</span>
-                </div>
-                {viewMode === "flat" && <Check className="h-3.5 w-3.5 text-primary" />}
-              </button>
-            </div>
-          </Dropdown>
+            )}
+            groups={[
+              {
+                label: "View",
+                selection: "single",
+                items: [
+                  {
+                    label: projectFilterId ? "Grouped by workspace" : "Grouped by project",
+                    icon: <LayoutGrid className="h-3.5 w-3.5" />,
+                    checked: viewMode === "grouped",
+                    onClick: () => setViewMode("grouped"),
+                  },
+                  {
+                    label: "Flat list",
+                    icon: <LayoutList className="h-3.5 w-3.5" />,
+                    checked: viewMode === "flat",
+                    onClick: () => setViewMode("flat"),
+                  },
+                ],
+              },
+            ]}
+          />
 
         </div>
       </div>
@@ -1797,16 +1708,29 @@ function SidebarComponent({
         <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1">
           {chatListTab === "active" ? (
             viewMode === "grouped" ? (
-              activeGroups.length > 0 && (
-                <div className="space-y-1.5">
-                  {activeGroups.map((group) => renderWorktreeGroup(group))}
-                </div>
+              projectFilterId ? (
+                activeGroups.length > 0 && (
+                  <div className="space-y-1.5">
+                    {activeGroups.map((group) => renderWorktreeGroup(group))}
+                  </div>
+                )
+              ) : (
+                projectGroups.length > 0 && (
+                  <div className="space-y-2">
+                    {projectGroups.map((group) => renderProjectSection(group))}
+                  </div>
+                )
               )
             ) : (
               flatList.length > 0 && (
                 <div className="space-y-1">
                   {flatList.map((chat) => {
                     const worktree = getWorktreeForChat(chat);
+                    // Across projects, the row names its project as well.
+                    const projectName = projectFilterId
+                      ? undefined
+                      : projects.find((p) => p.id === chat.projectId)?.name;
+                    const where = [projectName, worktree?.branch].filter(Boolean).join(" · ");
                     return (
                       <ChatItem
                         key={chat.id}
@@ -1814,7 +1738,7 @@ function SidebarComponent({
                         inGroup={false}
                         editingChatId={editingChatId}
                         editingTitle={editingTitle}
-                        workspaceBranch={worktree?.branch}
+                        workspaceBranch={where || undefined}
                         activeChatId={activeChatId}
                         onChatClick={handleChatClick}
                         onContextMenu={handleChatContextMenu}
@@ -1857,20 +1781,20 @@ function SidebarComponent({
                     variant="ghost"
                     size="sm"
                   >
-                    Create Chat
+                    New chat
                   </Button>
                   {viewMode === "flat" && activeGroups.length > 0 && (
                     <Button
                       onClick={() => {
                         const mainGroup = activeGroups.find((g) => g.isMain);
                         if (mainGroup) {
-                          void handleSwitchToWorktreeNewChat(mainGroup.worktreeId);
+                          void handleSwitchToWorktreeNewChat(mainGroup.worktreeId, mainGroup.projectId);
                         }
                       }}
                       variant="ghost"
                       size="sm"
                     >
-                      Go to Main Workspace
+                      Go to main workspace
                     </Button>
                   )}
                 </div>
@@ -1881,7 +1805,9 @@ function SidebarComponent({
       </div>
 
       <div className="border-t border-border/40 bg-card px-3 py-2">
-        <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} onOpenInbox={onOpenInbox} />
+        <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />
+        {/* Renders nothing for a person with one org. */}
+        <OrgSwitcher />
         <SidebarNavButton
           icon={<Settings className="h-4 w-4" />}
           label="Settings"
@@ -1889,16 +1815,27 @@ function SidebarComponent({
         />
       </div>
 
-      {/* Context Menu */}
+      {/* One context menu for every row; its items follow the row. */}
       {contextMenu && (
         <ContextMenu
-          items={
+          label={contextMenu.type === "chat" ? "Chat actions" : "Workspace actions"}
+          groups={
             contextMenu.type === "chat"
               ? getChatContextMenuItems(contextMenu.chatId)
               : getWorktreeContextMenuItems(contextMenu.worktreeId)
           }
+          open
           position={{ x: contextMenu.x, y: contextMenu.y }}
-          onClose={() => setContextMenu(null)}
+          openVia={contextMenu.via}
+          onOpenChange={(open) => {
+            if (open) return;
+            setContextMenu(null);
+            // Back to the composer, unless the chosen item focused an input
+            // of its own (an inline rename): after the item's state commits.
+            requestAnimationFrame(() => {
+              if (!isInputFocused()) focusChatInput();
+            });
+          }}
         />
       )}
       {/* Render complete */}
