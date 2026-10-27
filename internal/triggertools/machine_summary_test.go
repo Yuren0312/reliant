@@ -1,9 +1,10 @@
 package triggertools
 
 import (
+	"testing"
+
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestSummarizeProjectsMachineAndNodeFailure(t *testing.T) {
