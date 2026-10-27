@@ -202,8 +202,8 @@ export function BillingSection() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <SettingsPageHeader
-        title="Billing"
-        description="Manage wallet credits, your compute plan, usage, and invoices."
+        title="Billing & usage"
+        description="Manage wallet credits, your compute plan, usage, limits, and invoices."
         className="mb-0"
       />
 
@@ -1388,11 +1388,11 @@ function UsageAndInvoicesTab() {
         <UsagePanel />
       </div>
       {/* The usage notices the gateway sends point here ("Settings → Billing"). */}
-      {obsOrg.orgId && (
-        <div className="border-t border-border pt-6" id="billing-observability-usage" data-testid="billing-observability-usage">
+      <div id="observability" className="border-t border-border pt-6" data-testid="billing-observability-usage">
+        <div id="billing-observability-usage">
           <UsageView orgId={obsOrg.orgId} />
         </div>
-      )}
+      </div>
       {deployUsage.available && (
         <div className="border-t border-border pt-6">
           <DeployUsageSection

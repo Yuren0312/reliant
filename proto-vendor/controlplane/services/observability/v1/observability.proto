@@ -232,7 +232,10 @@ service ObservabilityService {
   // enforcing. It is a plain Postgres read of what the hourly meter wrote
   // (nothing here queries ClickHouse), so it works when the tenant is
   // unreachable. Membership-checked on org_id.
+  // Deprecated: use observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage.
+  // Kept until deployed clients have migrated; it remains Postgres-only.
   rpc GetObservabilityUsage(GetObservabilityUsageRequest) returns (GetObservabilityUsageResponse) {
+    option deprecated = true;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true

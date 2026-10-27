@@ -10158,7 +10158,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x1eRELEASE_FINDING_CODE_NEW_ISSUE\x10\x03\x12(\n" +
 	"$RELEASE_FINDING_CODE_REGRESSED_ISSUE\x10\x04\x12%\n" +
 	"!RELEASE_FINDING_CODE_ALERT_FIRING\x10\x05\x12*\n" +
-	"&RELEASE_FINDING_CODE_WORKLOAD_RESTARTS\x10\x062\x93\r\n" +
+	"&RELEASE_FINDING_CODE_WORKLOAD_RESTARTS\x10\x062\x98\r\n" +
 	"\x14ObservabilityService\x12U\n" +
 	"\n" +
 	"SearchLogs\x12\".controlplane.v1.SearchLogsRequest\x1a#.controlplane.v1.SearchLogsResponse\x12U\n" +
@@ -10177,8 +10177,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x11GetServiceSignals\x12).controlplane.v1.GetServiceSignalsRequest\x1a*.controlplane.v1.GetServiceSignalsResponse\x12^\n" +
 	"\rListWorkloads\x12%.controlplane.v1.ListWorkloadsRequest\x1a&.controlplane.v1.ListWorkloadsResponse\x12X\n" +
 	"\vGetWorkload\x12#.controlplane.v1.GetWorkloadRequest\x1a$.controlplane.v1.GetWorkloadResponse\x12^\n" +
-	"\rGetDashboards\x12%.controlplane.v1.GetDashboardsRequest\x1a&.controlplane.v1.GetDashboardsResponse\x12v\n" +
-	"\x15GetObservabilityUsage\x12-.controlplane.v1.GetObservabilityUsageRequest\x1a..controlplane.v1.GetObservabilityUsageResponse\x12g\n" +
+	"\rGetDashboards\x12%.controlplane.v1.GetDashboardsRequest\x1a&.controlplane.v1.GetDashboardsResponse\x12{\n" +
+	"\x15GetObservabilityUsage\x12-.controlplane.v1.GetObservabilityUsageRequest\x1a..controlplane.v1.GetObservabilityUsageResponse\"\x03\x88\x02\x01\x12g\n" +
 	"\x10GetReleaseHealth\x12(.controlplane.v1.GetReleaseHealthRequest\x1a).controlplane.v1.GetReleaseHealthResponseB\xe1\x01\n" +
 	"\x13com.controlplane.v1B\x12ObservabilityProtoP\x01ZYgithub.com/reliant-labs/reliant/gen/controlplane/services/observability/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 

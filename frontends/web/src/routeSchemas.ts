@@ -356,6 +356,7 @@ export const BILLING_TAB_IDS = [
   "invoices",
   "usage",
   "ai",
+  "limits",
 ] as const;
 export type BillingTab = (typeof BILLING_TAB_IDS)[number];
 
@@ -370,7 +371,7 @@ export type VisibleBillingTab = (typeof VISIBLE_BILLING_TABS)[number];
 
 /** Where an inbound `?tab=` lands now that invoices has been folded in. */
 export function resolveBillingTab(tab?: BillingTab): VisibleBillingTab {
-  return tab === "invoices" ? "usage" : (tab ?? "overview");
+  return tab === "invoices" || tab === "limits" ? "usage" : (tab ?? "overview");
 }
 
 /**

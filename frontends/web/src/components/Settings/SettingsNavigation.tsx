@@ -41,7 +41,7 @@ const sectionGroups: SectionGroup[] = [
       // deployment has no organization to grant permissions within.
       ...(hasControlPlane
         ? [
-            { id: "billing" as const, label: "Billing", icon: CreditCard },
+            { id: "billing" as const, label: "Billing & usage", icon: CreditCard },
             { id: "member-permissions" as const, label: "Members", icon: Shield },
           ]
         : []),
