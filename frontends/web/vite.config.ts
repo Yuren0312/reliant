@@ -95,6 +95,12 @@ export default defineConfig({
   build: {
     // Optimize build output
     rollupOptions: {
+      // Two documents: the app, and the desktop app's find bar, which Electron
+      // loads into a view of its own over a window (src/findBar/protocol.ts).
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        findBar: path.resolve(__dirname, "find-bar.html"),
+      },
       output: {
         // Create manual chunks for better code splitting
         manualChunks: {

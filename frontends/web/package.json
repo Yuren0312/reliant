@@ -30,6 +30,7 @@
       "QuestionService",
       "RepoService",
       "RunService",
+      "ScenarioService",
       "SettingsService",
       "SystemService",
       "TaskService",

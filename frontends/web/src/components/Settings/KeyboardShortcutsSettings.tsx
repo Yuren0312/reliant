@@ -455,8 +455,13 @@ export function KeyboardShortcutsSettings() {
     initializeShortcuts();
   }, [initializeShortcuts]);
 
-  // Group shortcuts by category
-  const categories = Object.values(shortcuts).reduce((acc, shortcut) => {
+  // Group shortcuts by category. A desktop-only shortcut does not exist in a
+  // browser tab, so the web lists only what can fire there.
+  const { isDesktop } = detectPlatform();
+  const available = Object.values(shortcuts).filter(
+    (shortcut) => isDesktop || !shortcut.desktopOnly,
+  );
+  const categories = available.reduce((acc, shortcut) => {
     if (!acc[shortcut.category]) {
       acc[shortcut.category] = [];
     }
