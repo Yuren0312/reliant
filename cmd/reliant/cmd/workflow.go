@@ -612,14 +612,32 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 // project's .reliant/workflows for the app (workflowref.ReadLayout), so the
 // CLI sees exactly the workflows and scenarios the app does.
 func readWorkflowLayout(dir string) (*workflowref.Layout, error) {
-	layout, err := workflowref.ReadLayout(os.DirFS(dir))
-	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", dir, err)
+	var layout *workflowref.Layout
+	conventional := filepath.Base(filepath.Dir(filepath.Clean(dir))) == ".reliant" && filepath.Base(filepath.Clean(dir)) == "workflows"
+	if conventional {
+		var err error
+		layout, err = workflowref.ReadSourceLayout(context.Background(), filepath.Dir(filepath.Dir(filepath.Clean(dir))))
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		root, err := os.OpenRoot(dir)
+		if os.IsNotExist(err) {
+			return workflowref.NewLayout(nil), nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		defer root.Close()
+		layout, err = workflowref.ReadLayout(root.FS())
+		if err != nil {
+			return nil, fmt.Errorf("reading %s: %w", dir, err)
+		}
 	}
 	// An explicit arbitrary --dir remains one directory. The conventional
 	// project workflows path also includes the same nested repos the daemon
 	// discovers for memories, skills and workflow sync.
-	if filepath.Base(filepath.Dir(filepath.Clean(dir))) == ".reliant" && filepath.Base(filepath.Clean(dir)) == "workflows" {
+	if conventional {
 		projectPath := filepath.Dir(filepath.Dir(filepath.Clean(dir)))
 		found, err := repo.Discover(context.Background(), projectPath, 0)
 		if err != nil {
@@ -630,7 +648,7 @@ func readWorkflowLayout(dir string) (*workflowref.Layout, error) {
 			if r.RelativePath == "" || r.RelativePath == "." {
 				continue
 			}
-			l, err := workflowref.ReadLayout(os.DirFS(filepath.Join(projectPath, r.RelativePath, filepath.FromSlash(workflowref.Dir))))
+			l, err := workflowref.ReadSourceLayout(context.Background(), filepath.Join(projectPath, r.RelativePath))
 			if err != nil {
 				return nil, err
 			}

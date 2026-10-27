@@ -91,7 +91,10 @@ func (f *filesystemConfigStore) GetProjectConfigRecord(ctx context.Context, proj
 
 	mcpConfigs := flattenMCPConfigBytes(userMCP, mergedProjectMCP, mergedLocalMCP)
 
-	workflowSources := readWorkflowSources(projectPath)
+	workflowSources, err := readWorkflowSources(ctx, projectPath)
+	if err != nil {
+		return nil, err
+	}
 	workflows, _ := indexWorkflows(workflowSources)
 	presets, _ := indexPresets(projectPath)
 	scenarios, _ := indexScenarios(workflowSources)

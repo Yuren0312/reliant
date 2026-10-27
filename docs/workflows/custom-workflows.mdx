@@ -99,7 +99,9 @@ Names resolve deterministically:
 - A qualified address always selects that repository, even when the root or one of your account's workflows has the same name. The repository qualifier is its exact, case-sensitive project-relative path; the workflow name is normalized as a slug.
 - Duplicate names within one repository's workflows directory remain errors. They are never resolved by file ordering.
 
-Scenarios stay beside their workflow in that repository's `<name>/scenarios/`. The CLI includes nested repositories when reading a conventional `.reliant/workflows` directory; an arbitrary `--dir` still reads only that directory. Newly added repositories may take up to a minute to enter the daemon's cached repository list.
+Scenarios stay beside their workflow in that repository's `<name>/scenarios/`. An orphan scenario or one whose local workflow name is invalid is reported as a source-directory error, never attached to a workflow in another repository. The CLI includes nested repositories when reading a conventional `.reliant/workflows` directory; an arbitrary `--dir` still reads only that directory. Newly added repositories may take up to a minute to enter the daemon's cached repository list.
+
+Discovery is confined to each source repository. Symlinks within the workflows tree and non-regular YAML files are rejected. Each source is limited to 1 MiB per YAML file, 8 MiB total YAML content, 1,024 filesystem entries (including the directory itself), and four path components below the workflows directory. If a source cannot be read safely or exceeds these bounds, the snapshot fails rather than uploading a partial or empty replacement catalog; fix the reported source and save again.
 
 ### Missing workflows and machine snapshots
 

@@ -187,11 +187,11 @@ func (d *daemonClient) currentUserID() string {
 }
 
 // projectSnapshot builds the config snapshot for projectPath.
-func (d *daemonClient) projectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
+func (d *daemonClient) projectSnapshot(ctx context.Context, projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
 	if d.buildSnapshot != nil {
 		return d.buildSnapshot(projectPath)
 	}
-	return buildProjectSnapshot(projectPath)
+	return buildProjectSnapshotContext(ctx, projectPath)
 }
 
 type StartOptions struct {
@@ -1258,7 +1258,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 						if ctx.Err() != nil {
 							return // session over; the next ack asks again
 						}
-						if err := d.sendLoadProjectConfigResponse(projectPath, uuid.New().String()); err != nil {
+						if err := d.sendLoadProjectConfigResponse(ctx, projectPath, uuid.New().String()); err != nil {
 							logging.WarnContext(ctx, logPrefix+" Failed responding to registration requested project load", "projectPath", projectPath, "error", err)
 						}
 					}
@@ -1281,7 +1281,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 		// LoadProjectConfigs on reconnect — a self-sustaining outage loop
 		// (2026-07-09 incident).
 		go func(req *reliantv1.LoadProjectConfigsRequest) {
-			if err := d.sendLoadProjectConfigResponse(req.ProjectPath, req.RequestId); err != nil {
+			if err := d.sendLoadProjectConfigResponse(ctx, req.ProjectPath, req.RequestId); err != nil {
 				logSendFailure(logPrefix+" Failed to send project config response", err, "project_path", req.ProjectPath, "request_id", req.RequestId)
 			}
 		}(m.LoadProjectConfigs)
@@ -2137,8 +2137,8 @@ func pathLooksLikeGitRepo(projectPath string) bool {
 	return false
 }
 
-func (d *daemonClient) sendLoadProjectConfigResponse(projectPath, requestID string) error {
-	snapshot, err := d.projectSnapshot(projectPath)
+func (d *daemonClient) sendLoadProjectConfigResponse(ctx context.Context, projectPath, requestID string) error {
+	snapshot, err := d.projectSnapshot(ctx, projectPath)
 	resp := &reliantv1.LoadProjectConfigsResponse{
 		RequestId: requestID,
 		Snapshot:  snapshot,
@@ -2245,7 +2245,7 @@ func (d *daemonClient) runProjectWatcher(ctx context.Context, projectPath string
 	var lastVersion string
 
 	sendSnapshotDelta := func() {
-		snapshot, err := d.projectSnapshot(projectPath)
+		snapshot, err := d.projectSnapshot(ctx, projectPath)
 		if err != nil || snapshot == nil {
 			if err != nil {
 				logging.WarnContext(ctx, logPrefix+" Failed to build project snapshot for watcher", "projectPath", projectPath, "error", err)
@@ -2288,6 +2288,10 @@ func (d *daemonClient) runProjectWatcher(ctx context.Context, projectPath string
 }
 
 func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
+	return buildProjectSnapshotContext(context.Background(), projectPath)
+}
+
+func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
 	projectPath = normalizePath(projectPath)
 	if projectPath == "" {
 		return nil, fmt.Errorf("project path is empty")
@@ -2311,7 +2315,10 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 	globalMemory, _ := readOptionalFile(globalMemoryPath)
 	projectMemory := readProjectMemory(projectPath)
 
-	workflowSources := readWorkflowSources(projectPath)
+	workflowSources, err := readWorkflowSources(ctx, projectPath)
+	if err != nil {
+		return nil, err
+	}
 	workflows, workflowBytes := indexWorkflows(workflowSources)
 	presets, presetBytes := indexPresets(projectPath)
 	scenarios, scenarioBytes := indexScenarios(workflowSources)
@@ -2637,30 +2644,36 @@ type workflowSource struct {
 // workflows and scenarios `reliant workflow` sees on disk. The project root's
 // source is always first; nested repos follow in path order. Which of them a
 // bare name resolves to is the server's to decide (workflowref.Index).
-func readWorkflowSources(projectPath string) []workflowSource {
-	sources := []workflowSource{readWorkflowSource(projectPath, "")}
-	repos := append([]string(nil), discoverRepoSources(context.Background(), projectPath)...)
+func readWorkflowSources(ctx context.Context, projectPath string) ([]workflowSource, error) {
+	root, err := readWorkflowSource(ctx, projectPath, "")
+	if err != nil {
+		return nil, err
+	}
+	sources := []workflowSource{root}
+	repos := append([]string(nil), discoverRepoSources(ctx, projectPath)...)
 	sort.Strings(repos)
 	for _, rel := range repos {
 		rel = filepath.ToSlash(filepath.Clean(rel))
 		if rel == "" || rel == "." {
 			continue
 		}
-		sources = append(sources, readWorkflowSource(projectPath, rel))
+		source, err := readWorkflowSource(ctx, projectPath, rel)
+		if err != nil {
+			return nil, err
+		}
+		sources = append(sources, source)
 	}
-	return sources
+	return sources, nil
 }
 
-func readWorkflowSource(projectPath, repo string) workflowSource {
-	baseDir := filepath.Join(projectPath, filepath.FromSlash(repo), filepath.FromSlash(workflowref.Dir))
-	layout, err := workflowref.ReadLayout(os.DirFS(baseDir))
+func readWorkflowSource(ctx context.Context, projectPath, repo string) (workflowSource, error) {
+	sourceDir := filepath.Join(projectPath, filepath.FromSlash(repo))
+	baseDir := filepath.Join(sourceDir, filepath.FromSlash(workflowref.Dir))
+	layout, err := workflowref.ReadSourceLayout(ctx, sourceDir)
 	if err != nil {
-		logging.Warn("Failed to read project workflows", "dir", baseDir, "error", err)
-		layout = workflowref.NewLayout(nil)
+		return workflowSource{}, fmt.Errorf("read workflows in %s: %w", sourceDir, err)
 	}
-	// Misplaced scenarios are reported by the surfaces that read them
-	// (`reliant workflow scenario`), not here: this runs on every 2s poll.
-	return workflowSource{repo: repo, layout: layout, baseDir: baseDir}
+	return workflowSource{repo: repo, layout: layout, baseDir: baseDir}, nil
 }
 
 // indexWorkflows syncs every project workflow file of every source with its

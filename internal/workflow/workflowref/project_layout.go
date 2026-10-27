@@ -1,6 +1,9 @@
 package workflowref
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+)
 
 // MergeLayouts combines the root's workflows with nested repo layouts. Paths
 // remain relative to their own workflows directory; Repo identifies that
@@ -13,6 +16,12 @@ func MergeLayouts(root *Layout, repos map[string]*Layout) *Layout {
 			files = append(files, File{Repo: repo, Path: e.Path, Content: e.Content})
 		}
 		for _, s := range l.Scenarios {
+			// Ownership must resolve in this directory, before global fallback
+			// exists. An orphan must never bind to a root/sibling workflow.
+			if _, err := l.Workflows.Lookup(s.WorkflowSlug); err != nil {
+				out.Misplaced = append(out.Misplaced, fmt.Errorf("%s: scenario has no valid workflow in its source directory: %w", RelativePath(repo, s.Path), err))
+				continue
+			}
 			s.Repo = repo
 			out.Scenarios = append(out.Scenarios, s)
 		}
