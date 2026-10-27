@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rundiagnostics"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
@@ -956,7 +958,7 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 	}
 	switch t.Kind {
 	case core.TriggerKindWebhook:
-		webhookURL := triggers.WebhookURL(s.deps.PublicURL, t.ID)
+		webhookURL := triggers.WebhookURL(s.publicURL, t.ID)
 		proto.WebhookUrl = &webhookURL
 		proto.WebhookManaged = s.managed(t)
 	case core.TriggerKindIntegration:
@@ -965,9 +967,29 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 		// know it; an operator-registered app webhook does not.
 		if uc, ok := s.deps.Catalog.(userConfiguredCatalog); ok {
 			if cfg, err := triggers.IntegrationConfigFor(t); err == nil && uc.UserConfiguredURL(cfg.Integration) {
-				eventsURL := triggers.IntegrationEventsURL(s.deps.PublicURL, cfg.Integration)
+				eventsURL := triggers.IntegrationEventsURL(s.publicURL, cfg.Integration)
 				proto.WebhookUrl = &eventsURL
 			}
+		}
+	}
+	// Older firings predate the terminal detail write. Diagnose the FIRST
+	// root workflow (the one launch created), never the chat's current root:
+	// replying later must not change what failed in this activation.
+	if proto.Health != nil && (proto.Health.Status == reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING || proto.Health.Status == reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_DEGRADED) {
+		for _, f := range firings {
+			failed := f.Event.RunStatus == core.TriggerRunFailed || f.Event.RunStatus == "" && f.Run != nil && f.Run.DisplayState == core.RunDisplayFailed
+			if f.Event.Outcome != core.TriggerEventLaunched || !failed {
+				continue
+			}
+			if f.Event.OutcomeDetail == "" && f.Event.ChatID != nil {
+				// Launch allocates the chat id as its first root workflow id.
+				if rows, e := s.deps.Repo.ListRunNodeExecutions(ctx, *f.Event.ChatID, rundiagnostics.RecordLimit); e == nil {
+					if detail := rundiagnostics.Failure(rows); detail != "" {
+						proto.Health.LastFailureDetail = detail
+					}
+				}
+			}
+			break
 		}
 	}
 	return proto
