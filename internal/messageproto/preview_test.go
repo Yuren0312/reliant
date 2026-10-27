@@ -121,7 +121,7 @@ func TestPreviewToolResult_StructuredToolsAreNeverTruncated(t *testing.T) {
 	}
 }
 
-// staticToolCalls is a ToolCallReader over fixed rows.
+// staticToolCalls is a Reader over fixed tool-call rows and no threads.
 type staticToolCalls []*db.ToolCall
 
 func (s staticToolCalls) ListToolCallsByMessageIDs(context.Context, []string) ([]*db.ToolCall, error) {
@@ -129,6 +129,10 @@ func (s staticToolCalls) ListToolCallsByMessageIDs(context.Context, []string) ([
 }
 
 func (s staticToolCalls) ListToolCallsByIDs(context.Context, []string) ([]*db.ToolCall, error) {
+	return nil, nil
+}
+
+func (s staticToolCalls) ListThreadsByIDs(context.Context, []string) ([]*db.Thread, error) {
 	return nil, nil
 }
 
