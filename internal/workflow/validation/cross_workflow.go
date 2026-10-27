@@ -58,8 +58,8 @@ func validateCrossWorkflow(wf *reliantv1.Workflow, opts *ValidationOptions, resu
 		return
 	}
 
-	visited := make(map[string]bool)
-	validateWorkflowTree(wf, wf, opts, program.Semantics, "", []string{}, program.Semantics.CanonicalWorkflowRef, visited, result)
+	active := make(map[*reliantv1.Workflow]bool)
+	validateWorkflowTree(wf, wf, opts, program.Semantics, "", []string{}, program.Semantics.CanonicalWorkflowRef, active, result)
 }
 
 // rootLabel names the workflow under validation at the head of a ref chain.
@@ -79,16 +79,24 @@ func validateWorkflowTree(
 	nodePathPrefix string,
 	path []string,
 	workflowIdentity string,
-	visited map[string]bool,
+	active map[*reliantv1.Workflow]bool,
 	result *Result,
 ) {
-	workflowName := workflow.GetName()
-	if visited[workflowName] {
-		return // Prevent infinite recursion
+	// Validate every invocation's compiled contract path. Display names are
+	// neither identities nor unique (parsed inline bodies are anonymous).
+	// Only an object already on THIS ancestor stack is a cycle; a sibling
+	// calling the same definition must still validate its own arguments.
+	// core.Compile already rejects reference cycles by canonical ref trail.
+	if workflow == nil || active[workflow] {
+		return
 	}
-	visited[workflowName] = true
+	active[workflow] = true
+	defer delete(active, workflow)
 
-	currentPath := append(path, workflowName)
+	currentPath := path
+	if nodePathPrefix == "" && workflow.GetName() != "" {
+		currentPath = append(append([]string{}, path...), workflow.GetName())
+	}
 
 	for _, node := range workflow.GetNodes() {
 		if opts != nil && opts.WorkflowLoader != nil {
@@ -116,9 +124,9 @@ func validateWorkflowTree(
 				opts,
 				semantics,
 				nodeContractPath,
-				path,
+				append(append([]string{}, nodePath...), "inline"),
 				contract.WorkflowIdentity,
-				visited,
+				active,
 				result,
 			)
 		case core.InputPolicyRefPresetsArgsDefaults:
@@ -159,9 +167,9 @@ func validateWorkflowTree(
 				opts,
 				semantics,
 				nodeContractPath,
-				path,
+				append(append([]string{}, nodePath...), "ref"),
 				contract.WorkflowIdentity,
-				visited,
+				active,
 				result,
 			)
 		}
