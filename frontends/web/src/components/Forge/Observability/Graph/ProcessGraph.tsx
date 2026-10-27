@@ -9,9 +9,9 @@ import { edgeLabel, type PositionedNode } from "./graphModel";
 const nodeTypes = { process: ProcessNode };
 type ProcessFlowNode = Node<{ node: GraphNode; selected: boolean }, "process">;
 function ProcessNode({ data }: NodeProps<ProcessFlowNode>) {
-  return <div className={cn("w-52 rounded-lg border bg-card px-3 py-2 text-foreground shadow-sm", data.selected ? "border-primary ring-2 ring-ring" : "border-border")}>
+  return <div className={cn("w-52 rounded-lg border bg-surface px-3 py-2 text-ink shadow-sm", data.selected ? "border-primary ring-2 ring-ring" : "border-border")}>
     <Handle type="target" position={Position.Left} />
-    <p className="text-xs uppercase tracking-wide text-muted-foreground">{data.node.kind} · {data.node.envId || "unknown environment"}</p>
+    <p className="text-xs uppercase tracking-wide text-ink-muted">{data.node.kind} · {data.node.envId || "unknown environment"}</p>
     <p className="truncate text-sm font-medium" title={data.node.label}>{data.node.label || "Unknown identity"}</p>
     <Handle type="source" position={Position.Right} />
   </div>;
@@ -33,7 +33,7 @@ export function ProcessGraph({ nodes, edges, selectedId, onNode, onEdge }: {
     labelBgStyle: { fill: "hsl(var(--card))" },
     markerEnd: { type: MarkerType.ArrowClosed },
   })), [edges]);
-  return <div className="h-[460px] overflow-hidden rounded-lg border border-border bg-background" aria-label="Process dependency graph" data-testid="process-graph">
+  return <div className="h-[460px] overflow-hidden rounded-lg border border-border bg-surface-sunken" aria-label="Process dependency graph" data-testid="process-graph">
     <ReactFlow nodes={flowNodes} edges={flowEdges} nodeTypes={nodeTypes} fitView minZoom={0.2} maxZoom={1.6}
       nodesConnectable={false} nodesDraggable={false} elementsSelectable={false}
       onNodeClick={(_, n) => onNode(n.data.node)}
