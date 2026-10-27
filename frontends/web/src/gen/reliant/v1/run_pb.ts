@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/run.proto.
  */
 export const file_reliant_v1_run: GenFile = /*@__PURE__*/
-  fileDesc("ChRyZWxpYW50L3YxL3J1bi5wcm90bxIKcmVsaWFudC52MSKABQoDUnVuEgoKAmlkGAEgASgJEhUKDXdvcmtmbG93X25hbWUYAiABKAkSDgoGdGhyZWFkGAMgASgJEhIKCnNlc3Npb25faWQYBCABKAkSEQoJcGFyZW50X2lkGAUgASgJEhoKEnNwYXduZWRfYnlfbm9kZV9pZBgGIAEoCRIWCg5sb29wX2l0ZXJhdGlvbhgHIAEoAxIoCgVzdGF0ZRgIIAEoDjIZLnJlbGlhbnQudjEuV29ya2Zsb3dTdGF0ZRIzCgtzdG9wX3JlYXNvbhgJIAEoDjIeLnJlbGlhbnQudjEuV29ya2Zsb3dTdG9wUmVhc29uEg8KB291dGNvbWUYCiABKAkSFQoNY3JlYXRlZF9hdF9tcxgLIAEoAxIXCg9jb21wbGV0ZWRfYXRfbXMYDCABKAMSDQoFdGl0bGUYDSABKAkSEgoKcHJvamVjdF9pZBgOIAEoCRITCgtsYXVuY2hfa2luZBgPIAEoCRISCgp0cmlnZ2VyX2lkGBAgASgJEhQKDHRyaWdnZXJfbmFtZRgRIAEoCRIRCglkYWVtb25faWQYEiABKAkSKgoIYWN0aXZpdHkYEyABKA4yGC5yZWxpYW50LnYxLkNoYXRBY3Rpdml0eRIyCg1kaXNwbGF5X3N0YXRlGBQgASgOMhsucmVsaWFudC52MS5SdW5EaXNwbGF5U3RhdGUSGwoOcGFyZW50X2NoYXRfaWQYFSABKAlIAIgBARIeChFwYXJlbnRfY2hhdF90aXRsZRgWIAEoCUgBiAEBEhAKCGFyY2hpdmVkGBcgASgIQhEKD19wYXJlbnRfY2hhdF9pZEIUChJfcGFyZW50X2NoYXRfdGl0bGUi3AIKD1N0YXJ0UnVuUmVxdWVzdBIQCgh3b3JrZmxvdxgBIAEoCRI3CgZpbnB1dHMYAiADKAsyJy5yZWxpYW50LnYxLlN0YXJ0UnVuUmVxdWVzdC5JbnB1dHNFbnRyeRISCgpzZXNzaW9uX2lkGAMgASgJEioKCG1lc3NhZ2VzGAQgAygLMhgucmVsaWFudC52MS5JbnB1dE1lc3NhZ2USOQoHcHJlc2V0cxgFIAMoCzIoLnJlbGlhbnQudjEuU3RhcnRSdW5SZXF1ZXN0LlByZXNldHNFbnRyeRIMCgRtb2RlGAYgASgJGkUKC0lucHV0c0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAEaLgoMUHJlc2V0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiMAoQU3RhcnRSdW5SZXNwb25zZRIcCgNydW4YASABKAsyDy5yZWxpYW50LnYxLlJ1biJeChBTaWduYWxSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCRIOCgZ0aHJlYWQYAiABKAkSKgoIbWVzc2FnZXMYAyADKAsyGC5yZWxpYW50LnYxLklucHV0TWVzc2FnZSI7ChFTaWduYWxSdW5SZXNwb25zZRIRCglkZWxpdmVyZWQYASABKAgSEwoLbWVzc2FnZV9pZHMYAiADKAkiHwoNR2V0UnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkiLgoOR2V0UnVuUmVzcG9uc2USHAoDcnVuGAEgASgLMg8ucmVsaWFudC52MS5SdW4i5AQKD0xpc3RSdW5zUmVxdWVzdBIXCgpzZXNzaW9uX2lkGAEgASgJSACIAQESFgoJcGFyZW50X2lkGAIgASgJSAGIAQESLQoFc3RhdGUYAyABKA4yGS5yZWxpYW50LnYxLldvcmtmbG93U3RhdGVIAogBARINCgVsaW1pdBgEIAEoBRIXCgpwcm9qZWN0X2lkGAYgASgJSAOIAQESEAoId29ya2Zsb3cYByADKAkSFwoKdHJpZ2dlcl9pZBgIIAEoCUgEiAEBEhMKC2xhdW5jaF9raW5kGAkgAygJEjMKDmRpc3BsYXlfc3RhdGVzGAogAygOMhsucmVsaWFudC52MS5SdW5EaXNwbGF5U3RhdGUSMQoNc3RhcnRlZF9hZnRlchgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMgoOc3RhcnRlZF9iZWZvcmUYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKBXF1ZXJ5GA0gASgJSAWIAQESFwoKcGFnZV90b2tlbhgOIAEoCUgGiAEBEh0KEGluY2x1ZGVfYXJjaGl2ZWQYDyABKAhIB4gBARIbCg5wYXJlbnRfY2hhdF9pZBgQIAEoCUgIiAEBQg0KC19zZXNzaW9uX2lkQgwKCl9wYXJlbnRfaWRCCAoGX3N0YXRlQg0KC19wcm9qZWN0X2lkQg0KC190cmlnZ2VyX2lkQggKBl9xdWVyeUINCgtfcGFnZV90b2tlbkITChFfaW5jbHVkZV9hcmNoaXZlZEIRCg9fcGFyZW50X2NoYXRfaWQiWQoQTGlzdFJ1bnNSZXNwb25zZRIdCgRydW5zGAEgAygLMg8ucmVsaWFudC52MS5SdW4SDQoFdG90YWwYAiABKAUSFwoPbmV4dF9wYWdlX3Rva2VuGAMgASgJIlUKGUxhc3RSdW5QZXJXb3JrZmxvd1JlcXVlc3QSFwoKcHJvamVjdF9pZBgBIAEoCUgAiAEBEhAKCHdvcmtmbG93GAIgAygJQg0KC19wcm9qZWN0X2lkIjsKGkxhc3RSdW5QZXJXb3JrZmxvd1Jlc3BvbnNlEh0KBHJ1bnMYASADKAsyDy5yZWxpYW50LnYxLlJ1biIhCg9QYXVzZVJ1blJlcXVlc3QSDgoGcnVuX2lkGAEgASgJIjQKEFBhdXNlUnVuUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIiIKEFJlc3VtZVJ1blJlcXVlc3QSDgoGcnVuX2lkGAEgASgJIlMKEVJlc3VtZVJ1blJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCRIcCgNydW4YAyABKAsyDy5yZWxpYW50LnYxLlJ1biIiChBDYW5jZWxSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCSI1ChFDYW5jZWxSdW5SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkiNQoTSW50ZXJydXB0UnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkSDgoGdGhyZWFkGAIgASgJIlYKFEludGVycnVwdFJ1blJlc3BvbnNlEhwKFGNhbmNlbGxlZF90b29sX2NhbGxzGAEgASgFEiAKGHVuZGVsaXZlcmFibGVfdG9vbF9jYWxscxgCIAMoCSq9AgoPUnVuRGlzcGxheVN0YXRlEiEKHVJVTl9ESVNQTEFZX1NUQVRFX1VOU1BFQ0lGSUVEEAASHAoYUlVOX0RJU1BMQVlfU1RBVEVfUVVFVUVEEAESHQoZUlVOX0RJU1BMQVlfU1RBVEVfUlVOTklORxACEiEKHVJVTl9ESVNQTEFZX1NUQVRFX05FRURTX0lOUFVUEAMSHAoYUlVOX0RJU1BMQVlfU1RBVEVfUEFVU0VEEAQSHwobUlVOX0RJU1BMQVlfU1RBVEVfQ09NUExFVEVEEAUSHAoYUlVOX0RJU1BMQVlfU1RBVEVfRkFJTEVEEAYSHwobUlVOX0RJU1BMQVlfU1RBVEVfQ0FOQ0VMTEVEEAcSKQolUlVOX0RJU1BMQVlfU1RBVEVfV0FJVElOR19GT1JfTUFDSElORRAIMsoFCgpSdW5TZXJ2aWNlEkcKCFN0YXJ0UnVuEhsucmVsaWFudC52MS5TdGFydFJ1blJlcXVlc3QaHC5yZWxpYW50LnYxLlN0YXJ0UnVuUmVzcG9uc2UiABJKCglTaWduYWxSdW4SHC5yZWxpYW50LnYxLlNpZ25hbFJ1blJlcXVlc3QaHS5yZWxpYW50LnYxLlNpZ25hbFJ1blJlc3BvbnNlIgASQQoGR2V0UnVuEhkucmVsaWFudC52MS5HZXRSdW5SZXF1ZXN0GhoucmVsaWFudC52MS5HZXRSdW5SZXNwb25zZSIAEkcKCExpc3RSdW5zEhsucmVsaWFudC52MS5MaXN0UnVuc1JlcXVlc3QaHC5yZWxpYW50LnYxLkxpc3RSdW5zUmVzcG9uc2UiABJlChJMYXN0UnVuUGVyV29ya2Zsb3cSJS5yZWxpYW50LnYxLkxhc3RSdW5QZXJXb3JrZmxvd1JlcXVlc3QaJi5yZWxpYW50LnYxLkxhc3RSdW5QZXJXb3JrZmxvd1Jlc3BvbnNlIgASRwoIUGF1c2VSdW4SGy5yZWxpYW50LnYxLlBhdXNlUnVuUmVxdWVzdBocLnJlbGlhbnQudjEuUGF1c2VSdW5SZXNwb25zZSIAEkoKCVJlc3VtZVJ1bhIcLnJlbGlhbnQudjEuUmVzdW1lUnVuUmVxdWVzdBodLnJlbGlhbnQudjEuUmVzdW1lUnVuUmVzcG9uc2UiABJKCglDYW5jZWxSdW4SHC5yZWxpYW50LnYxLkNhbmNlbFJ1blJlcXVlc3QaHS5yZWxpYW50LnYxLkNhbmNlbFJ1blJlc3BvbnNlIgASUwoMSW50ZXJydXB0UnVuEh8ucmVsaWFudC52MS5JbnRlcnJ1cHRSdW5SZXF1ZXN0GiAucmVsaWFudC52MS5JbnRlcnJ1cHRSdW5SZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_google_protobuf_struct, file_google_protobuf_timestamp, file_reliant_v1_chat]);
+  fileDesc("ChRyZWxpYW50L3YxL3J1bi5wcm90bxIKcmVsaWFudC52MSKABQoDUnVuEgoKAmlkGAEgASgJEhUKDXdvcmtmbG93X25hbWUYAiABKAkSDgoGdGhyZWFkGAMgASgJEhIKCnNlc3Npb25faWQYBCABKAkSEQoJcGFyZW50X2lkGAUgASgJEhoKEnNwYXduZWRfYnlfbm9kZV9pZBgGIAEoCRIWCg5sb29wX2l0ZXJhdGlvbhgHIAEoAxIoCgVzdGF0ZRgIIAEoDjIZLnJlbGlhbnQudjEuV29ya2Zsb3dTdGF0ZRIzCgtzdG9wX3JlYXNvbhgJIAEoDjIeLnJlbGlhbnQudjEuV29ya2Zsb3dTdG9wUmVhc29uEg8KB291dGNvbWUYCiABKAkSFQoNY3JlYXRlZF9hdF9tcxgLIAEoAxIXCg9jb21wbGV0ZWRfYXRfbXMYDCABKAMSDQoFdGl0bGUYDSABKAkSEgoKcHJvamVjdF9pZBgOIAEoCRITCgtsYXVuY2hfa2luZBgPIAEoCRISCgp0cmlnZ2VyX2lkGBAgASgJEhQKDHRyaWdnZXJfbmFtZRgRIAEoCRIRCglkYWVtb25faWQYEiABKAkSKgoIYWN0aXZpdHkYEyABKA4yGC5yZWxpYW50LnYxLkNoYXRBY3Rpdml0eRIyCg1kaXNwbGF5X3N0YXRlGBQgASgOMhsucmVsaWFudC52MS5SdW5EaXNwbGF5U3RhdGUSGwoOcGFyZW50X2NoYXRfaWQYFSABKAlIAIgBARIeChFwYXJlbnRfY2hhdF90aXRsZRgWIAEoCUgBiAEBEhAKCGFyY2hpdmVkGBcgASgIQhEKD19wYXJlbnRfY2hhdF9pZEIUChJfcGFyZW50X2NoYXRfdGl0bGUi3AIKD1N0YXJ0UnVuUmVxdWVzdBIQCgh3b3JrZmxvdxgBIAEoCRI3CgZpbnB1dHMYAiADKAsyJy5yZWxpYW50LnYxLlN0YXJ0UnVuUmVxdWVzdC5JbnB1dHNFbnRyeRISCgpzZXNzaW9uX2lkGAMgASgJEioKCG1lc3NhZ2VzGAQgAygLMhgucmVsaWFudC52MS5JbnB1dE1lc3NhZ2USOQoHcHJlc2V0cxgFIAMoCzIoLnJlbGlhbnQudjEuU3RhcnRSdW5SZXF1ZXN0LlByZXNldHNFbnRyeRIMCgRtb2RlGAYgASgJGkUKC0lucHV0c0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAEaLgoMUHJlc2V0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiMAoQU3RhcnRSdW5SZXNwb25zZRIcCgNydW4YASABKAsyDy5yZWxpYW50LnYxLlJ1biJeChBTaWduYWxSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCRIOCgZ0aHJlYWQYAiABKAkSKgoIbWVzc2FnZXMYAyADKAsyGC5yZWxpYW50LnYxLklucHV0TWVzc2FnZSI7ChFTaWduYWxSdW5SZXNwb25zZRIRCglkZWxpdmVyZWQYASABKAgSEwoLbWVzc2FnZV9pZHMYAiADKAkiHwoNR2V0UnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkidAoOR2V0UnVuUmVzcG9uc2USHAoDcnVuGAEgASgLMg8ucmVsaWFudC52MS5SdW4SKwoFbm9kZXMYAiADKAsyHC5yZWxpYW50LnYxLlJ1bk5vZGVFeGVjdXRpb24SFwoPbm9kZXNfdHJ1bmNhdGVkGAMgASgIIoMDChBSdW5Ob2RlRXhlY3V0aW9uEgoKAmlkGAEgASgJEhMKC3dvcmtmbG93X2lkGAIgASgJEg8KB25vZGVfaWQYAyABKAkSEQoJbm9kZV9wYXRoGAQgASgJEhAKCGFjdGl2aXR5GAUgASgJEg4KBnN0YXR1cxgGIAEoCRIYCgtkdXJhdGlvbl9tcxgHIAEoA0gAiAEBEg0KBWVycm9yGAggASgJEhYKCWV4aXRfY29kZRgJIAEoBUgBiAEBEhMKC3N0ZG91dF90YWlsGAogASgJEhMKC3N0ZGVycl90YWlsGAsgASgJEhIKCnN0YXJ0ZWRfYXQYDCABKAkSFAoMY29tcGxldGVkX2F0GA0gASgJEg8KB2F0dGVtcHQYDiABKAUSFAoMbG9vcF9ub2RlX2lkGA8gASgJEhsKDmxvb3BfaXRlcmF0aW9uGBAgASgFSAKIAQFCDgoMX2R1cmF0aW9uX21zQgwKCl9leGl0X2NvZGVCEQoPX2xvb3BfaXRlcmF0aW9uIuQECg9MaXN0UnVuc1JlcXVlc3QSFwoKc2Vzc2lvbl9pZBgBIAEoCUgAiAEBEhYKCXBhcmVudF9pZBgCIAEoCUgBiAEBEi0KBXN0YXRlGAMgASgOMhkucmVsaWFudC52MS5Xb3JrZmxvd1N0YXRlSAKIAQESDQoFbGltaXQYBCABKAUSFwoKcHJvamVjdF9pZBgGIAEoCUgDiAEBEhAKCHdvcmtmbG93GAcgAygJEhcKCnRyaWdnZXJfaWQYCCABKAlIBIgBARITCgtsYXVuY2hfa2luZBgJIAMoCRIzCg5kaXNwbGF5X3N0YXRlcxgKIAMoDjIbLnJlbGlhbnQudjEuUnVuRGlzcGxheVN0YXRlEjEKDXN0YXJ0ZWRfYWZ0ZXIYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjIKDnN0YXJ0ZWRfYmVmb3JlGAwgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgVxdWVyeRgNIAEoCUgFiAEBEhcKCnBhZ2VfdG9rZW4YDiABKAlIBogBARIdChBpbmNsdWRlX2FyY2hpdmVkGA8gASgISAeIAQESGwoOcGFyZW50X2NoYXRfaWQYECABKAlICIgBAUINCgtfc2Vzc2lvbl9pZEIMCgpfcGFyZW50X2lkQggKBl9zdGF0ZUINCgtfcHJvamVjdF9pZEINCgtfdHJpZ2dlcl9pZEIICgZfcXVlcnlCDQoLX3BhZ2VfdG9rZW5CEwoRX2luY2x1ZGVfYXJjaGl2ZWRCEQoPX3BhcmVudF9jaGF0X2lkIlkKEExpc3RSdW5zUmVzcG9uc2USHQoEcnVucxgBIAMoCzIPLnJlbGlhbnQudjEuUnVuEg0KBXRvdGFsGAIgASgFEhcKD25leHRfcGFnZV90b2tlbhgDIAEoCSJVChlMYXN0UnVuUGVyV29ya2Zsb3dSZXF1ZXN0EhcKCnByb2plY3RfaWQYASABKAlIAIgBARIQCgh3b3JrZmxvdxgCIAMoCUINCgtfcHJvamVjdF9pZCI7ChpMYXN0UnVuUGVyV29ya2Zsb3dSZXNwb25zZRIdCgRydW5zGAEgAygLMg8ucmVsaWFudC52MS5SdW4iIQoPUGF1c2VSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCSI0ChBQYXVzZVJ1blJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCSIiChBSZXN1bWVSdW5SZXF1ZXN0Eg4KBnJ1bl9pZBgBIAEoCSJTChFSZXN1bWVSdW5SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSHAoDcnVuGAMgASgLMg8ucmVsaWFudC52MS5SdW4iIgoQQ2FuY2VsUnVuUmVxdWVzdBIOCgZydW5faWQYASABKAkiNQoRQ2FuY2VsUnVuUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIjUKE0ludGVycnVwdFJ1blJlcXVlc3QSDgoGcnVuX2lkGAEgASgJEg4KBnRocmVhZBgCIAEoCSJWChRJbnRlcnJ1cHRSdW5SZXNwb25zZRIcChRjYW5jZWxsZWRfdG9vbF9jYWxscxgBIAEoBRIgChh1bmRlbGl2ZXJhYmxlX3Rvb2xfY2FsbHMYAiADKAkqvQIKD1J1bkRpc3BsYXlTdGF0ZRIhCh1SVU5fRElTUExBWV9TVEFURV9VTlNQRUNJRklFRBAAEhwKGFJVTl9ESVNQTEFZX1NUQVRFX1FVRVVFRBABEh0KGVJVTl9ESVNQTEFZX1NUQVRFX1JVTk5JTkcQAhIhCh1SVU5fRElTUExBWV9TVEFURV9ORUVEU19JTlBVVBADEhwKGFJVTl9ESVNQTEFZX1NUQVRFX1BBVVNFRBAEEh8KG1JVTl9ESVNQTEFZX1NUQVRFX0NPTVBMRVRFRBAFEhwKGFJVTl9ESVNQTEFZX1NUQVRFX0ZBSUxFRBAGEh8KG1JVTl9ESVNQTEFZX1NUQVRFX0NBTkNFTExFRBAHEikKJVJVTl9ESVNQTEFZX1NUQVRFX1dBSVRJTkdfRk9SX01BQ0hJTkUQCDLKBQoKUnVuU2VydmljZRJHCghTdGFydFJ1bhIbLnJlbGlhbnQudjEuU3RhcnRSdW5SZXF1ZXN0GhwucmVsaWFudC52MS5TdGFydFJ1blJlc3BvbnNlIgASSgoJU2lnbmFsUnVuEhwucmVsaWFudC52MS5TaWduYWxSdW5SZXF1ZXN0Gh0ucmVsaWFudC52MS5TaWduYWxSdW5SZXNwb25zZSIAEkEKBkdldFJ1bhIZLnJlbGlhbnQudjEuR2V0UnVuUmVxdWVzdBoaLnJlbGlhbnQudjEuR2V0UnVuUmVzcG9uc2UiABJHCghMaXN0UnVucxIbLnJlbGlhbnQudjEuTGlzdFJ1bnNSZXF1ZXN0GhwucmVsaWFudC52MS5MaXN0UnVuc1Jlc3BvbnNlIgASZQoSTGFzdFJ1blBlcldvcmtmbG93EiUucmVsaWFudC52MS5MYXN0UnVuUGVyV29ya2Zsb3dSZXF1ZXN0GiYucmVsaWFudC52MS5MYXN0UnVuUGVyV29ya2Zsb3dSZXNwb25zZSIAEkcKCFBhdXNlUnVuEhsucmVsaWFudC52MS5QYXVzZVJ1blJlcXVlc3QaHC5yZWxpYW50LnYxLlBhdXNlUnVuUmVzcG9uc2UiABJKCglSZXN1bWVSdW4SHC5yZWxpYW50LnYxLlJlc3VtZVJ1blJlcXVlc3QaHS5yZWxpYW50LnYxLlJlc3VtZVJ1blJlc3BvbnNlIgASSgoJQ2FuY2VsUnVuEhwucmVsaWFudC52MS5DYW5jZWxSdW5SZXF1ZXN0Gh0ucmVsaWFudC52MS5DYW5jZWxSdW5SZXNwb25zZSIAElMKDEludGVycnVwdFJ1bhIfLnJlbGlhbnQudjEuSW50ZXJydXB0UnVuUmVxdWVzdBogLnJlbGlhbnQudjEuSW50ZXJydXB0UnVuUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_google_protobuf_struct, file_google_protobuf_timestamp, file_reliant_v1_chat]);
 
 /**
  * Run is one workflow execution.
@@ -391,6 +391,19 @@ export type GetRunResponse = Message<"reliant.v1.GetRunResponse"> & {
    * @generated from field: reliant.v1.Run run = 1;
    */
   run?: Run | undefined;
+
+  /**
+   * Newest attempts first, including nested workflows. Inputs and arbitrary
+   * outputs are never included; command streams are redacted, bounded tails.
+   *
+   * @generated from field: repeated reliant.v1.RunNodeExecution nodes = 2;
+   */
+  nodes: RunNodeExecution[];
+
+  /**
+   * @generated from field: bool nodes_truncated = 3;
+   */
+  nodesTruncated: boolean;
 };
 
 /**
@@ -399,6 +412,102 @@ export type GetRunResponse = Message<"reliant.v1.GetRunResponse"> & {
  */
 export const GetRunResponseSchema: GenMessage<GetRunResponse> = /*@__PURE__*/
   messageDesc(file_reliant_v1_run, 6);
+
+/**
+ * One recorded node attempt, not an aggregate that hides earlier failures.
+ *
+ * @generated from message reliant.v1.RunNodeExecution
+ */
+export type RunNodeExecution = Message<"reliant.v1.RunNodeExecution"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string workflow_id = 2;
+   */
+  workflowId: string;
+
+  /**
+   * @generated from field: string node_id = 3;
+   */
+  nodeId: string;
+
+  /**
+   * @generated from field: string node_path = 4;
+   */
+  nodePath: string;
+
+  /**
+   * @generated from field: string activity = 5;
+   */
+  activity: string;
+
+  /**
+   * completed, failed, or skipped. These are persisted attempts, not live events.
+   *
+   * @generated from field: string status = 6;
+   */
+  status: string;
+
+  /**
+   * @generated from field: optional int64 duration_ms = 7;
+   */
+  durationMs?: bigint | undefined;
+
+  /**
+   * @generated from field: string error = 8;
+   */
+  error: string;
+
+  /**
+   * @generated from field: optional int32 exit_code = 9;
+   */
+  exitCode?: number | undefined;
+
+  /**
+   * @generated from field: string stdout_tail = 10;
+   */
+  stdoutTail: string;
+
+  /**
+   * @generated from field: string stderr_tail = 11;
+   */
+  stderrTail: string;
+
+  /**
+   * @generated from field: string started_at = 12;
+   */
+  startedAt: string;
+
+  /**
+   * @generated from field: string completed_at = 13;
+   */
+  completedAt: string;
+
+  /**
+   * @generated from field: int32 attempt = 14;
+   */
+  attempt: number;
+
+  /**
+   * @generated from field: string loop_node_id = 15;
+   */
+  loopNodeId: string;
+
+  /**
+   * @generated from field: optional int32 loop_iteration = 16;
+   */
+  loopIteration?: number | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.RunNodeExecution.
+ * Use `create(RunNodeExecutionSchema)` to create a new message.
+ */
+export const RunNodeExecutionSchema: GenMessage<RunNodeExecution> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_run, 7);
 
 /**
  * @generated from message reliant.v1.ListRunsRequest
@@ -523,7 +632,7 @@ export type ListRunsRequest = Message<"reliant.v1.ListRunsRequest"> & {
  * Use `create(ListRunsRequestSchema)` to create a new message.
  */
 export const ListRunsRequestSchema: GenMessage<ListRunsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 7);
+  messageDesc(file_reliant_v1_run, 8);
 
 /**
  * @generated from message reliant.v1.ListRunsResponse
@@ -556,7 +665,7 @@ export type ListRunsResponse = Message<"reliant.v1.ListRunsResponse"> & {
  * Use `create(ListRunsResponseSchema)` to create a new message.
  */
 export const ListRunsResponseSchema: GenMessage<ListRunsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 8);
+  messageDesc(file_reliant_v1_run, 9);
 
 /**
  * @generated from message reliant.v1.LastRunPerWorkflowRequest
@@ -583,7 +692,7 @@ export type LastRunPerWorkflowRequest = Message<"reliant.v1.LastRunPerWorkflowRe
  * Use `create(LastRunPerWorkflowRequestSchema)` to create a new message.
  */
 export const LastRunPerWorkflowRequestSchema: GenMessage<LastRunPerWorkflowRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 9);
+  messageDesc(file_reliant_v1_run, 10);
 
 /**
  * @generated from message reliant.v1.LastRunPerWorkflowResponse
@@ -603,7 +712,7 @@ export type LastRunPerWorkflowResponse = Message<"reliant.v1.LastRunPerWorkflowR
  * Use `create(LastRunPerWorkflowResponseSchema)` to create a new message.
  */
 export const LastRunPerWorkflowResponseSchema: GenMessage<LastRunPerWorkflowResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 10);
+  messageDesc(file_reliant_v1_run, 11);
 
 /**
  * @generated from message reliant.v1.PauseRunRequest
@@ -620,7 +729,7 @@ export type PauseRunRequest = Message<"reliant.v1.PauseRunRequest"> & {
  * Use `create(PauseRunRequestSchema)` to create a new message.
  */
 export const PauseRunRequestSchema: GenMessage<PauseRunRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 11);
+  messageDesc(file_reliant_v1_run, 12);
 
 /**
  * @generated from message reliant.v1.PauseRunResponse
@@ -645,7 +754,7 @@ export type PauseRunResponse = Message<"reliant.v1.PauseRunResponse"> & {
  * Use `create(PauseRunResponseSchema)` to create a new message.
  */
 export const PauseRunResponseSchema: GenMessage<PauseRunResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 12);
+  messageDesc(file_reliant_v1_run, 13);
 
 /**
  * @generated from message reliant.v1.ResumeRunRequest
@@ -662,7 +771,7 @@ export type ResumeRunRequest = Message<"reliant.v1.ResumeRunRequest"> & {
  * Use `create(ResumeRunRequestSchema)` to create a new message.
  */
 export const ResumeRunRequestSchema: GenMessage<ResumeRunRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 13);
+  messageDesc(file_reliant_v1_run, 14);
 
 /**
  * @generated from message reliant.v1.ResumeRunResponse
@@ -693,7 +802,7 @@ export type ResumeRunResponse = Message<"reliant.v1.ResumeRunResponse"> & {
  * Use `create(ResumeRunResponseSchema)` to create a new message.
  */
 export const ResumeRunResponseSchema: GenMessage<ResumeRunResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 14);
+  messageDesc(file_reliant_v1_run, 15);
 
 /**
  * @generated from message reliant.v1.CancelRunRequest
@@ -710,7 +819,7 @@ export type CancelRunRequest = Message<"reliant.v1.CancelRunRequest"> & {
  * Use `create(CancelRunRequestSchema)` to create a new message.
  */
 export const CancelRunRequestSchema: GenMessage<CancelRunRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 15);
+  messageDesc(file_reliant_v1_run, 16);
 
 /**
  * @generated from message reliant.v1.CancelRunResponse
@@ -732,7 +841,7 @@ export type CancelRunResponse = Message<"reliant.v1.CancelRunResponse"> & {
  * Use `create(CancelRunResponseSchema)` to create a new message.
  */
 export const CancelRunResponseSchema: GenMessage<CancelRunResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 16);
+  messageDesc(file_reliant_v1_run, 17);
 
 /**
  * @generated from message reliant.v1.InterruptRunRequest
@@ -756,7 +865,7 @@ export type InterruptRunRequest = Message<"reliant.v1.InterruptRunRequest"> & {
  * Use `create(InterruptRunRequestSchema)` to create a new message.
  */
 export const InterruptRunRequestSchema: GenMessage<InterruptRunRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 17);
+  messageDesc(file_reliant_v1_run, 18);
 
 /**
  * @generated from message reliant.v1.InterruptRunResponse
@@ -788,7 +897,7 @@ export type InterruptRunResponse = Message<"reliant.v1.InterruptRunResponse"> & 
  * Use `create(InterruptRunResponseSchema)` to create a new message.
  */
 export const InterruptRunResponseSchema: GenMessage<InterruptRunResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_run, 18);
+  messageDesc(file_reliant_v1_run, 19);
 
 /**
  * RunDisplayState is the single status vocabulary the UI shows for a run

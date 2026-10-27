@@ -126,6 +126,34 @@ func ListStepExecutionRecordsForChat(ctx context.Context, db orm.Context, chatID
 	return stepExecutionsToCore(rows), nil
 }
 
+// ListRunNodeExecutions reads one workflow subtree, never a different root
+// run in the same chat. Select only command streams, never arbitrary outputs
+// or resolved inputs. Redaction must see the complete stream BEFORE taking a
+// tail, otherwise a SQL cut could split a credential and defeat masking.
+func ListRunNodeExecutions(ctx context.Context, db orm.Context, workflowID string, limit int) ([]*core.StepExecution, error) {
+	var rows []*StepExecution
+	err := db.Bun().NewRaw(`WITH RECURSIVE tree AS (
+    SELECT id FROM workflows WHERE id = ?0
+    UNION ALL SELECT w.id FROM workflows w JOIN tree t ON w.parent_id = t.id
+)
+SELECT se.id, se.workflow_id, se.step_id, se.activity_name,
+       se.exit_code, se.success, se.duration_ms, se.created_at,
+       se.loop_node_id, se.loop_iteration, se.attempt, se.node_path,
+       se.error_message,
+       CASE WHEN se.activity_name LIKE '%ExecuteRunStep' OR se.exit_code IS NOT NULL
+         THEN json_build_object(
+           'stdout', CASE WHEN se.output_json IS JSON OBJECT THEN se.output_json::jsonb->>'stdout' END,
+           'stderr', CASE WHEN se.output_json IS JSON OBJECT THEN se.output_json::jsonb->>'stderr' END)::text
+         ELSE NULL END AS output_json
+FROM step_executions se JOIN tree t ON t.id = se.workflow_id
+WHERE se.activity_name <> ALL(ARRAY['WorkflowStatus', 'SaveMessage', 'FetchThreadResult', 'Cleanup', 'WorkflowError']::text[])
+ORDER BY se.created_at DESC, se.id DESC LIMIT ?1`, workflowID, limit).Scan(ctx, &rows)
+	if err != nil {
+		return nil, err
+	}
+	return stepExecutionsToCore(rows), nil
+}
+
 // chatStepExecutionsSQL is every step of every workflow of one chat, in one
 // round trip, for ChatService/GetWorkflowExecutions (the FULL view). It
 // replaced a per-workflow loop: 83 serial queries for the worst real chat,

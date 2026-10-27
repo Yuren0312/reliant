@@ -8574,6 +8574,17 @@
             "ProtoType": "message",
             "IsOptional": false,
             "MessageType": "reliant.v1.Run"
+          },
+          {
+            "Name": "nodes",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.RunNodeExecution"
+          },
+          {
+            "Name": "nodes_truncated",
+            "ProtoType": "bool",
+            "IsOptional": false
           }
         ],
         "InterruptRunRequest": [
@@ -8862,6 +8873,16 @@
             "name": "run",
             "kind": "message",
             "type_name": "reliant.v1.Run"
+          },
+          {
+            "name": "nodes",
+            "kind": "message",
+            "type_name": "reliant.v1.RunNodeExecution",
+            "repeated": true
+          },
+          {
+            "name": "nodes_truncated",
+            "kind": "bool"
           }
         ],
         "reliant.v1.InputMessage": [
@@ -9153,6 +9174,75 @@
             "kind": "bool"
           }
         ],
+        "reliant.v1.RunNodeExecution": [
+          {
+            "name": "id",
+            "kind": "string"
+          },
+          {
+            "name": "workflow_id",
+            "kind": "string"
+          },
+          {
+            "name": "node_id",
+            "kind": "string"
+          },
+          {
+            "name": "node_path",
+            "kind": "string"
+          },
+          {
+            "name": "activity",
+            "kind": "string"
+          },
+          {
+            "name": "status",
+            "kind": "string"
+          },
+          {
+            "name": "duration_ms",
+            "kind": "int64",
+            "optional": true
+          },
+          {
+            "name": "error",
+            "kind": "string"
+          },
+          {
+            "name": "exit_code",
+            "kind": "int32",
+            "optional": true
+          },
+          {
+            "name": "stdout_tail",
+            "kind": "string"
+          },
+          {
+            "name": "stderr_tail",
+            "kind": "string"
+          },
+          {
+            "name": "started_at",
+            "kind": "string"
+          },
+          {
+            "name": "completed_at",
+            "kind": "string"
+          },
+          {
+            "name": "attempt",
+            "kind": "int32"
+          },
+          {
+            "name": "loop_node_id",
+            "kind": "string"
+          },
+          {
+            "name": "loop_iteration",
+            "kind": "int32",
+            "optional": true
+          }
+        ],
         "reliant.v1.SignalRunRequest": [
           {
             "name": "run_id",
@@ -9238,6 +9328,7 @@
         "reliant.v1.ResumeRunRequest": "reliant/v1/run.proto",
         "reliant.v1.ResumeRunResponse": "reliant/v1/run.proto",
         "reliant.v1.Run": "reliant/v1/run.proto",
+        "reliant.v1.RunNodeExecution": "reliant/v1/run.proto",
         "reliant.v1.SignalRunRequest": "reliant/v1/run.proto",
         "reliant.v1.SignalRunResponse": "reliant/v1/run.proto",
         "reliant.v1.StartRunRequest": "reliant/v1/run.proto",
@@ -10537,6 +10628,10 @@
           },
           {
             "name": "daemon_name",
+            "kind": "string"
+          },
+          {
+            "name": "machine_state",
             "kind": "string"
           },
           {
@@ -39771,7 +39866,7 @@
     "reliant/v1/provider_account.proto": "50649efde02dd84bad1d334053b066859d0e8627b88b202e98447d6654f375e4",
     "reliant/v1/question.proto": "b7bed3249ce684a4191444c9bb404bcee80fc346093493b91a4430173205c87c",
     "reliant/v1/repo.proto": "5ea880bc3bb10123c803298ab7fe6c6a3c57dde359b2f5b339e774ab880864a0",
-    "reliant/v1/run.proto": "b0304388de799c989705f8ce41e8ec8ed725f2ecdae83c8be02ae284e461ca37",
+    "reliant/v1/run.proto": "a06e3ba61b0bb466a94bb9e042580df85844c77d9054e2cc57a15ec1e100c490",
     "reliant/v1/scenario.proto": "5be8a10f590bf6a518a4963e7ea5e9a2f847fa5d8f55a50ea07ee55e940e0a1b",
     "reliant/v1/settings.proto": "8e3021e862f33d2c381f0a96d89124d946eeea71563d5d9cb3218e5b805645c4",
     "reliant/v1/streaming.proto": "d2cd468dc58d6482db006c4c49c80c11302cc79f02f375461fd3c850d60cd3fa",
@@ -39781,7 +39876,7 @@
     "reliant/v1/token.proto": "df7f634505ef8d0da2882feb4fe31865d541b2593df0c069159f2b6440e5f63e",
     "reliant/v1/tool_call.proto": "b5861a934a2b119031b609eb10cf77e6ba8ccce474d1bb0edbf5cd9fed56cc95",
     "reliant/v1/tools_daemon.proto": "619e7af630046ea39abad05dfb538dfaafc7cfcacbe5a413489b2b05260a15d2",
-    "reliant/v1/trigger.proto": "0f2d477e782a056081d09805e1d3972fe7ac430604cb6252d743e51aa1ec2674",
+    "reliant/v1/trigger.proto": "79f41242dd9e0e34d416011667c671286fcf8115d83d5cbe453c9a40235dcd1f",
     "reliant/v1/workflow.proto": "bd8fa927bf1b9842617fda4c7d56e346ff6ee6d89247178752fb10b9c4f18c86",
     "reliant/v1/workflow_v2.proto": "ab25a4ea3cdfdc1ab731f8eefde4fe45325da51d03e2f93ec1c1023b5e36eaf7",
     "reliant/v1/worktree.proto": "ce353c761192377e35feb5ab9aa68f2b52981f0982b746f7597e51b7648fa24b"

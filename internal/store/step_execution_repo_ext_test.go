@@ -19,6 +19,32 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
+// Run diagnostics is scoped to the workflow tree, not every root of a chat,
+// and never projects resolved inputs or arbitrary output fields.
+func TestListRunNodeExecutions(t *testing.T) {
+	env := storetest.New(t)
+	seedSteps(t, env)
+	rows, err := store.ListRunNodeExecutions(context.Background(), env.ORM, "wf-s1", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 4 {
+		t.Fatalf("got %d rows, want 4 graph attempts", len(rows))
+	}
+	for _, row := range rows {
+		if row.WorkflowID == "wf-other" || row.InputJSON.Valid || strings.Contains(row.OutputJSON.String, "tokens") || strings.Contains(row.OutputJSON.String, "answer") {
+			t.Fatalf("unwanted data: %+v", row)
+		}
+	}
+	rows, err = store.ListRunNodeExecutions(context.Background(), env.ORM, "wf-s2", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].WorkflowID != "wf-s2" {
+		t.Fatalf("subtree and limit: %+v", rows)
+	}
+}
+
 type stepSeed struct {
 	id, workflow, step, activity, nodePath string
 	output                                 string
