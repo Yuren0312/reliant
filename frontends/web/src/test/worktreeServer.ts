@@ -35,7 +35,7 @@ export interface WorktreeServer {
 
 const now = "2026-01-01T00:00:00.000Z";
 
-export function worktreeServer(initial: Partial<Worktree>[] = [], options?: { createStatus?: WorktreeStatus }): WorktreeServer {
+export function worktreeServer(initial: Partial<Worktree>[] = [], options?: { createStatus?: WorktreeStatus; maxPageSize?: number }): WorktreeServer {
   const rows: Worktree[] = initial.map((w) => buildWorktree(w));
   const counts: Record<string, Req[]> = {};
   const failures = new Map<string, Error>();
@@ -49,7 +49,9 @@ export function worktreeServer(initial: Partial<Worktree>[] = [], options?: { cr
   const find = (id: unknown) => rows.find((w) => w.id === id);
   const notFound = (id: unknown) => new ConnectError(`worktree ${String(id)} not found`, Code.NotFound);
   const page = (list: Worktree[], req: Req) => {
-    const limit = Number(req.limit) || 100;
+    // Like a server-side page cap, independent of the client's requested limit.
+    // Paging UI tests can exercise multiple pages without rendering 100 rows.
+    const limit = Math.min(Number(req.limit) || 100, options?.maxPageSize ?? Infinity);
     const offset = Number(req.pageToken || 0);
     const slice = list.slice(offset, offset + limit);
     const next = offset + limit < list.length ? String(offset + limit) : "";
