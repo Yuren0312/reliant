@@ -12,6 +12,24 @@ describe("what an environment rolls back to", () => {
     expect(previousReleaseOf(ledger("v4", "v1", "v1"), "v4")).toBe("v1");
   });
 
+  it("skips component promotions when selecting a whole-environment rollback", () => {
+    expect(previousReleaseOf([
+      { releaseVersion: "v3", targets: [] },
+      { releaseVersion: "v2", targets: ["api"] },
+      { releaseVersion: "v1", targets: [] },
+    ], "v3")).toBe("v1");
+    expect(previousReleaseOf([
+      { releaseVersion: "v2", targets: ["api"] },
+      { releaseVersion: "v1", targets: [] },
+    ], "v2")).toBeNull();
+    expect(previousReleaseOf([
+      { releaseVersion: "v3", targets: ["api"] },
+      { releaseVersion: "v3", targets: [] },
+      { releaseVersion: "v2", targets: ["web"] },
+      { releaseVersion: "v1", targets: [] },
+    ], "v3")).toBe("v1");
+  });
+
   it("is nothing for an environment that only ever ran one release", () => {
     expect(previousReleaseOf(ledger("v1", "v1"), "v1")).toBeNull();
     expect(previousReleaseOf(undefined, "v1")).toBeNull();

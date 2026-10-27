@@ -32,7 +32,14 @@ export function ProcessHealth({ scope, range, workloads, alerts, envNameOf, work
   const showEnv = scope?.envIds.length === 0;
   const groupBy = useMemo(() => showEnv ? [ENV_KEY] : [], [showEnv]);
   const overview = useServiceOverview(scope, range, [], groupBy);
-  const rows = useMemo(() => serviceRows(overview.data?.services ?? [], workloads, alerts, envNameOf).sort(byAttention), [overview.data, workloads, alerts, envNameOf]);
+  const rows = useMemo(() => {
+    // An ungrouped single-env health row carries no env label. Constrain both
+    // joins by immutable environment IDs before the name-based model sees it.
+    const ids = new Set(scope?.envIds ?? []);
+    const scopedWorkloads = ids.size ? workloads.filter(workload => ids.has(workload.envId)) : workloads;
+    const scopedAlerts = ids.size ? alerts.filter(alert => ids.has(alert.envId)) : alerts;
+    return serviceRows(overview.data?.services ?? [], scopedWorkloads, scopedAlerts, envNameOf).sort(byAttention);
+  }, [overview.data, workloads, alerts, envNameOf, scope]);
   return <Panel title="Process health" flush testId="observability-services">
     <p className="px-4 pt-3 text-sm text-ink-muted">Deployed processes (service.name), not RPC services. Open a process to investigate.</p>
     {overview.data && <div className="px-4"><ObsAsOf updatedAt={overview.dataUpdatedAt} /></div>}

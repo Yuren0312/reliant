@@ -410,7 +410,7 @@ export function OverviewHome({
             scope={kpiScope}
             range={range}
             workloads={workloads}
-            alerts={alerts.data ?? []}
+            alerts={(alerts.data ?? []).filter(alert => projectEnvIds.has(alert.envId))}
             envNameOf={(id) => envs.find(candidate => candidate.id === id)?.name}
             workloadHref={(name, processEnv) => hrefs.workload(name, processEnv ?? env)}
             logsHref={(name) => withSearch(consolePath(project, { kind: "obs-view", view: "logs" }), { env, range, service: name, severity: "error,fatal" })}

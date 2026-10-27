@@ -22,6 +22,8 @@
 /** What the rule reads of a promotion: the ledgers of both clients carry it. */
 export interface PromotedRelease {
   releaseVersion: string;
+  /** Nonempty means only these components were promoted, not the environment. */
+  targets?: readonly string[];
 }
 
 export interface RollbackTarget {
@@ -38,11 +40,13 @@ export interface RollbackTarget {
  */
 export function previousReleaseOf(promotions: readonly PromotedRelease[] | undefined, current: string): string | null {
   if (!promotions || !current) return null;
-  const at = promotions.findIndex((p) => p.releaseVersion === current);
-  // The ledger names the current release first; if it does not (a page of
-  // history that predates it), there is nothing reliable to name.
+  // Component promotions never establish a whole-environment release. Ignore
+  // them both when locating the current baseline and selecting its predecessor.
+  const wholeEnvironment = promotions.filter((p) => !p.targets?.length);
+  const at = wholeEnvironment.findIndex((p) => p.releaseVersion === current);
+  // A component-only current release or a page predating it proves no baseline.
   if (at < 0) return null;
-  for (const p of promotions.slice(at + 1)) {
+  for (const p of wholeEnvironment.slice(at + 1)) {
     if (p.releaseVersion && p.releaseVersion !== current) return p.releaseVersion;
   }
   return null;
