@@ -1697,7 +1697,7 @@ Use after fire_trigger to see whether a firing launched, skipped or failed; acce
 
 **Tags:** `workflow`, `readonly`
 
-List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's health.
+List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's machine (name, id and current registry state) and health. Failed launched runs include the failing node's error.
 
 Narrow by workflow to see a workflow's activations. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; fix the workflow, then the user re-enables it in the app).
 
@@ -2105,7 +2105,7 @@ _Miscellaneous tools and utilities._
 | [`control_run`](#control_run) | runs | Pause, resume or cancel another top-level run the user owns. |
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
 | [`generate_video`](#generate_video) | media | Generate a short video clip from a text description. |
-| [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, and ... |
+| [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, an e... |
 | [`github__branch_get`](#github__branch_get) | integration | Return one branch: whether it exists, its head commit sha, and whether GitHub treats it as protec... |
 | [`github__code_search`](#github__code_search) | integration | Search file contents with GitHub's code search syntax. Scope the query with a qualifier, repo:own... |
 | [`github__issue_comment`](#github__issue_comment) | integration | Post a markdown comment on an issue, or on a pull request's conversation tab (pull requests share... |
@@ -2341,7 +2341,7 @@ NOTES:
 
 **Tags:** `runs`, `readonly`
 
-Check on one top-level run: its state, title, workflow, when it was created and last active, and an excerpt of the last thing its agent said.
+Check on one top-level run: its state, title, workflow, when it was created and last active, an excerpt of the last thing its agent said, and a nodes section with per-attempt status, timing and errors. Command nodes include exit codes and redacted stdout/stderr tails (up to 50 lines each). The newest 200 attempts are shown; older attempts are explicitly marked omitted.
 
 The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt.
 

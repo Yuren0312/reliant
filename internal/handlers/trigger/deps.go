@@ -21,6 +21,7 @@ import (
 
 // Repository is everything the trigger handlers read and write.
 type Repository interface {
+	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
 	// Trigger rows and their webhook credentials.
 	CreateTrigger(ctx context.Context, t *core.Trigger) error
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
