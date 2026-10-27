@@ -10,13 +10,13 @@ import { MonitorPlay } from "lucide-react";
 
 export function SessionNote({ icon, title, children, testId, action }: { icon: ReactNode; title: string; children: ReactNode; testId: string; action?: ReactNode }) {
   return (
-    <div role="status" data-testid={testId} className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-background px-4 py-5">
-      <span className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true">
+    <div role="status" data-testid={testId} className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5">
+      <span className="mt-0.5 shrink-0 text-ink-muted" aria-hidden="true">
         {icon}
       </span>
       <div className="min-w-0 space-y-1.5">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <div className="text-xs text-muted-foreground">{children}</div>
+        <p className="text-sm font-medium text-ink">{title}</p>
+        <div className="text-xs text-ink-muted">{children}</div>
         {action && <div className="pt-1">{action}</div>}
       </div>
     </div>

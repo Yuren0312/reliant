@@ -188,9 +188,8 @@ export default function WorkloadsPreview() {
                   release: (version) => withSearch("/forge-releases-preview", { version, dark: search.dark, scheme: search.scheme }),
                   releases: withSearch("/forge-releases-preview", { dark: search.dark, scheme: search.scheme }),
                   alerts: href({}),
-                  activity: href({}),
+                  scoped: (envName) => href({ env: envName }),
                 }}
-                onSelectEnv={(next) => go({ env: next })}
                 navigateTo={(target) => void navigate({ href: target })}
                 hosted={active.id === "no-frontends" ? WITHOUT_FRONTENDS : FIXTURE_HOSTED}
                 hostedLoading={active.id === "frontends-loading"}

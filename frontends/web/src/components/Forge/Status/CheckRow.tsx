@@ -78,9 +78,9 @@ export function CheckRow({ check }: CheckRowProps) {
         </DispositionChip>
       </td>
 
-      <td className="px-4 py-2 align-top text-sm text-foreground">{check.name}</td>
+      <td className="px-4 py-2 align-top text-sm text-ink">{check.name}</td>
 
-      <td className="px-4 py-2 align-top text-sm text-muted-foreground">
+      <td className="px-4 py-2 align-top text-sm text-ink-muted">
         {hasDetail ? (
           <div className="space-y-1">
             {check.message && <p>{check.message}</p>}
@@ -93,10 +93,10 @@ export function CheckRow({ check }: CheckRowProps) {
 
             {check.evidence && (
               <details>
-                <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+                <summary className="cursor-pointer text-xs text-ink-muted hover:text-ink">
                   Evidence
                 </summary>
-                <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-md border border-border/60 bg-background px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-md border border-border/60 bg-surface-sunken px-2 py-1.5 font-mono text-xs text-ink-muted">
                   {check.evidence}
                 </pre>
               </details>
@@ -111,7 +111,7 @@ export function CheckRow({ check }: CheckRowProps) {
 
       {/* A duration is a measurement, not an identifier, so it is not
           monospaced. `tabular-nums` keeps the column aligned without it. */}
-      <td className="whitespace-nowrap px-4 py-2 text-right align-top text-xs tabular-nums text-muted-foreground">
+      <td className="whitespace-nowrap px-4 py-2 text-right align-top text-xs tabular-nums text-ink-muted">
         {duration || <span aria-hidden="true">—</span>}
       </td>
     </tr>

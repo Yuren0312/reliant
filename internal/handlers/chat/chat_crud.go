@@ -226,25 +226,27 @@ func (s *Service) validateBuilderTest(ctx context.Context, userID string, msg *r
 	return nil
 }
 
-// ListChats lists all non-archived chats for a project
+// ListChats lists the caller's non-archived chats: in one project, or across
+// all of their projects when project_id is empty (the sidebar's "All
+// projects" view). Chats are filtered by owner in both cases.
 func (s *Service) ListChats(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListChatsRequest],
 ) (*connect.Response[reliantv1.ListChatsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ProjectId == "" {
-		return nil, svcerr.InvalidArgument("project_id is required")
-	}
-
 	limit := int(100)
 	if req.Msg.Limit != nil && *req.Msg.Limit > 0 {
 		limit = int(*req.Msg.Limit)
 	}
 
+	var projectID *string
+	if req.Msg.ProjectId != "" {
+		projectID = &req.Msg.ProjectId
+	}
 	filters := db.ChatFilters{
 		UserID:          userID,
-		ProjectID:       &req.Msg.ProjectId,
+		ProjectID:       projectID,
 		Limit:           limit,
 		ExcludeArchived: true,
 		SidebarOnly:     req.Msg.GetSidebarOnly(),
@@ -260,7 +262,7 @@ func (s *Service) ListChats(
 	for i, c := range chats {
 		protoChats[i] = chatToProto(c)
 	}
-	mainWorktree := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, chats, protoChats)
+	mainWorktrees := s.attachWorktrees(ctx, userID, req.Msg.ProjectId, chats, protoChats)
 
 	// Get latest user update sequence for stream sync —
 	// the frontend uses this to connect the streaming RPC without redundant event replay.
@@ -274,7 +276,7 @@ func (s *Service) ListChats(
 		Chats:                  protoChats,
 		Total:                  int32(len(protoChats)),
 		LastUserUpdateSequence: latestSeq,
-		MainWorktree:           mainWorktree,
+		MainWorktrees:          mainWorktrees,
 	}), nil
 }
 
@@ -299,37 +301,59 @@ func (s *Service) GetChat(
 		return nil, svcerr.NotFound("chat")
 	}
 
-	// Check for ghost workflows (DB says running, but Temporal lost it).
-	// GetChat is a READ operation — it does NOT reconcile workflow status.
-	// Status transitions are handled by WorkflowStatus("completed") activity
-	// callbacks and EnsureWorkflowRunning belt-and-suspenders in ActivityWrapper.
-	needsRecovery := false
-	if workflowID := chat.MainThreadID(); workflowID != "" {
-		// Check if the root workflow needs ghost recovery
-		wf, wfErr := s.deps.Repo.GetWorkflow(ctx, workflowID)
-		if wfErr == nil && wf != nil && wf.Status == db.Active() {
-			// DB says running — verify Temporal agrees
-			temporalState, err := s.runs.State(ctx, workflowID)
-			if err != nil {
-				logging.WarnContext(ctx, "Failed to query Temporal for workflow status",
-					"error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
-			} else if !temporalState.Exists {
-				// Ghost workflow — Temporal lost it but DB says running
-				needsRecovery = true
-			}
-			// If Temporal says completed but DB says running, DON'T reconcile here.
-			// The WorkflowStatus("completed") activity callback is the authoritative
-			// path for transitioning DB status. The EnsureWorkflowRunning belt-and-
-			// suspenders in ActivityWrapper handles the reverse case.
-		}
-	}
+	// Ghost detection (DB says running, but Temporal lost it) is advisory
+	// here: it only sets NeedsRecovery so the client offers "resume". The
+	// recovery itself is SendMessage's, which re-asks Temporal before it
+	// acts. So the Temporal describe neither gates this read nor can fail
+	// it: it runs beside the selection and workspace reads it would
+	// otherwise queue behind, and an answer that does not arrive within
+	// ghostCheckTimeout is "unknown" -- reported as not needing recovery,
+	// like a failed query always was.
+	ghost := make(chan bool, 1)
+	go func() { ghost <- s.chatNeedsRecovery(ctx, chat) }()
 
 	// Carries the composer's choice for this chat, so any device opens on it.
 	protoChat := s.chatToProtoWithSelection(ctx, chat)
-	protoChat.NeedsRecovery = needsRecovery
+	protoChat.NeedsRecovery = <-ghost
 	return connect.NewResponse(&reliantv1.GetChatResponse{
 		Chat: protoChat,
 	}), nil
+}
+
+// ghostCheckTimeout bounds GetChat's Temporal describe. A var so a test can
+// shrink it.
+var ghostCheckTimeout = 750 * time.Millisecond
+
+// chatNeedsRecovery reports whether the chat's root run is a ghost: the
+// database says it is running and Temporal has no such execution. GetChat is
+// a READ -- it does not reconcile workflow status. Transitions belong to the
+// WorkflowStatus("completed") activity callback, and EnsureWorkflowRunning in
+// ActivityWrapper handles the reverse case.
+//
+// Anything short of a definite "Temporal lost it" -- no root run, a run the
+// database does not call active, a failed or timed-out query -- is false.
+func (s *Service) chatNeedsRecovery(ctx context.Context, chat *db.Chat) bool {
+	workflowID := chat.MainThreadID()
+	if workflowID == "" {
+		return false
+	}
+	wf, err := s.deps.Repo.GetWorkflow(ctx, workflowID)
+	if err != nil || wf == nil || wf.Status != db.Active() {
+		return false
+	}
+
+	// DB says running -- verify Temporal agrees.
+	describeCtx, cancel := context.WithTimeout(ctx, ghostCheckTimeout)
+	defer cancel()
+	state, err := s.runs.State(describeCtx, workflowID)
+	if err != nil {
+		logging.WarnContext(ctx, "Failed to query Temporal for workflow status",
+			"error", err, "chatID", chat.ID, "workflowID", workflowID)
+		return false
+	}
+	// Temporal says completed but the database says running: not reconciled
+	// here. See above.
+	return !state.Exists
 }
 
 // UpdateChat updates chat metadata
@@ -552,16 +576,13 @@ func (s *Service) cancelArchivedChatWorkflow(ctx context.Context, chat *db.Chat)
 		"workflowID", workflowID)
 }
 
-// SearchChats searches chats by title and message content
+// SearchChats searches the caller's chats by title and message content: in
+// one project, or in all of their projects when project_id is empty.
 func (s *Service) SearchChats(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SearchChatsRequest],
 ) (*connect.Response[reliantv1.SearchChatsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
-
-	if req.Msg.ProjectId == "" {
-		return nil, svcerr.InvalidArgument("project_id is required")
-	}
 
 	// Return empty results if no query
 	if req.Msg.Query == "" {

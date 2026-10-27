@@ -3,7 +3,7 @@
 /**
  * The Releases list against the fixture ledger (releaseFixtures.ts): the
  * pipeline, the env columns, the DORA strip, the filters, the row menu's
- * env-naming actions (D1), and the empty / loading / error / degraded states.
+ * env-naming actions, and the empty / loading / error / degraded states.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -54,7 +54,7 @@ describe("the list", () => {
     expect(within(row(V[1]!)).getByText("ran before in prod")).toBeInTheDocument();
   });
 
-  it("carries the commit subject and author (D4), and tags scoped and rolled-back releases (D5)", async () => {
+  it("carries the commit subject and author, and tags scoped and rolled-back releases", async () => {
     renderList(createReleasesFixtureApi());
     await ready();
     expect(row(V[0]!)).toHaveTextContent(RELEASES[0]!.subject);
@@ -126,7 +126,7 @@ describe("the list", () => {
   });
 });
 
-describe("row actions name their environment (D1)", () => {
+describe("row actions name their environment", () => {
   it("promotes through the target dialog, defaulting to the scoped env", async () => {
     const user = userEvent.setup();
     const harness = renderList(createReleasesFixtureApi());

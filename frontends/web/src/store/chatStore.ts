@@ -895,7 +895,7 @@ interface ChatStoreState {
   pendingStatusFetches: Record<string, Promise<unknown>>;
 
   // Methods for chat management
-  loadChats: (projectId?: string) => Promise<void>;
+  loadChats: () => Promise<void>;
   startChat: (
     worktreeId?: string,
     firstMessage?: string,
@@ -925,7 +925,11 @@ interface ChatStoreState {
 
   // Methods for active chat
   setActiveChat: (chatId: string | null) => void;
-  selectChat: (chat: Chat) => void;
+  // deferPersist skips recording the chat as the worktree's active chat: a
+  // caller still resolving the chat's worktree context calls persistActiveChat
+  // once that context is current (see selectChatWithWorktreeContext).
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean }) => void;
+  persistActiveChat: (chatId: string) => void;
   clearCurrentChat: (worktreeId?: string | null) => void;
 
   // Message methods
@@ -1191,6 +1195,7 @@ function applyFirstSend(chat: Chat, projectId: string): void {
   seedChatDetail(chat);
   upsertChatInListCache(projectId, chat);
   void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId) });
+  void queryClient.invalidateQueries({ queryKey: chatKeys.list(null) });
 
   // Initialize state for the new chat
   useChatStore.getState().initChatState(chat);
@@ -1218,19 +1223,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   error: null,
   pendingStatusFetches: {},
 
-  // Load all chats (with singleflight deduplication to prevent parallel API calls)
+  // Load the sidebar's chat list — the filter's project, or every project —
+  // with singleflight deduplication to prevent parallel API calls.
   loadChats: async () => {
-    const projectId = useProjectStore.getState().currentProject?.id;
-    if (!projectId) {
-      return;
-    }
+    const scope = useWorkspaceStateStore.getState().projectFilterId;
 
-    // Use singleflight to ensure only one load per project runs at a time
-    // The key includes projectId to allow different projects to load simultaneously
-    return singleflight(`loadChats:${projectId}`, async () => {
+    // Use singleflight to ensure only one load per scope runs at a time
+    return singleflight(`loadChats:${scope ?? "*"}`, async () => {
       set({ error: null });
       try {
-        const response = await chatActions.listChats(projectId);
+        const response = await chatActions.listChats(scope ?? undefined);
         const chatList = response.chats;
         const lastUserUpdateSequence = response.lastUserUpdateSequence;
 
@@ -1465,7 +1467,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   // Select a chat (make it active and load its data)
-  selectChat: (chat: Chat) => {
+  selectChat: (chat: Chat, options?: { deferPersist?: boolean }) => {
     // Start profiler session here since this is the reliable entry point for tab switching
     tabSwitchProfiler.startSession(chat.id);
 
@@ -1542,20 +1544,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // The worktree context is managed by worktreeStore (single source of truth)
     // Browser viewers are filtered based on worktreeStore.currentWorktreeId
 
-    // Save to workspace state for persistence
-    // IMPORTANT: Always use the current worktree context, not the chat's worktree_id
-    // This ensures state is saved to where the user is currently viewing (e.g., __main__)
-    // so it can be properly restored on reload
-    const projectId = useProjectStore.getState().currentProject?.id;
-    const currentWorktreeId =
-      useWorktreeStore.getState().currentWorktreeId ?? null;
-    if (projectId) {
-      useWorkspaceStateStore
-        .getState()
-        .setActiveChatId(projectId, currentWorktreeId, chat.id);
-      useWorkspaceStateStore
-        .getState()
-        .addToChatQueue(projectId, currentWorktreeId, chat.id);
+    // Save to workspace state for persistence (see persistActiveChat).
+    if (!options?.deferPersist) {
+      get().persistActiveChat(chat.id);
     }
 
     // New chats already had their empty message-list cache seeded by
@@ -1621,6 +1612,24 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("selectChat-end");
     }
+  },
+
+  // Record the chat as the active and most recent chat of the worktree the
+  // user is viewing.
+  // IMPORTANT: Always use the current worktree context, not the chat's worktree_id
+  // This ensures state is saved to where the user is currently viewing (e.g., __main__)
+  // so it can be properly restored on reload
+  persistActiveChat: (chatId: string) => {
+    const projectId = useProjectStore.getState().currentProject?.id;
+    if (!projectId) return;
+    const currentWorktreeId =
+      useWorktreeStore.getState().currentWorktreeId ?? null;
+    useWorkspaceStateStore
+      .getState()
+      .setActiveChatId(projectId, currentWorktreeId, chatId);
+    useWorkspaceStateStore
+      .getState()
+      .addToChatQueue(projectId, currentWorktreeId, chatId);
   },
 
   // Clear the current chat selection

@@ -27,7 +27,7 @@ import { DomainStateBadge } from "../Domains/DomainStateBadge";
 import { shortVersion } from "../Releases/releaseModel";
 
 const ICON_BUTTON =
-  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-ink/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
 /** Copies `value`; the icon turns into a tick for a moment. Silent without a clipboard — the URL is on screen to select. */
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -70,10 +70,10 @@ function UrlLine({ url, host, testId }: { url: string; host: string; testId: str
         rel="noreferrer"
         title={`Open ${url}`}
         data-testid={testId}
-        className="no-color inline-flex min-w-0 items-center gap-1 font-mono text-sm text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="no-color inline-flex min-w-0 items-center gap-1 font-mono text-sm text-ink underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <span className="truncate">{host}</span>
-        <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <ExternalLink className="h-3 w-3 shrink-0 text-ink-muted" aria-hidden="true" />
       </a>
       <CopyButton value={url} label={url} />
     </span>
@@ -89,9 +89,9 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
       data-verdict={frontend.verdict}
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="text-sm font-medium text-foreground">{frontend.name}</span>
+        <span className="text-sm font-medium text-ink">{frontend.name}</span>
         <Tag title="Built once, uploaded to Reliant's static hosting and served from a CDN. No compute.">Static site</Tag>
-        {showEnv && <span className="text-xs text-muted-foreground">{frontend.env}</span>}
+        {showEnv && <span className="text-xs text-ink-muted">{frontend.env}</span>}
         {frontend.stopped ? (
           <Tag tone="warning" title="Stopped, so it is not serving. Start it from the workload's page.">
             Stopped
@@ -100,7 +100,7 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
           <VerdictChip verdict={frontend.verdict} testId="frontend-verdict" />
         )}
         {frontend.release && (
-          <span className="ml-auto text-xs text-muted-foreground" title={frontend.release} data-testid="frontend-release">
+          <span className="ml-auto text-xs text-ink-muted" title={frontend.release} data-testid="frontend-release">
             {shortVersion(frontend.release)}
           </span>
         )}
@@ -109,7 +109,7 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
       {frontend.url ? (
         <UrlLine url={frontend.url} host={frontend.host} testId="frontend-url" />
       ) : (
-        <p className="text-xs text-muted-foreground" data-testid="frontend-url-pending">
+        <p className="text-xs text-ink-muted" data-testid="frontend-url-pending">
           No address yet. The platform allocates one on this site&apos;s first deploy, and it appears here.
         </p>
       )}
@@ -121,13 +121,13 @@ function FrontendRow({ frontend, showEnv, domainsHref }: { frontend: Frontend; s
               {domain.url ? (
                 <UrlLine url={domain.url} host={domain.hostname} testId="frontend-domain-url" />
               ) : (
-                <span className="truncate font-mono text-sm text-muted-foreground">{domain.hostname}</span>
+                <span className="truncate font-mono text-sm text-ink-muted">{domain.hostname}</span>
               )}
               <DomainStateBadge state={domain.state} />
             </span>
           ))}
           {domains.length === 0 && (
-            <span className="text-muted-foreground" data-testid="frontend-no-domain">
+            <span className="text-ink-muted" data-testid="frontend-no-domain">
               Serves on its generated address.
             </span>
           )}

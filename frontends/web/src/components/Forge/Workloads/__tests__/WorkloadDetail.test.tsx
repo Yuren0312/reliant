@@ -2,8 +2,8 @@
 
 /**
  * One workload against the fixtures: the header and its env-naming actions
- * (D1), Restart for hosted envs only (D6), Scale as the declared line plus
- * "Open PR" (D6), the pods, the Config tab (env var names only), the explorer
+ *, Restart for hosted envs only, Scale as the declared line plus
+ * "Open PR", the pods, the Config tab (env var names only), the explorer
  * tabs pre-filtered to the workload, a Job's page, and the not-found and error
  * states.
  */
@@ -56,7 +56,7 @@ describe("a workload", () => {
     await userEvent.click(button);
     const dialog = screen.getByRole("dialog", { name: "Restart reliant-temporal-worker in prod?" });
     const confirm = within(dialog).getByRole("button", { name: "Restart in prod" });
-    // D8: the action is the primary (accent) button, never a status colour.
+    // The action is the primary (accent) button, never a status colour.
     expect(confirm.className).toContain("bg-accent");
     expect(confirm.className).not.toMatch(/warning|danger/);
     await userEvent.click(confirm);

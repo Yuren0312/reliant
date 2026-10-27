@@ -118,7 +118,7 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
       ) : (
         <Card padding="none" data-testid="obs-sessions-list" aria-busy={sessions.isFetching || undefined}>
           <SessionTable sessions={rows} onOpen={(id) => navigate({ session: id, t: undefined })} />
-          <nav aria-label="Session pages" className="flex items-center justify-between gap-2 border-t border-border/60 px-4 py-2 text-xs text-muted-foreground">
+          <nav aria-label="Session pages" className="flex items-center justify-between gap-2 border-t border-border/60 px-4 py-2 text-xs text-ink-muted">
             <span data-testid="obs-sessions-page">Page {page}</span>
             <span className="flex gap-2">
               <Button
@@ -150,7 +150,7 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
 }
 
 const INPUT =
-  "h-8 w-full rounded-md border border-border bg-background px-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "h-8 w-full rounded-md border border-border bg-surface-sunken px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function SessionToolbar({
   scope,
@@ -182,7 +182,7 @@ function SessionToolbar({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <div role="group" aria-label="Only sessions" className="inline-flex rounded-lg border border-border bg-background p-0.5">
+        <div role="group" aria-label="Only sessions" className="inline-flex rounded-lg border border-border bg-surface-sunken p-0.5">
           <button
             type="button"
             aria-pressed={hasError}
@@ -209,7 +209,7 @@ function SessionToolbar({
           <label htmlFor="obs-sessions-path" className="sr-only">
             Entry path contains
           </label>
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-ink-muted" aria-hidden="true" />
           <input
             id="obs-sessions-path"
             type="search"
@@ -245,21 +245,21 @@ function SessionToolbar({
 function chip(active: boolean) {
   return cn(
     "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-    active ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+    active ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
   );
 }
 
 function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen: (id: string) => void }) {
   const now = Date.now();
   if (sessions.length === 0) {
-    return <p className="px-4 py-6 text-sm text-muted-foreground">No more sessions in this window.</p>;
+    return <p className="px-4 py-6 text-sm text-ink-muted">No more sessions in this window.</p>;
   }
   return (
     <div className="overflow-x-auto">
       <StackedTable className="w-full text-sm">
         <caption className="sr-only">Browser sessions in scope, newest first</caption>
         <thead>
-          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
             <th scope="col" className="px-4 py-2 font-medium">Session</th>
             <th scope="col" className="px-4 py-2 font-medium">Entry</th>
             <th scope="col" className="px-4 py-2 text-right font-medium">Duration</th>
@@ -270,30 +270,30 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
         </thead>
         <tbody>
           {sessions.map((s) => (
-            <tr key={`${s.service}-${s.sessionId}`} className="border-b border-border/50 align-top last:border-b-0 hover:bg-muted/40" data-testid={`obs-session-${s.sessionId}`}>
+            <tr key={`${s.service}-${s.sessionId}`} className="border-b border-border/50 align-top last:border-b-0 hover:bg-ink/5" data-testid={`obs-session-${s.sessionId}`}>
               <th scope="row" className="px-4 py-2 text-left font-normal">
                 <button
                   type="button"
                   onClick={() => onOpen(s.sessionId)}
-                  className="block max-w-full truncate text-left font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="block max-w-full truncate text-left font-medium text-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   title={s.startedMs ? `Started ${formatAgo(s.startedMs, now)}` : undefined}
                   data-testid={`obs-session-open-${s.sessionId}`}
                 >
                   {sessionTitle(s.service, s.startedMs, { now })}
                 </button>
-                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                  {s.userId ? <span className="text-foreground">{s.userId}</span> : <span>anonymous</span>}
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-ink-muted">
+                  {s.userId ? <span className="text-ink">{s.userId}</span> : <span>anonymous</span>}
                   {s.envName && <span>{s.envName}</span>}
                   {s.hasReplay && <Tag title="This session's replay was recorded">replay</Tag>}
                   <Mono value={s.sessionId} length={8} />
                 </p>
               </th>
-              <td className="max-w-[16rem] truncate px-4 py-2 font-mono text-xs text-foreground" title={s.entryPath}>
+              <td className="max-w-[16rem] truncate px-4 py-2 font-mono text-xs text-ink" title={s.entryPath}>
                 {s.entryPath || "/"}
               </td>
-              <td className="px-4 py-2 text-right tabular-nums text-foreground">{formatDuration(Math.max(0, s.endedMs - s.startedMs))}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-foreground">{formatCount(s.pageViews)}</td>
-              <td className="px-4 py-2 text-right tabular-nums text-foreground">{formatCount(s.interactions)}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-ink">{formatDuration(Math.max(0, s.endedMs - s.startedMs))}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-ink">{formatCount(s.pageViews)}</td>
+              <td className="px-4 py-2 text-right tabular-nums text-ink">{formatCount(s.interactions)}</td>
               <td className="px-4 py-2">
                 {s.errors > 0 ? <Status tone="danger" label={formatCount(s.errors)} /> : <Status tone="neutral" label="none" />}
               </td>

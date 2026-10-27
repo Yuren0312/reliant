@@ -48,17 +48,17 @@ function StateFrame({
     <div
       data-testid={testId}
       role={tone === "error" ? "alert" : "status"}
-      className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-background px-4 py-5"
+      className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5"
     >
       <span
-        className={tone === "error" ? "mt-0.5 shrink-0 text-destructive" : "mt-0.5 shrink-0 text-muted-foreground"}
+        className={tone === "error" ? "mt-0.5 shrink-0 text-danger-ink" : "mt-0.5 shrink-0 text-ink-muted"}
         aria-hidden="true"
       >
         {icon}
       </span>
       <div className="min-w-0 space-y-1.5">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        {children && <div className="space-y-1 text-xs text-muted-foreground">{children}</div>}
+        <p className="text-sm font-medium text-ink">{title}</p>
+        {children && <div className="space-y-1 text-xs text-ink-muted">{children}</div>}
         {actions && <div className="flex flex-wrap gap-2 pt-1">{actions}</div>}
       </div>
     </div>
@@ -98,7 +98,7 @@ interface TopicCopy {
 }
 
 const SIGNALS_ON = (signal: string) => (
-  <code className="font-mono text-foreground">{`signals = forge.ObservabilitySignals {${signal} = True}`}</code>
+  <code className="font-mono text-ink">{`signals = forge.ObservabilitySignals {${signal} = True}`}</code>
 );
 
 export const OBS_TOPICS: Record<ObsTopic, TopicCopy> = {
@@ -120,8 +120,8 @@ export const OBS_TOPICS: Record<ObsTopic, TopicCopy> = {
     source: (
       <>
         A forge frontend sends sessions on its own. Replay is opt-in: build the frontend with{" "}
-        <code className="font-mono text-foreground">VITE_OTEL_REPLAY=true</code> (
-        <code className="font-mono text-foreground">NEXT_PUBLIC_OTEL_REPLAY=true</code> for Next.js) and set {SIGNALS_ON("replay")} on the environment.
+        <code className="font-mono text-ink">VITE_OTEL_REPLAY=true</code> (
+        <code className="font-mono text-ink">NEXT_PUBLIC_OTEL_REPLAY=true</code> for Next.js) and set {SIGNALS_ON("replay")} on the environment.
         Every replay is masked; there is no unmasked mode.
       </>
     ),
@@ -146,9 +146,6 @@ export const OBS_TOPICS: Record<ObsTopic, TopicCopy> = {
   dashboards: {
     about: "Dashboards collects the dashboards forge generates from your services and frontends, the ones you commit, and the ones you build here.",
     docs: { href: DOCS.dashboards, label: "How dashboards work" },
-  },
-  usage: {
-    about: "Usage shows the telemetry your organization stored this month against its allowance.",
   },
 };
 
@@ -435,7 +432,7 @@ export function OperatorBadge({ provenance }: { provenance: Provenance }) {
   const label = provenance.source || "operator";
   return (
     <span
-      className="shrink-0 rounded border border-border px-1 py-px font-sans text-2xs uppercase tracking-wide text-muted-foreground"
+      className="shrink-0 rounded border border-border px-1 py-px font-sans text-2xs uppercase tracking-wide text-ink-muted"
       title="Reliant operator data: platform telemetry, not this app's"
       data-testid="obs-operator-badge"
     >
@@ -490,7 +487,7 @@ export function ObsAsOf({ updatedAt, className }: { updatedAt?: number; classNam
       role="status"
       data-testid="obs-as-of"
       title="The hourly query allowance is used up, so this is the last result that loaded. It updates by itself once the allowance refills."
-      className={`inline-flex items-center gap-1 rounded border border-border px-1.5 py-px text-2xs text-muted-foreground ${className ?? ""}`}
+      className={`inline-flex items-center gap-1 rounded border border-border px-1.5 py-px text-2xs text-ink-muted ${className ?? ""}`}
     >
       <PauseCircle className="h-3 w-3" aria-hidden="true" />
       Paused{updatedAt ? ` · as of ${formatClock(updatedAt)}` : ""} · query budget resets at {formatClock(state.resetsAtMs)}
@@ -528,14 +525,14 @@ export function ObsQuotaBanner({ usageHref = BILLING_USAGE_HREF, onOpenUsage }: 
       role="status"
       data-testid="obs-quota-banner"
       data-state={state.kind}
-      className="flex items-start gap-3 rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground"
+      className="flex items-start gap-3 rounded-lg border border-border bg-surface-sunken px-4 py-3 text-sm text-ink"
     >
-      <PauseCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <PauseCircle className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
       <div className="min-w-0 space-y-1">
         <p className="font-medium">
           {exhausted ? `Live updates are paused until ${resets}` : "Refresh slowed to protect your query allowance"}
         </p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ink-muted">
           {exhausted
             ? `${own ? "Your organization used this hour's query allowance for the console." : "Your organization used this hour's query allowance."} What is on screen is the last result that loaded; it updates by itself at ${resets}. `
             : `Searches, and opening a trace or an issue, still work. Normal refresh returns at ${resets}. `}

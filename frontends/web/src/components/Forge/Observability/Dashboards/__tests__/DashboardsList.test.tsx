@@ -4,7 +4,7 @@
  * Observability › Dashboards against the in-memory DashboardService: the
  * shelves (starred with previews, recently viewed, from your releases,
  * workspace), the filters, starring, the template gallery and New dashboard —
- * each write naming its environment (D1) — and the read-only, empty and
+ * each write naming its environment — and the read-only, empty and
  * failed states.
  */
 

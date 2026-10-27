@@ -1,14 +1,13 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * THE CONSOLE'S URLS (research/console-v3/PROPOSAL.md §3.2), and the mapping
- * from every URL the console used to have onto them.
+ * THE CONSOLE'S URLS, and the mapping from every URL the console used to have
+ * onto them.
  *
- *   /forge/p/:project                         Overview (project home, with the workloads)
+ *   /forge/p/:project                         Overview (project home: health, workloads)
  *   /forge/p/:project/workloads/:env/:name    one workload in one environment
  *   /forge/p/:project/releases                Releases
- *   /forge/p/:project/releases/:version       one release (its DORA strip is on Releases, D9)
- *   /forge/p/:project/observability           Observability overview
+ *   /forge/p/:project/releases/:version       one release (its DORA strip is on Releases)
  *   /forge/p/:project/observability/:view     errors · sessions · logs · traces · metrics · profiles · dashboards · alerts
  *   /forge/p/:project/observability/dashboards/:kind/:key
  *                                             one dashboard: a release one (`release/<id>`)
@@ -17,9 +16,12 @@
  *   /forge/p/:project/environments/:env       one environment, as a configured object
  *   /forge/p/:project/secrets                 Secrets
  *   /forge/p/:project/domains                 Domains
- *   /forge/p/:project/monitoring              Monitoring settings
- *   /forge/p/:project/settings                Project settings (Usage lives here)
- *   /forge/p/:project/activity                Activity
+ *   /forge/p/:project/activity                Activity (the audit log)
+ *
+ * Retired, and redirected by the route tree: `/observability` (its home was
+ * the Overview twice over) → the Overview; `/monitoring` (a placeholder) →
+ * Alerts, where routing and silences live; `/settings` (the organization's
+ * usage) → the app's Settings › Billing, which shows the same figures.
  *
  * The org pages sit beside them: the whole org, with app and environment as
  * filters (the `apps` and `envs` search keys) rather than a path segment.
@@ -42,7 +44,7 @@
  * project no Reliant project here declares still opens, read from the control
  * plane alone.
  *
- * `?env=` is the ONE scope param (decision D1, envScope.ts). Every list page
+ * `?env=` is the ONE scope param (envScope.ts). Every list page
  * honours it; a page with an environment in its path pins that one instead.
  *
  * Nothing outside this module spells a console path: pages, the nav and the
@@ -59,7 +61,14 @@ export const FORGE_ROOT = "/forge";
 /** The org's Apps list (components/Apps/AppsPage.tsx): the way out of one app's console to all of them. */
 export const APPS_PATH = "/apps";
 
-/** The Observability sub-pages that are nav entries (decision D9). */
+/**
+ * The organization's usage (its telemetry allowance): the app's Settings ›
+ * Billing, which renders the same UsageView the console's retired Project
+ * settings page did.
+ */
+export const ORG_USAGE_PATH = "/settings/billing";
+
+/** The Observability sub-pages that are nav entries. */
 export const OBS_NAV_VIEWS = ["errors", "sessions", "logs", "traces", "metrics", "profiles", "dashboards", "alerts"] as const;
 export type ObsNavView = (typeof OBS_NAV_VIEWS)[number];
 
@@ -106,7 +115,6 @@ export type ConsolePage =
   | { kind: "workload"; env: string; name: string }
   | { kind: "releases" }
   | { kind: "release"; version: string }
-  | { kind: "observability" }
   | { kind: "obs-view"; view: ObsNavView }
   /** One dashboard. Its kind is in the path: a release dashboard and a workspace one may share a key. */
   | { kind: "dashboard"; dashKind: DashboardPageKind; key: string }
@@ -114,8 +122,6 @@ export type ConsolePage =
   | { kind: "environment"; env: string }
   | { kind: "secrets" }
   | { kind: "domains" }
-  | { kind: "monitoring" }
-  | { kind: "settings" }
   | { kind: "activity" };
 
 export function consoleBase(project: string): string {
@@ -134,8 +140,6 @@ export function consolePath(project: string, page: ConsolePage): string {
       return `${base}/releases`;
     case "release":
       return `${base}/releases/${encodeURIComponent(page.version)}`;
-    case "observability":
-      return `${base}/observability`;
     case "obs-view":
       return `${base}/observability/${page.view}`;
     case "dashboard":
@@ -148,10 +152,6 @@ export function consolePath(project: string, page: ConsolePage): string {
       return `${base}/secrets`;
     case "domains":
       return `${base}/domains`;
-    case "monitoring":
-      return `${base}/monitoring`;
-    case "settings":
-      return `${base}/settings`;
     case "activity":
       return `${base}/activity`;
   }
@@ -184,7 +184,7 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "releases":
         return sub ? { kind: "release", version: safeDecode(sub) } : { kind: "releases" };
       case "observability":
-        if (!sub) return { kind: "observability" };
+        if (!sub) return null;
         if (sub === "dashboards" && dashKind) {
           return isDashboardPageKind(dashKind) && dashKey && rest.length === 0 ? { kind: "dashboard", dashKind, key: safeDecode(dashKey) } : null;
         }
@@ -193,8 +193,6 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
         return sub ? { kind: "environment", env: safeDecode(sub) } : { kind: "environments" };
       case "secrets":
       case "domains":
-      case "monitoring":
-      case "settings":
       case "activity":
         return sub ? null : { kind: section };
       default:
@@ -226,18 +224,17 @@ export function withSearch(path: string, search: Record<string, unknown> = {}): 
 /**
  * Where an Observability view lives now. The panel still speaks in views
  * (obsSearch.ts) — its links say "open Logs", "open Traces" — and this turns
- * each into the page that hosts it: the nav entries under Observability and
- * Project settings for Usage (decision D9). Workloads and Delivery are no
- * views any more: the workloads are the Overview's own tables (with a page
- * per workload), and the DORA figures are the Releases page's strip.
+ * each into the page that hosts it: the nav entries under Observability. The
+ * panel's own overview is the console's Overview, which carries the same
+ * health strip. Workloads and Delivery are no views any more: the workloads
+ * are the Overview's own tables (with a page per workload), and the DORA
+ * figures are the Releases page's strip.
  */
 export function pageOfObsView(view: ObsView | undefined): ConsolePage {
   switch (view) {
     case undefined:
     case "overview":
-      return { kind: "observability" };
-    case "usage":
-      return { kind: "settings" };
+      return { kind: "overview" };
     default:
       return { kind: "obs-view", view };
   }
@@ -246,13 +243,9 @@ export function pageOfObsView(view: ObsView | undefined): ConsolePage {
 /** The panel view a console page hosts, when it hosts one. */
 export function obsViewOfPage(page: ConsolePage): ObsView | null {
   switch (page.kind) {
-    case "observability":
-      return "overview";
-    case "settings":
-      return "usage";
     case "obs-view":
-      // Metrics (the explorer, ../Observability/Metrics) and Dashboards
-      // (decision DB) are console pages of their own, not panel views.
+      // Metrics (the explorer, ../Observability/Metrics) and Dashboards are
+      // console pages of their own, not panel views.
       return page.view === "metrics" || page.view === "dashboards" ? null : page.view;
     default:
       return null;
@@ -296,7 +289,7 @@ export function carriedOrgSearch(search: Record<string, unknown>): Record<string
  * What a retired Observability URL carried: the current keys, plus the
  * retired `view=workloads` and the `workload` it had open.
  */
-export type LegacyObsSearch = Omit<ObsSearch, "view"> & { view?: ObsView | "workloads"; workload?: string };
+export type LegacyObsSearch = Omit<ObsSearch, "view"> & { view?: ObsView | "workloads" | "usage"; workload?: string };
 
 /** What a legacy `/forge/env/:env` URL carried. */
 export interface LegacyEnvSearch extends LegacyObsSearch {
@@ -318,7 +311,7 @@ function legacyWorkloadsTarget(project: string, env: string, workload: string | 
  * scope a notification or bookmark meant survives the move.
  *
  * The per-environment resource tabs become the project's resource pages
- * scoped to that environment (decision D1); everything else about the
+ * scoped to that environment; everything else about the
  * environment — overview, the local dev stack, domain bindings, the retired
  * tab names — is the environment's own page under Configure.
  */
@@ -331,12 +324,14 @@ export function legacyEnvTarget(project: string, env: string, search: LegacyEnvS
     case "secrets":
       return withSearch(consolePath(project, { kind: "secrets" }), { env, secret: search.secret });
     case "observability":
+      if (search.view === "usage") return ORG_USAGE_PATH;
       if (search.view === "workloads") return legacyWorkloadsTarget(project, env, search.workload);
       return withSearch(consolePath(project, pageOfObsView(search.view)), {
         env,
         ...carriedObsSearch(search as Record<string, unknown>),
       });
     case "domains":
+      return withSearch(consolePath(project, { kind: "domains" }), { env });
     case "identity":
     case "running":
       return withSearch(consolePath(project, { kind: "environment", env }), { env, tab: search.tab });
@@ -347,6 +342,7 @@ export function legacyEnvTarget(project: string, env: string, search: LegacyEnvS
 
 /** `/forge/observability?view=…&envs=…` → the page hosting that view, scoped. */
 export function legacyObservabilityTarget(project: string, search: LegacyObsSearch): string {
+  if (search.view === "usage") return ORG_USAGE_PATH;
   if (search.view === "workloads") return legacyWorkloadsTarget(project, envScopeOfEnvs(search.envs), search.workload);
   return withSearch(consolePath(project, pageOfObsView(search.view)), {
     env: envScopeOfEnvs(search.envs),

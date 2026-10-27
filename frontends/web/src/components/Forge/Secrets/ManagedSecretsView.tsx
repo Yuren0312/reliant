@@ -236,11 +236,11 @@ function StoreHeader({
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-sm font-semibold text-foreground">{modeLabel(mode)}</h2>
-          <span className="font-mono text-xs text-muted-foreground">{env}</span>
+          <h2 className="text-sm font-semibold text-ink">{modeLabel(mode)}</h2>
+          <span className="font-mono text-xs text-ink-muted">{env}</span>
           {protection?.protected && <ProtectedBadge />}
         </div>
-        <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
+        <p className="max-w-2xl text-xs leading-relaxed text-ink-muted">
           {/* A reason there is no lookup outranks the mode sentence: it is the
               more specific answer to "why can I not set this here". */}
           <WithCode text={availabilityExplanation(availability) ?? modeExplanation(mode, envKind)} />
@@ -252,13 +252,13 @@ function StoreHeader({
             explanation rather than beside the heading because it is the
             follow-up to that sentence — "and here is the longer answer" —
             not a second navigation target competing with it. */}
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ink-muted">
           <a
             href={SECRETS_DOCS_URL}
             target="_blank"
             rel="noreferrer"
             data-testid="secrets-docs-link"
-            className="inline-flex items-center gap-1 text-foreground underline underline-offset-2 hover:text-primary"
+            className="inline-flex items-center gap-1 text-ink underline underline-offset-2 hover:text-primary"
           >
             How secrets work
             <ExternalLink className="h-3 w-3" aria-hidden="true" />
@@ -270,7 +270,7 @@ function StoreHeader({
         </p>
 
         {tally.total > 0 && (
-          <div className="flex items-center gap-3 pt-1 text-xs text-muted-foreground">
+          <div className="flex items-center gap-3 pt-1 text-xs text-ink-muted">
             <Count label="total" value={tally.total} />
             <Divider />
             <Count label="set" value={tally.set} />
@@ -326,7 +326,7 @@ function ProtectedBadge() {
     <span
       data-testid="secrets-protected-badge"
       title="Changes need org admin and a one-time code from your email"
-      className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-2xs font-medium text-foreground"
+      className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-2xs font-medium text-ink"
     >
       <Lock className="h-3 w-3" aria-hidden="true" />
       Protected
@@ -355,21 +355,21 @@ function ProtectionLine({
 
   if (grantUntil !== null) {
     return (
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="secrets-step-up-live">
+      <p className="flex items-center gap-1.5 text-xs text-ink-muted" data-testid="secrets-step-up-live">
         <LockOpen className="h-3 w-3 text-success-ink" aria-hidden="true" />
         <span>
           Confirmed — you can change secrets here for{" "}
-          <span className="tabular-nums text-foreground" data-testid="secrets-step-up-countdown">
+          <span className="tabular-nums text-ink" data-testid="secrets-step-up-countdown">
             {formatCountdown(grantUntil - now)}
           </span>
-          . This also covers <code className="font-mono text-foreground">forge secret set</code> from your
+          . This also covers <code className="font-mono text-ink">forge secret set</code> from your
           machine.
         </span>
       </p>
     );
   }
   return (
-    <p className="text-xs text-muted-foreground" data-testid="secrets-step-up-locked">
+    <p className="text-xs text-ink-muted" data-testid="secrets-step-up-locked">
       Changes here need a one-time code from your email, and are allowed for 15 minutes after you
       confirm.{" "}
       {onUnlock && (
@@ -377,7 +377,7 @@ function ProtectionLine({
           type="button"
           onClick={onUnlock}
           data-testid="secrets-unlock"
-          className="text-foreground underline underline-offset-2 hover:text-primary"
+          className="text-ink underline underline-offset-2 hover:text-primary"
         >
           Confirm now
         </button>
@@ -396,7 +396,7 @@ function WithCode({ text }: { text: string }) {
     <>
       {text.split(/(`[^`]+`)/g).map((part, i) =>
         part.startsWith("`") && part.endsWith("`") ? (
-          <code key={i} className="font-mono text-foreground">
+          <code key={i} className="font-mono text-ink">
             {part.slice(1, -1)}
           </code>
         ) : (
@@ -411,7 +411,7 @@ function WithCode({ text }: { text: string }) {
 function Count({ label, value, tone }: { label: string; value: number; tone?: "danger" }) {
   return (
     <span>
-      <span className={cn("font-medium", tone === "danger" ? "text-destructive-ink" : "text-foreground")}>
+      <span className={cn("font-medium", tone === "danger" ? "text-danger-ink" : "text-ink")}>
         {value}
       </span>{" "}
       {label}
@@ -444,7 +444,7 @@ function SecretList({
   onSelect: (name: string) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <div className="overflow-hidden rounded-lg border border-border bg-surface">
       <StackedTable className="w-full border-collapse text-sm">
         <caption className="sr-only">
           Secrets in this environment, by state and version. No values are shown or fetched.
@@ -473,11 +473,11 @@ function SecretList({
               }}
               className={cn(
                 "cursor-pointer border-b border-border/60 transition-colors last:border-0",
-                "hover:bg-foreground/[0.03] focus:outline-none focus-visible:bg-foreground/[0.03]"
+                "hover:bg-ink/[0.03] focus:outline-none focus-visible:bg-ink/[0.03]"
               )}
             >
               {/* Mono: a secret name is an identifier. */}
-              <td className="px-4 py-2.5 font-mono text-sm text-foreground">{row.name}</td>
+              <td className="px-4 py-2.5 font-mono text-sm text-ink">{row.name}</td>
               <td className="px-4 py-2.5">
                 <Status
                   size="sm"
@@ -485,13 +485,13 @@ function SecretList({
                   label={<span className="text-xs">{rowStatusLabel(row)}</span>}
                 />
               </td>
-              <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+              <td className="px-4 py-2.5 font-mono text-xs text-ink-muted">
                 {row.summary && row.summary.currentVersion > 0 ? `v${row.summary.currentVersion}` : "—"}
               </td>
-              <td className="px-4 py-2.5 text-xs text-muted-foreground">
+              <td className="px-4 py-2.5 text-xs text-ink-muted">
                 {formatShort(row.summary?.updatedAt)}
               </td>
-              <td className="px-4 py-2.5 text-xs text-muted-foreground">
+              <td className="px-4 py-2.5 text-xs text-ink-muted">
                 <DeclaredBy row={row} />
               </td>
             </tr>
@@ -508,7 +508,7 @@ function Th({ children }: { children: React.ReactNode }) {
       scope="col"
       /* Muted uppercase micro-label — the section-label treatment, used for
          column heads so they recede behind the data they describe. */
-      className="px-4 py-2 text-left text-2xs font-medium uppercase tracking-wide text-muted-foreground"
+      className="px-4 py-2 text-left text-2xs font-medium uppercase tracking-wide text-ink-muted"
     >
       {children}
     </th>
@@ -574,7 +574,7 @@ function SecretDetail({
       <button
         type="button"
         onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        className="inline-flex items-center gap-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
         All secrets
@@ -583,22 +583,22 @@ function SecretDetail({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-2">
           {/* The secret name is the page's subject AND an identifier: mono. */}
-          <h2 className="font-mono text-base font-semibold text-foreground">{row.name}</h2>
+          <h2 className="font-mono text-base font-semibold text-ink">{row.name}</h2>
           <div className="flex items-center gap-2.5">
             <Status
               size="sm"
               tone={rowStatusVariant(row)}
               label={<span className="text-xs">{rowStatusLabel(row)}</span>}
             />
-            <span className="font-mono text-xs text-muted-foreground">{env}</span>
+            <span className="font-mono text-xs text-ink-muted">{env}</span>
           </div>
-          <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
+          <p className="max-w-2xl text-xs leading-relaxed text-ink-muted">
             {row.origin === "declared-unset"
               ? "A workload in this environment declares this secret and the store has never held a value for it. Deploys that need it will fail until it is set."
               : row.origin === "declared-unread"
                 ? "A workload in this environment declares this secret, but its store could not be read from here, so whether it holds a value is not known. This is not a statement that it is missing."
                 : row.origin === "declared-present"
-                  ? "Forge reports the store holds a value for this secret. Its version history lives in the store, which this console cannot read for this environment."
+                  ? "Forge reports the store holds a value for this secret. Its version history lives in the store, which Reliant cannot read for this environment."
                   : row.state
                 ? managedSecretStateExplanation(row.state)
                 : ""}
@@ -622,13 +622,13 @@ function SecretDetail({
 
       {row.declaredBy.length > 0 && (
         <section className="space-y-2">
-          <h3 className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+          <h3 className="text-2xs font-medium uppercase tracking-wide text-ink-muted">
             Declared by
           </h3>
           <ul className="space-y-1">
             {row.declaredBy.map((decl, i) => (
-              <li key={`${decl.workload}-${i}`} className="text-xs text-muted-foreground">
-                <span className="font-mono text-foreground">{decl.workload ?? "—"}</span>
+              <li key={`${decl.workload}-${i}`} className="text-xs text-ink-muted">
+                <span className="font-mono text-ink">{decl.workload ?? "—"}</span>
                 {decl.kind && <span> · {decl.kind}</span>}
               </li>
             ))}
@@ -640,7 +640,7 @@ function SecretDetail({
         <p
           role="alert"
           data-testid="secret-action-error"
-          className="flex max-w-2xl gap-2 text-xs leading-relaxed text-destructive-ink"
+          className="flex max-w-2xl gap-2 text-xs leading-relaxed text-danger-ink"
         >
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>{props.actionError}</span>
@@ -655,19 +655,19 @@ function SecretDetail({
         // It no longer says "setting a value here creates the first one":
         // with no row there is nowhere to set one (§10 state 3), so that was
         // an offer of a write this console cannot perform.
-        <p className="max-w-2xl text-xs text-muted-foreground" data-testid="version-history-not-ensured">
+        <p className="max-w-2xl text-xs text-ink-muted" data-testid="version-history-not-ensured">
           No versions yet — this environment hasn&apos;t been built, so nothing has ever held a
           value for it.
         </p>
       ) : availability !== "available" ? (
         // Only the store knows a secret's versions. When it cannot be read
         // here, "No versions yet" would be a claim — say where they are.
-        <p className="max-w-2xl text-xs text-muted-foreground" data-testid="version-history-unavailable">
+        <p className="max-w-2xl text-xs text-ink-muted" data-testid="version-history-unavailable">
           Version history is kept in the store, which cannot be read from here for this environment.
         </p>
       ) : (
       <section className="space-y-2">
-        <h3 className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        <h3 className="text-2xs font-medium uppercase tracking-wide text-ink-muted">
           Version history
         </h3>
         <SecretVersionHistory
@@ -712,8 +712,8 @@ function EmptyState({
       data-testid="secrets-empty"
       className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border px-6 py-14 text-center"
     >
-      <KeyRound className="h-5 w-5 text-muted-foreground" aria-hidden="true" />
-      <p className="max-w-md text-sm text-muted-foreground">
+      <KeyRound className="h-5 w-5 text-ink-muted" aria-hidden="true" />
+      <p className="max-w-md text-sm text-ink-muted">
         {/* The two no-row availabilities say what to RUN, not "add one now"
             (#353, §10 state 3). They used to promise that a value added here
             was kept for the first deploy — which this console could only
@@ -725,7 +725,7 @@ function EmptyState({
             ? "This environment hasn't been built yet, so nothing holds a value for it. Run forge env build for it, or open Preview with your daemon online — after that its secrets can be set here, with your daemon offline."
             : "No secrets in this environment yet."
           : mode === "managed-remote"
-            ? "No secrets are declared here, and this console cannot read the managed store. Set one with forge secret set."
+            ? "No secrets are declared here, and Reliant cannot read the managed store. Set one with forge secret set."
           : mode === "external"
             ? "No secrets are declared here. An external secret manager holds the values for this environment, so they are provisioned outside reliant."
             : mode === "file"
@@ -758,15 +758,15 @@ function EmptyState({
 function SecretListSkeleton() {
   return (
     <div
-      className="overflow-hidden rounded-lg border border-border bg-card"
+      className="overflow-hidden rounded-lg border border-border bg-surface"
       data-testid="secrets-skeleton"
     >
       <span className="sr-only">Loading secrets…</span>
       {[0, 1, 2, 3].map((i) => (
         <div key={i} className="flex items-center gap-4 border-b border-border/60 px-4 py-3 last:border-0">
-          <div className="h-3.5 w-40 animate-pulse rounded bg-foreground/[0.06]" />
-          <div className="h-3.5 w-16 animate-pulse rounded bg-foreground/[0.06]" />
-          <div className="h-3.5 w-10 animate-pulse rounded bg-foreground/[0.06]" />
+          <div className="h-3.5 w-40 animate-pulse rounded bg-ink/[0.06]" />
+          <div className="h-3.5 w-16 animate-pulse rounded bg-ink/[0.06]" />
+          <div className="h-3.5 w-10 animate-pulse rounded bg-ink/[0.06]" />
         </div>
       ))}
     </div>

@@ -32,7 +32,7 @@ const state = vi.hoisted(() => ({
   envs: { isLoading: false, data: undefined as unknown },
   appNames: [] as string[],
   alerts: [] as { state: string }[],
-  panelProps: [] as { place: unknown; search: unknown; chrome?: string }[],
+  panelProps: [] as { place: unknown; search: unknown }[],
   panelNavigate: undefined as undefined | ((next: Record<string, unknown>) => void),
 }));
 
@@ -51,7 +51,7 @@ vi.mock("@/store/authStore", () => ({
   useAuthStore: (select: (s: { user: null }) => unknown) => select({ user: null }),
 }));
 vi.mock("../../Observability/ObservabilityPanel", () => ({
-  default: (props: { place: unknown; search: unknown; navigate: (next: Record<string, unknown>) => void; chrome?: string }) => {
+  default: (props: { place: unknown; search: unknown; navigate: (next: Record<string, unknown>) => void }) => {
     state.panelProps.push(props);
     state.panelNavigate = props.navigate;
     return <div data-testid="panel-stub" />;
@@ -155,7 +155,6 @@ describe("OrgObservabilityPage", () => {
     await mount("/forge/observability/logs?q=timeout&apps=%5B%22shop%22%5D&envs=%5B%22shop%2Fprod%22%5D");
     await screen.findByTestId("panel-stub");
     const props = state.panelProps.at(-1)!;
-    expect(props.chrome).toBe("console");
     expect(props.place).toEqual({
       kind: "org",
       apps: ["api", "shop"],
@@ -217,14 +216,6 @@ describe("OrgObservabilityPage", () => {
     state.panelNavigate!({ view: "traces", trace: "abc" });
     await waitFor(() => expect(router.state.location.pathname).toBe("/forge/observability/traces"));
     expect(router.state.location.search).toMatchObject({ apps: ["shop"], range: "7d", trace: "abc" });
-  });
-
-  it("sends Usage to the overview: the org console has no page for it", async () => {
-    available(APPS);
-    const router = await mount("/forge/observability/logs");
-    await screen.findByTestId("panel-stub");
-    state.panelNavigate!({ view: "usage" });
-    await waitFor(() => expect(router.state.location.pathname).toBe("/forge/observability"));
   });
 
   it("updates the search in place for a change within the view", async () => {

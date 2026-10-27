@@ -483,9 +483,10 @@ func runForgeDeploySelfExec(ctx context.Context, projectDir string, args []strin
 	full := append([]string{"forge"}, args...)
 	cmd := exec.CommandContext(ctx, self, full...)
 	cmd.Dir = projectDir
-	if org := forgeOrgEnv(ctx); org != nil {
-		cmd.Env = append(os.Environ(), org...)
-	}
+	// The deploy attempt forge records on the control plane says where it came
+	// from: this path is the console's Deploy dialog. Display only.
+	cmd.Env = append(os.Environ(), "FORGE_DEPLOY_SOURCE=console")
+	cmd.Env = append(cmd.Env, forgeOrgEnv(ctx)...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

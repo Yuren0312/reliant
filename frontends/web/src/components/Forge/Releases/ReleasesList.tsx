@@ -1,22 +1,22 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * RELEASES — the project's one list of releases (decision D2), with what is
+ * RELEASES — the project's one list of releases, with what is
  * where across environments at a glance.
  *
- *   header      the delivery figures for the scoped environment (D9: Delivery
+ *   header      the delivery figures for the scoped environment (Delivery
  *               folds in here as a strip of DORA facts, each with the server's
  *               own definition on hover).
  *   pipeline    one cell per long-lived environment: the release live there,
  *               how far it is from prod, who put it there and when, and any
  *               scoped deploy on top; the previews share one cell.
  *   table       one row per release: version (with scoped / rolled-back tags),
- *               sha + commit subject (D4), checks, ONE COLUMN PER LONG-LIVED
+ *               sha + commit subject, checks, ONE COLUMN PER LONG-LIVED
  *               ENVIRONMENT (● live · ◐ partly live · ○ ran before · · never),
  *               previews, author, and a row menu whose actions name their
- *               environment (D1).
+ *               environment.
  *
- * The top-bar scope (D1, default prod) highlights its column and, by default,
+ * The top-bar scope (default prod) highlights its column and, by default,
  * narrows the list to the releases that ran there; one click shows the rest.
  */
 
@@ -69,6 +69,8 @@ export interface ReleasesSearch {
   status?: StatusFilter;
   /** Show every release, not only those that ran in the scoped environment. */
   every?: boolean;
+  /** The deploy whose output is open in the Deploys section. */
+  deploy?: string;
 }
 
 export interface PromoteRequest {
@@ -524,7 +526,7 @@ function EnvButton({ name, selected, onSelect }: { name: string; selected: boole
       type="button"
       onClick={() => onSelect(name)}
       aria-pressed={selected}
-      title={selected ? `The page is scoped to ${name}` : `Scope the console to ${name}`}
+      title={selected ? `The page is scoped to ${name}` : `Show ${name}`}
       className={cn("rounded text-xs hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent", selected ? "font-medium text-ink" : "text-ink-muted")}
     >
       {name}
@@ -669,10 +671,10 @@ function ReleaseTable({
   const previewSelected = !!model?.previews.some((candidate) => candidate.name === env);
   const columns = 5 + longEnvs.length + (hasPreviews ? 1 : 0);
   // The scoped environment's column is a SELECTION, the one structural use
-  // the web-styling contract allows `bg-muted` (interaction state): it lifts
+  // the web-styling contract allows `bg-surface-sunken` (interaction state): it lifts
   // the column in dark and tints it in light, as the mockup's muted-55% does.
   // `bg-surface-muted` (= --background) would recess it into a black stripe.
-  const sel = (on: boolean) => (on ? "bg-muted/60" : "");
+  const sel = (on: boolean) => (on ? "bg-surface-sunken" : "");
   // Scoped deploys that sit on top of a release, by version, for the follow-up line under its row.
   const followUps = new Map<string, { env: string; targets: string[]; by: string; at?: string }[]>();
   for (const cell of model?.pipeline ?? []) {
@@ -747,7 +749,7 @@ function ReleaseTable({
                           title={version}
                           className="no-color shrink-0 font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent"
                         >
-                          {version}
+                          {shortVersion(version)}
                         </Link>
                         <ReleaseTags row={row} />
                       </span>

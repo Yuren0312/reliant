@@ -135,7 +135,7 @@ export function OrgObservabilityPage() {
   } else {
     body = (
       <Suspense fallback={loading}>
-        <ObservabilityPanel place={place} search={obsSearch} navigate={navigateObs} chrome="console" />
+        <ObservabilityPanel place={place} search={obsSearch} navigate={navigateObs} />
       </Suspense>
     );
   }

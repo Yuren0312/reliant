@@ -28,6 +28,8 @@ import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundar
 import { lazyRoute } from './lib/lazyRoute'
 import { AuthGuard } from './components/AuthGuard'
 import { ModalLayer } from './components/Modals/ModalLayer'
+import { AddProjectDialogHost } from './components/Projects/AddProjectDialog'
+import { AutomationDialogHost } from './components/Automations/dialog/AutomationDialogHost'
 import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
@@ -109,18 +111,16 @@ const ConnectorConsentPage = lazyRoute(
   () => import('./components/Settings/ConnectorConsentPage'), 'ConnectorConsentPage')
 const WorkflowPage = lazyRoute(
   () => import('./components/workflow/WorkflowPage'), 'WorkflowPage')
-const AutomationsListPage = lazyRoute(
-  () => import('./components/Automations/AutomationsListPage'), 'AutomationsListPage')
-const AutomationDetailPage = lazyRoute(
-  () => import('./components/Automations/AutomationDetailPage'), 'AutomationDetailPage')
+const AutomationRedirectPage = lazyRoute(
+  () => import('./components/workflows/AutomationRedirectPage'), 'AutomationRedirectPage')
 const RunsPage = lazyRoute(
   () => import('./components/runs/RunsPage'), 'RunsPage')
 const RunDetailPage = lazyRoute(
   () => import('./components/runs/RunDetailPage'), 'RunDetailPage')
 const WorkflowsLayout = lazyRoute(
   () => import('./components/workflows/WorkflowsShell'), 'WorkflowsLayout')
-const LibraryPage = lazyRoute(
-  () => import('./components/workflows/library/LibraryPage'), 'LibraryPage')
+const WorkflowsListPage = lazyRoute(
+  () => import('./components/workflows/list/WorkflowsListPage'), 'WorkflowsListPage')
 const WorkflowDetailPage = lazyRoute(
   () => import('./components/workflows/detail/WorkflowDetailPage'), 'WorkflowDetailPage')
 const InboxPage = lazyRoute(
@@ -151,6 +151,10 @@ const MobileWorkflowCatalog = lazyRoute(
   () => import('./components/Mobile/MobileWorkflowCatalog'), 'MobileWorkflowCatalog')
 const MobileInboxScreen = lazyRoute(
   () => import('./components/Mobile/MobileInboxScreen'), 'MobileInboxScreen')
+const MobileRunsScreen = lazyRoute(
+  () => import('./components/Mobile/MobileRunsScreen'), 'MobileRunsScreen')
+const MobileAutomationRedirect = lazyRoute(
+  () => import('./components/Mobile/MobileAutomationRedirect'), 'MobileAutomationRedirect')
 const MobileDiagnosticsRoute = lazyRoute(
   () => import('./components/Mobile/MobileDiagnosticsRoute'), 'MobileDiagnosticsRoute')
 const MobileSettingsScreen = lazyRoute(
@@ -173,8 +177,6 @@ const ForgeConsoleReleasesPage = lazyRoute(
   () => import('./components/Forge/Releases/ReleasesPages'), 'ReleasesPage')
 const ForgeConsoleReleasePage = lazyRoute(
   () => import('./components/Forge/Releases/ReleasesPages'), 'ReleasePage')
-const ForgeConsoleObservabilityPage = lazyRoute(
-  () => import('./components/Forge/Console/ConsolePages'), 'ObservabilityOverviewPage')
 const ForgeConsoleObservabilityViewPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'ObservabilityViewPage')
 const ForgeConsoleDashboardsPage = lazyRoute(
@@ -183,10 +185,6 @@ const ForgeConsoleDashboardPage = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardPage')
 const ForgeConsoleSecretsPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'SecretsPage')
-const ForgeConsoleMonitoringPage = lazyRoute(
-  () => import('./components/Forge/Console/ConsolePages'), 'MonitoringSettingsPage')
-const ForgeConsoleSettingsPage = lazyRoute(
-  () => import('./components/Forge/Console/ConsolePages'), 'ProjectSettingsPage')
 const ForgeConsoleActivityPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'ActivityPage')
 const ForgeEnvironmentsPage = lazyRoute(
@@ -281,6 +279,11 @@ function RootShell() {
         <Outlet />
       </ShortcutHost>
       <ModalLayer />
+      {/* Add project opens over any route (the sidebar, Settings, the
+          new-chat project chip, the shortcut, the tray). */}
+      <AddProjectDialogHost />
+      {/* openAutomationDialog: one automation dialog for every page, chat card and builder panel. */}
+      <AutomationDialogHost />
       <AnonSignInNudge />
       <Toaster />
       <NewBuildPrompt />
@@ -488,17 +491,17 @@ const indexRoute = createRoute({
   component: App,
 })
 
-// Project routes — the URL is the source of truth for the currently-selected
-// project. `/project/$projectId` deep-links into a specific project; the App
-// component reads the param via useParams and calls selectProject. `/project`
-// (no id) redirects to `/` (the project picker view inside App).
+// Project routes — the URL carries the sidebar's project filter.
+// `/project/$projectId` shows one project (App reads the param via useParams
+// and calls setProjectFilter); `/` shows every project. `/project` (no id)
+// redirects to `/`.
 const projectRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: 'project/$projectId',
   component: App,
 })
 
-const projectPickerRedirectRoute = createRoute({
+const projectRootRedirectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/project',
   component: () => <Navigate to="/" search={{}} />,
@@ -657,17 +660,16 @@ const workflowBuilderRoute = createRoute({
   component: () => <WorkflowPage />,
 })
 
-// The Workflows area — Library, Runs, Automations — and the redirects from
+// The Workflows area — Workflows and Runs — and the redirects from
 // the paths it replaced. Defined in workflowsAreaRoutes.tsx so the route tests
 // mount the same definitions.
 const workflowsAreaRoutes = createWorkflowsAreaRoutes(() => authenticatedLayoutRoute, {
   layout: WorkflowsLayout,
-  library: LibraryPage,
+  library: WorkflowsListPage,
   workflowDetail: WorkflowDetailPage,
   runs: RunsPage,
   runDetail: RunDetailPage,
-  automations: AutomationsListPage,
-  automationDetail: AutomationDetailPage,
+  automationRedirect: AutomationRedirectPage,
 })
 
 // Inbox: everything waiting on the user, across every chat and project
@@ -698,7 +700,7 @@ function ForgeGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// The forge console (research/console-v3/PROPOSAL.md §3.2): /forge/p/$project/…
+// The forge console: /forge/p/$project/…
 // for every page, addressed by the FORGE project name, plus /forge and the
 // retired URLs, which resolve a project and redirect so bookmarks and
 // notification deep links keep working. Defined in forgeConsoleRoutes.tsx so
@@ -721,7 +723,6 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   workload: gated(ForgeConsoleWorkloadPage),
   releases: gated(ForgeConsoleReleasesPage),
   release: gated(ForgeConsoleReleasePage),
-  observability: gated(ForgeConsoleObservabilityPage),
   observabilityView: gated(ForgeConsoleObservabilityViewPage),
   dashboards: gated(ForgeConsoleDashboardsPage),
   dashboard: gated(ForgeConsoleDashboardPage),
@@ -729,8 +730,6 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   environment: gated(ForgeEnvPage),
   secrets: gated(ForgeConsoleSecretsPage),
   domains: gated(ForgeDomainsPage),
-  monitoring: gated(ForgeConsoleMonitoringPage),
-  settings: gated(ForgeConsoleSettingsPage),
   activity: gated(ForgeConsoleActivityPage),
   orgLayout: gated(ForgeOrgLayout),
   orgObservability: gated(ForgeOrgObservabilityRoute),
@@ -857,6 +856,21 @@ const mobileInboxRoute = createRoute({
   component: MobileInboxScreen,
 })
 
+// The run log, and an automation link resolved to its workflow: so a desktop
+// /workflows/runs or automation link opened on a phone lands on its target
+// (lib/mobileRedirect.ts, mobilePathFor) instead of the chat list.
+const mobileRunsRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/runs',
+  component: MobileRunsScreen,
+})
+
+const mobileAutomationRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/automations/$triggerId',
+  component: MobileAutomationRedirect,
+})
+
 // Settings → Diagnostics at its own URL, for a support link.
 const mobileDiagnosticsRoute = createRoute({
   getParentRoute: () => mobileLayoutRoute,
@@ -920,7 +934,7 @@ const routeTree = rootRoute.addChildren([
   forgeWorkloadsPreviewRoute,
   forgeDashboardsPreviewRoute,
   forgeMetricsPreviewRoute,
-  projectPickerRedirectRoute,
+  projectRootRedirectRoute,
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([
     mobileLayoutRoute.addChildren([
@@ -938,6 +952,8 @@ const routeTree = rootRoute.addChildren([
       mobileSettingsRoute,
       mobileGitHubRoute,
       mobileInboxRoute,
+      mobileRunsRoute,
+      mobileAutomationRoute,
       mobileDiagnosticsRoute,
     ]),
     onboardingRoute,

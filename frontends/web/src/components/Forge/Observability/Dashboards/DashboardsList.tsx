@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * OBSERVABILITY › DASHBOARDS (console v3, decision DB): every dashboard of
+ * OBSERVABILITY › DASHBOARDS: every dashboard of
  * the project in the console's scope, as the reader looks for one.
  *
  *   toolbar           search, Source (release / workspace), Owner (forge,
@@ -276,8 +276,8 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
                     <div key={dashboard.ref.key} className="flex flex-wrap items-center justify-between gap-3 p-4">
                       <div className="min-w-0">
                         <Link href={hrefs.dashboard(dashboard.ref)} className={INK_LINK}>{dashboard.title}</Link>
-                        <p className="text-sm text-muted-foreground">{dashboard.description}</p>
-                        <p className="text-sm text-muted-foreground">Requires cost-read permission, not billing management.</p>
+                        <p className="text-sm text-ink-muted">{dashboard.description}</p>
+                        <p className="text-sm text-ink-muted">Requires cost-read permission, not billing management.</p>
                       </div>
                       <SourceTag source={dashboard.source} />
                     </div>

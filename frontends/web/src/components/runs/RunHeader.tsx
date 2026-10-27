@@ -24,6 +24,7 @@ import type { LaunchEvent } from "@/hooks/run-queries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { isLiveRunStatus, launchKindDisplay, runStatus, type LaunchKindDisplay } from "@/lib/runStatus";
 import { formatAbsoluteTime } from "@/lib/relativeTime";
+import { automationHref } from "@/lib/workflowsArea";
 import Button from "@/components/forge-ui/button";
 import { RunStatusBadge } from "./RunStatusIndicator";
 import { daemonLabel } from "../Automations/daemonChoices";
@@ -47,6 +48,8 @@ export interface RunHeaderActions {
   onRerun?: () => void;
   /** Fire this run's automation now; omitted unless it is a live automation's run. */
   onRunAutomationNow?: () => void;
+  /** Make an automation of this run (offered once it succeeded). */
+  onSchedule?: () => void;
 }
 
 interface RunHeaderProps {
@@ -136,8 +139,14 @@ export function RunHeader({ chat, triggerName, event, parent, projectName, actio
               leftIcon={<RotateCcw className="h-4 w-4" />}
               onClick={actions.onRerun}
               disabled={busy}
+              title="Runs it again with the workflow's current definition"
             >
-              Re-run (current definition)
+              Re-run
+            </Button>
+          )}
+          {actions.onSchedule && (status.key === "succeeded" || status.key === "completed") && (
+            <Button size="sm" variant="ghost" leftIcon={<CalendarClock className="h-4 w-4" />} onClick={actions.onSchedule} disabled={busy}>
+              Run this on a schedule
             </Button>
           )}
           {actions.onRunAutomationNow && (
@@ -147,8 +156,9 @@ export function RunHeader({ chat, triggerName, event, parent, projectName, actio
               leftIcon={<CalendarClock className="h-4 w-4" />}
               onClick={actions.onRunAutomationNow}
               disabled={busy}
+              title="Fires the trigger that started this run, under its own settings"
             >
-              Run automation now
+              Fire trigger now
             </Button>
           )}
           {actions.onToggleDiagram && (
@@ -228,13 +238,12 @@ function StartedBy({
     return (
       <>
         {parts.lead}
-        <Link
-          to="/workflows/automations/$triggerId"
-          params={{ triggerId: chat.triggerId }}
+        <a
+          href={automationHref({ id: chat.triggerId, workflow: chat.workflowName, projectId: chat.projectId })}
           className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           {parts.automation}
-        </Link>
+        </a>
         {parts.trail}
       </>
     );

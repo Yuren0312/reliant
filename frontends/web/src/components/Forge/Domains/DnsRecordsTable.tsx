@@ -55,7 +55,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       type="button"
       onClick={onCopy}
       aria-label={copied ? `${label} copied` : `Copy ${label}`}
-      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-muted transition hover:bg-ink/5 hover:text-ink focus:outline-none focus:ring-1 focus:ring-ring"
     >
       {copied ? (
         <Check className="h-3.5 w-3.5 text-success-ink" aria-hidden="true" />
@@ -107,8 +107,8 @@ function purposeOf(type: string): string {
 function RecordStatus({ check }: { check?: DnsRecordCheck }) {
   const styles: Record<DnsRecordCheck, { icon: typeof Check; className: string; label: string }> = {
     ok: { icon: Check, className: "text-success-ink", label: "Found" },
-    failed: { icon: AlertTriangle, className: "text-destructive-ink", label: "Not found" },
-    unchecked: { icon: CircleDashed, className: "text-muted-foreground", label: "Not checked yet" },
+    failed: { icon: AlertTriangle, className: "text-danger-ink", label: "Not found" },
+    unchecked: { icon: CircleDashed, className: "text-ink-muted", label: "Not checked yet" },
   };
   // ABSENT IS `unchecked`, the same reading the wire conversion gives a
   // record that carries no verdict. This table is also handed records by
@@ -135,7 +135,7 @@ function RecordStatus({ check }: { check?: DnsRecordCheck }) {
 export function DnsRecordsTable({ records }: { records: DomainDnsRecord[] }) {
   if (records.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className="text-sm text-ink-muted">
         The control plane did not return any DNS records for this domain. That is expected for a
         domain Reliant owns, which needs no setup at your provider.
       </p>
@@ -143,11 +143,11 @@ export function DnsRecordsTable({ records }: { records: DomainDnsRecord[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/60 bg-background">
+    <div className="overflow-hidden rounded-lg border border-border/60 bg-surface-sunken">
       <StackedTable className="w-full text-left text-xs" data-testid="dns-records-table">
         <caption className="sr-only">DNS records to publish for this domain</caption>
         <thead>
-          <tr className="border-b border-border/60 text-2xs uppercase tracking-wide text-muted-foreground">
+          <tr className="border-b border-border/60 text-2xs uppercase tracking-wide text-ink-muted">
             <th scope="col" className="px-3 py-2 font-medium">
               Type
             </th>
@@ -171,23 +171,23 @@ export function DnsRecordsTable({ records }: { records: DomainDnsRecord[] }) {
                 className={cn(index > 0 && "border-t border-border/60")}
                 data-testid={`dns-record-${record.type.toLowerCase()}`}
               >
-                <td className="px-3 py-2 align-top font-mono font-medium text-foreground">
+                <td className="px-3 py-2 align-top font-mono font-medium text-ink">
                   {record.type}
                 </td>
                 <td className="px-3 py-2 align-top">
                   <div className="flex items-start gap-1">
                     {/* break-all, not truncate: an ellipsis would be copied
                         as literal dots by anyone selecting the text. */}
-                    <span className="break-all font-mono text-foreground">{record.name}</span>
+                    <span className="break-all font-mono text-ink">{record.name}</span>
                     <CopyButton value={record.name} label={`${record.type} record name`} />
                   </div>
                 </td>
                 <td className="px-3 py-2 align-top">
                   <div className="flex items-start gap-1">
-                    <span className="break-all font-mono text-foreground">{record.value}</span>
+                    <span className="break-all font-mono text-ink">{record.value}</span>
                     <CopyButton value={record.value} label={`${record.type} record value`} />
                   </div>
-                  {purpose && <p className="mt-1 max-w-prose text-2xs text-muted-foreground">{purpose}</p>}
+                  {purpose && <p className="mt-1 max-w-prose text-2xs text-ink-muted">{purpose}</p>}
                 </td>
                 <td className="px-3 py-2 align-top">
                   <RecordStatus check={record.check} />
@@ -196,7 +196,7 @@ export function DnsRecordsTable({ records }: { records: DomainDnsRecord[] }) {
                       thing that turns a cross into an action. */}
                   {record.detail && (
                     <p
-                      className="mt-1 max-w-prose text-2xs text-destructive-ink"
+                      className="mt-1 max-w-prose text-2xs text-danger-ink"
                       data-testid={`dns-record-detail-${record.type.toLowerCase()}`}
                     >
                       {record.detail}

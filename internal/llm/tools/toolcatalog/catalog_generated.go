@@ -132,6 +132,18 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"draft_automation": {
+		Bindable: map[string]struct{}{
+			"assumptions": {},
+			"name":        {},
+			"params":      {},
+			"prompt":      {},
+			"summary":     {},
+			"when":        {},
+			"workflow":    {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"edit": {
 		Bindable: map[string]struct{}{
 			"new_string":  {},
@@ -427,6 +439,17 @@ var generatedToolParams = map[string]ToolParams{
 			"owner":      {},
 			"repo":       {},
 			"title":      {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__pr_enqueue": {
+		Bindable: map[string]struct{}{
+			"connection":      {},
+			"expectedHeadOid": {},
+			"owner":           {},
+			"pull_number":     {},
+			"repo":            {},
+			"repository_id":   {},
 		},
 		Unbindable: map[string]string{},
 	},

@@ -6120,8 +6120,8 @@
             "IsOptional": false
           },
           {
-            "Name": "main_worktree",
-            "ProtoType": "message",
+            "Name": "main_worktrees",
+            "ProtoType": "[]message",
             "IsOptional": false,
             "MessageType": "reliant.v1.WorktreeSummary"
           }
@@ -7556,10 +7556,7 @@
         "reliant.v1.ListChatsRequest": [
           {
             "name": "project_id",
-            "kind": "string",
-            "validate": {
-              "required": true
-            }
+            "kind": "string"
           },
           {
             "name": "limit",
@@ -7588,9 +7585,10 @@
             "kind": "int64"
           },
           {
-            "name": "main_worktree",
+            "name": "main_worktrees",
             "kind": "message",
-            "type_name": "reliant.v1.WorktreeSummary"
+            "type_name": "reliant.v1.WorktreeSummary",
+            "repeated": true
           }
         ],
         "reliant.v1.ListMessagesRequest": [
@@ -8629,6 +8627,10 @@
             "name": "deleted_at",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "project_id",
+            "kind": "string"
           }
         ]
       },
@@ -9342,6 +9344,11 @@
             "Name": "parent_chat_id",
             "ProtoType": "string",
             "IsOptional": true
+          },
+          {
+            "Name": "include_unlaunched_events",
+            "ProtoType": "bool",
+            "IsOptional": true
           }
         ],
         "ListRunsResponse": [
@@ -9360,6 +9367,12 @@
             "Name": "next_page_token",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "unlaunched_events",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.UnlaunchedTriggerEvent"
           }
         ],
         "PauseRunRequest": [
@@ -9653,6 +9666,11 @@
             "name": "parent_chat_id",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "include_unlaunched_events",
+            "kind": "bool",
+            "optional": true
           }
         ],
         "reliant.v1.ListRunsResponse": [
@@ -9669,6 +9687,12 @@
           {
             "name": "next_page_token",
             "kind": "string"
+          },
+          {
+            "name": "unlaunched_events",
+            "kind": "message",
+            "type_name": "reliant.v1.UnlaunchedTriggerEvent",
+            "repeated": true
           }
         ],
         "reliant.v1.PauseRunRequest": [
@@ -9943,6 +9967,49 @@
             "kind": "message",
             "type_name": "reliant.v1.Run"
           }
+        ],
+        "reliant.v1.UnlaunchedTriggerEvent": [
+          {
+            "name": "id",
+            "kind": "string"
+          },
+          {
+            "name": "trigger_id",
+            "kind": "string"
+          },
+          {
+            "name": "trigger_name",
+            "kind": "string"
+          },
+          {
+            "name": "workflow_name",
+            "kind": "string"
+          },
+          {
+            "name": "project_id",
+            "kind": "string"
+          },
+          {
+            "name": "launch_kind",
+            "kind": "string"
+          },
+          {
+            "name": "occurred_at_ms",
+            "kind": "int64"
+          },
+          {
+            "name": "outcome",
+            "kind": "enum",
+            "type_name": "reliant.v1.UnlaunchedTriggerEventOutcome"
+          },
+          {
+            "name": "outcome_detail",
+            "kind": "string"
+          },
+          {
+            "name": "workflow_trigger",
+            "kind": "string"
+          }
         ]
       },
       "SchemaFiles": {
@@ -9966,7 +10033,8 @@
         "reliant.v1.SignalRunRequest": "reliant/v1/run.proto",
         "reliant.v1.SignalRunResponse": "reliant/v1/run.proto",
         "reliant.v1.StartRunRequest": "reliant/v1/run.proto",
-        "reliant.v1.StartRunResponse": "reliant/v1/run.proto"
+        "reliant.v1.StartRunResponse": "reliant/v1/run.proto",
+        "reliant.v1.UnlaunchedTriggerEvent": "reliant/v1/run.proto"
       },
       "Enums": {
         "reliant.v1.ChatActivity": [
@@ -10003,6 +10071,11 @@
           "RUN_DISPLAY_STATE_FAILED",
           "RUN_DISPLAY_STATE_CANCELLED",
           "RUN_DISPLAY_STATE_WAITING_FOR_MACHINE"
+        ],
+        "reliant.v1.UnlaunchedTriggerEventOutcome": [
+          "UNLAUNCHED_TRIGGER_EVENT_OUTCOME_UNSPECIFIED",
+          "UNLAUNCHED_TRIGGER_EVENT_OUTCOME_SKIPPED",
+          "UNLAUNCHED_TRIGGER_EVENT_OUTCOME_FAILED"
         ],
         "reliant.v1.WorkflowState": [
           "WORKFLOW_STATE_UNSPECIFIED",
@@ -10054,6 +10127,11 @@
           7,
           8
         ],
+        "reliant.v1.UnlaunchedTriggerEventOutcome": [
+          0,
+          1,
+          2
+        ],
         "reliant.v1.WorkflowState": [
           0,
           1,
@@ -10084,6 +10162,10 @@
         "reliant.v1.RunDisplayState": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "RunDisplayState"
+        },
+        "reliant.v1.UnlaunchedTriggerEventOutcome": {
+          "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+          "GoName": "UnlaunchedTriggerEventOutcome"
         },
         "reliant.v1.WorkflowState": {
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -10382,6 +10464,22 @@
           "Activity": {
             "Mutating": false
           }
+        },
+        {
+          "Name": "DraftAutomation",
+          "InputType": "DraftAutomationRequest",
+          "OutputType": "DraftAutomationResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.DraftAutomationRequest",
+          "OutputTypeFQ": "reliant.v1.DraftAutomationResponse",
+          "InputProtoFile": "reliant/v1/trigger.proto",
+          "OutputProtoFile": "reliant/v1/trigger.proto",
+          "Activity": {
+            "Mutating": true
+          }
         }
       ],
       "ProtoFile": "reliant/v1/trigger.proto",
@@ -10441,6 +10539,36 @@
             "ProtoType": "[]message",
             "IsOptional": false,
             "MessageType": "reliant.v1.TriggerFailure"
+          }
+        ],
+        "DraftAutomationRequest": [
+          {
+            "Name": "description",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "project_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "workflow",
+            "ProtoType": "string",
+            "IsOptional": false
+          },
+          {
+            "Name": "timezone",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "DraftAutomationResponse": [
+          {
+            "Name": "draft",
+            "ProtoType": "message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.AutomationDraft"
           }
         ],
         "EnableWorkflowRequest": [
@@ -10769,6 +10897,22 @@
       },
       "Audience": "user",
       "Schemas": {
+        "reliant.v1.AutomationDraft": [
+          {
+            "name": "definition",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerDefinition"
+          },
+          {
+            "name": "summary",
+            "kind": "string"
+          },
+          {
+            "name": "assumptions",
+            "kind": "string",
+            "repeated": true
+          }
+        ],
         "reliant.v1.CreateTriggerRequest": [
           {
             "name": "trigger",
@@ -10818,6 +10962,38 @@
             "kind": "message",
             "type_name": "reliant.v1.TriggerFailure",
             "repeated": true
+          }
+        ],
+        "reliant.v1.DraftAutomationRequest": [
+          {
+            "name": "description",
+            "kind": "string",
+            "validate": {
+              "min_len": 1,
+              "max_len": 4000
+            }
+          },
+          {
+            "name": "project_id",
+            "kind": "string",
+            "validate": {
+              "min_len": 1
+            }
+          },
+          {
+            "name": "workflow",
+            "kind": "string"
+          },
+          {
+            "name": "timezone",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.DraftAutomationResponse": [
+          {
+            "name": "draft",
+            "kind": "message",
+            "type_name": "reliant.v1.AutomationDraft"
           }
         ],
         "reliant.v1.EnableWorkflowRequest": [
@@ -11778,12 +11954,15 @@
         ]
       },
       "SchemaFiles": {
+        "reliant.v1.AutomationDraft": "reliant/v1/trigger.proto",
         "reliant.v1.CreateTriggerRequest": "reliant/v1/trigger.proto",
         "reliant.v1.CreateTriggerResponse": "reliant/v1/trigger.proto",
         "reliant.v1.DeleteTriggerRequest": "reliant/v1/trigger.proto",
         "reliant.v1.DeleteTriggerResponse": "reliant/v1/trigger.proto",
         "reliant.v1.DisableWorkflowRequest": "reliant/v1/trigger.proto",
         "reliant.v1.DisableWorkflowResponse": "reliant/v1/trigger.proto",
+        "reliant.v1.DraftAutomationRequest": "reliant/v1/trigger.proto",
+        "reliant.v1.DraftAutomationResponse": "reliant/v1/trigger.proto",
         "reliant.v1.EnableWorkflowRequest": "reliant/v1/trigger.proto",
         "reliant.v1.EnableWorkflowResponse": "reliant/v1/trigger.proto",
         "reliant.v1.FireTriggerRequest": "reliant/v1/trigger.proto",
@@ -41642,7 +41821,7 @@
     "reliant/v1/attachment.proto": "e6f64e796cbc3893024de1fae3f6f78364a97ce8b84a418f741fad24f4d6e490",
     "reliant/v1/background.proto": "fe7cf26a7d237af7b09b2c54c6cfc5dde7c8d9abb0eae4cc3eb2fe802fcaa0a1",
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
-    "reliant/v1/chat.proto": "9617ec3b58fa0244f55b43ef49ce5d940e451d4b9658d9d6c1baaa7abaff7b4e",
+    "reliant/v1/chat.proto": "e1bd53bbf69d1bd64ac6123a7f43464efb5e62541130baa6d66af3579b0c4c82",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
@@ -41662,7 +41841,7 @@
     "reliant/v1/provider_account.proto": "ad06dd4fd31338c6f0aa89d1b5902ee4794e8dd472067544df514a3c63a5ad82",
     "reliant/v1/question.proto": "aaa6172d584a3393d873602d48c00459d1f78322c5ea6404b1d5c8a280c7f024",
     "reliant/v1/repo.proto": "41361c4d530daffc74850527b0953baab9a7681b7f659e580c96d1de6d01498a",
-    "reliant/v1/run.proto": "e4f1d7b5b9d6594c86efc20e1c7a49bf71663418ff7994b580b3b0dc69edcc29",
+    "reliant/v1/run.proto": "a09b4a2effcec6e5917076f86cf7b9945961d1ecfc280f85670d69b63df8a6a6",
     "reliant/v1/scenario.proto": "01ef4dff556b643996e489dcfb8ca5bca9e70e923c9b9ad9e30aa55dfc2ea8a0",
     "reliant/v1/settings.proto": "ac1c6509ebf66e479d2de5ce04990ffb764b6102f2748948669dd88509511ff2",
     "reliant/v1/streaming.proto": "dd5ccfd3d903575cf3fb9f03acfe4f106fd833ea858443f3f08463c7f81fe062",
@@ -41672,9 +41851,9 @@
     "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "704b6c6e1382484be35cc8668d914aaf54b99dc0d070fbfc58ae240c47397441",
-    "reliant/v1/trigger.proto": "1e4c6c51ccfb548c1249aeb15d1ee161013b60d29b20041eb9bb8d4ec67ae64a",
+    "reliant/v1/trigger.proto": "fe695d7df2de13bbfda0806758bce8b42e0887eae2e209b6679f1131901e2344",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "0beb777de1451dfe512db520d4e6cb0aacc394444053e9abb548e85bf61d821a",
-    "reliant/v1/worktree.proto": "2d2670e4ca98a799c8f0f8a9397ef34cd4f69f715283627ffd290fbe8f80b5cd"
+    "reliant/v1/worktree.proto": "69869e28c05bfde2c91bacf02319abc46c668ee2f89246fd10ce5b9808623658"
   }
 }

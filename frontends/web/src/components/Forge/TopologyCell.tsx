@@ -46,7 +46,7 @@ export function TopologyCell({ cell, env }: TopologyCellProps) {
       >
         <Tooltip content={`${cell.image} is not in this environment's release`} triggerClassName="block">
           <span
-            className="inline-flex h-6 w-full items-center justify-center rounded-md text-muted-foreground/60"
+            className="inline-flex h-6 w-full items-center justify-center rounded-md text-ink-subtle"
             aria-label={`${cell.image}: not in this release`}
           >
             <span aria-hidden="true">·</span>

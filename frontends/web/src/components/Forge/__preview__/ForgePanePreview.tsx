@@ -51,10 +51,7 @@ import { ConsoleLayout } from "../Console/ConsoleLayout";
 import { DashboardPage, DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
 import {
   ActivityPage,
-  MonitoringSettingsPage,
-  ObservabilityOverviewPage,
   ObservabilityViewPage,
-  ProjectSettingsPage,
   SecretsPage,
 } from "../Console/ConsolePages";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
@@ -435,7 +432,6 @@ function buildRouter(path: string) {
     workload: WorkloadPage,
     releases: ReleasesPage,
     release: ReleasePage,
-    observability: ObservabilityOverviewPage,
     observabilityView: ObservabilityViewPage,
     dashboards: DashboardsPage,
     dashboard: DashboardPage,
@@ -443,8 +439,6 @@ function buildRouter(path: string) {
     environment: ForgeEnvPage,
     secrets: SecretsPage,
     domains: ForgeDomainsPage,
-    monitoring: MonitoringSettingsPage,
-    settings: ProjectSettingsPage,
     activity: ActivityPage,
     orgLayout: OrgConsoleLayout,
     orgObservability: OrgObservabilityRoute,

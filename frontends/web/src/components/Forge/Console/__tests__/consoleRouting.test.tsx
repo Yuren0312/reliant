@@ -12,7 +12,7 @@
  *   - the console looks the Reliant project up from the forge project in its
  *     path, and a name no project here declares still opens (read from the
  *     control plane alone, no daemon);
- *   - the environment scope (D1) is defaulted, remembered per project and
+ *   - the environment scope is defaulted, remembered per project and
  *     reflected into `?env=` on list pages, and left alone on a page that pins
  *     its own;
  *   - Escape and the close button leave.
@@ -210,7 +210,6 @@ function renderAt(initialEntry: string) {
     workload: probe("workload"),
     releases: probe("releases"),
     release: probe("release"),
-    observability: probe("observability"),
     observabilityView: probe("observability-view"),
     dashboards: probe("dashboards"),
     dashboard: probe("dashboard"),
@@ -218,8 +217,6 @@ function renderAt(initialEntry: string) {
     environment: probe("environment"),
     secrets: probe("secrets"),
     domains: probe("domains"),
-    monitoring: probe("monitoring"),
-    settings: probe("settings"),
     activity: probe("activity"),
     orgLayout: OrgLayoutStub,
     orgObservability: OrgObservabilityRoute,
@@ -370,13 +367,23 @@ describe("redirects from the retired URLs", () => {
     await landsOn(router, "/forge/p/alpha/domains", { env: "prod" });
   });
 
-  it("lands a view that is not a nav entry on the Observability overview", async () => {
+  it("lands a view that is not a nav entry on the first view", async () => {
     const router = renderAt("/forge/p/alpha/observability/heatmaps?env=e2e");
-    await landsOn(router, "/forge/p/alpha/observability", { env: "e2e" });
+    await landsOn(router, "/forge/p/alpha/observability/errors", { env: "e2e" });
+  });
+
+  it("lands the retired Observability home on the Overview, which carries its strip", async () => {
+    const router = renderAt("/forge/p/alpha/observability?env=e2e");
+    await landsOn(router, "/forge/p/alpha", { env: "e2e" });
+  });
+
+  it("lands the retired Monitoring settings on Alerts, where routing and silences live", async () => {
+    const router = renderAt("/forge/p/alpha/monitoring?env=e2e");
+    await landsOn(router, "/forge/p/alpha/observability/alerts", { env: "e2e" });
   });
 });
 
-describe("the environment scope (D1)", () => {
+describe("the environment scope", () => {
   it("defaults to prod and reflects it into the URL on a list page", async () => {
     const router = renderAt("/forge/p/alpha/releases");
     await landsOn(router, "/forge/p/alpha/releases", { env: "prod" });

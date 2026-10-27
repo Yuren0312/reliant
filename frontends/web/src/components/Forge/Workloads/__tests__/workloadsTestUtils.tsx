@@ -20,7 +20,7 @@ import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
 import { RepoMetaProvider, type RepoMetaApi } from "@/services/forge/RepoMetaContext";
 
 import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
-import { OverviewHome, type HostedByEnv, type OverviewSearch } from "../OverviewHome";
+import { OverviewHome, type HostedByEnv, type OverviewRollback, type OverviewSearch } from "../OverviewHome";
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch } from "../WorkloadDetail";
 import type { StripEnv } from "../workloadModel";
 import { FIXTURE_DOMAINS, FIXTURE_HOSTED, STRIP_ENVS, WORKLOADS_PROJECT, createRepoMetaFixture, createWorkloadsFixtureApi, fixtureHostedObservation } from "../__fixtures__/workloadFixtures";
@@ -57,6 +57,7 @@ export function renderOverview({
   hosted = FIXTURE_HOSTED,
   hostedLoading = false,
   domains = { availability: "available", domains: FIXTURE_DOMAINS, detail: "" },
+  rollback,
 }: {
   env?: string;
   envs?: StripEnv[];
@@ -65,9 +66,9 @@ export function renderOverview({
   hosted?: HostedByEnv;
   hostedLoading?: boolean;
   domains?: DomainsState;
-} = {}): Harness<OverviewSearch> & { selectEnv: ReturnType<typeof vi.fn>; navigateTo: ReturnType<typeof vi.fn> } {
+  rollback?: OverviewRollback;
+} = {}): Harness<OverviewSearch> & { navigateTo: ReturnType<typeof vi.fn> } {
   let latest = search;
-  const selectEnv = vi.fn();
   const navigateTo = vi.fn();
   function Stateful() {
     const [state, setState] = useState<OverviewSearch>(search);
@@ -89,10 +90,10 @@ export function renderOverview({
           release: (version) => `/r/${version}`,
           releases: "/releases",
           alerts: "/alerts",
-          activity: "/activity",
+          scoped: (envName) => `/overview?env=${envName}`,
         }}
-        onSelectEnv={selectEnv}
         navigateTo={navigateTo}
+        rollback={rollback}
         hosted={hosted}
         hostedLoading={hostedLoading}
         domains={domains}
@@ -100,7 +101,7 @@ export function renderOverview({
       />
     );
   }
-  return { ...wrap(obs, <Stateful />), current: () => latest, selectEnv, navigateTo };
+  return { ...wrap(obs, <Stateful />), current: () => latest, navigateTo };
 }
 
 export function renderWorkload(

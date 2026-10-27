@@ -10,10 +10,6 @@ describe("orgPageOfObsView", () => {
     expect(orgPageOfObsView("overview")).toEqual({ kind: "observability" });
   });
 
-  it("sends Usage there too: the org console has no page for the allowance", () => {
-    expect(orgPageOfObsView("usage")).toEqual({ kind: "observability" });
-  });
-
   it("sends every other view to its own page", () => {
     for (const view of ["errors", "logs", "traces", "profiles", "alerts"] as const) {
       expect(orgPageOfObsView(view)).toEqual({ kind: "obs-view", view });

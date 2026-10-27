@@ -5,9 +5,7 @@
  * Console/paths.ts `pageOfObsView` / `obsViewOfPage`.
  *
  * The panel still speaks in views ("open Logs for this service"); this says
- * which org page hosts each. Usage is the one view with no org page: it is the
- * organization's allowance, shown in Settings, and the org console has no nav
- * entry for it, so a request for it lands on the org overview.
+ * which org page hosts each.
  */
 
 import { orgPath, type OrgPage } from "../Console/paths";
@@ -18,7 +16,6 @@ export function orgPageOfObsView(view: ObsView | undefined): OrgPage {
   switch (view) {
     case undefined:
     case "overview":
-    case "usage":
       return { kind: "observability" };
     default:
       return { kind: "obs-view", view };

@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * React Query hooks for native dashboards (DashboardService, decision DB).
+ * React Query hooks for native dashboards (DashboardService).
  *
  * The index is keyed by (org, project, environment) and shared: the
  * Dashboards page, the nav's starred entries and a dashboard's own star all
