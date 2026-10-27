@@ -23,6 +23,11 @@
 #   release-gate.sh show <rev>
 #       Print <rev>'s record.
 #
+# Everything the merge gate (scripts/merge-gate.sh) leaves out runs here:
+# golangci-lint and buf lint (lint), link errors (build), slow tests, the race
+# detector and every Go package and vitest file the merge tier deferred (test),
+# integration and e2e. dev-docs/merge-and-release-gates.md lists the split.
+#
 # Steps, in order (every step runs even after a failure; one table at the end):
 #   npm          npm ci wherever node_modules is stale (., frontends/web,
 #                electron, tools/protoc-gen-es)

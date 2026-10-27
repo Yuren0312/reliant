@@ -3,6 +3,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -27,6 +28,8 @@ func runGateVerify(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	planPath := fs.String("plan", "", "plan.json written by `test-affected plan -json`")
 	dir := fs.String("dir", "", "the gate's log directory (<phase>.row files)")
+	root := fs.String("root", ".", "judged repository root")
+	base := fs.String("base", "", "judged base commit")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -35,6 +38,9 @@ func runGateVerify(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	problems := verifyGate(*planPath, *dir)
+	if _, err := readPlan(context.Background(), *root, *base, *planPath); err != nil {
+		problems = append(problems, "plan identity invalid: "+err.Error())
+	}
 	verdict := "OK"
 	if len(problems) > 0 {
 		verdict = "FAILED: " + strings.Join(problems, "; ")
@@ -76,16 +82,14 @@ func verifyGate(planPath, dir string) []string {
 	if pl.MigOrder.Full {
 		obliged["migorder"] = "the plan selected the migration-order lane"
 	}
-	var migration, pin, subdir, web bool
+	var migration, subdir, web bool
 	for _, f := range pl.Files {
 		p := f.Path
 		switch {
 		case strings.HasPrefix(p, "db/migrations/"):
 			migration = true
 		case p == "forge.yaml":
-			migration, pin = true, true
-		case p == "go.mod" || p == "go.sum":
-			pin = true
+			migration = true
 		}
 		if strings.HasPrefix(p, "frontends/web/") {
 			web = true
@@ -100,7 +104,10 @@ func verifyGate(planPath, dir string) []string {
 	if migration {
 		obliged["migsafety"] = "a migration or forge.yaml changed"
 	}
-	if pin || subdir {
+	// Lint is scoped to the changed directories. A diff that moves only a pin
+	// at the root (go.mod, go.sum, forge.yaml) has none: its whole-module
+	// lint is the release gate's (dev-docs/merge-and-release-gates.md).
+	if subdir {
 		obliged["lint"] = "the diff touches linted code"
 	}
 	// Phases the script itself decided to run (it appends each to <dir>/expected
