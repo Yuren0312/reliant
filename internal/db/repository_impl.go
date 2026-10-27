@@ -2856,6 +2856,11 @@ func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome
 	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
 }
 
+// SetLaunchEventRunFailureDetail records why the launch run failed.
+func (r *Repo) SetLaunchEventRunFailureDetail(ctx context.Context, chatID, detail string) error {
+	return store.SetLaunchEventRunFailureDetail(ctx, r.ORM(), chatID, detail)
+}
+
 // SetLaunchEventRunStatus records how the run a trigger fired ended, on
 // the chat's launch event (core.TriggerEvent.RunStatus).
 func (r *Repo) SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error {
@@ -3112,6 +3117,11 @@ func (r *Repo) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*
 	return store.ListChatStepExecutions(ctx, r.ORM(), chatID, model.InternalActivities)
 }
 
+// ListRunNodeExecutions returns bounded diagnostics for one workflow subtree.
+func (r *Repo) ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*StepExecution, error) {
+	return store.ListRunNodeExecutions(ctx, r.ORM(), workflowID, limit)
+}
+
 // ListStepExecutionRecordsForChat returns full step rows (inputs, output,
 // error), newest first, optionally scoped to one node and what ran inside it.
 func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error) {
@@ -3172,6 +3182,10 @@ func (r *Repo) GetThread(ctx context.Context, id string) (*Thread, error) {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 	return store.GetThread(ctx, r.ORM(), id)
+}
+
+func (r *Repo) ListThreadsByIDs(ctx context.Context, ids []string) ([]*Thread, error) {
+	return store.ListThreadsByIDs(ctx, r.ORM(), ids)
 }
 
 func (r *Repo) GetRootThread(ctx context.Context, chatID string) (*Thread, error) {
