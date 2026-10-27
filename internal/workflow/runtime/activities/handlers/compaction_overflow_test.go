@@ -62,64 +62,24 @@ func historyChars(history []message.Message) int {
 	return total
 }
 
-func TestShrinkSummarizationHistory_KeepsTaskNewestTurnsAndInstruction(t *testing.T) {
+func TestSummaryPrefixEnd_PreservesEveryByteAtAllBudgets(t *testing.T) {
 	t.Parallel()
-
-	history := []message.Message{textMsg(message.User, "the original task")}
-	for i := range 20 {
-		history = append(history, textMsg(message.Assistant, fmt.Sprintf("turn %02d %s", i, strings.Repeat("x", 1000))))
-	}
-	history = append(history, textMsg(message.User, compactionMsg))
-	total := historyChars(history)
-
-	shrunk, ok := shrinkSummarizationHistory(history, 0.5)
-	require.True(t, ok)
-
-	assert.LessOrEqual(t, historyChars(shrunk), total/2+300, "the omission note is the only thing over budget")
-	assert.Equal(t, "the original task", shrunk[0].Content().Text, "the task is kept")
-	assert.Contains(t, shrunk[1].Content().Text, "earlier messages omitted", "the cut is marked where it happened")
-	assert.Equal(t, message.User, shrunk[1].Role)
-	assert.Equal(t, compactionMsg, shrunk[len(shrunk)-1].Content().Text, "the instruction stays last")
-	assert.True(t, strings.HasPrefix(shrunk[len(shrunk)-2].Content().Text, "turn 19 "), "the newest turn is kept whole")
-
-	// The kept turns are a contiguous, in-order tail.
-	prev := -1
-	for _, m := range shrunk[2 : len(shrunk)-1] {
-		var n int
-		_, err := fmt.Sscanf(m.Content().Text, "turn %d", &n)
-		require.NoError(t, err)
-		if prev >= 0 {
-			assert.Equal(t, prev+1, n)
-		}
-		prev = n
+	text := "é界 original task and results"
+	for budget := -1; budget <= len(text)+1; budget++ {
+		end := summaryPrefixEnd(text, budget)
+		assert.LessOrEqual(t, end, max(budget, 0))
+		assert.Equal(t, text, text[:end]+text[end:])
+		assert.Equal(t, text[:end], strings.ToValidUTF8(text[:end], ""))
+		assert.Equal(t, text[end:], strings.ToValidUTF8(text[end:], ""))
 	}
 }
 
-func TestShrinkSummarizationHistory_CutsOneOversizedTurn(t *testing.T) {
+func TestNextSummaryPrefixBudget_ReservesOverheadAndTerminates(t *testing.T) {
 	t.Parallel()
-
-	history := []message.Message{
-		textMsg(message.User, "task"),
-		textMsg(message.Assistant, strings.Repeat("é", 50_000)), // multi-byte: cuts must land on rune boundaries
-		textMsg(message.User, compactionMsg),
-	}
-	shrunk, ok := shrinkSummarizationHistory(history, 0.5)
-	require.True(t, ok)
-	require.Len(t, shrunk, 3, "no turn is dropped, so there is no omission note")
-	assert.Less(t, historyChars(shrunk), historyChars(history))
-	assert.Contains(t, shrunk[1].Content().Text, "omitted to fit")
-	for _, m := range shrunk {
-		assert.True(t, strings.ToValidUTF8(m.Content().Text, "") == m.Content().Text, "valid UTF-8")
-	}
-}
-
-func TestShrinkSummarizationHistory_RefusesWhatItCannotCut(t *testing.T) {
-	t.Parallel()
-
-	_, ok := shrinkSummarizationHistory([]message.Message{textMsg(message.User, compactionMsg)}, 0.5)
-	assert.False(t, ok)
-	_, ok = shrinkSummarizationHistory([]message.Message{textMsg(message.User, "a"), textMsg(message.User, "b")}, 1)
-	assert.False(t, ok)
+	assert.Zero(t, nextSummaryPrefixBudget(0, 700, contextOverflow{}))
+	assert.Zero(t, nextSummaryPrefixBudget(minimumSummaryPrefixBytes, 700, contextOverflow{}))
+	assert.Equal(t, 4300, nextSummaryPrefixBudget(9300, 700, contextOverflow{}))
+	assert.Equal(t, minimumSummaryPrefixBytes, nextSummaryPrefixBudget(1025, 700, contextOverflow{Actual: 1_000_000, Limit: 1}))
 }
 
 // overflowingSummarizer refuses the first `refusals` requests as too long and
@@ -166,13 +126,13 @@ func TestGenerateCompactionSummary_RecoversFromContextOverflow(t *testing.T) {
 
 	summary, err := compact.generateCompactionSummary(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, "", "", types.FailoverPolicy{}, longConversation(), nil)
 	require.NoError(t, err, "a summarizer that refuses the history as too long must not fail the compaction")
-	assert.Equal(t, "Mock response", summary)
+	assert.Contains(t, summary, "Mock response")
+	assert.Contains(t, summary, unprocessedContinuation)
 
 	require.Len(t, driver.got, 2)
 	first, retry := driver.got[0], driver.got[1]
-	assert.Less(t, historyChars(retry), historyChars(first)*9/10, "the retry sends less, by the ratio the refusal reported")
-	assert.Equal(t, "the original task", retry[0].Content().Text)
-	assert.Contains(t, retry[1].Content().Text, "earlier messages omitted")
+	assert.Less(t, historyChars(retry), historyChars(first)*9/10, "the retry makes bounded progress")
+	assert.Contains(t, retry[0].Content().Text, "the original task")
 	assert.Contains(t, retry[len(retry)-1].Content().Text, "handoff", "the summarization instruction is still the last turn")
 }
 
@@ -185,7 +145,9 @@ func TestGenerateCompactionSummary_GivesUpAfterBoundedRetries(t *testing.T) {
 	_, err := compact.generateCompactionSummary(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, "", "", types.FailoverPolicy{}, longConversation(), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "prompt is too long")
-	assert.Len(t, driver.got, summarizeOverflowAttempts)
+	assert.ErrorIs(t, err, errCompactionOverflow)
+	assert.Less(t, len(driver.got), 20)
+	assert.Greater(t, len(driver.got), 3)
 }
 
 func TestGenerateCompactionSummary_DoesNotRetryOtherFailures(t *testing.T) {

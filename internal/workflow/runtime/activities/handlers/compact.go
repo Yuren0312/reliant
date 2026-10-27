@@ -14,7 +14,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/accumulator"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -163,6 +162,13 @@ func (a *CompactActivity) Execute(ctx context.Context, input ActivityInput) (Com
 	// Generate summary of messages to be compacted
 	summary, err := a.generateCompactionSummaryOnProvider(ctx, chat, thread, rtx.FallbackModel, rtx.Failover, currentContextMessages, summarizeWith, rtx)
 	if err != nil {
+		if errors.Is(err, errCompactionOverflow) {
+			// Reuse the existing non-destructive skip outcome. Do not create a
+			// new context window from an unusable or incomplete summary.
+			logging.WarnContext(ctx, "[COMPACTION] Retaining original context", "chatID", rtx.ChatID, "thread", thread, "error", err)
+			a.emitThreadUpdate(ctx, rtx.ChatID, thread, "active", "")
+			return CompactOutput{SkippedReason: err.Error()}, nil
+		}
 		return CompactOutput{}, fmt.Errorf("failed to generate compaction summary: %w", err)
 	}
 
@@ -385,11 +391,10 @@ var compactionModelTier = []models.ModelID{
 
 // generateCompactionSummary generates a summary of messages using the LLM.
 //
-// Only the model tier and the summarization prompt are compaction-specific.
-// The request envelope — thinking configuration, provider options, driver
-// selection, tool-less history sanitization — flows through the same
-// request-construction path as a normal CallLLM turn (resolveLLMCall +
-// prepareHistoryForLLM), so provider constraints are handled in one place.
+// The request envelope — thinking configuration, provider options and driver
+// selection — flows through resolveLLMCall as a normal CallLLM turn does.
+// Compaction uses its own lossless text projection instead of the normal
+// tool-result trim: anything not summarized must remain in the continuation.
 func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *db.Chat, thread, fallbackModel string, failover types.FailoverPolicy, messages []message.Message, summarizeWith *reliantv1.ModelSelector) (string, error) {
 	return a.generateCompactionSummaryOnProvider(ctx, chat, thread, fallbackModel, failover, messages, summarizeWith, types.RuntimeContext{})
 }
@@ -453,70 +458,56 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 
 	compactionPrompts := []string{`You are a specialist at summarizing conversations.`}
 
-	// Add ephemeral user message at the end to trigger summarization.
-	// This message is not saved to the DB, only passed to the LLM.
-	history := append(messages, message.Message{
-		Role: "user",
-		Parts: []message.ContentPart{
-			message.TextContent{
-				Text: compactionMsg,
-			},
-		},
-	})
-
-	// Standard pre-request transforms. Summarization is a read-only pass that
-	// passes no tools, so this also flattens tool_use/tool_result blocks to
-	// text (providers reject tool-call blocks on tool-less requests). The trim
-	// backstop scales with the summarization model's prompt ceiling for the
-	// SELECTED provider, so the summarization request itself fits.
-	history = prepareHistoryForLLM(chat.ID, history, compactionPrompts, nil,
-		promptCeiling(resolved.Definition, resolved.ProviderDriver, resolved.Model))
-
-	// Call LLM to generate summary using streaming (required for long operations)
-	// We use streaming mode because Anthropic requires it for operations that may take >10 minutes
-	// The accumulator will collect all chunks and return the final response
-	//
-	// The pre-request trim cannot guarantee the history fits: it trusts the
-	// thread's stored token count, which another model's tokenizer measured
-	// whenever the summarizer is not the model that filled the thread, and
-	// after flattening there are no tool results left for it to cut. So a
-	// provider that refuses the prompt as too long is answered by summarizing
-	// less of it, never by failing the agent: a summary of the recent
-	// conversation keeps the run going; a failed compaction ends it.
-	var response *llm.DriverResponse
+	// Build a read-only text transcript, not a trimmed request history: a new
+	// context boundary makes anything omitted here invisible to later turns.
+	// Prefix-only recovery retains the exact unprocessed suffix in the same
+	// persisted handoff, with no new state or retrieval contract.
+	transcript := compactionTranscript(messages)
+	prefixEnd := len(transcript)
+	overhead := len(compactionMsg)
+	for _, prompt := range compactionPrompts {
+		overhead += len(prompt)
+	}
 	for attempt := 1; ; attempt++ {
-		response, err = accumulator.StreamAndAccumulate(a.routing.observe(ctx, chat.UserID, resolved.Account), resolved.Driver, compactionPrompts, history, []tools.Tool{})
-		if err == nil {
-			break
+		if err := ctx.Err(); err != nil {
+			return "", err
 		}
-		overflow, isOverflow := parseContextOverflow(err)
-		if isOverflow && attempt < summarizeOverflowAttempts {
-			if shrunk, ok := shrinkSummarizationHistory(history, overflow.keepFraction()); ok {
-				logging.WarnContext(ctx, "[COMPACTION] Summarizer refused the history as too long; retrying with the oldest turns omitted",
-					"chatID", chat.ID,
-					"thread", thread,
-					"model", definitionID(resolved.Definition),
-					"provider", resolved.ProviderDriver,
-					"attempt", attempt,
-					"promptTokens", overflow.Actual,
-					"limitTokens", overflow.Limit,
-					"messagesBefore", len(history),
-					"messagesAfter", len(shrunk))
-				history = shrunk
-				continue
+		history := []message.Message{
+			{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: transcript[:prefixEnd]}}},
+			{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: compactionMsg}}},
+		}
+		response, err := accumulator.StreamAndAccumulate(a.routing.observe(ctx, chat.UserID, resolved.Account), resolved.Driver, compactionPrompts, history, []tools.Tool{})
+		if err == nil {
+			if strings.TrimSpace(response.Content) == "" {
+				return "", fmt.Errorf("empty summary generated")
 			}
+			if prefixEnd == len(transcript) {
+				return response.Content, nil
+			}
+			summary := response.Content + unprocessedContinuation + transcript[prefixEnd:]
+			// A non-shrinking handoff would just trigger another compaction.
+			// Keep the original context instead of replacing it with more text.
+			if len(summary) >= len(transcript) {
+				return "", fmt.Errorf("%w: summary did not reclaim space", errCompactionOverflow)
+			}
+			return summary, nil
+		}
+		if overflow, ok := parseContextOverflow(err); ok {
+			next := nextSummaryPrefixBudget(prefixEnd, overhead, overflow)
+			if next == 0 {
+				return "", fmt.Errorf("%w: %v", errCompactionOverflow, err)
+			}
+			logging.WarnContext(ctx, "[COMPACTION] Summarizer overflow; retrying a smaller prefix and retaining the unprocessed continuation",
+				"chatID", chat.ID, "thread", thread, "attempt", attempt,
+				"prefixBytes", prefixEnd, "nextPrefixBytes", next)
+			prefixEnd = summaryPrefixEnd(transcript, next)
+			continue
 		}
 		return "", a.routing.providerFailure(ctx, fmt.Errorf("failed to generate summary: %w", err), usageLimitContext{
 			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: failover,
 		})
 	}
-
-	if response.Content == "" {
-		return "", fmt.Errorf("empty summary generated")
-	}
-
-	return response.Content, nil
 }
 
 // resolveCompactionModel picks the model that summarizes the conversation.

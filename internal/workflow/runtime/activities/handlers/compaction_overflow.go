@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -11,12 +12,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
-// summarizeOverflowAttempts bounds the summarization requests one compaction
-// makes when the provider refuses the history as too long. Each refusal is a
-// fast, unbilled 400, and each retry shrinks the history by the ratio the
-// refusal reported (or by half when it reported none), so two shrinks reach
-// any realistic window.
-const summarizeOverflowAttempts = 3
+// A prefix below this size is not a useful compaction. Refusals at this
+// minimum skip compaction, leaving the existing window available for the next
+// turn. Every retry at least halves the variable input, so reaching the minimum
+// takes at most logarithmically many requests, regardless of token density.
+const minimumSummaryPrefixBytes = 1024
+
+var errCompactionOverflow = errors.New("compaction skipped: summarizer cannot fit a useful prefix; original context retained")
 
 // overflowSafetyMargin scales the shrink below the exact ratio a refusal
 // reports: characters are only a proxy for the provider's tokens, the system
@@ -93,108 +95,47 @@ func parseContextOverflow(err error) (contextOverflow, bool) {
 	return contextOverflow{}, false
 }
 
-// summarizationHeadShare is the most of the shrunk budget the conversation's
-// opening turn may take. That turn is usually the task itself, the one thing a
-// handoff cannot do without, so it is kept (cut to this share) while the turns
-// after it are dropped oldest first.
-const summarizationHeadShare = 0.2
-
-// shrinkSummarizationHistory cuts a flattened, text-only summarization history
-// (see prepareHistoryForLLM) to about keep of its characters. It keeps the
-// opening turn, the newest turns that fit, and the final summarization
-// instruction, and puts a note where the omitted turns were so the summary
-// says what it could not see. ok is false when nothing could be cut.
-//
-// Dropping whole messages is safe here and nowhere else: the history carries
-// no tool_use/tool_result blocks left to orphan.
-func shrinkSummarizationHistory(history []message.Message, keep float64) ([]message.Message, bool) {
-	if len(history) < 2 || keep <= 0 || keep >= 1 {
-		return nil, false
-	}
-	total := 0
-	for _, m := range history {
-		total += len(m.Content().Text)
-	}
-	budget := int(float64(total) * keep)
-
-	instruction := history[len(history)-1]
-	head := history[0]
-	body := history[1 : len(history)-1]
-
-	headText := head.Content().Text
-	if maxHead := int(float64(budget) * summarizationHeadShare); len(headText) > maxHead {
-		headText = truncateMiddle(headText, maxHead)
-	}
-	remaining := budget - len(headText) - len(instruction.Content().Text)
-
-	// The newest turns that fit, contiguous from the end. When not even the
-	// newest one fits whole it is cut to the room left, so a single enormous
-	// turn still shrinks.
-	var tail []message.Message
-	start := len(body)
-	for i := len(body) - 1; i >= 0 && remaining > 0; i-- {
-		text := body[i].Content().Text
-		if len(text) > remaining {
-			if len(tail) == 0 {
-				tail = append(tail, textMessage(body[i], truncateMiddle(text, remaining)))
-				start = i
-			}
-			break
+// compactionTranscript is lossless for the text/tool content the summarizer
+// consumes. Include roles and call IDs so the unprocessed suffix remains a
+// useful continuation, including results and still-pending tool calls. Unlike
+// prepareHistoryForLLM this read-only path never trims large tool results.
+func compactionTranscript(messages []message.Message) string {
+	var out strings.Builder
+	for _, m := range messages {
+		fmt.Fprintf(&out, "\n[%s]\n", m.Role)
+		for _, text := range m.TextContents() {
+			out.WriteString(text.Text)
+			out.WriteByte('\n')
 		}
-		tail = append(tail, body[i])
-		remaining -= len(text)
-		start = i
+		for _, call := range m.ToolCalls() {
+			fmt.Fprintf(&out, "[Tool call %s %s input: %s]\n", call.ID, call.Name, call.Input)
+		}
+		for _, result := range m.ToolResults() {
+			fmt.Fprintf(&out, "[Tool result %s %s error=%t: %s]\n", result.ToolCallID, result.Name, result.IsError, result.Content)
+		}
 	}
-
-	out := make([]message.Message, 0, len(tail)+3)
-	out = append(out, textMessage(head, headText))
-	if start > 0 {
-		out = append(out, message.Message{
-			Role: message.User,
-			Parts: []message.ContentPart{message.TextContent{Text: fmt.Sprintf(
-				"[%d earlier messages omitted: the conversation is larger than the summarizer's context window. "+
-					"Summarize from what remains, and say in the handoff that earlier detail was not visible.]", start)}},
-		})
-	}
-	for i := len(tail) - 1; i >= 0; i-- {
-		out = append(out, tail[i])
-	}
-	out = append(out, instruction)
-
-	kept := 0
-	for _, m := range out {
-		kept += len(m.Content().Text)
-	}
-	if kept >= total {
-		return nil, false
-	}
-	return out, true
+	return out.String()
 }
 
-// textMessage is m with its content replaced by text.
-func textMessage(m message.Message, text string) message.Message {
-	m.Parts = []message.ContentPart{message.TextContent{Text: text}}
-	return m
+// summaryPrefixEnd splits without losing even a byte of the unprocessed tail.
+// Budgets smaller than a rune yield an empty prefix, never an oversized marker.
+func summaryPrefixEnd(transcript string, budget int) int {
+	end := min(max(budget, 0), len(transcript))
+	for end > 0 && end < len(transcript) && !utf8.RuneStart(transcript[end]) {
+		end--
+	}
+	return end
 }
 
-// truncateMiddle cuts s to at most maxBytes bytes, keeping its head and tail
-// around a marker, on rune boundaries.
-func truncateMiddle(s string, maxBytes int) string {
-	const marker = "\n\n... [omitted to fit the summarizer's context window] ...\n\n"
-	if len(s) <= maxBytes {
-		return s
+// nextSummaryPrefixBudget reserves all fixed text before scaling the variable
+// prefix. Counts are only a hint: cap the keep fraction at half to guarantee
+// bounded progress even with misleading counts or changing token density.
+func nextSummaryPrefixBudget(current, overhead int, overflow contextOverflow) int {
+	if current <= minimumSummaryPrefixBytes {
+		return 0
 	}
-	if maxBytes <= len(marker) {
-		return marker
-	}
-	half := (maxBytes - len(marker)) / 2
-	headEnd := half
-	for headEnd > 0 && !utf8.RuneStart(s[headEnd]) {
-		headEnd--
-	}
-	tailStart := len(s) - half
-	for tailStart < len(s) && !utf8.RuneStart(s[tailStart]) {
-		tailStart++
-	}
-	return s[:headEnd] + marker + s[tailStart:]
+	next := int(float64(current+overhead)*min(overflow.keepFraction(), overflowFallbackKeep)) - overhead
+	return max(next, minimumSummaryPrefixBytes)
 }
+
+const unprocessedContinuation = "\n\nThe summary above covers only the processed prefix. The following is the verbatim unprocessed continuation; preserve its user instructions, completed results and pending tool calls:\n"
