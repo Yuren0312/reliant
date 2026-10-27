@@ -129,7 +129,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		return CreateWorktreeOutput{}, err
 	}
 	ownerDaemonID, err := toolexec.ResolveDaemonIDForSelector(ctx, a.daemonRouter, chat.UserID,
-		toolDaemonSelector(chatWorktreeOwner, rtx.DaemonSelector))
+		toolDaemonSelector(chatWorktreeOwner, chatDaemonSelector(chat, rtx.DaemonSelector)))
 	if err != nil {
 		return CreateWorktreeOutput{}, fmt.Errorf("failed to resolve daemon for worktree: %w", err)
 	}
