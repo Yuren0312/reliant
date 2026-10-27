@@ -26,6 +26,8 @@
  *   - timeout next so the full request lifecycle (incl. retries through
  *     inner interceptors) is bounded;
  *   - auth attaches the bearer before the trace stage;
+ *   - org (orgInterceptor) names the active org on requests that carry an
+ *     `org_id` field; authed routes only, since an unauthenticated call has no org;
  *   - daemon-last-seen header is independent of auth ordering but cheap to
  *     leave just after auth;
  *   - trace stamps the W3C traceparent; the span it names is the HyperDX
@@ -57,6 +59,7 @@ import * as Sentry from "@sentry/react";
 import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
 import { upgradeInterceptor } from "./upgradeInterceptor";
+import { orgInterceptor } from "./orgInterceptor";
 import { machineWakeInterceptor } from "./machineWakeInterceptor";
 import { createDeadlineInterceptor } from "./rpcDeadline";
 import { classifyRpcFailure } from "./rpcErrorPolicy";
@@ -688,7 +691,7 @@ export function buildInterceptors(
   const chain: Interceptor[] = [
     normalizeInterceptor,
     timeoutInterceptor,
-    ...(withAuth ? [authInterceptor, missingTokenInterceptor] : []),
+    ...(withAuth ? [authInterceptor, missingTokenInterceptor, orgInterceptor] : []),
     backend === "reliant-api" ? daemonLastSeenInterceptor : forgeViaInterceptor,
     traceStage,
     errorInterceptor,

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useActiveOrgStore } from "@/store/activeOrgStore";
 
 // MEMBER PERMISSIONS. Who in the org may deploy, manage secrets, manage
 // domains — and who may change that.
@@ -47,11 +48,51 @@ function roster(grantable: string[] = ADMIN_SET) {
 
 describe("MemberPermissions", () => {
   beforeEach(() => {
+    useActiveOrgStore.setState({ userId: "alice", chosenId: "org-a", effectiveId: "org-a" });
     listMemberPermissions.mockReset().mockResolvedValue(roster());
     updateMemberPermissions.mockReset().mockImplementation(
       (userId: string, scopes: string[]) =>
         Promise.resolve({ userId, email: "dev@example.test", role: "member", scopes })
     );
+  });
+
+  it("ignores an old org roster even after switching back to the same org", async () => {
+    let finish!: (value: ReturnType<typeof roster>) => void;
+    listMemberPermissions.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    render(<MemberPermissions />);
+    await waitFor(() => expect(listMemberPermissions).toHaveBeenCalledTimes(1));
+    const current = roster();
+    current.members[1].email = "current@example.test";
+    listMemberPermissions.mockResolvedValue(current);
+    act(() => useActiveOrgStore.setState({ effectiveId: "org-b" }));
+    await screen.findByText("current@example.test");
+    act(() => useActiveOrgStore.setState({ effectiveId: "org-a" }));
+    await waitFor(() => expect(listMemberPermissions).toHaveBeenCalledTimes(3));
+    await screen.findByText("current@example.test");
+    await act(async () => finish(roster()));
+    expect(screen.queryByText("dev@example.test")).toBeNull();
+    expect(screen.getByText("current@example.test")).toBeInTheDocument();
+  });
+
+  it.each(["resolve", "reject"])("ignores a previous org edit %s without overwriting the new roster", async (outcome) => {
+    let finish!: (value: unknown) => void;
+    let fail!: (error: Error) => void;
+    updateMemberPermissions.mockImplementationOnce(() => new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
+    render(<MemberPermissions />);
+    await screen.findByText("dev@example.test");
+    fireEvent.click(screen.getByRole("checkbox", { name: /dev@example.test deploy:write/i }));
+    const current = roster();
+    current.members[1].scopes = ["deploy:read", "secret:read"];
+    listMemberPermissions.mockResolvedValue(current);
+    act(() => useActiveOrgStore.setState({ effectiveId: "org-b" }));
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: /dev@example.test secret:read/i })).toBeChecked());
+    await act(async () => {
+      if (outcome === "resolve") finish({ scopes: ["deploy:write"] });
+      else fail(new Error("old org refused"));
+    });
+    expect(screen.getByRole("checkbox", { name: /dev@example.test secret:read/i })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /dev@example.test deploy:write/i })).not.toBeChecked();
+    expect(screen.queryByText(/could not update/i)).toBeNull();
   });
 
   it("lists every member, including one holding almost nothing", async () => {

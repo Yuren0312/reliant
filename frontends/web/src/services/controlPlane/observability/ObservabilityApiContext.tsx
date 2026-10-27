@@ -13,7 +13,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 
-import { getWalletOverview } from "../reliantAI";
+import { currentOrgId } from "../orgs";
 import * as activity from "./activityApi";
 import * as alerting from "./alertingApi";
 import * as rpc from "./api";
@@ -87,8 +87,8 @@ export interface ObservabilityApi {
 }
 
 export const controlPlaneObservabilityApi: ObservabilityApi = {
-  // The org the billing surfaces resolve for the caller (the wallet overview).
-  currentOrgId: async () => (await getWalletOverview())?.organization?.id ?? null,
+  // The active org (the switcher's choice, else the person's default).
+  currentOrgId,
   searchLogs: rpc.searchLogs,
   listTraces: rpc.listTraces,
   getTrace: rpc.getTrace,

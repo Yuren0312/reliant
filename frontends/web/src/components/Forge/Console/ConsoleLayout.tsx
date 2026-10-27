@@ -42,6 +42,7 @@ import { useProjects } from "@/hooks/project-queries";
 import { ForgeCloseButton } from "../ForgeHeader";
 import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { ConsoleProjectSwitcher, ProjectMonogram } from "./ConsoleProjectSwitcher";
+import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { ConsoleShell, type ConsoleNavEnv } from "./ConsoleShell";
 import { ForgeConsoleContext, type ForgeConsole } from "./consoleContext";
 import { ENV_ALL, rememberedEnv, rememberEnv, resolveEnvScope, scopeOptions } from "./envScope";
@@ -210,6 +211,7 @@ export function ConsoleLayout() {
   return (
     <ConsoleShell
       project={forgeProject}
+      orgSwitcher={<OrgSwitcher />}
       page={page}
       env={env}
       envs={navEnvs}

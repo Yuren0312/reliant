@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/token"
 	"github.com/reliant-labs/reliant/internal/memtemp"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
+	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -518,5 +519,22 @@ func TestReliantForge_PointsForgeAtTheSession(t *testing.T) {
 	argv, err := cloudcred.ParseCommand(os.Getenv(cloudcred.HelperEnv))
 	if err != nil || len(argv) != 3 || argv[1] != "auth" || argv[2] != "forge-credential" {
 		t.Fatalf("after `reliant forge`, %s = %q (%v), want this binary's unpinned helper", cloudcred.HelperEnv, os.Getenv(cloudcred.HelperEnv), err)
+	}
+}
+
+func TestExchangeRequest_NamesTheOrgOnlyWhenAsked(t *testing.T) {
+	if got := exchangeRequest("https://cp.example", []string{"deploy:write"}, ""); got.OrgId != nil {
+		t.Fatalf("no org asked, yet the exchange names %q", got.GetOrgId())
+	}
+	if got := exchangeRequest("https://cp.example", nil, " org-b "); got.GetOrgId() != "org-b" {
+		t.Fatalf("org = %q, want org-b", got.GetOrgId())
+	}
+}
+
+// The daemon sets this name on the forge it runs; the helper reads it. They are
+// two constants in two packages, so a rename must break a test, not a deploy.
+func TestForgeOrgEnvMatchesTheDaemon(t *testing.T) {
+	if forgeOrgEnv != daemonruntime.ForgeOrgEnv {
+		t.Fatalf("helper reads %q, daemon sets %q", forgeOrgEnv, daemonruntime.ForgeOrgEnv)
 	}
 }

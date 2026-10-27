@@ -16,7 +16,7 @@
  * per-user GetLLMSpend gives the end-user the equivalent spend view.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CreditCard,
   KeyRound,
@@ -62,6 +62,8 @@ import {
   useRotateLLMKey,
 } from "../../../hooks/useReliantAIQueries";
 import { LLMKeyStatus } from "../../../gen/controlplane/controlplane/v1/shared_pb";
+import { useActiveOrg } from "@/hooks/useOrgs";
+import { getActiveOrgId } from "@/store/activeOrgStore";
 
 // ---------------------------------------------------------------------------
 // Formatting helpers (self-contained — reliant-web has no lib/billing).
@@ -158,10 +160,20 @@ export function ReliantAISection() {
       </div>
     );
   }
-  return <ReliantAIPanel />;
+  return <OrgReliantAIPanel />;
 }
 
-function ReliantAIPanel() {
+function OrgReliantAIPanel() {
+  const orgId = useActiveOrg().activeOrgId ?? "";
+  return <ReliantAIPanel key={orgId} orgId={orgId} />;
+}
+
+function ReliantAIPanel({ orgId }: { orgId: string }) {
+  const live = useRef(true);
+  useEffect(() => {
+    live.current = true;
+    return () => { live.current = false; };
+  }, []);
   const [createOpen, setCreateOpen] = useState(false);
   const [revealedKey, setRevealedKey] = useState<{
     name: string;
@@ -176,11 +188,6 @@ function ReliantAIPanel() {
   const overview = overviewQ.data;
   const wallet = walletQ.data;
   const entitlement = overview?.entitlement;
-
-  // Org resolution mirrors admin-web: prefer the wallet's org, fall back to the
-  // entitlement's source ref. A signed-in user resolves to exactly one billing
-  // scope, so there is no org switcher.
-  const orgId = wallet?.organization?.id ?? entitlement?.sourceRefId ?? "";
 
   const { startDate, endDate } = useMemo(() => {
     const end = new Date();
@@ -240,6 +247,7 @@ function ReliantAIPanel() {
     )
       return;
     const res = await rotateMut.mutateAsync({ keyId: key.id });
+    if (!live.current || (getActiveOrgId() ?? "") !== orgId) return;
     setRevealedKey({ name: key.name, secret: res.plaintextKey, kind: "rotated" });
   };
 
@@ -524,6 +532,7 @@ function ReliantAIPanel() {
             creating={createMut.isPending}
             onCreate={async (args) => {
               const res = await createMut.mutateAsync({ orgId, ...args });
+              if (!live.current || (getActiveOrgId() ?? "") !== orgId) return;
               setCreateOpen(false);
               setRevealedKey({
                 name: args.name,

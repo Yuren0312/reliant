@@ -18708,6 +18708,11 @@
             "Name": "env",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "GetForgeEnvShapeResponse": [
@@ -18733,6 +18738,11 @@
             "Name": "env",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "GetForgeEnvStatusResponse": [
@@ -18763,6 +18773,11 @@
             "Name": "envs",
             "ProtoType": "[]string",
             "IsOptional": false
+          },
+          {
+            "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "GetForgeTopologyResponse": [
@@ -18788,6 +18803,11 @@
             "Name": "env",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "ListForgeSecretsResponse": [
@@ -18818,6 +18838,11 @@
             "Name": "checkout_path",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "PlanForgeDeployResponse": [
@@ -18848,6 +18873,11 @@
             "Name": "release",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "PlanForgePromoteResponse": [
@@ -18888,6 +18918,11 @@
             "Name": "expect_unbound",
             "ProtoType": "bool",
             "IsOptional": false
+          },
+          {
+            "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "PromoteForgeEnvResponse": [
@@ -18918,6 +18953,11 @@
             "Name": "checkout_path",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "StartForgeDeployRequest": [
@@ -18965,6 +19005,11 @@
             "Name": "checkout_path",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "StartForgeDeployResponse": [
@@ -19010,6 +19055,11 @@
             "Name": "env",
             "ProtoType": "string",
             "IsOptional": false
+          },
+          {
+            "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "VerifyForgeEnvResponse": [
@@ -19182,6 +19232,11 @@
           {
             "name": "env",
             "kind": "string"
+          },
+          {
+            "name": "org_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.GetForgeEnvShapeResponse": [
@@ -19203,6 +19258,11 @@
           {
             "name": "env",
             "kind": "string"
+          },
+          {
+            "name": "org_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.GetForgeEnvStatusResponse": [
@@ -19229,6 +19289,11 @@
             "name": "envs",
             "kind": "string",
             "repeated": true
+          },
+          {
+            "name": "org_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.GetForgeTopologyResponse": [
@@ -19256,6 +19321,11 @@
             "validate": {
               "required": true
             }
+          },
+          {
+            "name": "org_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ListForgeSecretsResponse": [
@@ -19281,6 +19351,11 @@
           {
             "name": "checkout_path",
             "kind": "string"
+          },
+          {
+            "name": "org_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.PlanForgeDeployResponse": [
@@ -19306,6 +19381,11 @@
           {
             "name": "release",
             "kind": "string"
+          },
+          {
+            "name": "org_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.PlanForgePromoteResponse": [
@@ -19339,6 +19419,11 @@
           {
             "name": "expect_unbound",
             "kind": "bool"
+          },
+          {
+            "name": "org_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.PromoteForgeEnvResponse": [
@@ -19364,6 +19449,11 @@
           {
             "name": "checkout_path",
             "kind": "string"
+          },
+          {
+            "name": "org_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.StartForgeDeployRequest": [
@@ -19403,6 +19493,11 @@
           {
             "name": "checkout_path",
             "kind": "string"
+          },
+          {
+            "name": "org_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.StartForgeDeployResponse": [
@@ -19441,6 +19536,11 @@
           {
             "name": "env",
             "kind": "string"
+          },
+          {
+            "name": "org_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.VerifyForgeEnvResponse": [
@@ -34281,6 +34381,11 @@
             "Name": "scopes",
             "ProtoType": "[]string",
             "IsOptional": false
+          },
+          {
+            "Name": "org_id",
+            "ProtoType": "string",
+            "IsOptional": true
           }
         ],
         "ExchangeTokenResponse": [
@@ -34302,6 +34407,11 @@
           {
             "Name": "scopes",
             "ProtoType": "[]string",
+            "IsOptional": false
+          },
+          {
+            "Name": "org_id",
+            "ProtoType": "string",
             "IsOptional": false
           }
         ],
@@ -34411,6 +34521,11 @@
             "name": "scopes",
             "kind": "string",
             "repeated": true
+          },
+          {
+            "name": "org_id",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ExchangeTokenResponse": [
@@ -34430,6 +34545,10 @@
             "name": "scopes",
             "kind": "string",
             "repeated": true
+          },
+          {
+            "name": "org_id",
+            "kind": "string"
           }
         ],
         "reliant.v1.GetGitTokenRequest": [
@@ -41530,7 +41649,7 @@
     "reliant/v1/daemon.proto": "544ad936ac84e4f6d7c91288776936aa92ce7489db2947d264229d1cb8bd4446",
     "reliant/v1/daemon_registry.proto": "c15e9d16f525310756b89578e95a715a81efdf775f8253ae39f5590c91ad3be2",
     "reliant/v1/filesystem.proto": "cc83ea41bb823ed2a07e35142adc22a3f80a9f597c00b2d1d42104f1b7b4afe1",
-    "reliant/v1/forge.proto": "f680b960736a0cf2e1653dccfbbdde85e65bc9dd6c5328fc934a26bd1436b3f1",
+    "reliant/v1/forge.proto": "391f39aeea3e85bcf5a2d69f9f432e4db855d99dc870524eeb4a3d0faf794ca5",
     "reliant/v1/inbox.proto": "03d13e9820de08aaf349a5a97a46722d4e5f62fd8f01a4546fc4b6d534a56883",
     "reliant/v1/integration.proto": "767cea1a652eb5c4ff2101c1f220e5e915566dd8ebda98567b4edfb26e420e0a",
     "reliant/v1/mcp.proto": "2dfa3b9bfe63a777f0812ffcef40fe43852a06e909e81a017aa7b26f80831121",
@@ -41550,7 +41669,7 @@
     "reliant/v1/system.proto": "bde89c4135b5b658dac9cdac927ebed454a5cae46afdfe73c5929c5d7c891703",
     "reliant/v1/task.proto": "4de0039c9bf6ac72d57fff94da153a9bd4e7dea695e7dcf07508ceeee5169285",
     "reliant/v1/terminal.proto": "094bb9ae0b7bd70878b7652a4e54932737d074d8850176cce36ade9cb5b9c2f2",
-    "reliant/v1/token.proto": "280e0dcd903d116bb7805890cace95e2440c24d33047fcac2e2cba1b5a986bd2",
+    "reliant/v1/token.proto": "4ac4e27a1c63f494f9ff087e99862013674dd6dfac7018d254165e2ba5521fe1",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
     "reliant/v1/tools_daemon.proto": "704b6c6e1382484be35cc8668d914aaf54b99dc0d070fbfc58ae240c47397441",
     "reliant/v1/trigger.proto": "1e4c6c51ccfb548c1249aeb15d1ee161013b60d29b20041eb9bb8d4ec67ae64a",
