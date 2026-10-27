@@ -106,6 +106,11 @@ vi.mock('@/hooks/observability-queries', async () => {
   }
 })
 
+vi.mock('@/hooks/observability-billing-queries', async () => {
+  const { ConnectError, Code } = await import('@connectrpc/connect')
+  return { useObsBillingUsage: () => ({ isPending: false, error: new ConnectError('Not deployed', Code.Unimplemented), refetch: vi.fn() }) }
+})
+
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
   // Real object, not a stub: `useRedeemCoupon` (from the OTHER hook module,
   // which is not mocked) dereferences these keys in its own onSuccess to
@@ -206,12 +211,12 @@ describe('BillingSection', () => {
     expect(section).toHaveTextContent('Customer metadata')
   })
 
-  it('shows no observability usage before an org exists', () => {
+  it('explains unavailable observability usage before an org exists', () => {
     renderSection()
 
     fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
 
-    expect(screen.queryByTestId('billing-observability-usage')).not.toBeInTheDocument()
+    expect(screen.getByTestId('billing-observability-usage')).toHaveTextContent('select an organization first')
   })
 
   it('shows the usage empty state on the merged tab', () => {

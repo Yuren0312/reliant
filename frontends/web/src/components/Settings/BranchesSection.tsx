@@ -13,18 +13,21 @@ import { WorktreeSettings } from "./WorktreeSettings";
 import { machineDisplayName } from "@/lib/machineName";
 import { useWorktreeList, useArchivedWorktreeList } from "../../hooks/worktree-queries";
 
-type WorkspacesTab = "active" | "archived" | "settings";
+type BranchesTab = "active" | "archived" | "settings";
 
 /**
- * Settings → Workspaces. A workspace is a git worktree of the current project
- * that a branched chat works in; this page lists them (active and archived),
- * drills into one, and holds the cleanup defaults applied when archiving.
+ * Settings → Branches. A branch here is the git worktree of the current
+ * project that a branched chat works in; this page lists them (active and
+ * archived), drills into one, and holds the cleanup defaults applied when
+ * archiving. It was called "Workspaces", which collided with the product's
+ * other workspace (a cloud workspace); its id was `workspaces` and
+ * /settings/workspaces redirects here.
  *
- * Selecting a workspace here opens its detail IN the page — it does not switch
- * the app into it. "Open workspace" does that, and then leaves Settings.
+ * Selecting a branch here opens its detail IN the page — it does not switch
+ * the app into it. "Open" does that, and then leaves Settings.
  */
-export function WorkspacesSection() {
-  const [activeTab, setActiveTab] = useState<WorkspacesTab>("active");
+export function BranchesSection() {
+  const [activeTab, setActiveTab] = useState<BranchesTab>("active");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const { activeDaemon } = useDaemonStatus();
   const closeSettings = useSettingsClose();
@@ -47,7 +50,7 @@ export function WorkspacesSection() {
   // Counts reflect what is loaded. Archived workspaces are a separate query the
   // Archived tab loads when opened, so until then there is no count to show.
   const activeCount = worktrees.length;
-  const tabs: Array<{ id: WorkspacesTab; label: string; count?: number }> = [
+  const tabs: Array<{ id: BranchesTab; label: string; count?: number }> = [
     { id: "active", label: hasMoreActive ? "Active (more)" : "Active", count: activeCount },
     {
       id: "archived",
@@ -57,20 +60,19 @@ export function WorkspacesSection() {
     { id: "settings", label: "Cleanup settings" },
   ];
 
-  const selectTab = (tab: WorkspacesTab) => {
+  const selectTab = (tab: BranchesTab) => {
     setActiveTab(tab);
     setSelectedId(null);
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-background" data-testid="workspaces-section">
-      <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+    <div className="flex flex-col" data-testid="branches-section">
         <SettingsPageHeader
-          title="Workspaces"
-          description="Each branched chat gets its own git worktree so agents can work in parallel without touching your main checkout. Review, open, archive or clean them up here."
+          title="Branches"
+          description="Each branched chat works in its own git worktree, so agents can work in parallel without touching your main checkout. Review, open, archive or clean them up here."
           meta={
             <>
-              <span className={workspaceChip} title="Workspaces are listed for the open project">
+              <span className={workspaceChip} title="Branches are listed for the open project">
                 <FolderGit2 className="h-3 w-3" aria-hidden="true" />
                 <span className="sr-only">Project:</span>
                 {currentProject?.name ?? "No project open"}
@@ -98,7 +100,7 @@ export function WorkspacesSection() {
           <>
             <div
               role="tablist"
-              aria-label="Workspace views"
+              aria-label="Branch views"
               className="mb-4 flex gap-1 border-b border-border"
             >
               {tabs.map((tab) => {
@@ -152,7 +154,6 @@ export function WorkspacesSection() {
             </div>
           </>
         )}
-      </div>
     </div>
   );
 }

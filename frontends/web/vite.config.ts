@@ -222,6 +222,11 @@ export default defineConfig({
         changeOrigin: true,
         ws: false,
       },
+      "/observability_billing.v1.": {
+        target: process.env.VITE_CONTROL_PLANE_API_URL || "http://127.0.0.1:8090",
+        changeOrigin: true,
+        ws: false,
+      },
       "/reliant.v1.": {
         target: process.env.VITE_API_URL || "http://127.0.0.1:3090",
         changeOrigin: true,

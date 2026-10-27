@@ -89,6 +89,8 @@ const ForgePanePreview = lazyRoute(
 // no backend. Also what the Playwright smoke drives (e2e/observability.spec.ts).
 const ObservabilityPreview = lazyRoute(
   () => import('./components/Forge/Observability/__preview__/ObservabilityPreview'), 'default')
+const ObservabilityBillingPreview = lazyRoute(
+  () => import('./components/Forge/Observability/__preview__/ObservabilityBillingPreview'), 'default')
 // The console v3 forge-ui primitives, composed on fabricated data.
 const ConsolePrimitivesPreview = lazyRoute(
   () => import('./components/Forge/__preview__/ConsolePrimitivesPreview'), 'default')
@@ -555,7 +557,7 @@ const forgePanePreviewRoute = createRoute({
 const forgeObservabilityPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-observability-preview',
-  component: () => <DevOnlyRoute><ObservabilityPreview /></DevOnlyRoute>,
+  component: () => <DevOnlyRoute>{new URLSearchParams(window.location.search).has('billingCase') ? <ObservabilityBillingPreview /> : <ObservabilityPreview />}</DevOnlyRoute>,
 })
 
 const consolePrimitivesPreviewRoute = createRoute({
@@ -623,7 +625,7 @@ const settingsConnectorRoutes = createSettingsConnectorRoutes(() => authenticate
   consent: ConnectorConsentPage,
 })
 
-// /settings/$section and /settings/environments/$machineId. Defined in
+// /settings/$section and /settings/machines/$machineId. Defined in
 // settingsSectionRoutes.tsx so the route tests mount the same definitions; an
 // unknown slug redirects to /settings with a notice rather than throwing.
 const settingsSectionRoutes = createSettingsSectionRoutes(() => authenticatedLayoutRoute, {

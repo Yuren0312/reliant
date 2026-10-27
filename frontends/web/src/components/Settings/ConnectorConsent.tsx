@@ -489,8 +489,8 @@ export function ConnectorConsent({
   if (authorized) {
     return (
       <div className="max-w-lg mx-auto py-16 text-center space-y-4">
-        <div className="mx-auto w-12 h-12 rounded-full bg-green-100 dark:bg-green-950/40 flex items-center justify-center">
-          <Check className="w-6 h-6 text-green-700 dark:text-green-400" />
+        <div className="mx-auto w-12 h-12 rounded-full bg-success/10 flex items-center justify-center">
+          <Check className="w-6 h-6 text-success-ink" />
         </div>
         <h2 className="text-lg font-semibold">{displayName} is connected</h2>
         <p className="text-sm text-muted-foreground">
@@ -517,8 +517,8 @@ export function ConnectorConsent({
       </div>
 
       {error && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-3">
-          <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+        <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+          <p className="text-sm text-destructive-ink">{error}</p>
         </div>
       )}
 
@@ -676,7 +676,7 @@ export function ConnectorConsent({
                   </div>
                 ) : clonedRepo ? (
                   <div className="flex items-center gap-2">
-                    <Check className="w-4 h-4 shrink-0 text-green-600 dark:text-green-400" />
+                    <Check className="w-4 h-4 shrink-0 text-success-ink" />
                     <p className="text-xs text-muted-foreground min-w-0 truncate">
                       Cloned{" "}
                       <span className="font-mono">{clonedRepo}</span> onto this
@@ -727,9 +727,9 @@ export function ConnectorConsent({
               </div>
             )}
             {selectedIsPersonal && (
-              <div className="flex gap-2 rounded-md border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/20 p-3">
-                <ShieldAlert className="w-4 h-4 shrink-0 text-yellow-700 dark:text-yellow-400 mt-0.5" />
-                <p className="text-xs text-yellow-800 dark:text-yellow-300">
+              <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 p-3">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-warning-ink mt-0.5" />
+                <p className="text-xs text-warning-ink">
                   This is your own computer, not a disposable sandbox. Anything
                   you allow here runs against your real files — prefer a narrow
                   directory and no shell access.
@@ -772,9 +772,9 @@ export function ConnectorConsent({
               </div>
             )}
             {form.pathRoot.trim() === "/" && (
-              <div className="flex gap-2 rounded-md border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/20 p-3">
-                <ShieldAlert className="w-4 h-4 shrink-0 text-yellow-700 dark:text-yellow-400 mt-0.5" />
-                <p className="text-xs text-yellow-800 dark:text-yellow-300">
+              <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 p-3">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-warning-ink mt-0.5" />
+                <p className="text-xs text-warning-ink">
                   {displayName} will be able to read every file this machine's
                   daemon can reach, including SSH keys, browser profiles, and
                   credentials outside any project.
@@ -850,16 +850,16 @@ export function ConnectorConsent({
             )}
 
             {execModeRequired && (
-              <p className="text-xs text-yellow-700 dark:text-yellow-400">
+              <p className="text-xs text-warning-ink">
                 You selected a tool that runs commands, so shell access cannot
                 be “No commands”.
               </p>
             )}
 
             {form.execMode === ConnectorExecMode.UNRESTRICTED && (
-              <div className="flex gap-2 rounded-md border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/20 p-3">
-                <ShieldAlert className="w-4 h-4 shrink-0 text-yellow-700 dark:text-yellow-400 mt-0.5" />
-                <p className="text-xs text-yellow-800 dark:text-yellow-300">
+              <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 p-3">
+                <ShieldAlert className="w-4 h-4 shrink-0 text-warning-ink mt-0.5" />
+                <p className="text-xs text-warning-ink">
                   {displayName} could run any command in this workspace. Only
                   choose this for a workspace you are willing to have modified
                   or destroyed.
