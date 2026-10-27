@@ -652,6 +652,10 @@ message Trigger {
   // Empty when the daemon has not reported one.
   string daemon_name = 17;
 
+  // Read-only registry state: connected, disconnected, starting, suspended,
+  // failed, removed, or none for a no-machine activation.
+  string machine_state = 30;
+
   // When true, a completed run of this trigger marks its chat unread
   // (raising the OS notification) and appears in the Inbox as "Run finished".
   // Off by default: unattended completions are silent, failures always notify
