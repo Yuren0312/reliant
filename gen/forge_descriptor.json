@@ -781,7 +781,9 @@
           "InputProtoFile": "reliant/v1/attachment.proto",
           "OutputProtoFile": "reliant/v1/attachment.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "stages an image for the composer: the message that sends it is the record"
           }
         },
         {
@@ -797,7 +799,9 @@
           "InputProtoFile": "reliant/v1/attachment.proto",
           "OutputProtoFile": "reliant/v1/attachment.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "stages a file's content for the composer: the message that sends it is the record"
           }
         },
         {
@@ -831,7 +835,9 @@
           "InputProtoFile": "reliant/v1/attachment.proto",
           "OutputProtoFile": "reliant/v1/attachment.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "removes an attachment staged for the composer: draft state of a message not yet sent"
           }
         }
       ],
@@ -2460,7 +2466,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "restore",
+            "TargetKind": "worktree_recovery",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2477,7 +2487,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "worktree_recovery",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2498,7 +2512,6 @@
             "Declared": true,
             "Verb": "create",
             "TargetKind": "worktree",
-            "Implied": true,
             "Writer": "INTERCEPTOR"
           }
         },
@@ -2567,7 +2580,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2584,7 +2601,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2600,7 +2621,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "archive",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2616,7 +2641,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "unarchive",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2632,7 +2661,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "import",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2665,7 +2698,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "prune_worktrees",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2681,7 +2718,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "recreate",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2761,7 +2802,9 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "git index edit through the daemon: the commit that follows is the event, and git records it"
           }
         },
         {
@@ -2777,7 +2820,9 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "git index edit through the daemon: undoes a stage, and the repository's history never sees it"
           }
         },
         {
@@ -2793,7 +2838,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "revert_files",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2809,7 +2858,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "commit",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2825,7 +2878,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "push",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2841,7 +2898,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "pull",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -2873,7 +2934,11 @@
           "InputProtoFile": "reliant/v1/worktree.proto",
           "OutputProtoFile": "reliant/v1/worktree.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create_pr",
+            "TargetKind": "worktree",
+            "Writer": "INTERCEPTOR"
           }
         }
       ],
@@ -14150,7 +14215,9 @@
           "InputProtoFile": "reliant/v1/daemon.proto",
           "OutputProtoFile": "reliant/v1/daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "an OAuth handshake still in flight on the daemon: the provider connection it completes is what records the change"
           }
         },
         {
@@ -14166,7 +14233,9 @@
           "InputProtoFile": "reliant/v1/daemon.proto",
           "OutputProtoFile": "reliant/v1/daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "opens the daemon's loopback OAuth helper for one linking session: handshake transport, not a change"
           }
         },
         {
@@ -14182,7 +14251,9 @@
           "InputProtoFile": "reliant/v1/daemon.proto",
           "OutputProtoFile": "reliant/v1/daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "closes the loopback OAuth helper when its linking session ends: handshake transport, not a change"
           }
         }
       ],
@@ -14324,7 +14395,9 @@
           "InputProtoFile": "reliant/v1/tools_daemon.proto",
           "OutputProtoFile": "reliant/v1/tools_daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "the daemon's tool-execution transport stream: each tool call records its own outcome"
           }
         },
         {
@@ -14340,7 +14413,9 @@
           "InputProtoFile": "reliant/v1/tools_daemon.proto",
           "OutputProtoFile": "reliant/v1/tools_daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "the gateway-dialed twin of ConnectDaemon: daemon transport, each tool call records its own outcome"
           }
         },
         {
@@ -14356,7 +14431,9 @@
           "InputProtoFile": "reliant/v1/tools_daemon.proto",
           "OutputProtoFile": "reliant/v1/tools_daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "unary fallback delivery of one tool result: daemon transport, the tool call records its own outcome"
           }
         },
         {
@@ -14367,12 +14444,13 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.WhoAmIRequest",
           "OutputTypeFQ": "reliant.v1.WhoAmIResponse",
           "InputProtoFile": "reliant/v1/tools_daemon.proto",
           "OutputProtoFile": "reliant/v1/tools_daemon.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         }
       ],
@@ -16139,12 +16217,13 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.ResolveDaemonRequest",
           "OutputTypeFQ": "reliant.v1.ResolveDaemonResponse",
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
           "OutputProtoFile": "reliant/v1/daemon_registry.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -16160,7 +16239,9 @@
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
           "OutputProtoFile": "reliant/v1/daemon_registry.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "reports whether the daemon is routable: this server cannot wake a machine, control-plane's ResumeDaemon does"
           }
         },
         {
@@ -16176,7 +16257,9 @@
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
           "OutputProtoFile": "reliant/v1/daemon_registry.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "re-probes the machine's local model servers: refreshes an observed inventory and configures nothing"
           }
         },
         {
@@ -16192,7 +16275,11 @@
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
           "OutputProtoFile": "reliant/v1/daemon_registry.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_local_model_endpoints",
+            "TargetKind": "daemon",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -16208,7 +16295,11 @@
           "InputProtoFile": "reliant/v1/daemon_registry.proto",
           "OutputProtoFile": "reliant/v1/daemon_registry.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "clear_caches",
+            "TargetKind": "daemon",
+            "Writer": "INTERCEPTOR"
           }
         }
       ],
@@ -16967,7 +17058,9 @@
           "InputProtoFile": "reliant/v1/filesystem.proto",
           "OutputProtoFile": "reliant/v1/filesystem.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "file edit through the daemon: git records file changes, and editor saves are high-volume"
           }
         },
         {
@@ -17031,7 +17124,9 @@
           "InputProtoFile": "reliant/v1/filesystem.proto",
           "OutputProtoFile": "reliant/v1/filesystem.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "filesystem edit through the daemon: git records the file once it is committed"
           }
         },
         {
@@ -17047,7 +17142,9 @@
           "InputProtoFile": "reliant/v1/filesystem.proto",
           "OutputProtoFile": "reliant/v1/filesystem.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "filesystem edit through the daemon: git records the removal once it is committed"
           }
         },
         {
@@ -17063,7 +17160,9 @@
           "InputProtoFile": "reliant/v1/filesystem.proto",
           "OutputProtoFile": "reliant/v1/filesystem.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "filesystem edit through the daemon: git records the copy once it is committed"
           }
         },
         {
@@ -17095,7 +17194,9 @@
           "InputProtoFile": "reliant/v1/filesystem.proto",
           "OutputProtoFile": "reliant/v1/filesystem.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "bulk file edit through the daemon: git records each changed file once it is committed"
           }
         },
         {
@@ -17127,7 +17228,9 @@
           "InputProtoFile": "reliant/v1/filesystem.proto",
           "OutputProtoFile": "reliant/v1/filesystem.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "filesystem edit through the daemon: an empty directory is not even something git records"
           }
         }
       ],
@@ -18364,7 +18467,9 @@
           "InputProtoFile": "reliant/v1/forge.proto",
           "OutputProtoFile": "reliant/v1/forge.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "reconciles an environment against its live cluster and reports drift: changes nothing, but calls out to the cluster, so it is not NO_SIDE_EFFECTS"
           }
         },
         {
@@ -18445,7 +18550,11 @@
           "InputProtoFile": "reliant/v1/forge.proto",
           "OutputProtoFile": "reliant/v1/forge.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "promote",
+            "TargetKind": "release",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -18478,7 +18587,9 @@
           "InputProtoFile": "reliant/v1/forge.proto",
           "OutputProtoFile": "reliant/v1/forge.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "builds the deploy plan a human approves: it binds and applies nothing, and the StartDeploy that ships it is the event"
           }
         },
         {
@@ -18494,7 +18605,11 @@
           "InputProtoFile": "reliant/v1/forge.proto",
           "OutputProtoFile": "reliant/v1/forge.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "deploy",
+            "TargetKind": "release",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -19461,7 +19576,11 @@
           "InputProtoFile": "reliant/v1/inbox.proto",
           "OutputProtoFile": "reliant/v1/inbox.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "cleanup_storage",
+            "TargetKind": "daemon",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -19477,7 +19596,9 @@
           "InputProtoFile": "reliant/v1/inbox.proto",
           "OutputProtoFile": "reliant/v1/inbox.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user inbox read state: hides items without resolving them"
           }
         },
         {
@@ -19493,7 +19614,9 @@
           "InputProtoFile": "reliant/v1/inbox.proto",
           "OutputProtoFile": "reliant/v1/inbox.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "per-user inbox read state: undoes a dismiss"
           }
         }
       ],
@@ -20300,7 +20423,11 @@
           "InputProtoFile": "reliant/v1/mcp.proto",
           "OutputProtoFile": "reliant/v1/mcp.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "install",
+            "TargetKind": "mcp_server",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -20316,7 +20443,11 @@
           "InputProtoFile": "reliant/v1/mcp.proto",
           "OutputProtoFile": "reliant/v1/mcp.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "uninstall",
+            "TargetKind": "mcp_server",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -20332,7 +20463,9 @@
           "InputProtoFile": "reliant/v1/mcp.proto",
           "OutputProtoFile": "reliant/v1/mcp.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "restarts a server process from its unchanged config: runtime recovery, not a configuration change"
           }
         },
         {
@@ -20364,7 +20497,11 @@
           "InputProtoFile": "reliant/v1/mcp.proto",
           "OutputProtoFile": "reliant/v1/mcp.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update_config",
+            "TargetKind": "mcp_server",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -20380,7 +20517,11 @@
           "InputProtoFile": "reliant/v1/mcp.proto",
           "OutputProtoFile": "reliant/v1/mcp.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "set_enabled",
+            "TargetKind": "mcp_server",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -20396,7 +20537,11 @@
           "InputProtoFile": "reliant/v1/mcp.proto",
           "OutputProtoFile": "reliant/v1/mcp.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "move_scope",
+            "TargetKind": "mcp_server",
+            "Writer": "INTERCEPTOR"
           }
         }
       ],
@@ -25007,7 +25152,6 @@
             "Declared": true,
             "Verb": "create",
             "TargetKind": "project",
-            "Implied": true,
             "Writer": "INTERCEPTOR"
           }
         },
@@ -25059,7 +25203,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -25076,7 +25224,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "delete",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -25092,7 +25244,9 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "bumps last_active when the project is opened: recency for sorting, not a change to the project"
           }
         },
         {
@@ -25124,7 +25278,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "update_metadata",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -25188,7 +25346,9 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "a no-op kept for old clients: projects are initialized when they are created, so it only reports that"
           }
         },
         {
@@ -25236,7 +25396,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "save_prompts",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -25252,7 +25416,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "init_git",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -25301,7 +25469,9 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "None": "records where a clone made by another route lives on a machine: idempotent placement bookkeeping the cloning client re-runs"
           }
         },
         {
@@ -25317,7 +25487,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "create",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -25349,7 +25523,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "pull",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -25365,7 +25543,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "remove_from_daemon",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -25381,7 +25563,11 @@
           "InputProtoFile": "reliant/v1/project.proto",
           "OutputProtoFile": "reliant/v1/project.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "reclone",
+            "TargetKind": "project",
+            "Writer": "INTERCEPTOR"
           }
         }
       ],
@@ -27737,12 +27923,13 @@
           "ServerStreaming": false,
           "AuthRequired": true,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.DiscoverReposRequest",
           "OutputTypeFQ": "reliant.v1.DiscoverReposResponse",
           "InputProtoFile": "reliant/v1/repo.proto",
           "OutputProtoFile": "reliant/v1/repo.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -27775,7 +27962,11 @@
           "InputProtoFile": "reliant/v1/repo.proto",
           "OutputProtoFile": "reliant/v1/repo.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "add",
+            "TargetKind": "repo",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -27791,7 +27982,11 @@
           "InputProtoFile": "reliant/v1/repo.proto",
           "OutputProtoFile": "reliant/v1/repo.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": true,
+            "Declared": true,
+            "Verb": "remove",
+            "TargetKind": "repo",
+            "Writer": "INTERCEPTOR"
           }
         },
         {
@@ -41325,29 +41520,29 @@
     "reliant/v1/account.proto": "9a2ee53fe8cd0e6ad7e2bc371885bb267664232a3782761076b843a0f7ca102d",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
     "reliant/v1/approval.proto": "4d455295dc786a51bb13f302b34a6b60ac70d131b5b6c1bd91967f17f37c7d72",
-    "reliant/v1/attachment.proto": "61fa803dd43b3e1f790ab13de3eeeced908b97c6076ea3154180dbd9b5018085",
+    "reliant/v1/attachment.proto": "e6f64e796cbc3893024de1fae3f6f78364a97ce8b84a418f741fad24f4d6e490",
     "reliant/v1/background.proto": "fe7cf26a7d237af7b09b2c54c6cfc5dde7c8d9abb0eae4cc3eb2fe802fcaa0a1",
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
     "reliant/v1/chat.proto": "9617ec3b58fa0244f55b43ef49ce5d940e451d4b9658d9d6c1baaa7abaff7b4e",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "34d6a19f3468e7be1b25acd39ee09336c18e967b81beea23b6d85b3f68355c96",
     "reliant/v1/connector.proto": "6564256b89939e0eea5f95080366720823f2c7c03d15360f2ac736d243c658a5",
-    "reliant/v1/daemon.proto": "81f841647a83dc20c756913fe6c358b77b00a2c686acdb05252818b415e8e8a1",
-    "reliant/v1/daemon_registry.proto": "409712b58dea048c4ccb419cf8af241d8f78a1313d95351c9a36d506126be93a",
-    "reliant/v1/filesystem.proto": "140d121cbc7cebc799860129abf98389a867d0b128fbe36b0d6c000bf9b92a6d",
-    "reliant/v1/forge.proto": "d975074ed16882b06823391fa8e1ab82c54e7b8624a1465cb45d11e3eb0c0138",
-    "reliant/v1/inbox.proto": "94d7bdbff7dc2d3cc85ed9ac7e47140ad217af70dff62ec3b7bd88d78bd3f732",
+    "reliant/v1/daemon.proto": "544ad936ac84e4f6d7c91288776936aa92ce7489db2947d264229d1cb8bd4446",
+    "reliant/v1/daemon_registry.proto": "c15e9d16f525310756b89578e95a715a81efdf775f8253ae39f5590c91ad3be2",
+    "reliant/v1/filesystem.proto": "cc83ea41bb823ed2a07e35142adc22a3f80a9f597c00b2d1d42104f1b7b4afe1",
+    "reliant/v1/forge.proto": "f680b960736a0cf2e1653dccfbbdde85e65bc9dd6c5328fc934a26bd1436b3f1",
+    "reliant/v1/inbox.proto": "03d13e9820de08aaf349a5a97a46722d4e5f62fd8f01a4546fc4b6d534a56883",
     "reliant/v1/integration.proto": "767cea1a652eb5c4ff2101c1f220e5e915566dd8ebda98567b4edfb26e420e0a",
-    "reliant/v1/mcp.proto": "d27eec630292113ac64b4b2e3468e72516d1f5c211dbfe536c2730e43ed2efd1",
+    "reliant/v1/mcp.proto": "2dfa3b9bfe63a777f0812ffcef40fe43852a06e909e81a017aa7b26f80831121",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",
     "reliant/v1/model_endpoint.proto": "78c975ea77eacab893b2389073746b4cc29f298c44a9b80543a74b13d1c649cc",
     "reliant/v1/package_commands.proto": "963ee23dd0200e0295f734f074c820290cfbc4fd5ed4ac6301f9e7c52367fcff",
     "reliant/v1/plan.proto": "10d988e3ed00486d4591339f2173afc72882fe0293b52427fe37736709564f5d",
     "reliant/v1/preset.proto": "4a4d7a48d45412e11b50bac80bbdc2d2e5c9a86596f680598efa312cb9f300c5",
-    "reliant/v1/project.proto": "9cd193101501187b898646fa617f711dd1bbbd93fe63879871bac58c38226929",
+    "reliant/v1/project.proto": "f45510467e94c4ac68f0e393635699c4a44482058007647617096ec86c117dc9",
     "reliant/v1/provider_account.proto": "ad06dd4fd31338c6f0aa89d1b5902ee4794e8dd472067544df514a3c63a5ad82",
     "reliant/v1/question.proto": "aaa6172d584a3393d873602d48c00459d1f78322c5ea6404b1d5c8a280c7f024",
-    "reliant/v1/repo.proto": "5ea880bc3bb10123c803298ab7fe6c6a3c57dde359b2f5b339e774ab880864a0",
+    "reliant/v1/repo.proto": "41361c4d530daffc74850527b0953baab9a7681b7f659e580c96d1de6d01498a",
     "reliant/v1/run.proto": "e4f1d7b5b9d6594c86efc20e1c7a49bf71663418ff7994b580b3b0dc69edcc29",
     "reliant/v1/scenario.proto": "01ef4dff556b643996e489dcfb8ca5bca9e70e923c9b9ad9e30aa55dfc2ea8a0",
     "reliant/v1/settings.proto": "ac1c6509ebf66e479d2de5ce04990ffb764b6102f2748948669dd88509511ff2",
@@ -41357,10 +41552,10 @@
     "reliant/v1/terminal.proto": "094bb9ae0b7bd70878b7652a4e54932737d074d8850176cce36ade9cb5b9c2f2",
     "reliant/v1/token.proto": "280e0dcd903d116bb7805890cace95e2440c24d33047fcac2e2cba1b5a986bd2",
     "reliant/v1/tool_call.proto": "fd5584a6591a8b23928eba070d24dcb7ba17b6ec6683700df792e2b958ce0eb3",
-    "reliant/v1/tools_daemon.proto": "093e70e06ec18f1a4db9ef4416590b721dc8085192cba21ca9f2993d8b01b8c0",
+    "reliant/v1/tools_daemon.proto": "704b6c6e1382484be35cc8668d914aaf54b99dc0d070fbfc58ae240c47397441",
     "reliant/v1/trigger.proto": "154c1e6cac514f479c24a2b742a4a52d4f3d3e314ffb2b9f254da7a416058aad",
     "reliant/v1/workflow.proto": "b77da362bd747c504b115c2bb44d864abf029336506637dbb5766bcbc46c1804",
     "reliant/v1/workflow_v2.proto": "0beb777de1451dfe512db520d4e6cb0aacc394444053e9abb548e85bf61d821a",
-    "reliant/v1/worktree.proto": "021b7ddfa340a326138bfd2072871bacdb284133e3af72c5e0fec3a5f2f6584a"
+    "reliant/v1/worktree.proto": "2d2670e4ca98a799c8f0f8a9397ef34cd4f69f715283627ffd290fbe8f80b5cd"
   }
 }
