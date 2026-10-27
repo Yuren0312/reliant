@@ -16,7 +16,7 @@
 #
 # Phases, each a row of the summary (slot wait vs run, seconds):
 #   plan       tools/test-affected plan: the ONE rule set (dev-docs/testing-affected.md)
-#   npm-*      npm ci where a selected lane needs node_modules it lacks
+#   npm-*      npm ci (pnpm-* for a pnpm project) where a selected lane needs node_modules it lacks
 #   generate   pinned forge generate must be a no-op; only when a forge input changed
 #   docs/Electron/production renderer/full fallbacks: RELEASE ONLY
 #   build      compile (go list -export: no link) every package whose build
@@ -233,9 +233,17 @@ load_selection || exit 1
 notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo FULL || echo "$nweb file(s)"); typecheck $typecheck; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
 
 # ── npm installs a selected lane needs ────────────────────────────────────
-# npm_install <dir>: npm ci in <dir> unless its install is current.
+# npm_install <dir>: npm ci in <dir> unless its install is current; pnpm's
+# frozen install for a pnpm project (frontends/web).
 npm_install() {
   local d=$1 n scripts
+  if [ -f "$d/pnpm-lock.yaml" ]; then
+    # pnpm rewrites node_modules/.modules.yaml on every install it completes.
+    [ "$d/node_modules/.modules.yaml" -nt "$d/pnpm-lock.yaml" ] && return 0
+    n=pnpm-$(echo "$d" | tr '/.' '-r')
+    phase "$n" pnpm install --dir "$d" --frozen-lockfile --ignore-scripts --config.confirmModulesPurge=false --reporter=silent
+    return
+  fi
   [ -f "$d/package-lock.json" ] || return 0
   # An install is current when npm's lockfile copy is newer than the lockfile,
   # and, for electron, its postinstall also fetched the binary: an interrupted

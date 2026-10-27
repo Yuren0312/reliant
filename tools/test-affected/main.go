@@ -578,7 +578,7 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 	}
 	for _, lc := range pl.Lockfiles {
 		if slices.ContainsFunc(lc.Lanes, func(l lane) bool { return enabled[l] }) {
-			p.f("\n[npm-lockfile] %s: npm ci --dry-run (%s)\n", lc.Dir, lc.Why)
+			p.f("\n[npm-lockfile] %s: %s (%s)\n", lc.Dir, strings.Join(lockfileArgv(lc.Lockfile), " "), lc.Why)
 		}
 	}
 	return p.err
@@ -654,8 +654,14 @@ type step struct {
 // lockfileArgv proves a project's lockfile still installs without touching
 // its node_modules: `npm ci` validates package.json against the lockfile
 // before it reifies anything, and --dry-run stops it there (~10s, offline for
-// a lockfile in sync).
-var lockfileArgv = []string{"npm", "ci", "--dry-run", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error"}
+// a lockfile in sync). pnpm's --frozen-lockfile --lockfile-only asks the same
+// question and writes nothing (~3s).
+func lockfileArgv(lockfile string) []string {
+	if lockfile == pnpmLock {
+		return []string{"pnpm", "install", "--frozen-lockfile", "--lockfile-only", "--ignore-scripts"}
+	}
+	return []string{"npm", "ci", "--dry-run", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error"}
+}
 
 func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 	var out []step
@@ -663,7 +669,7 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 	// against a node_modules a fresh install can no longer produce.
 	for _, lc := range pl.Lockfiles {
 		if slices.ContainsFunc(lc.Lanes, func(l lane) bool { return enabled[l] }) {
-			out = append(out, step{name: "npm lockfile in sync (" + lc.Dir + ")", dir: filepath.Join(r.root, lc.Dir), argv: lockfileArgv, prerequisite: true})
+			out = append(out, step{name: "npm lockfile in sync (" + lc.Dir + ")", dir: filepath.Join(r.root, lc.Dir), argv: lockfileArgv(lc.Lockfile), prerequisite: true})
 		}
 	}
 	// Cheapest of all (a fetch and a directory listing) and the one that
