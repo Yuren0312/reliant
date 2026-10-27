@@ -462,6 +462,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		TriggerLister:      triggertools.New(d.Triggers.Service),
 		TriggerFirer:       triggertools.New(d.Triggers.Service),
 		TriggerEventLister: triggertools.New(d.Triggers.Service),
+		ActivationManager:  d.Triggers.Service,
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens
