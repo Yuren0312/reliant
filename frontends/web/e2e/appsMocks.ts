@@ -129,14 +129,19 @@ export const DEPLOY_MESSAGES = [
         toolCallId: 'tc_deploy',
         input: JSON.stringify({ command: 'reliant forge env deploy prod', description: 'Deploy the storefront to prod' }),
         toolCallStatus: 3,
-        matchedResult: {
-          toolCallId: 'tc_deploy',
-          type: 'tool_result',
-          content: JSON.stringify({ stdout: 'release v1.4.0 promoted to prod\n', stderr: '', exit_code: 0 }),
-        },
       },
       { id: 'b4', index: 2, type: 1, content: 'Done. v1.4.0 is live in prod.' },
     ],
+  },
+  // Results are separate TOOL messages, joined by toolCallId. The server no
+  // longer copies matchedResult onto an assistant's call block.
+  {
+    id: 'msg_3', seq: '3', thread: 'main', role: 4,
+    createdAt: minutesAgo(19), updatedAt: minutesAgo(19),
+    contentBlocks: [{
+      id: 'b5', index: 0, type: 3, toolCallId: 'tc_deploy', toolName: 'shell',
+      content: JSON.stringify({ stdout: 'release v1.4.0 promoted to prod\n', stderr: '', exit_code: 0 }),
+    }],
   },
 ];
 
