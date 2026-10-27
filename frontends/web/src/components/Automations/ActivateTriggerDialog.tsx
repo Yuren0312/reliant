@@ -28,31 +28,30 @@
 import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import { Check, Copy, KeyRound, RotateCw } from "lucide-react";
 
-import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import Modal from "../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { CardInset } from "../forge-ui/card";
-import { Toggle } from "../ui/Toggle";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import { useProjectStore } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
-import { useProjectDaemonInstalls, triggerKeys } from "@/hooks/trigger-queries";
-import { useQueryClient } from "@tanstack/react-query";
+import { useCreateTrigger, useProjectDaemonInstalls, useRotateWebhookToken } from "@/hooks/trigger-queries";
 import {
   inlineTriggerSource,
   triggerErrorMessage,
-  triggerGrpc,
   webhookUrlForDisplay,
   type ActingIdentityKey,
   type Trigger,
   type WebhookCredential,
-} from "@/api/trigger-grpc";
-import { getGRPCBaseURLPublic } from "@/api/grpc-client";
+} from "@/hooks/trigger-model";
+import { reliantApiBaseUrl } from "@/lib/connect";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "../workflow/run/RunWorkflowForm";
 import type { RunWorkflowValue } from "../workflow/run/runWorkflowValues";
 import { fieldClass, hintClass, labelClass, textareaClass, errorTextClass } from "../workflow/run/runFormStyles";
 import { buildDaemonChoices, defaultDaemonId } from "./daemonChoices";
 import { ConnectionPicker } from "../workflow/connections/ConnectionPicker";
 import { ConnectIntegrationDialog } from "../workflow/connections/ConnectIntegrationDialog";
-import { useCatalogEntry, useDeclaredTriggerRef } from "@/hooks/connection-queries";
+import { useCatalogEntry, useDeclaredTriggerRef } from "@/hooks/catalog-queries";
 import { integrationOf, promptOf, sourceCase, type DeclaredTrigger } from "@/lib/declaredTriggers";
 import { TriggerSourceFields } from "../workflow/config/DeclaredTriggerPanel";
 import { OnlyFromControl } from "../workflow/config/OnlyFromControl";
@@ -89,7 +88,7 @@ const NO_MACHINE = "__no_machine__";
  * Electron release cut after this dialog landed.
  */
 export function apiOrigin(): string {
-  return getGRPCBaseURLPublic() ?? globalThis.location?.origin ?? "";
+  return reliantApiBaseUrl() ?? globalThis.location?.origin ?? "";
 }
 
 export function ActivateTriggerDialog(props: ActivateTriggerDialogProps) {
@@ -104,8 +103,8 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
   const [declared, setDeclared] = useState(initialDeclared);
   const ids = useId();
   const fieldId = (name: string) => `${ids}-${name}`;
-  const queryClient = useQueryClient();
-  const projects = useProjectStore((s) => s.projects);
+  const createTrigger = useCreateTrigger();
+  const { projects } = useProjects();
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
   const kind = sourceCase(declared);
   const integration = integrationOf(declared);
@@ -163,7 +162,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
     if (Object.keys(errors).length > 0) return;
     setSaving(true);
     try {
-      const result = await triggerGrpc.createWithCredential({
+      const result = await createTrigger.mutateAsync({
         name: name.trim(),
         projectId,
         worktreeId: inputs.worktreeId,
@@ -180,7 +179,6 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
         source: personal ? inlineTriggerSource(declared.source) : { kind: "activation", workflowTrigger: declared.name ?? "" },
         filter: personal && kind !== "schedule" ? filter : undefined,
       });
-      void queryClient.invalidateQueries({ queryKey: triggerKeys.lists() });
       onActivated?.(result.trigger);
       if (result.webhook || kind === "webhook") setCreated(result);
       else onClose();
@@ -194,7 +192,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
   const show = (key: string) => attempted && errors[key];
 
   return (
-    <Modal isOpen onClose={onClose} size="lg" title={personal ? `Add a trigger to ${workflowTitle || workflowRef}` : `Activate “${declared.name}”`}>
+    <Modal open onClose={onClose} size="lg" title={personal ? `Add a trigger to ${workflowTitle || workflowRef}` : `Activate “${declared.name}”`}>
       <form onSubmit={onSubmit} noValidate className="space-y-5" aria-label={personal ? "Add a personal trigger" : `Activate ${declared.name}`}>
         <CardInset className="text-sm">
           {personal ? (
@@ -352,14 +350,8 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
         <ActingIdentityField value={actingIdentity} onChange={setActingIdentity} />
 
         <div className="flex flex-wrap items-center gap-6">
-          <div className="flex items-center gap-2">
-            <Toggle checked={enabled} onChange={setEnabled} srLabel="Enabled" />
-            <span className="text-sm text-foreground" aria-hidden>Enabled</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Toggle checked={notify} onChange={setNotify} srLabel="Notify me when a run completes" />
-            <span className="text-sm text-foreground" aria-hidden>Notify me when a run completes</span>
-          </div>
+          <ToggleSwitch checked={enabled} onChange={setEnabled} label="Enabled" size="lg" className="forge-ui" />
+          <ToggleSwitch checked={notify} onChange={setNotify} label="Notify me when a run completes" size="lg" className="forge-ui" />
         </div>
 
         {error && (
@@ -387,7 +379,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
 
 function ActivatedView({ created, onClose }: { created: { trigger: Trigger; webhook?: WebhookCredential }; onClose: () => void }) {
   return (
-    <Modal isOpen onClose={onClose} size="lg" title={`${created.trigger.name} is active`}>
+    <Modal open onClose={onClose} size="lg" title={`${created.trigger.name} is active`}>
       <div className="space-y-4">
         <WebhookCredentialPanel trigger={created.trigger} credential={created.webhook} />
         <div className="flex justify-end border-t border-border pt-4">
@@ -404,7 +396,7 @@ function ActivatedView({ created, onClose }: { created: { trigger: Trigger; webh
  * old token at once.
  */
 export function WebhookCredentialPanel({ trigger, credential: initial }: { trigger: Trigger; credential?: WebhookCredential }) {
-  const queryClient = useQueryClient();
+  const rotateToken = useRotateWebhookToken();
   const [credential, setCredential] = useState(initial);
   const [rotating, setRotating] = useState(false);
   const [confirmRotate, setConfirmRotate] = useState(false);
@@ -427,10 +419,9 @@ export function WebhookCredentialPanel({ trigger, credential: initial }: { trigg
     setRotating(true);
     setError(null);
     try {
-      const result = await triggerGrpc.rotateWebhookToken(trigger.id);
+      const result = await rotateToken.mutateAsync(trigger.id);
       setCredential(result.webhook);
       setConfirmRotate(false);
-      void queryClient.invalidateQueries({ queryKey: triggerKeys.all });
     } catch (err) {
       setError(triggerErrorMessage(err));
     } finally {
@@ -456,7 +447,7 @@ export function WebhookCredentialPanel({ trigger, credential: initial }: { trigg
           <p className="text-foreground">Rotate the token? Senders using the current one stop working immediately.</p>
           <div className="mt-2 flex gap-2">
             <Button size="sm" variant="ghost" onClick={() => setConfirmRotate(false)}>Keep it</Button>
-            <Button size="sm" variant="destructive" loading={rotating} onClick={() => void rotate()}>Rotate token</Button>
+            <Button size="sm" variant="danger" loading={rotating} onClick={() => void rotate()}>Rotate token</Button>
           </div>
         </div>
       ) : (

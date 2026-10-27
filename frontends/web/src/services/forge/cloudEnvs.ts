@@ -129,7 +129,7 @@ export interface CloudEnvStatus {
  * signal. It lands in `unreachable` with the server's own message as detail.
  *
  *   available         the control plane answered.
- *   no-control-plane  this build has none (no VITE_CONTROL_PLANE_API_URL).
+ *   no-control-plane  this build has none (no CONTROL_PLANE_API_URL).
  *   no-access         PermissionDenied: the caller's role in the organization
  *                     may not read deploy state (deploy reads need org admin).
  *   not-configured    Unimplemented: this control plane does not serve the
@@ -316,6 +316,18 @@ export async function listProjectEnvironments(project: string): Promise<CloudEnv
     .map(toCloudEnv)
     .filter((env) => env.id !== "" && env.name !== "" && env.project === project)
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Every environment the org holds, across all its forge projects — the Apps
+ * list's one read. An environment with no project predates the project
+ * dimension and names no app, so it is dropped here.
+ */
+export async function listOrgEnvironments(): Promise<CloudEnv[]> {
+  const res = await client().listEnvironments({});
+  return (res.environments ?? [])
+    .map(toCloudEnv)
+    .filter((env) => env.id !== "" && env.name !== "" && env.project !== "");
 }
 
 /** The control plane's observation of one environment — a database read, no cluster hop. */

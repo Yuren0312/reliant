@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/controlplane"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
@@ -28,7 +28,7 @@ import (
 // control-plane's STORAGE faked (fakeControlPlane, Memory under real grant
 // rules):
 //
-//	app session ─► TokenService.CreateToken(DAEMON) ─► MintForUser + clipped UpdateForUser
+//	app session ─► TokenService.CreateToken(DAEMON) ─► atomically clipped MintForUser
 //	daemon credential ─► TokenService.ExchangeToken (public at the interceptor,
 //	                     authenticated in the handler) ─► MintForUser ─► `rlat_`
 //
@@ -49,7 +49,7 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 	cpSrv := httptest.NewServer(cp)
 	t.Cleanup(cpSrv.Close)
 
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(controlplane.Endpoint{URL: cpSrv.URL, InternalServiceSecret: secret}, nil))
+	authority, mode, err := tokenauthority.New(tokenauthority.Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: cpSrv.URL, InternalServiceSecret: secret}})
 	require.NoError(t, err)
 	require.Equal(t, tokenauthority.ModeControlPlane, mode)
 

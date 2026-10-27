@@ -2,21 +2,21 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { PermissionsPanel } from "../PermissionsPanel";
-import { ApprovalStatus } from "../../../gen/reliant/v1/approval_pb";
-import type { ToolApprovalRequest } from "../../../api/client";
+import { create } from "@bufbuild/protobuf";
+import { ApprovalSchema, ApprovalStatus } from "../../../gen/reliant/v1/approval_pb";
+import type { Approval } from "../../../gen/reliant/v1/approval_pb";
 
 // The batch "N Pending / Approve All / Deny All" bar ChatPresenter mounts
 // above the composer. On a 390px viewport its desktop `inline-flex` row does
 // not fit, and the keyboard-shortcut badge is meaningless without a keyboard.
-const pending: ToolApprovalRequest[] = [
-  {
+const pending: Approval[] = [
+  create(ApprovalSchema, {
     id: "approval-1",
-    chat_id: "chat-1",
-    content_block_id: "block-1",
-    tool_name: "edit",
+    chatId: "chat-1",
+    entityId: "block-1",
     status: ApprovalStatus.PENDING,
-    created_at: new Date().toISOString(),
-  },
+    createdAt: new Date().toISOString(),
+  }),
 ];
 
 vi.mock("../../../store/chatStoreHooks", () => ({
@@ -24,9 +24,9 @@ vi.mock("../../../store/chatStoreHooks", () => ({
 }));
 
 vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingApprovals: () => ({ data: pending }),
-  useBatchApprove: () => ({ mutate: vi.fn() }),
-  useBatchDeny: () => ({ mutate: vi.fn() }),
+  usePendingApprovals: () => ({ data: { approvals: pending } }),
+  useBatchApproveInChat: () => ({ mutate: vi.fn() }),
+  useBatchDenyInChat: () => ({ mutate: vi.fn() }),
 }));
 
 describe("PermissionsPanel batch approval bar", () => {

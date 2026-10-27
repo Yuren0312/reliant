@@ -43,11 +43,14 @@
  * Plus the write: setting a secret from Live makes zero daemon calls either.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { ForgeService } from "@/gen/reliant/v1/forge_pb";
+import { setTransport } from "@/lib/connect";
+import { mockTransport, type MockHandlers } from "@/lib/test-utils";
 import type { CloudEnvStatus, CloudPromotion } from "@/services/forge/cloudEnvs";
 import type { LiveConvergence, LiveEnv } from "@/services/forge/live";
 
@@ -69,26 +72,17 @@ function daemonTripwire(method: string) {
   };
 }
 
-vi.mock("@/api/forge-grpc", () => ({
-  forgeGrpc: {
-    getTopology: daemonTripwire("getTopology"),
-    verifyEnv: daemonTripwire("verifyEnv"),
-    listSecrets: daemonTripwire("listSecrets"),
-    getEnvStatus: daemonTripwire("getEnvStatus"),
-    getEnvShape: daemonTripwire("getEnvShape"),
-    planPromote: daemonTripwire("planPromote"),
-    applyPromote: daemonTripwire("applyPromote"),
-    planDeploy: daemonTripwire("planDeploy"),
-    startDeploy: daemonTripwire("startDeploy"),
-    getDeployStatus: daemonTripwire("getDeployStatus"),
-  },
-}));
-
-// The generated daemon client itself, in case anything bypasses forge-grpc.
-vi.mock("@/api/grpc-client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/api/grpc-client")>()),
-  createForgeClient: daemonTripwire("createForgeClient"),
-}));
+/**
+ * EVERY ForgeService rpc, answered at the transport by a tripwire — the
+ * generated hooks and the generated client both read it there, so nothing can
+ * bypass this. Built from the service descriptor, so an rpc added later is
+ * wired too.
+ */
+function forgeServiceTripwires(): MockHandlers {
+  return Object.fromEntries(
+    ForgeService.methods.map((method) => [`ForgeService.${method.name}`, daemonTripwire(method.localName)])
+  );
+}
 
 const routeState: { env: string; tab?: string } = { env: "prod" };
 const navigate = vi.fn();
@@ -224,7 +218,7 @@ const CONVERGENCES: LiveConvergence[] = [
   },
 ];
 
-const getLiveView = vi.fn(() => Promise.resolve([PROD, STAGING]));
+const getLiveView = vi.fn((_project: string) => Promise.resolve([PROD, STAGING]));
 const listEnvironmentConvergences = vi.fn((environmentId: string) =>
   Promise.resolve(environmentId === "cp-prod" ? CONVERGENCES : [])
 );
@@ -262,7 +256,7 @@ const PROMOTIONS: CloudPromotion[] = [
   },
 ];
 
-const getEnvironmentStatus = vi.fn(() => Promise.resolve(STATUS));
+const getEnvironmentStatus = vi.fn((_id: string) => Promise.resolve(STATUS));
 const listEnvironmentPromotions = vi.fn((environmentId: string) =>
   Promise.resolve(environmentId === "cp-prod" ? PROMOTIONS : [])
 );
@@ -274,14 +268,17 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
 
 // The managed store IS the control plane, so the secrets half of Live is a
 // control-plane read too.
-const listSecrets = vi.fn(() =>
-  Promise.resolve([{ name: "STRIPE_WEBHOOK_SECRET", currentVersion: 3, oldestVersion: 1, versions: [] }])
+const listSecrets = vi.fn((_environmentId: string) =>
+  Promise.resolve({
+    secrets: [{ name: "STRIPE_WEBHOOK_SECRET", currentVersion: 3, oldestVersion: 1, versions: [] as unknown[] }],
+    protected: false,
+  })
 );
-const setSecret = vi.fn(() => Promise.resolve({ version: 4 }));
+const setSecret = vi.fn((_input: unknown) => Promise.resolve({ version: 4 }));
 vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
-  listSecrets: (...args: unknown[]) => listSecrets(...(args as [])),
-  setSecret: (...args: unknown[]) => setSecret(...(args as [])),
+  listSecrets: (environmentId: string) => listSecrets(environmentId),
+  setSecret: (input: unknown) => setSecret(input),
   getSecretVersions: () => Promise.resolve({ name: "", versions: [] }),
 }));
 
@@ -332,8 +329,11 @@ function renderWithQuery(ui: React.ReactElement) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
+afterEach(() => setTransport(null));
+
 beforeEach(() => {
   daemonCalls.length = 0;
+  setTransport(mockTransport(forgeServiceTripwires()));
   routeState.env = "prod";
   routeState.tab = undefined;
   consoleState.forgeProject = "hounders";
@@ -542,7 +542,8 @@ describe("the Environments table needs no daemon", () => {
 
     const empty = await screen.findByTestId("forge-environments-empty", {}, { timeout: 5000 });
     expect(empty).toHaveTextContent(/no environments recorded yet/i);
-    expect(empty).toHaveTextContent("forge env build");
+    expect(empty).toHaveTextContent("forge env deploy <env>");
+    expect(empty).toHaveTextContent("Environments lists where this project runs");
 
     expectNoBannerOrError();
     expect(daemonCalls.every((call) => call === "getTopology")).toBe(true);

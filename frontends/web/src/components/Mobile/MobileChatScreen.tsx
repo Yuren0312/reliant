@@ -19,10 +19,12 @@ import { ChevronLeft, FolderGit2 } from "lucide-react";
 import { ChatContainer } from "../Chat/ChatContainer";
 import { useChat } from "../../store/chatStoreHooks";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
+import { fetchProjects, getCachedProjects } from "../../hooks/project-queries";
 import { MobileWorkspaceSheet } from "./MobileWorkspaceSheet";
 import { MobileWorkflowExecutionEntry } from "./MobileWorkflowExecutionEntry";
 import { MobileScreenHeader } from "./MobileChrome";
+import { loadMainWorktree } from "../../hooks/worktree-actions";
+import { useMainWorktree } from "../../hooks/worktree-queries";
 
 export function MobileChatScreen() {
   // `strict: false` rather than `from: "/m/chats/$chatId"`. The route is
@@ -31,9 +33,8 @@ export function MobileChatScreen() {
   // "Could not find an active match" and took down the whole screen.
   const { chatId } = useParams({ strict: false });
   const chat = useChat(chatId);
-  const currentProject = useProjectStore((s) => s.currentProject);
-  const worktrees = useWorktreeStore((s) => s.worktrees);
-  const loadMainWorktree = useWorktreeStore((s) => s.loadMainWorktree);
+  const currentProjectId = useProjectStore((s) => s.currentProject?.id);
+  const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
   const [showWorkspace, setShowWorkspace] = useState(false);
 
   // A deep link or notification can open a chat that is not in the project the
@@ -48,12 +49,15 @@ export function MobileChatScreen() {
     alignedFor.current = chatId;
     if (useProjectStore.getState().currentProject?.id === chatProjectId) return;
     void (async () => {
-      if (!useProjectStore.getState().projects.some((p) => p.id === chatProjectId)) {
-        await useProjectStore.getState().loadProjects();
+      let project = getCachedProjects().find((p) => p.id === chatProjectId);
+      if (!project) {
+        project = (await fetchProjects()).find((p) => p.id === chatProjectId);
       }
-      const project = useProjectStore.getState().projects.find((p) => p.id === chatProjectId);
       if (!project) return;
-      await useProjectStore.getState().selectProject(project);
+      // Not the desktop workspace restore: it would select the project's
+      // remembered chat — not this one — mark it read and move the update
+      // stream's single chat subscription off the chat on screen.
+      await useProjectStore.getState().selectProject(project, { restoreWorkspace: false });
     })();
   }, [chatId, chatProjectId]);
 
@@ -61,13 +65,13 @@ export function MobileChatScreen() {
   // same default MobileNewChat resolves to when creating a chat. Without
   // loading the main workspace here, that fallback has nothing to resolve
   // against. Only that one row: the screen never lists workspaces.
-  const hasMain = worktrees.some((w) => w.is_main && !w.deleted_at);
+  const main = useMainWorktree(currentProjectId);
+  const mainWorktree = main && !main.deleted_at ? main : undefined;
   useEffect(() => {
-    if (!currentProject) return;
-    if (!hasMain) void loadMainWorktree(currentProject.id);
-  }, [currentProject, hasMain, loadMainWorktree]);
+    // Selects main when nothing is selected yet; the row is already cached.
+    if (currentProjectId) void loadMainWorktree(currentProjectId);
+  }, [currentProjectId]);
 
-  const mainWorktree = worktrees.find((w) => w.is_main && !w.deleted_at);
   const effectiveWorktreeId = chat?.worktreeId ?? mainWorktree?.id;
 
   // `useParams({ strict: false })` types every param as optional, so chatId is
@@ -124,7 +128,7 @@ export function MobileChatScreen() {
           onClose={() => setShowWorkspace(false)}
           chatId={chatId}
           worktreeId={effectiveWorktreeId}
-          projectPath={currentProject?.path}
+          projectPath={currentProjectPath}
         />
       )}
 
@@ -137,9 +141,12 @@ export function MobileChatScreen() {
           otherwise sit under the home indicator. */}
       <div
         className="min-h-0 flex-1"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        style={{ paddingBottom: "var(--mobile-safe-bottom, env(safe-area-inset-bottom))" }}
       >
-        <ChatContainer tabId={chatId} />
+        {/* The screen header above already shows the title; ChatHeader's own
+            copy was a second 50px band under it. Its menu, context ring and
+            thread tabs stay. */}
+        <ChatContainer tabId={chatId} hideChatTitle />
       </div>
     </div>
   );

@@ -10,7 +10,7 @@
  * from this factory — is `connect.routing.test.ts`.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Interceptor } from '@connectrpc/connect'
 import type { TransportBackend } from '../transport'
 
@@ -44,6 +44,14 @@ vi.mock('@/services/controlPlane/config', () => ({
 // Stub localStorage for transport.ts (which reads it inside the auth
 // interceptor) and the auth-store dynamic import path (so the unauth
 // 401-fallback never reaches it during the smoke test).
+// Each test imports a FRESH transport (vi.resetModules), but the first import
+// in a worker also transforms its whole module graph: ~4s alone, past the
+// test timeout under a loaded full run. Transform it once here, on the
+// hook's own budget, so every test's import is only an evaluation.
+beforeAll(async () => {
+  await import('../transport')
+}, 60_000)
+
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
@@ -62,7 +70,7 @@ describe('buildInterceptors factory', () => {
     // error-normalize → timeout → auth → missing-token → daemon-last-seen →
     // trace → error-log → upgrade → machine-wake → unauth
     expect(chain).toHaveLength(10)
-    // The D7 seam is the one trace stage, at its documented position.
+    // The trace stage (the forge runtime's traceInterceptor) is at its documented position.
     expect(chain[5]).toBe(traceStage)
     // Every entry must be a function (Connect Interceptor shape).
     for (const entry of chain) {
@@ -91,14 +99,12 @@ describe('buildInterceptors factory', () => {
     expect(buildInterceptors({})).toHaveLength(10)
   })
 
-  it('omits exactly one stage (daemon-last-seen) from the control-plane chain', async () => {
+  it('swaps exactly one stage (daemon-last-seen for forge-via) in the control-plane chain', async () => {
     const { buildInterceptors } = await import('../transport')
     const reliantApi = buildInterceptors({ withAuth: true })
     const controlPlane = buildInterceptors({ withAuth: true, backend: 'control-plane' })
-    expect(controlPlane).toHaveLength(reliantApi.length - 1)
-    for (const entry of controlPlane) {
-      expect(reliantApi).toContain(entry)
-    }
+    expect(controlPlane).toHaveLength(reliantApi.length)
+    expect(controlPlane.filter((entry) => !reliantApi.includes(entry))).toHaveLength(1)
   })
 })
 
@@ -152,6 +158,13 @@ describe('x-daemon-last-seen scoping', () => {
     const sent = await headersSent('control-plane')
     expect(sent.has('x-daemon-last-seen')).toBe(false)
     expect(sent.get('authorization')).toBe('Bearer test-token')
+  })
+
+  // The control plane's activity stream records how a change arrived; the
+  // console names itself so a promote from here reads "via Console".
+  it('names the console to the control plane in Forge-Via, and only there', async () => {
+    expect((await headersSent('control-plane')).get('Forge-Via')).toBe('console')
+    expect((await headersSent('reliant-api')).has('Forge-Via')).toBe(false)
   })
 })
 
@@ -243,21 +256,21 @@ describe('same-origin transport selection (CORS-free dev model)', () => {
     vi.unstubAllGlobals()
   })
 
-  it('getGRPCBaseURL returns the document origin when served over http (dev)', async () => {
+  it('reliantApiBaseUrl returns the document origin when served over http (dev)', async () => {
     stubLocation('http:', 'http://127.0.0.1:5173')
-    const { getGRPCBaseURLPublic } = await import('../grpc-client')
-    expect(getGRPCBaseURLPublic()).toBe('http://127.0.0.1:5173')
+    const { reliantApiBaseUrl } = await import('../../lib/connect')
+    expect(reliantApiBaseUrl()).toBe('http://127.0.0.1:5173')
   })
 
-  it('getGRPCBaseURL prefers RELIANT_CONFIG.grpcUrl when served from file:// (packaged Electron)', async () => {
+  it('reliantApiBaseUrl prefers RELIANT_CONFIG.grpcUrl when served from file:// (packaged Electron)', async () => {
     stubLocation('file:', 'null')
     ;(window as unknown as { RELIANT_CONFIG?: unknown }).RELIANT_CONFIG = {
       isElectron: true,
       grpcUrl: 'http://127.0.0.1:54321',
     }
     try {
-      const { getGRPCBaseURLPublic } = await import('../grpc-client')
-      expect(getGRPCBaseURLPublic()).toBe('http://127.0.0.1:54321')
+      const { reliantApiBaseUrl } = await import('../../lib/connect')
+      expect(reliantApiBaseUrl()).toBe('http://127.0.0.1:54321')
     } finally {
       delete (window as unknown as { RELIANT_CONFIG?: unknown }).RELIANT_CONFIG
     }

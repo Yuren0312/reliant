@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { ArrowUpRight, Play, X } from "lucide-react";
 import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import {
@@ -40,7 +40,7 @@ function writeDismissed(sig: string): void {
 }
 
 export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillProps) {
-  const goToBilling = useGoToBilling();
+  const goToBilling = useGoToBilling("chat");
   // Daemons whose Resume RPC succeeded. The registry's lifecycle mirror lags
   // the real state (control-plane's reconciler writes it), so the list keeps
   // saying "suspended" for a while after a successful resume; trust the RPC
@@ -185,7 +185,7 @@ interface ResumeButtonProps {
 
 function ResumeButton({ daemon, onResume, busy }: ResumeButtonProps) {
   return (
-    <Tooltip content={`Resume ${machineDisplayName(daemon)}`} placement="top" delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={`Resume ${machineDisplayName(daemon)}`} side="top" delay={300} triggerClassName="inline-flex">
 <button
       type="button"
       onClick={() => void onResume(daemon.daemonId)}

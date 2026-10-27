@@ -343,8 +343,11 @@ type ListIssuesRequest struct {
 	// open".
 	SincePromotionId *string `protobuf:"bytes,5,opt,name=since_promotion_id,json=sincePromotionId,proto3,oneof" json:"since_promotion_id,omitempty"`
 	// Substring of the title or the culprit.
-	Text *string   `protobuf:"bytes,6,opt,name=text,proto3,oneof" json:"text,omitempty"`
-	Sort IssueSort `protobuf:"varint,7,opt,name=sort,proto3,enum=controlplane.v1.IssueSort" json:"sort,omitempty"`
+	Text *string `protobuf:"bytes,6,opt,name=text,proto3,oneof" json:"text,omitempty"`
+	// Only the issues of this issue source (Issue.source). Unset or empty: errors
+	// only — a source's issues are never mixed into the error inbox.
+	Source *string   `protobuf:"bytes,10,opt,name=source,proto3,oneof" json:"source,omitempty"`
+	Sort   IssueSort `protobuf:"varint,7,opt,name=sort,proto3,enum=controlplane.v1.IssueSort" json:"sort,omitempty"`
 	// Rows per page. Default 50, max 100.
 	PageSize int32 `protobuf:"varint,8,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// next_page_token from the previous page; valid only with the same request.
@@ -421,6 +424,13 @@ func (x *ListIssuesRequest) GetSincePromotionId() string {
 func (x *ListIssuesRequest) GetText() string {
 	if x != nil && x.Text != nil {
 		return *x.Text
+	}
+	return ""
+}
+
+func (x *ListIssuesRequest) GetSource() string {
+	if x != nil && x.Source != nil {
+		return *x.Source
 	}
 	return ""
 }
@@ -827,12 +837,14 @@ func (x *IssueFrame) GetInApp() bool {
 }
 
 type IssueVersionBreakdown struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	Events        int64                  `protobuf:"varint,2,opt,name=events,proto3" json:"events,omitempty"`
-	Affected      int64                  `protobuf:"varint,3,opt,name=affected,proto3" json:"affected,omitempty"`
-	FirstSeenAt   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=first_seen_at,json=firstSeenAt,proto3" json:"first_seen_at,omitempty"`
-	LastSeenAt    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Version     string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Events      int64                  `protobuf:"varint,2,opt,name=events,proto3" json:"events,omitempty"`
+	Affected    int64                  `protobuf:"varint,3,opt,name=affected,proto3" json:"affected,omitempty"`
+	FirstSeenAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=first_seen_at,json=firstSeenAt,proto3" json:"first_seen_at,omitempty"`
+	LastSeenAt  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
+	// What affected counted, as controlplane.v1.Issue.affected_unit.
+	AffectedUnit  string `protobuf:"bytes,6,opt,name=affected_unit,json=affectedUnit,proto3" json:"affected_unit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -900,6 +912,13 @@ func (x *IssueVersionBreakdown) GetLastSeenAt() *timestamppb.Timestamp {
 		return x.LastSeenAt
 	}
 	return nil
+}
+
+func (x *IssueVersionBreakdown) GetAffectedUnit() string {
+	if x != nil {
+		return x.AffectedUnit
+	}
+	return ""
 }
 
 // IssueReleaseRef names the release an issue first appeared in and what changed
@@ -1302,14 +1321,16 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x05 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x17\n" +
 	"\aenv_ids\x18\x06 \x03(\tR\x06envIdsB\r\n" +
-	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\xf0\x03\n" +
+	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\x98\x04\n" +
 	"\x11ListIssuesRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.IssueScopeR\x05scope\x128\n" +
 	"\bstatuses\x18\x02 \x03(\x0e2\x1c.controlplane.v1.IssueStatusR\bstatuses\x12?\n" +
 	"\bplatform\x18\x03 \x01(\x0e2\x1e.controlplane.v1.IssuePlatformH\x00R\bplatform\x88\x01\x01\x121\n" +
 	"\x12first_seen_release\x18\x04 \x01(\tH\x01R\x10firstSeenRelease\x88\x01\x01\x121\n" +
 	"\x12since_promotion_id\x18\x05 \x01(\tH\x02R\x10sincePromotionId\x88\x01\x01\x12\x17\n" +
-	"\x04text\x18\x06 \x01(\tH\x03R\x04text\x88\x01\x01\x12.\n" +
+	"\x04text\x18\x06 \x01(\tH\x03R\x04text\x88\x01\x01\x12\x1b\n" +
+	"\x06source\x18\n" +
+	" \x01(\tH\x04R\x06source\x88\x01\x01\x12.\n" +
 	"\x04sort\x18\a \x01(\x0e2\x1a.controlplane.v1.IssueSortR\x04sort\x12\x1b\n" +
 	"\tpage_size\x18\b \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
@@ -1317,7 +1338,8 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\t_platformB\x15\n" +
 	"\x13_first_seen_releaseB\x15\n" +
 	"\x13_since_promotion_idB\a\n" +
-	"\x05_text\"l\n" +
+	"\x05_textB\t\n" +
+	"\a_source\"l\n" +
 	"\x12ListIssuesResponse\x12.\n" +
 	"\x06issues\x18\x01 \x03(\v2\x16.controlplane.v1.IssueR\x06issues\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"l\n" +
@@ -1355,14 +1377,15 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x04file\x18\x02 \x01(\tR\x04file\x12\x12\n" +
 	"\x04line\x18\x03 \x01(\x05R\x04line\x12\x16\n" +
 	"\x06column\x18\x04 \x01(\x05R\x06column\x12\x15\n" +
-	"\x06in_app\x18\x05 \x01(\bR\x05inApp\"\xe3\x01\n" +
+	"\x06in_app\x18\x05 \x01(\bR\x05inApp\"\x88\x02\n" +
 	"\x15IssueVersionBreakdown\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
 	"\x06events\x18\x02 \x01(\x03R\x06events\x12\x1a\n" +
 	"\baffected\x18\x03 \x01(\x03R\baffected\x12>\n" +
 	"\rfirst_seen_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vfirstSeenAt\x12<\n" +
 	"\flast_seen_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastSeenAt\"\xaa\x01\n" +
+	"lastSeenAt\x12#\n" +
+	"\raffected_unit\x18\x06 \x01(\tR\faffectedUnit\"\xaa\x01\n" +
 	"\x0fIssueReleaseRef\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1d\n" +
 	"\n" +

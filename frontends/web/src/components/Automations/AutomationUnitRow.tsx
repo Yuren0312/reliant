@@ -16,15 +16,15 @@ import { Link } from "@tanstack/react-router";
 import { AlertOctagon } from "lucide-react";
 import { toast } from "sonner";
 
-import { sourceKindLabel, triggerErrorMessage, type Trigger } from "@/api/trigger-grpc";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { sourceKindLabel, triggerErrorMessage, type Trigger } from "@/hooks/trigger-model";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { useDisableWorkflow, useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import { unitLastEvent, unitNextFireAt, type AutomationUnit } from "@/lib/automationUnits";
 import { describeTriggerSource } from "@/lib/cronText";
 import { RAW_EVENT_NAMING, type IntegrationEventNaming } from "@/lib/integrationEventNames";
 import { automationAnchorId } from "@/lib/workflowsArea";
 import { cn } from "@/lib/utils";
-import { Toggle } from "../ui/Toggle";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import { AUTOMATION_ROW_GRID, HealthIndicator, LastRun, NextFire, sourceIcon } from "./AutomationRow";
 import { AutomationCta } from "./AutomationCta";
 import { automationMachineLabel } from "./daemonChoices";
@@ -157,7 +157,7 @@ export function AutomationUnitRow({ unit }: { unit: AutomationUnit }) {
         </div>
       </div>
       <div className="flex items-center justify-end">
-        <Toggle checked={on} onChange={toggle} disabled={pending} srLabel={`${title} in ${project.name} on`} />
+        <ToggleSwitch checked={on} onChange={toggle} disabled={pending} ariaLabel={`${title} in ${project.name} on`} size="lg" className="forge-ui" />
       </div>
     </li>
   );

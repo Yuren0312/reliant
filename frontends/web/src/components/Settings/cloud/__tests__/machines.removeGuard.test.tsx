@@ -1,11 +1,14 @@
 import { render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const mocks = vi.hoisted(() => ({
   listDaemons: vi.fn(async () => ({ daemons: [] as unknown[] })),
 }))
 
+// The Add machine sheet (billing checkout, catalog) is not under test here.
+vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
+vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
   useComputeUsage: () => ({ data: undefined }),
   usePlans: () => ({ data: { plans: [] }, isLoading: false }),
@@ -36,7 +39,6 @@ vi.mock('@/services/controlPlane/environments', () => ({
   describeError: (_e: unknown, fallback = 'error') => fallback,
   portAccessRulesQueryKey: (id: string) => ['cp', 'ports', id],
   getComputeSubscription: vi.fn(async () => ({})),
-  listDaemonTokens: vi.fn(async () => []),
   getDaemon: vi.fn(),
   createEnvironment: vi.fn(),
   deleteDaemon: vi.fn(),
@@ -45,19 +47,19 @@ vi.mock('@/services/controlPlane/environments', () => ({
   listPortAccessRules: vi.fn(async () => []),
   setPortAccess: vi.fn(),
   removePortAccess: vi.fn(),
-  createDaemonToken: vi.fn(),
-  revokeDaemonToken: vi.fn(),
 }))
-vi.mock('@/api/grpc-client', () => ({
-  grpcClient: { daemonRegistry: () => ({ listDaemons: async () => mocks.listDaemons() }) },
-}))
-
 import {
   MachinesSection,
   canRemoveDaemon,
   CONNECTED_MACHINE_REMOVE_REASON,
 } from '@/components/Settings/cloud/machines'
 import { DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
+import { setTransport } from '@/lib/connect'
+import { daemonRegistryTransport } from '@/test/daemonRegistry'
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+afterEach(() => setTransport(null))
 
 // A managed machine is labelled by its control-plane name, never its pod
 // hostname, so the fixture carries both the way a real registry row does.

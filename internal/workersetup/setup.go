@@ -23,10 +23,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/streaming"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
+	"github.com/reliant-labs/reliant/internal/version"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	v2activities "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
@@ -90,10 +92,14 @@ type Config struct {
 	// a credential identically. nil refuses every authenticated call.
 	IntegrationCredentials httpaction.CredentialSource
 
-	// ControlPlaneURL is the control plane hosting this deployment, "" when it
-	// is self-hosted (ServerProcessConfig's ControlPlaneConfig). It decides which
-	// addresses a user-supplied model endpoint may resolve to.
-	ControlPlaneURL string
+	// HostedActions is fixed-action-only hosted HTTP execution, never a tool
+	// credential source. nil refuses nodes that request hosted_use.
+	HostedActions handlers.HostedActionExecutor
+
+	// AllowPrivateEgress is ServerProcessConfig.network.allow_private_egress:
+	// whether a user-supplied model endpoint may resolve to a private,
+	// loopback or link-local address. False is the default.
+	AllowPrivateEgress bool
 	// WriteLedger records the action node's mutating integration calls, so an
 	// event they cause can be attributed. nil records nothing.
 	WriteLedger writeledger.Service
@@ -204,7 +210,8 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 
 	activityDeps.Connections = cfg.IntegrationCredentials
-	activityDeps.ControlPlaneURL = cfg.ControlPlaneURL
+	activityDeps.HostedActions = cfg.HostedActions
+	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
 	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits)
 
@@ -358,7 +365,14 @@ func workerOptions(cfg *Config, onFatalError func(error), gomaxprocs int) worker
 		// backstop that converts whatever still slips through into a retry
 		// rather than a user-visible cancellation.
 		MaxHeartbeatThrottleInterval: maxHeartbeatThrottleInterval,
-		BuildID:                      v2workflow.WorkerBuildID,
+		// The binary's release version, so a workflow task's history event and
+		// the SDK's "Workflow panic" log name the build that ran it. A constant
+		// here ("reliant-worker") made every build look identical: on
+		// 2026-10-23 a mid-rollout TMPRL1100 non-determinism panic — an old
+		// replica replaying history the new one had written — could not be
+		// told apart from a corrupt history. Versioning-based dispatch stays
+		// off (UseBuildIDForVersioning unset): this only labels.
+		BuildID: version.TemporalBuildID(),
 		// Set explicitly rather than inherited from the client, so the identity
 		// is stable no matter how the client was constructed (tests and the
 		// replay harness build their own). This is the value that surfaces as
@@ -369,9 +383,27 @@ func workerOptions(cfg *Config, onFatalError func(error), gomaxprocs int) worker
 		DeadlockDetectionTimeout: 30 * time.Second,
 		Interceptors: append([]interceptor.WorkerInterceptor{
 			observability.NewMetricsWorkerInterceptor(),
+			observability.NewRunScopeWorkerInterceptor(chatOwners(cfg)),
 			newActivityRelease(),
 		}, cfg.WorkflowInterceptors...),
 	}
+}
+
+// chatOwners answers whose chat an activity is working on, for the run scope
+// the worker stamps on every log line (observability.NewRunScopeWorkerInterceptor).
+// A chat's owner never changes; it is read once per chat per hour.
+func chatOwners(cfg *Config) *telemetry.ChatOwnerCache {
+	if cfg.Database == nil {
+		return nil
+	}
+	repo := cfg.Database
+	return telemetry.NewChatOwnerCache(func(ctx context.Context, chatID string) (string, error) {
+		chat, err := repo.GetChat(ctx, chatID)
+		if err != nil || chat == nil {
+			return "", err
+		}
+		return chat.UserID, nil
+	}, time.Hour, 10000)
 }
 
 // TaskQueueName returns the task queue name that would be used by a worker with the given config.

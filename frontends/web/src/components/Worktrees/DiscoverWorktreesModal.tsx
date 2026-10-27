@@ -1,16 +1,17 @@
 import { useState, useEffect, useMemo } from "react";
 import { AlertCircle, FolderGit2, Loader2, Lock, Trash2 } from "lucide-react";
-import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { CardInset } from "../forge-ui/card";
-import { useWorktreeStore } from "../../store/worktreeStore";
-import type { DiscoveredWorktree } from "../../api/worktree-grpc";
 import {
   adoptConfirmation,
   groupByRepo,
   isAdoptBlocked,
   lockedMoveExplanation,
 } from "./discoverWorktreesUtils";
+import { importWorktree, pruneWorktrees } from "../../hooks/worktree-actions";
+import { useDiscoveredWorktrees, type DiscoveredWorktree, type StaleWorktree } from "../../hooks/worktree-queries";
 
 interface DiscoverWorktreesModalProps {
   isOpen: boolean;
@@ -19,20 +20,22 @@ interface DiscoverWorktreesModalProps {
   projectId: string;
 }
 
+const EMPTY_DISCOVERED: DiscoveredWorktree[] = [];
+const EMPTY_STALE: StaleWorktree[] = [];
+
 export function DiscoverWorktreesModal({
   isOpen,
   onClose,
   onWorktreesImported,
   projectId,
 }: DiscoverWorktreesModalProps) {
-  const discovered = useWorktreeStore((s) => s.discoveredWorktrees);
-  const stale = useWorktreeStore((s) => s.staleWorktrees);
-  const workspacesRoot = useWorktreeStore((s) => s.workspacesRoot);
-  const isDiscovering = useWorktreeStore((s) => s.isDiscovering);
-  const error = useWorktreeStore((s) => s.error);
-  const discoverWorktrees = useWorktreeStore((s) => s.discoverWorktrees);
-  const importWorktree = useWorktreeStore((s) => s.importWorktree);
-  const pruneWorktrees = useWorktreeStore((s) => s.pruneWorktrees);
+  // Discovery reads the checkouts on disk: fresh every time the modal opens.
+  const discovery = useDiscoveredWorktrees(projectId, { enabled: isOpen, staleTime: 0 });
+  const discovered = discovery.data?.discovered ?? EMPTY_DISCOVERED;
+  const stale = discovery.data?.stale ?? EMPTY_STALE;
+  const workspacesRoot = discovery.data?.workspacesRoot ?? "";
+  const isDiscovering = discovery.isFetching;
+  const error = discovery.error ? discovery.error.message || "Failed to discover workspaces" : null;
 
   const [pending, setPending] = useState<DiscoveredWorktree | null>(null);
   const [name, setName] = useState("");
@@ -44,13 +47,12 @@ export function DiscoverWorktreesModal({
 
   useEffect(() => {
     if (isOpen && projectId) {
-      void discoverWorktrees(projectId);
       setPending(null);
       setItemErrors({});
       setPruneError(null);
       setPrunedPaths(null);
     }
-  }, [isOpen, projectId, discoverWorktrees]);
+  }, [isOpen, projectId]);
 
   const groups = useMemo(() => groupByRepo(discovered), [discovered]);
 
@@ -103,7 +105,7 @@ export function DiscoverWorktreesModal({
 
   return (
     <>
-      <Modal isOpen={isOpen} onClose={onClose} title="Worktrees made outside Reliant" size="xl">
+      <Modal open={isOpen} fallbackFocus={focusChatInput} onClose={onClose} title="Worktrees made outside Reliant" size="xl">
         <div className="space-y-4">
           {error && (
             <div
@@ -218,7 +220,7 @@ export function DiscoverWorktreesModal({
       </Modal>
 
       {pending && (
-        <Modal isOpen onClose={() => !adopting && setPending(null)} title="Adopt this worktree?" size="md">
+        <Modal open fallbackFocus={focusChatInput} onClose={() => !adopting && setPending(null)} title="Adopt this worktree?" size="md">
           <div className="space-y-3">
             <p className="text-sm text-foreground">{adoptConfirmation(pending, workspacesRoot, name.trim() || pending.name)}</p>
             {pendingBlocked && (

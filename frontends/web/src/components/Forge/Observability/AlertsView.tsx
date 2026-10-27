@@ -24,10 +24,11 @@
  */
 
 import { useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, BellOff, CheckCircle2, ChevronDown, ChevronRight, Code2, Copy, ExternalLink, Lock, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, BellOff, CheckCircle2, ChevronDown, ChevronRight, Code2, Copy, ExternalLink, LineChart, Lock, ShieldCheck } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
+import { CommandLine, DOCS } from "@/components/Forge/GettingStarted";
 import { useAlertHistory, useAlerts } from "@/hooks/observability-queries";
 import type { AlertEvent, AlertInstance, DeclaredAlertRule } from "@/services/controlPlane/observability/alertingTypes";
 import { alertingErrorKind } from "@/services/controlPlane/observability/errors";
@@ -35,11 +36,14 @@ import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observab
 import { cn } from "@/lib/utils";
 
 import { AlertReceivers } from "./AlertReceivers";
+import { AskReliantButton } from "./AskReliant/AskReliant";
 import { AlertSilences, SilenceDialog } from "./AlertSilences";
 import { ruleAsCode, starterRuleKcl, type RuleAsCode } from "./alertsAsCode";
 import { formatAgo, formatTimestamp } from "./format";
+import { alertPivot, alertRange, useExploreHref } from "./Metrics/pivots";
 import { placeEnvironments, type ObsEnvironment, type ObsPlace } from "./obsPlace";
 import { ALERTS_TABS, type AlertsTab, type ObsNavigate } from "./obsSearch";
+import { ExploreLink } from "./Metrics/ExploreLink";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
@@ -303,6 +307,9 @@ function FiringTab({
   onRules: () => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
+  const exploreHref = useExploreHref();
+  const exploreAlert = (a: AlertInstance, rule: DeclaredAlertRule | undefined) =>
+    rule ? (exploreHref?.(alertPivot(rule.expr, a.labels), { env: envName(a.envId), range: alertRange(a.firingAtMs ?? a.activeAtMs, Date.now()) }) ?? null) : null;
   const ruleOf = (a: AlertInstance) => rules.find((r) => r.env.id === a.envId && r.rule.alert === a.rule);
   if (alerts.length === 0) {
     const evaluated = rules.filter((r) => !observabilityOff(r.env)).length;
@@ -372,10 +379,17 @@ function FiringTab({
                   <LabelChips labels={a.labels} skip={["alertname", "severity"]} />
                 </div>
                 <div className="flex shrink-0 gap-2">
+                  <AskReliantButton subject={{ kind: "alert", rule: a.rule, fingerprint: a.fingerprint, env: environments.find((env) => env.id === a.envId)?.name ?? null }} />
                   {declared && (
                     <Button variant="ghost" size="sm" leftIcon={<Code2 className="h-3.5 w-3.5" />} onClick={() => onOpenRule(declared.key)}>
                       Rule
                     </Button>
+                  )}
+                  {exploreAlert(a, declared?.rule) && (
+                    <ExploreLink href={exploreAlert(a, declared?.rule)!} testId={`obs-alert-explore-${a.rule}`}>
+                      <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
+                      Explore
+                    </ExploreLink>
                   )}
                   <Button
                     variant="outline"
@@ -539,6 +553,20 @@ function RulesTab({
             Rules live in your code, per environment, and arrive with its next deploy. forge adds best-practice defaults (error rate, a
             service going silent, containers killed for memory) to every environment that has services; add your own beside them.
           </p>
+          <p>Start from the rule below, then see what your rules would fire right now against the local stack that forge env up runs:</p>
+          <CommandLine command="forge obs alerts check" />
+          <p>
+            <a
+              href={DOCS.alerts}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-sm font-medium text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              data-testid="obs-rules-none-docs"
+            >
+              How alerts work
+              <ArrowUpRight className="h-3 w-3" aria-hidden="true" />
+            </a>
+          </p>
         </Frame>
         <CodeSnippet snippet={starterRuleKcl(env)} />
       </div>
@@ -595,6 +623,8 @@ function RulesTab({
 
 function RuleDetail({ entry }: { entry: EnvRule }) {
   const { rule, env } = entry;
+  const exploreHref = useExploreHref();
+  const explore = exploreHref?.(alertPivot(rule.expr), { env: env.name, range: "1h" }) ?? null;
   return (
     <Card padding="md" data-testid="obs-rule-detail">
       <div className="space-y-4">
@@ -603,6 +633,12 @@ function RuleDetail({ entry }: { entry: EnvRule }) {
             <h3 className="font-mono text-sm font-semibold text-foreground">{rule.alert}</h3>
             <SeverityChip severity={rule.labels.severity ?? "warning"} />
             <SourceChip rule={rule} />
+            {explore && (
+              <ExploreLink href={explore} testId="obs-rule-explore" className="ml-auto">
+                <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
+                Explore
+              </ExploreLink>
+            )}
           </div>
           <p className="text-xs text-muted-foreground">
             Declared for <span className="font-mono">{env.name}</span>

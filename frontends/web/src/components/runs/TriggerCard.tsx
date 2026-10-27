@@ -20,13 +20,13 @@ import { useId, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 
-import type { LaunchEvent } from "@/api/run-grpc";
+import type { LaunchEvent } from "@/hooks/run-queries";
 import { isUnattendedLaunchKind, launchKindDisplay } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { formatClock, launchContextOf } from "./launchContext";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { LaunchKindIcon } from "./LaunchKindIcon";
 
 interface TriggerCardProps {

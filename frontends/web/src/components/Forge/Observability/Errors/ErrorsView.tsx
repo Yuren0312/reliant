@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Search } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useIssues, type IssueFilters } from "@/hooks/observability-queries";
 import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
 import {
@@ -106,6 +106,7 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
           what={statuses.length ? "issues" : "open issues"}
           range={range}
           filtered={filtered}
+          topic="errors"
           onWiden={() => navigate({ range: "7d" })}
           onClearFilters={() => navigate({ istatus: undefined, platform: undefined, service: undefined, q: undefined })}
         />

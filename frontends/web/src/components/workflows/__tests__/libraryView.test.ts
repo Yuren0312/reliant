@@ -8,9 +8,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { RunSummary } from "@/api/run-grpc";
-import type { Trigger, TriggerHealthStatusKey } from "@/api/trigger-grpc";
-import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
+import type { RunSummary } from "@/hooks/run-queries";
+import type { Trigger, TriggerHealthStatusKey } from "@/hooks/trigger-model";
+import type { InvalidWorkflow, WorkflowResponse } from "@/hooks/workflow-queries";
 import { automationsDeletedWith, deletedAutomationsSentence, libraryView, turnedOnSummary } from "../library/libraryView";
 import { automationHealth } from "@/lib/automationHealth";
 
@@ -46,11 +46,14 @@ function trigger(id: string, workflow: string, status: TriggerHealthStatusKey = 
     params: {},
     message: "",
     daemonId: "d",
+    noMachine: false,
     notifyOnComplete: false,
     actingIdentity: "owner",
     health: { status, consecutiveFailures: status === "failing" ? 3 : 0, consecutiveSkips: 0, lastFailureDetail: "" },
     createdAt: "",
     updatedAt: "",
+    source: { kind: "unknown" } as Trigger["source"],
+    webhookManaged: false,
   };
 }
 

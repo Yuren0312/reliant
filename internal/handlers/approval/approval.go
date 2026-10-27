@@ -413,6 +413,7 @@ func (s *Service) BatchApprove(
 		Success:  true,
 		Approved: int32(len(req.Msg.RequestIds)),
 		Message:  fmt.Sprintf("Approved %d requests", len(req.Msg.RequestIds)),
+		ChatId:   chatID,
 	}), nil
 }
 
@@ -533,6 +534,7 @@ func (s *Service) BatchDeny(
 		Success: true,
 		Denied:  int32(len(req.Msg.RequestIds)),
 		Message: fmt.Sprintf("Denied %d requests", len(req.Msg.RequestIds)),
+		ChatId:  chatID,
 	}), nil
 }
 
@@ -596,18 +598,6 @@ func (s *Service) createDenialMessage(ctx context.Context, chatID string, denial
 
 	logging.DebugContext(ctx, "[Approval] Found tool_call blocks to deny", "count", len(toolCallBlocks), "chatID", chatID)
 
-	// Get next ordinal for the chat
-	nextOrdinal, err := s.deps.Repo.GetNextOrdinal(ctx, lastAssistantMsg.ThreadID)
-	if err != nil {
-		return fmt.Errorf("failed to get next ordinal: %w", err)
-	}
-
-	// Get next chat-global seq. See 20260802000000_add_message_seq.sql.
-	nextSeq, err := s.deps.Repo.GetNextSeq(ctx, chatID, lastAssistantMsg.ThreadID)
-	if err != nil {
-		return fmt.Errorf("failed to get next seq: %w", err)
-	}
-
 	// Create the denial message and content blocks atomically
 	now := time.Now().UTC()
 	messageID := uuid.New().String()
@@ -619,8 +609,6 @@ func (s *Service) createDenialMessage(ctx context.Context, chatID string, denial
 		msg := &db.Message{
 			ID:              messageID,
 			ChatID:          chatID,
-			Ordinal:         nextOrdinal,
-			Seq:             nextSeq,
 			ThreadID:        lastAssistantMsg.ThreadID,
 			ContextWindowID: lastAssistantMsg.ContextWindowID,
 			Role:            reliantv1.MessageRole_MESSAGE_ROLE_TOOL,
@@ -628,7 +616,8 @@ func (s *Service) createDenialMessage(ctx context.Context, chatID string, denial
 			UpdatedAt:       now,
 		}
 
-		if err := s.deps.Repo.CreateMessage(txCtx, msg); err != nil {
+		// The next ordinal and seq are allocated with the insert.
+		if err := s.deps.Repo.CreateNumberedMessage(txCtx, msg); err != nil {
 			return fmt.Errorf("failed to create denial message: %w", err)
 		}
 
@@ -701,8 +690,8 @@ func (s *Service) createDenialMessage(ctx context.Context, chatID string, denial
 			UpdateType:    "message",
 			ID:            messageID,
 			ChatID:        chatID,
-			Seq:           nextSeq,
-			Ordinal:       nextOrdinal,
+			Seq:           msg.Seq,
+			Ordinal:       msg.Ordinal,
 			Thread:        lastAssistantMsg.ThreadID,
 			Role:          "tool",
 			ContentBlocks: contentBlocksData,

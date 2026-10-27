@@ -13,7 +13,7 @@
  *   error-normalize → timeout → auth → missing-token → daemon-last-seen → trace
  *     → error-logging → upgrade-modal → machine-wake → 401-signout
  * (error-normalize and auth are the runtime's; daemon-last-seen only on reliant
- * api-server transports — see TransportBackend; trace is the D7 seam below).
+ * api-server transports — see TransportBackend; trace is the runtime's).
  *
  * Why this order:
  *   - error-normalize outermost so EVERY failure a caller sees — a server
@@ -25,12 +25,13 @@
  *     `.message` drops connect's "[code] " prefix (`rawMessage` is unchanged);
  *   - timeout next so the full request lifecycle (incl. retries through
  *     inner interceptors) is bounded;
- *   - auth attaches the bearer before any header injection (tracing);
+ *   - auth attaches the bearer before the trace stage;
  *   - daemon-last-seen header is independent of auth ordering but cheap to
  *     leave just after auth;
- *   - tracing wraps the actual `next(req)` so spans capture network time;
- *   - errorInterceptor logs/reports to Sentry — wraps tracing so it sees the
- *     real failure (tracing would otherwise mark OK and rethrow);
+ *   - trace stamps the W3C traceparent; the span it names is the HyperDX
+ *     SDK's fetch span, opened below this chain, so it covers network time;
+ *   - errorInterceptor logs/reports to Sentry — sees the real failure the
+ *     inner stages raise;
  *   - upgradeInterceptor opens the modal on ResourceExhausted + reason header
  *     before propagating;
  *   - machineWakeInterceptor records a machine the server woke for the request
@@ -50,15 +51,8 @@ import type { Interceptor } from "@connectrpc/connect";
 import {
   authInterceptor as runtimeAuthInterceptor,
   errorNormalizeInterceptor,
+  traceInterceptor,
 } from "@reliantlabs/forge-web-runtime/interceptors";
-import {
-  trace,
-  context,
-  SpanStatusCode,
-  SpanKind,
-  propagation,
-  type Span,
-} from "@opentelemetry/api";
 import * as Sentry from "@sentry/react";
 import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
@@ -108,6 +102,19 @@ const daemonLastSeenInterceptor: Interceptor = (next) => async (req) => {
   if (_daemonLastSeen !== null) {
     req.header.set("x-daemon-last-seen", String(_daemonLastSeen));
   }
+  return await next(req);
+};
+
+// Forge-Via names this client to the control plane's activity stream
+// (forge/pkg/activity): a change made here reads "sean promoted v1.7.44 via
+// Console", where the same change from `reliant forge` reads "via CLI". The
+// control-plane admin-server admits it cross-origin (forge's default CORS
+// allow list, forge >= #966); the reliant api-server does not read it, so it
+// is never sent there.
+export const FORGE_VIA_HEADER = "Forge-Via";
+
+const forgeViaInterceptor: Interceptor = (next) => async (req) => {
+  req.header.set(FORGE_VIA_HEADER, "console");
   return await next(req);
 };
 
@@ -201,6 +208,7 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   // Streaming methods should not have client-side timeout
   // These are server-streaming RPCs that manage their own lifecycle via AbortController
   StreamUserUpdates: 0,
+  StreamChatUpdates: 0,
   StreamProcessOutput: 0,
 };
 
@@ -232,6 +240,9 @@ const PROCEDURE_TIMEOUTS: Record<string, number> = {
   [`${FORGE}/StartDeployPlan`]: 115_000,
   [`${FORGE}/StartDeploy`]: 115_000,
   [`${FORGE}/GetDeployStatus`]: 20_000,
+  // A replay page is up to 16 MiB of events (the console asks for 4 MiB),
+  // base64 inside JSON: on a slow link the 10s default aborts it mid-body.
+  "controlplane.v1.RumService/GetSessionReplay": 60_000,
 };
 
 /** The client-side budget for one RPC. Exported for the transport tests. */
@@ -304,59 +315,12 @@ export function describeInFlight(): string {
 
 const timeoutInterceptor: Interceptor = deadline.interceptor;
 
-// OTel tracing interceptor — creates a span per RPC and injects W3C
-// traceparent/tracestate headers.
-export const tracingInterceptor: Interceptor = (next) => async (req) => {
-  const tracer = trace.getTracer("reliant-frontend");
-  const spanName = `grpc.${req.service.typeName}/${req.method.name}`;
-
-  return tracer.startActiveSpan(
-    spanName,
-    { kind: SpanKind.CLIENT },
-    async (span: Span) => {
-      try {
-        // Inject W3C trace context into request headers
-        const carrier: Record<string, string> = {};
-        propagation.inject(context.active(), carrier);
-        for (const [key, value] of Object.entries(carrier)) {
-          req.header.set(key, value);
-        }
-
-        span.setAttribute("rpc.system", "connect");
-        span.setAttribute("rpc.service", req.service.typeName);
-        span.setAttribute("rpc.method", req.method.name);
-
-        const result = await next(req);
-        span.setStatus({ code: SpanStatusCode.OK });
-        return result;
-      } catch (error) {
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : String(error),
-        });
-        span.recordException(
-          error instanceof Error ? error : new Error(String(error)),
-        );
-        throw error;
-      } finally {
-        span.end();
-      }
-    },
-  );
-};
-
-// ─── D7 SEAM: which interceptor propagates the trace ─────────────────
-//
-// OWNER DECISION D7 IS PENDING (research/forge-migration/13-p9-frontend-plan.md
-// §11): delete reliant's tracingInterceptor above in favour of the forge
-// runtime's `traceInterceptor()` (which propagates the HyperDX browser span
-// the runtime already starts). Until it is decided, reliant's stays.
-//
-// This constant is the ONLY place the choice is made. To flip it:
-//   import { traceInterceptor } from "@reliantlabs/forge-web-runtime/interceptors";
-//   export const traceStage: Interceptor = traceInterceptor();
-// then delete tracingInterceptor and its @opentelemetry/api imports.
-export const traceStage: Interceptor = tracingInterceptor;
+// Trace propagation is the forge web runtime's: it writes a valid W3C
+// `traceparent` on every request (waiting, bounded, for browser telemetry to
+// finish starting so the call goes through the SDK's patched fetch). The span
+// itself is the HyperDX SDK's fetch span, so one RPC is one browser span whose
+// context the interceptor and the SDK agree on.
+export const traceStage: Interceptor = traceInterceptor();
 
 // Warn when a unary RPC takes at least this long. Streams are excluded —
 // their duration is the lifetime of the subscription, not a latency.
@@ -687,8 +651,9 @@ const unauthInterceptor: Interceptor = (next) => async (req) => {
 /**
  * Which server a transport dials.
  *
- * It decides the one backend-specific header: x-daemon-last-seen, a hint only
- * the reliant api-server reads. In a production build the web app calls both
+ * It decides the backend-specific headers: x-daemon-last-seen, a hint only
+ * the reliant api-server reads, and Forge-Via, which only the control plane's
+ * activity stream reads. In a production build the web app calls both
  * servers CROSS-ORIGIN (api.reliantapi.com and admin.reliantapi.com), so every
  * header it sends must be in that server's CORS preflight allow-list or the
  * browser refuses to send the RPC at all. The control-plane admin-server does
@@ -708,8 +673,9 @@ export type TransportBackend = "reliant-api" | "control-plane";
  * the upgrade-modal interceptor so a quota-exhausted DevAuth call still
  * pops the modal.
  *
- * `backend` (default `"reliant-api"`) names the server the transport dials;
- * `"control-plane"` omits the daemon-last-seen header. See TransportBackend.
+ * `backend` (default `"reliant-api"`) names the server the transport dials:
+ * `"reliant-api"` sends the daemon-last-seen header, `"control-plane"` sends
+ * Forge-Via instead. See TransportBackend.
  *
  * Order is intentional — see the module-level comment. Do NOT reorder
  * without thinking through the timeout/upgrade/unauth interaction.
@@ -723,7 +689,7 @@ export function buildInterceptors(
     normalizeInterceptor,
     timeoutInterceptor,
     ...(withAuth ? [authInterceptor, missingTokenInterceptor] : []),
-    ...(backend === "reliant-api" ? [daemonLastSeenInterceptor] : []),
+    backend === "reliant-api" ? daemonLastSeenInterceptor : forgeViaInterceptor,
     traceStage,
     errorInterceptor,
     upgradeInterceptor,

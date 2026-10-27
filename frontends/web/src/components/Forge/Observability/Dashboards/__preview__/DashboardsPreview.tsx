@@ -16,7 +16,7 @@
  *   …&dash=release/frontend-web   (funnel, issues, sessions)    …&dash=release/overview
  *   …&compare=period|release  &range=24h  &service=api  &tv=1  &version=2
  *   …&env=all|staging|dev
- *   …&case=empty|read-only|error|loading|not-set-up|no-telemetry
+ *   …&case=empty|read-only|error|loading|not-set-up|no-telemetry|nothing-yet
  *   …&alert=ratio|p95|grouped|formula|gauge|sql|heatmap|counter|funnel   "Create alert from this panel", for a sample panel
  *   …&dark=1&scheme=pure-black
  */
@@ -39,6 +39,7 @@ import { compareParam, isDashboardPageKind, rangeParam, refreshParam, type Dashb
 import { DashboardsList, type DashboardsSearch } from "../DashboardsList";
 import { AlertFromPanelDialog } from "../AlertFromPanelDialog";
 import { DashboardView } from "../DashboardView";
+import ChartCorrectnessPreview from "../../charts/__preview__/ChartCorrectnessPreview";
 
 const BASE = "/forge-dashboards-preview";
 
@@ -47,10 +48,6 @@ const SCHEMES = [
   "refined-neutral",
   "modern-teal",
   "slate",
-  "forest",
-  "vibrant-pink",
-  "energetic-orange",
-  "bold-red",
   "purple-classic",
   "pure-black",
 ] as const;
@@ -62,7 +59,8 @@ const CASES: { id: string; label: string; options: FixtureOptions & { loading?: 
   { id: "error", label: "dashboards unavailable", options: { dashboardsFailWith: Code.Unavailable } },
   { id: "loading", label: "loading", options: { loading: true } },
   { id: "not-set-up", label: "observability not set up", options: { failWith: Code.FailedPrecondition } },
-  { id: "no-telemetry", label: "nothing sent yet", options: { empty: true } },
+  { id: "no-telemetry", label: "nothing sent in the window", options: { empty: true } },
+  { id: "nothing-yet", label: "set up, nothing arrived this week (getting started)", options: { empty: true, signals: { services: [], truncated: false } } },
 ];
 
 type PreviewSearch = DashboardsSearch &
@@ -174,6 +172,7 @@ export default function DashboardsPreview() {
     releases: "/forge-releases-preview",
     release: (version: string) => withSearch("/forge-releases-preview", { version }),
     trace: (traceId: string) => withSearch("/forge-observability-preview", { view: "traces", trace: traceId }),
+    session: (sessionId: string) => withSearch("/forge-observability-preview", { view: "sessions", session: sessionId }),
     workload: (name: string) => withSearch("/forge-workloads-preview", { workload: name }),
     dashboard: dashboardHref,
   };
@@ -216,7 +215,7 @@ export default function DashboardsPreview() {
     >
       <QueryClientProvider client={queryClient}>
         <ObservabilityApiProvider api={api}>
-          {page === "list" ? (
+          {page === "chart-correctness" ? <ChartCorrectnessPreview /> : page === "list" ? (
             <DashboardsList
               key={caseId}
               project={FIXTURE_PROJECT}

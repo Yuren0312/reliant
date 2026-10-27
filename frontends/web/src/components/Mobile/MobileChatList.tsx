@@ -30,7 +30,7 @@
  * at without starting or opening a chat in it.
  */
 
-import { Suspense, lazy, useCallback, useMemo, useState } from "react";
+import { Suspense, lazy, memo, useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
@@ -54,7 +54,6 @@ import {
 } from "../../hooks/chat-queries";
 import { prefetchChatMessages } from "../../hooks/message-queries";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
 import { cn } from "../../lib/utils";
 import { isChatBusy, needsUserAttention } from "../../lib/chatSendState";
 import { chatListIndicators, stillRunningPhrase } from "../../lib/runStatus";
@@ -88,7 +87,7 @@ import { ChatState } from "../../gen/reliant/v1/chat_pb";
 // The DOMAIN Chat (types/chat), not the raw protobuf one: it is
 // `Omit<ProtoChat, '$typeName'>` plus the client-side fields the API layer
 // flattens on (worktreeName / worktreeDeletedAt), and it is what
-// api.chatsV2.list — and therefore useChatListWithWorkspaces — actually returns. Importing
+// listChats (hooks/chat-actions) — and therefore useChatListWithWorkspaces — actually returns. Importing
 // the pb type here made every list value fail to assign for want of a
 // `$typeName` this component never reads.
 import type { Chat } from "../../types/chat";
@@ -96,6 +95,7 @@ import type { WorktreeSummary } from "../../gen/reliant/v1/worktree_pb";
 import { workspaceOfChat } from "../../lib/chatWorkspace";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import { useSortOrder, type ChatSortOption } from "../../store/chatListPreferencesStore";
+import { archiveWorktree } from "../../hooks/worktree-actions";
 
 interface ChatGroup {
   worktreeId: string;
@@ -199,7 +199,12 @@ function primeChatOpen(chat: Chat): void {
   prefetchChatMessages(chat.id);
 }
 
-function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
+// Memoized: Virtuoso re-invokes `itemContent` for every visible row whenever
+// the list re-renders, and the list re-renders on every chat-list cache write
+// (an activity change, an unread flip, a new message's lastMessageAt on any
+// chat). React Query keeps an unchanged chat's object identity across those
+// writes, so only the row whose chat actually changed re-renders.
+const ChatRow = memo(function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
   const state = { activity: chat.activity, needsRecovery: chat.needsRecovery };
   const attention = needsUserAttention(state);
   const busy = isChatBusy(state);
@@ -291,7 +296,7 @@ function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
       </Link>
     </div>
   );
-}
+});
 
 interface GroupHeaderProps {
   group: ChatGroup;
@@ -401,7 +406,6 @@ export function MobileChatList() {
   const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
   const { data: chatList, isLoading } = useChatListWithWorkspaces(currentProjectId);
   const sortOrder = useSortOrder();
-  const archiveWorktree = useWorktreeStore((s) => s.archiveWorktree);
   const queryClient = useQueryClient();
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -421,22 +425,28 @@ export function MobileChatList() {
     setCollapsed((prev) => ({ ...prev, [worktreeId]: !prev[worktreeId] }));
   }, []);
 
-  const totalChats = groups.reduce((sum, g) => sum + g.chats.length, 0);
+  // Derived once per (groups, collapsed) change rather than on every render:
+  // a fresh `groupCounts` array hands Virtuoso a new prop each render.
+  const { totalChats, groupCounts, flatChats, groupEndIndices } = useMemo(() => {
+    const totalChats = groups.reduce((sum, g) => sum + g.chats.length, 0);
 
-  const groupCounts = groups.map((g) => (collapsed[g.worktreeId] ? 0 : g.chats.length));
-  // Flatten visible (expanded) chats in group order, so a Virtuoso item index
-  // maps directly to `flatChats[index]` regardless of which groups are
-  // collapsed.
-  const flatChats = groups.flatMap((g) => (collapsed[g.worktreeId] ? [] : g.chats));
+    const groupCounts = groups.map((g) => (collapsed[g.worktreeId] ? 0 : g.chats.length));
+    // Flatten visible (expanded) chats in group order, so a Virtuoso item index
+    // maps directly to `flatChats[index]` regardless of which groups are
+    // collapsed.
+    const flatChats = groups.flatMap((g) => (collapsed[g.worktreeId] ? [] : g.chats));
 
-  // Which flat indices end a group. `ChatRow` rounds its bottom corners there,
-  // finishing the card the group header opened — CSS `last:` can't express
-  // this because Virtuoso renders every row as a flat sibling of every other.
-  const groupEndIndices = new Set<number>();
-  groupCounts.reduce((offset, count) => {
-    if (count > 0) groupEndIndices.add(offset + count - 1);
-    return offset + count;
-  }, 0);
+    // Which flat indices end a group. `ChatRow` rounds its bottom corners there,
+    // finishing the card the group header opened — CSS `last:` can't express
+    // this because Virtuoso renders every row as a flat sibling of every other.
+    const groupEndIndices = new Set<number>();
+    groupCounts.reduce((offset, count) => {
+      if (count > 0) groupEndIndices.add(offset + count - 1);
+      return offset + count;
+    }, 0);
+
+    return { totalChats, groupCounts, flatChats, groupEndIndices };
+  }, [groups, collapsed]);
 
   // Archiving can take as long as waking the workspace's machine (the store
   // retries across a wake for up to two minutes). Before this state existed the
@@ -458,7 +468,7 @@ export function MobileChatList() {
       setIsArchiving(false);
       setConfirmingArchive(null);
     }
-  }, [confirmingArchive, isArchiving, archiveWorktree, queryClient]);
+  }, [confirmingArchive, isArchiving, queryClient]);
 
   // Memoized so Virtuoso gets a stable component type. An inline component
   // would remount the footer, and the button in it, on every render.

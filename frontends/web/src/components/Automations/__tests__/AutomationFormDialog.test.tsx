@@ -9,7 +9,11 @@
  * InvalidArgument is shown beside the field it is about.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance, afterEach } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { queryClient as presetQueryClient } from "@/lib/query-client";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
@@ -28,7 +32,7 @@ import {
 import { jsToProtoValue } from "@/api/proto-utils";
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ProjectDaemonSchema, ProjectInstallState } from "@/gen/reliant/v1/project_pb";
-import { triggerFromProto } from "@/api/trigger-grpc";
+import { triggerFromProto } from "@/hooks/trigger-model";
 import { GetWorkflowResponseSchema, WorkflowDraftStatus } from "@/gen/reliant/v1/workflow_pb";
 import { WorkflowSchema } from "@/gen/reliant/v1/workflow_v2_pb";
 import {
@@ -48,19 +52,31 @@ const listWorktrees = vi.fn();
 const listDaemons = vi.fn();
 const listProjectDaemons = vi.fn();
 
-const listConnections = vi.fn(async () => ({ connections: [] }));
+const listConnections = vi.fn(async (_req: unknown) => ({ connections: [] }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    connection: () => ({ listConnections }),
-    trigger: () => ({ createTrigger, updateTrigger }),
-    workflow: () => ({ listWorkflows, getWorkflow }),
-    preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
-    worktree: () => ({ listWorktrees }),
-    daemonRegistry: () => ({ listDaemons }),
-    project: () => ({ listProjectDaemons }),
-  },
-}));
+
+// PresetService and TriggerService are reached through connectClient (the generated hooks), so
+// it is answered at the transport by the same fakes. So is ConnectionService
+// (generated hooks).
+beforeEach(() => {
+  setTransport(mockTransport({
+      // The daemon list is read through connectClient(DaemonRegistryService).
+      ...serviceHandlers("DaemonRegistryService", { listDaemons }),
+      ...serviceHandlers("TriggerService", { createTrigger, updateTrigger }),
+      // The run form lists workspaces through the generated WorktreeService hooks.
+      ...serviceHandlers("WorktreeService", { listWorktrees }),
+      ...serviceHandlers("WorkflowService", { listWorkflows, getWorkflow }),
+      ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
+      ...serviceHandlers("ProjectService", { listProjectDaemons }),
+      "ConnectionService.ListConnections": (req) => listConnections(req),
+    }));
+});
+afterEach(() => {
+  setTransport(null);
+  // The preset reads are cached in the app's query client; no test may see
+  // another's answers.
+  presetQueryClient.clear();
+});
 
 function daemon(daemonId: string, hostname: string, status = DaemonStatus.ACTIVE) {
   return create(DaemonInfoSchema, { daemonId, hostname, status });
@@ -70,14 +86,23 @@ function install(projectId: string, daemonId: string, installState = ProjectInst
   return create(ProjectDaemonSchema, { projectId, daemonId, installState });
 }
 
-vi.mock("@/store/projectStore", () => {
-  const snapshot = () => ({
+// The project list the form offers (ListProjects, through useProjects).
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjects: () => ({
     projects: [
       { id: "proj-1", name: "Reliant" },
       { id: "proj-2", name: "Forge" },
     ],
+    isLoading: false,
+    error: null,
+    refetch: () => undefined,
+  }),
+}));
+
+vi.mock("@/store/projectStore", () => {
+  const snapshot = () => ({
     currentProject: { id: "proj-2", name: "Forge" },
-    loadProjects: vi.fn(async () => undefined),
   });
   const useProjectStore = Object.assign(
     (selector?: (s: ReturnType<typeof snapshot>) => unknown) => (selector ? selector(snapshot()) : snapshot()),

@@ -752,7 +752,7 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 	if strings.TrimSpace(def.Filter) != "" {
 		return nil, svcerr.InvalidArgument("filter: an activation's filter is its declaration's; edit the workflow's triggers: block to change it")
 	}
-	wf, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, def.Workflow, def.ProjectId)
+	wf, err := launch.ResolveValidatedRunWorkflow(ctx, s.deps.Repo, userID, def.Workflow, def.ProjectId)
 	if err != nil {
 		var lookup *launch.WorkflowLookupError
 		if errors.As(err, &lookup) {
@@ -911,7 +911,11 @@ func (s *Service) requireSetupComplete(ctx context.Context, t *core.Trigger) err
 	}
 	decl, err := triggers.ResolveDeclaration(ctx, triggers.LaunchWorkflows{Repo: s.deps.Repo}, t)
 	if err != nil {
-		return nil
+		var broken *triggers.DeclarationError
+		if errors.As(err, &broken) {
+			return svcerr.FailedPrecondition(broken.Error())
+		}
+		return triggerDBError("resolve workflow", err)
 	}
 	issues := triggers.SetupIssues(decl, t)
 	if len(issues) == 0 {
@@ -952,7 +956,7 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 	}
 	switch t.Kind {
 	case core.TriggerKindWebhook:
-		webhookURL := triggers.WebhookURL(s.deps.PublicURL, t.ID)
+		webhookURL := triggers.WebhookURL(s.publicURL, t.ID)
 		proto.WebhookUrl = &webhookURL
 		proto.WebhookManaged = s.managed(t)
 	case core.TriggerKindIntegration:
@@ -961,7 +965,7 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 		// know it; an operator-registered app webhook does not.
 		if uc, ok := s.deps.Catalog.(userConfiguredCatalog); ok {
 			if cfg, err := triggers.IntegrationConfigFor(t); err == nil && uc.UserConfiguredURL(cfg.Integration) {
-				eventsURL := triggers.IntegrationEventsURL(s.deps.PublicURL, cfg.Integration)
+				eventsURL := triggers.IntegrationEventsURL(s.publicURL, cfg.Integration)
 				proto.WebhookUrl = &eventsURL
 			}
 		}

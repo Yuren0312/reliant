@@ -20,8 +20,7 @@
  * spy-based test would have happily passed against the broken call.
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import React from "react";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import {
   createRootRoute,
   createRoute,
@@ -30,44 +29,24 @@ import {
   Outlet,
 } from "@tanstack/react-router";
 import { indexSearchSchema } from "../../routeSchemas";
+import { mockTransport } from "../../lib/test-utils";
 
 // projectStore pulls in the gRPC client graph via its sibling stores; none of
 // it is exercised here (syncProjectUrl only touches the router), so the heavy
 // leaves are stubbed to keep this a focused unit test.
 //
-// `touch` resolves rather than being absent: selectProject calls it
-// fire-and-forget, so a missing method surfaces as an unhandled rejection
-// that fails the run even though every assertion passed.
-vi.mock("../../api/project-grpc", () => ({
-  projectGrpc: {
-    touch: vi.fn(async () => undefined),
-    get: vi.fn(async () => undefined),
-    list: vi.fn(async () => []),
-  },
+// `touchProject` is stubbed: selectProject sends it fire-and-forget, and the
+// unit-test transport refusing it would surface as a logged rejection that
+// has nothing to do with the URL.
+vi.mock("../../hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../hooks/project-queries")>()),
+  touchProject: vi.fn(),
 }));
 
 // Selecting a project also loads its chats, presets and workflows in the
-// background. Unmocked, each was a real RPC that settled after the test — and
-// under load, late enough to time the test out.
-vi.mock("../../api/chat-grpc", async () => {
-  const actual = await vi.importActual<typeof import("../../api/chat-grpc")>("../../api/chat-grpc");
-  return {
-    ...actual,
-    chatGrpc: {
-      ...actual.chatGrpc,
-      list: vi.fn(async () => ({ chats: [], total: 0, lastUserUpdateSequence: 0 })),
-    },
-  };
-});
-vi.mock("../../api/preset-grpc", async () => {
-  const actual = await vi.importActual<typeof import("../../api/preset-grpc")>("../../api/preset-grpc");
-  return { ...actual, presetGrpc: { ...actual.presetGrpc, listPresets: vi.fn(async () => []) } };
-});
-vi.mock("../../api/workflow-grpc", async () => {
-  const actual = await vi.importActual<typeof import("../../api/workflow-grpc")>("../../api/workflow-grpc");
-  return { ...actual, workflowGrpc: { ...actual.workflowGrpc, listWorkflows: vi.fn(async () => []) } };
-});
-
+// background. Unanswered, each was a real RPC that settled after the test — and
+// under load, late enough to time the test out. The chat list is answered at
+// the transport (beforeEach).
 function makeRouter(initialEntry: string) {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   // Mirrors routes.tsx: `_app` owns validateSearch, `/` and
@@ -150,7 +129,6 @@ const project = (id: string) => ({
   name: `project-${id}`,
   path: `/tmp/${id}`,
   is_git_repo: false,
-  worktree_count: 0,
   last_active: "",
   created_at: "",
   updated_at: "",
@@ -173,8 +151,19 @@ async function selectProjectIgnoringSideEffects(
 }
 
 describe("syncProjectUrl — search params survive project selection", () => {
-  beforeEach(() => {
+  // Each test imports a FRESH projectStore (vi.resetModules), but the first
+  // import in a worker also transforms its whole module graph: ~4-5s alone,
+  // past the test timeout under a loaded full run. Transform it once here,
+  // on the hook's own budget, so every test's import is only an evaluation.
+  beforeAll(async () => {
+    await import("../projectStore");
+  }, 60_000);
+
+  beforeEach(async () => {
     vi.resetModules();
+    // The transport seam of the module instance the re-imported store uses.
+    const { setTransport } = await import("../../lib/connect");
+    setTransport(mockTransport({ "ChatService.ListChats": { response: { chats: [] } } }));
   });
 
   afterEach(() => {

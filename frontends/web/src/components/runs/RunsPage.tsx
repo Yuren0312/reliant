@@ -10,18 +10,19 @@
  * project by default with an "All projects" chip (decision 10).
  */
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Activity, CalendarClock, Workflow } from "lucide-react";
 
-import { runErrorMessage } from "@/api/run-grpc";
+import { runErrorMessage } from "@/hooks/run-queries";
 import { useChat } from "@/hooks/chat-queries";
 import { useRunList } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { useProjectStore } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 import Card from "../forge-ui/card";
 import PageHeader from "../forge-ui/page_header";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { WORKFLOWS_AUTOMATIONS_PATH, WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
 import { RunList } from "./RunList";
 import { RunFilters, useRunsSearch } from "./RunFilters";
@@ -34,11 +35,7 @@ export function RunsPage() {
 export function RunsView() {
   const [search] = useRunsSearch();
   const currentProject = useProjectStore((state) => state.currentProject);
-  const projects = useProjectStore((state) => state.projects);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
-  useEffect(() => {
-    void loadProjects().catch(() => undefined);
-  }, [loadProjects]);
+  const { projects } = useProjects();
 
   // A chat's children (?parent=) are listed wherever and whenever they ran:
   // the parent chat's header promised "N runs started here", and a project

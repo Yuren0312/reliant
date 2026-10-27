@@ -4,8 +4,8 @@ import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
-import { DEFAULT_WORKFLOW, usePreferencesStore } from "../../store/preferencesStore";
-import { chatGrpc } from "../../api/chat-grpc";
+import { useDefaultWorkflow } from "../../hooks/settings-queries";
+import * as chatActions from "../../hooks/chat-actions";
 
 interface UseChatInputStateProps {
   chatId?: string;
@@ -18,7 +18,7 @@ export function useChatInputState({
 }: UseChatInputStateProps) {
   // Get project/worktree context for draft persistence
   const currentProjectId = useProjectStore((state) => state.currentProject?.id);
-  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktree?.id ?? null);
+  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktreeId);
   
   // For new chats (no chatId), use project-level draft storage
   // This ensures drafts persist when switching workspaces within NewChatView
@@ -46,8 +46,7 @@ export function useChatInputState({
   const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get user's default workflow from preferences
-  const userDefaultWorkflow = usePreferencesStore((state) => state.preferences?.defaultWorkflow);
-  const effectiveDefaultWorkflow = userDefaultWorkflow ?? DEFAULT_WORKFLOW;
+  const effectiveDefaultWorkflow = useDefaultWorkflow();
 
   // Workflow selection state - tracks which workflow is selected.
   // null means use user's default workflow (from preferences).
@@ -81,7 +80,7 @@ export function useChatInputState({
 
   const saveDraft = useCallback((value: string) => {
     const projectId = useProjectStore.getState().currentProject?.id;
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+    const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
 
     if (projectId) {
       // For new chats, use project-level draft (persists across worktree switches)
@@ -178,7 +177,7 @@ export function useChatInputState({
       : currentChat.workflowName || null;
     
     setSelectedWorkflow(workflow);
-  }, [currentChat, effectiveDefaultWorkflow, chatId, userDefaultWorkflow]);
+  }, [currentChat, effectiveDefaultWorkflow, chatId]);
 
   // Reset state when chatId or tabId changes
   useEffect(() => {
@@ -195,7 +194,7 @@ export function useChatInputState({
     
     // Immediately clear the draft from persistence
     const projectId = useProjectStore.getState().currentProject?.id;
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+    const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
     
     if (projectId) {
       // Clear any pending debounced save
@@ -231,7 +230,7 @@ export function useChatInputState({
     if (chatId && isPendingChat) {
       try {
         const workflowName = workflow ?? effectiveDefaultWorkflow;
-        const updatedChat = await chatGrpc.update(chatId, { workflow_name: workflowName });
+        const updatedChat = await chatActions.updateChat(chatId, { workflow_name: workflowName });
         // Home the updated chat into the React Query caches (the single source
         // of truth): replace the detail entry and patch workflowName in the
         // list so the sidebar stays in sync.

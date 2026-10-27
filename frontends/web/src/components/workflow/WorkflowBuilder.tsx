@@ -41,7 +41,7 @@ import {
   type FlowNodeData,
 } from "../../lib/workflow-flow";
 import { AutomationFormDialog } from "../Automations/AutomationFormDialog";
-import type { Trigger } from "../../api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import { workflowRefForTrigger } from "../../lib/triggerRail";
 import { TriggerRailProvider, type TriggerRailContextValue } from "./TriggerRailContext";
 import { TriggerPayloadPanel } from "./config/TriggerPayloadPanel";
@@ -72,7 +72,7 @@ import {
   CheckCircle2,
   PencilRuler,
 } from "lucide-react";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { splitFindings, type DraftStatus } from "./workflowDraftStatus";
 import { WorkflowInfoPopover } from "./WorkflowInfoPopover";
 import { WorkflowStatusChip } from "./WorkflowStatusChip";
@@ -89,9 +89,9 @@ import { useLiveValidation } from "./hooks/useLiveValidation";
 import { withFindingMarkers, withProblemMarkers } from "./nodes/problemMarkers";
 import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { YamlEditorModal } from "./YamlEditorModal";
-import type { ValidationError } from "../../api/workflow-grpc";
-import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import type { ValidationError } from "../../hooks/workflow-queries";
+import Modal from "../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 
 import type { BackgroundVariant, SelectionMode } from "@xyflow/react";
 import { WorkflowEditorChatPanel, type PanelSize } from "./WorkflowEditorChatPanel";
@@ -127,11 +127,13 @@ import { findingsForTrigger, type DeclaredTrigger } from "../../lib/declaredTrig
 import { useAddTrigger } from "./hooks/useAddTrigger";
 import { ConnectIntegrationDialog, type ConnectIntegrationTarget } from "./connections/ConnectIntegrationDialog";
 import {
-  catalogSearchGrpc,
-  type CatalogEntry,
+  cachedCatalogEntry,
+  fetchCatalogEntry,
+  useActionOutputSchemas,
+  useCatalogEntry,
+  useDeclaredTriggerRef,
   type CatalogEntrySummary,
-} from "../../api/catalog-search-grpc";
-import { connectionKeys, useActionOutputSchemas, useCatalogEntry, useDeclaredTriggerRef } from "../../hooks/connection-queries";
+} from "../../hooks/catalog-queries";
 import {
   actionNodeIdBase,
   getActionParams,
@@ -1616,15 +1618,10 @@ function WorkflowBuilderInner({
   const addActionStep = useCallback(
     (entry: CatalogEntrySummary) => {
       const id = uniqueNodeId(actionNodeIdBase(entry.ref), nodes.map((n) => n.id));
-      const cached = queryClient.getQueryData<CatalogEntry>(connectionKeys.catalogEntry(entry.ref));
+      const cached = cachedCatalogEntry(queryClient, entry.ref);
       insertStep(newActionStep(id, entry.ref, actionParamDefaults(cached?.paramsSchema)));
       if (cached) return;
-      void queryClient
-        .fetchQuery({
-          queryKey: connectionKeys.catalogEntry(entry.ref),
-          queryFn: () => catalogSearchGrpc.get(entry.ref),
-          staleTime: 5 * 60_000,
-        })
+      void fetchCatalogEntry(queryClient, entry.ref)
         .then((full) => {
           const defaults = actionParamDefaults(full.paramsSchema);
           if (Object.keys(defaults).length === 0) return;
@@ -2410,7 +2407,7 @@ function WorkflowBuilderInner({
       {/* Create a Copy Modal */}
       {showTemplateModal && (
         <Modal
-          isOpen={true}
+          open={true}
           onClose={() => setShowTemplateModal(false)}
           title="Create a Copy"
           size="md"
@@ -2460,7 +2457,7 @@ function WorkflowBuilderInner({
       {/* Exit Confirmation Modal */}
       {showExitConfirmModal && (
         <Modal
-          isOpen={true}
+          open={true}
           onClose={() => setShowExitConfirmModal(false)}
           title="Unsaved Changes"
           size="sm"
@@ -2483,7 +2480,7 @@ function WorkflowBuilderInner({
                 </Button>
               )}
               <Button
-                variant={(workflow.name ?? "").trim() ? "outline" : "destructive"}
+                variant={(workflow.name ?? "").trim() ? "outline" : "danger"}
                 onClick={handleDiscardAndExit}
                 disabled={isSavingBeforeExit}
               >
@@ -2545,7 +2542,7 @@ function WorkflowBuilderInner({
       {/* Scenario Panel Modal */}
       {currentProject?.id && (
         <Modal
-          isOpen={showScenarioPanel}
+          open={showScenarioPanel}
           onClose={() => setShowScenarioPanel(false)}
           title="Tests"
           size="lg"

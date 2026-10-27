@@ -23,8 +23,8 @@ import { Link } from "@tanstack/react-router";
 import { ChevronDown, ChevronRight, Power } from "lucide-react";
 import { toast } from "sonner";
 
-import { triggerErrorMessage, type Trigger } from "@/api/trigger-grpc";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { triggerErrorMessage, type Trigger } from "@/hooks/trigger-model";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { useDisableWorkflow, useSetTriggerEnabled, useTriggers } from "@/hooks/trigger-queries";
 import { workflowAutomationsFor, unitLastEvent, type WorkflowAutomation } from "@/lib/automationUnits";
 import { automationHealth } from "@/lib/automationHealth";
@@ -34,10 +34,10 @@ import { formatRelativeTime } from "@/lib/relativeTime";
 import { triggerRunsWorkflow } from "@/lib/triggerRail";
 import { automationAnchorId } from "@/lib/workflowsArea";
 import { cn } from "@/lib/utils";
-import { useProjectStore } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 import Card, { CardInset } from "../../forge-ui/card";
-import { Button } from "../../ui/Button";
-import { Toggle } from "../../ui/Toggle";
+import ToggleSwitch from "../../forge-ui/toggle_switch";
+import Button from "@/components/forge-ui/button";
 import { AutomationCta } from "../../Automations/AutomationCta";
 import { HealthIndicator, AutomationRow } from "../../Automations/AutomationRow";
 import { automationMachineLabel } from "../../Automations/daemonChoices";
@@ -79,7 +79,7 @@ export function unitSummary(unit: WorkflowAutomation, declared: readonly Declare
 export function TurnedOnCard({ workflowRef, workflowTitle, declared, projectId, setupBlockedReason, onAddCustom }: TurnedOnCardProps) {
   // Every project: the card says where this workflow is on, not only here.
   const triggers = useTriggers();
-  const projects = useProjectStore((s) => s.projects);
+  const { projects } = useProjects();
   const naming = useIntegrationEventNaming();
   const units = useMemo(() => workflowAutomationsFor(triggers.data ?? [], workflowRef), [triggers.data, workflowRef]);
   const custom = useMemo(
@@ -265,7 +265,7 @@ function UnitRow({
               Settings
             </Button>
           )}
-          <Toggle checked={on} onChange={onToggle} disabled={disable.isPending || setEnabled.isPending} srLabel={`On in ${project}`} />
+          <ToggleSwitch checked={on} onChange={onToggle} disabled={disable.isPending || setEnabled.isPending} ariaLabel={`On in ${project}`} size="lg" className="forge-ui" />
         </div>
       </div>
       {expanded && (

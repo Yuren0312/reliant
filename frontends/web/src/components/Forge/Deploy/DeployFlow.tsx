@@ -28,8 +28,8 @@
  * whatsoever is yet known about whether it worked.
  */
 
-import { Button } from "@/components/ui/Button";
-import type { DeployStatus, StartDeployResult } from "@/api/forge-grpc";
+import Button from "@/components/forge-ui/button";
+import type { DeployStatus, StartDeployResult } from "@/hooks/forge-model";
 import {
   deployBlockers,
   deployTokenFor,

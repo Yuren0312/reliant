@@ -39,7 +39,7 @@ function makeDeps(overrides: Partial<CommitDeps> = {}) {
       reason: null as string | null,
     })),
     listDaemons: vi.fn(async () => ({
-      daemons: [] as Array<{ id: string; status: number }>,
+      daemons: [] as Array<{ daemonId: string; status: number }>,
     })),
     createDaemon: vi.fn(async () => "daemon-new"),
     resumeDaemon: vi.fn(async () => undefined),
@@ -116,7 +116,7 @@ describe("commitLaunchPlan — idempotency", () => {
     await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
 
     expect(deps.createDaemon).toHaveBeenCalledWith(
-      expect.objectContaining({ name: ONBOARDING_DAEMON_NAME }),
+      expect.objectContaining({ name: ONBOARDING_DAEMON_NAME, refreshExisting: true }),
     );
   });
 
@@ -582,7 +582,7 @@ describe("commitLaunchPlan — anonymous account", () => {
   it("does not ask an anonymous user on their own computer for anything", async () => {
     const deps = makeDeps({ isAnonymous: vi.fn(() => true) });
     const result = await commitLaunchPlan(
-      { compute: "local", modelProvider: "own_key", commitKey: "key-local" } as Partial<LaunchPlan>,
+      { compute: "local_daemon", modelProvider: "anthropic", commitKey: "key-local" },
       deps,
     );
     const task = taskNamed(result.tasks, "provision_daemon");

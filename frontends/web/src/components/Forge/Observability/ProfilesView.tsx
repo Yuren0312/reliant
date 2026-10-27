@@ -59,6 +59,7 @@ export function ProfilesView({
           includeAll={false}
           onChange={(next) => navigate({ service: next }, { replace: true })}
           id="obs-profile-service"
+          signal="profiles"
         />
         <label htmlFor="obs-profile-type" className="sr-only">
           Profile type
@@ -112,7 +113,7 @@ export function ProfilesView({
         >
           {traceId
             ? "No profile samples are linked to this trace. The CPU profiler samples 100 times a second, so spans shorter than about 10ms usually have none."
-            : `No ${type.label.toLowerCase()} samples from ${service} in this window. Services built with forge send profiles once they run a release with the profiler enabled.`}
+            : `No ${type.label.toLowerCase()} samples from ${service} in this window. Services built with forge send profiles once they run a release with the profiler enabled; on hosting, turn it on with signals = forge.ObservabilitySignals {profiles = True} on the environment.`}
         </p>
       ) : (
         // On a phone the heaviest functions lead: a ranked list reads at 390px,

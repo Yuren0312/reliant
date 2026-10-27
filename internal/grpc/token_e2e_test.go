@@ -19,8 +19,9 @@ import (
 	"testing"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/controlplane"
 
 	"connectrpc.com/connect"
 	"github.com/golang-jwt/jwt/v5"
@@ -67,8 +68,8 @@ type fakeControlPlane struct {
 	secret     string
 	store      *tokenauthority.Memory
 	introspect atomic.Int64
-	// grants is each user's org permissions, which UpdateForUser clips an
-	// edited scope set to (control-plane's org_member_grants). nil: no clip.
+	// grants is each user's org permissions: MintForUser clips to them;
+	// UpdateForUser refuses any excess (control-plane's org_member_grants).
 	grants map[string]fat.Set
 }
 
@@ -138,8 +139,13 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.Unmarshal(raw, &in)
 		scopes := make([]fat.Scope, 0, len(in.Scopes))
-		for _, s := range in.Scopes {
-			scopes = append(scopes, fat.Scope(s))
+		requested, serr := fat.NewSet(in.Scopes)
+		if serr != nil {
+			writeConnectError(w, http.StatusBadRequest, "invalid_argument", serr.Error())
+			return
+		}
+		for s := range cp.clipToGrants(in.UserID, requested) {
+			scopes = append(scopes, s)
 		}
 		m, merr := cp.store.MintForUser(ctx, tokenauthority.MintRequest{UserID: in.UserID, Name: in.Name, Scopes: scopes,
 			Resource: in.Resource.resource(), Ephemeral: in.Ephemeral, ExpiresAt: in.ExpiresAt, Rotate: in.Rotate})
@@ -148,7 +154,7 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out = map[string]any{"tokenId": m.TokenID, "secret": m.Plaintext, "displayPrefix": m.DisplayPrefix,
-			"expiresAt": m.ExpiresAt, "rotated": m.Rotated}
+			"expiresAt": m.ExpiresAt, "rotated": m.Rotated, "scopes": m.Scopes}
 	case "ListForUser":
 		var in struct {
 			UserID string `json:"userId"`
@@ -181,7 +187,11 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				writeConnectError(w, http.StatusBadRequest, "invalid_argument", serr.Error())
 				return
 			}
-			scopes = cp.clipToGrants(in.UserID, set)
+			if !cp.clipToGrants(in.UserID, set).Covers(set) {
+				writeConnectError(w, http.StatusForbidden, "permission_denied", "scope exceeds current org grants")
+				return
+			}
+			scopes = set
 		}
 		info, uerr := cp.store.UpdateForUser(ctx, in.UserID, in.TokenID, in.Name, scopes)
 		if uerr != nil {
@@ -216,7 +226,7 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// clipToGrants is control-plane's UpdateForUser rule: an org-administration
+// clipToGrants is control-plane's MintForUser rule: an org-administration
 // scope survives only if the user holds it as a grant; session scopes pass.
 // A nil grants map grants everything (no clipping configured).
 func (cp *fakeControlPlane) clipToGrants(userID string, requested fat.Set) fat.Set {
@@ -354,7 +364,7 @@ func TestDaemonCredential_HostedEndToEnd(t *testing.T) {
 
 	// Select the authority from the configured control plane, exactly as the
 	// api-server and the gateway do. A configured control-plane MUST win.
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(controlplane.Endpoint{URL: cpSrv.URL, InternalServiceSecret: secret}, nil))
+	authority, mode, err := tokenauthority.New(tokenauthority.Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: cpSrv.URL, InternalServiceSecret: secret}})
 	require.NoError(t, err)
 	require.Equal(t, tokenauthority.ModeControlPlane, mode)
 
@@ -416,7 +426,7 @@ func TestDaemonCredential_HostedRefusesWhenControlPlaneIsDown(t *testing.T) {
 	dead.Close()
 
 	authority, mode, err := tokenauthority.New(tokenauthority.Deps{
-		ControlPlaneURL: deadURL, InternalServiceSecret: "s", DB: nil,
+		ControlPlane: &configv1.ControlPlaneConfig{Url: deadURL, InternalServiceSecret: "s"}, DB: nil,
 	})
 	require.NoError(t, err)
 	require.Equal(t, tokenauthority.ModeControlPlane, mode)
@@ -436,7 +446,7 @@ func TestDaemonCredential_SelfHostedEndToEnd(t *testing.T) {
 
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(controlplane.Endpoint{}, repo.ORM()))
+	authority, mode, err := tokenauthority.New(tokenauthority.Deps{DB: repo.ORM()})
 	require.NoError(t, err)
 	require.Equal(t, tokenauthority.ModeLocal, mode)
 

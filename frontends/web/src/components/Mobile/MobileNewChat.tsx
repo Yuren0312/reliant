@@ -17,7 +17,7 @@
  * React Query detail and list caches, initializes per-chat store state, plants
  * the optimistic first user message, and marks the chat RUNNING so the
  * thinking indicator shows before the first stream frame. A "simpler" direct
- * `api.chatsV2.start` here would land on `/m/chats/$chatId` with an empty
+ * `startChat` (hooks/chat-actions) here would land on `/m/chats/$chatId` with an empty
  * transcript and no spinner until the stream caught up.
  *
  * Workspace: defaults to the project's main worktree, the same default the
@@ -42,21 +42,16 @@
  * new pattern for this one screen.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import { ArrowUp, ChevronLeft, GitBranchPlus, Loader2 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useProjectStore } from "../../store/projectStore";
-import type { Worktree } from "../../store/worktreeStore";
-import { useWorktreeList } from "../../hooks/useWorktreeList";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { sortActiveWorkspaces } from "../Worktrees/workspaceStatus";
-import { useWorkflows } from "../../store/globalDataStore";
-import { isOfferedInChatPicker } from "../../api/workflow-grpc";
-import {
-  DEFAULT_WORKFLOW,
-  usePreferencesStore,
-} from "../../store/preferencesStore";
+import { useWorkflows } from "../../hooks/workflow-queries";
+import { isOfferedInChatPicker } from "../../hooks/workflow-queries";
+import { useDefaultWorkflow, useHiddenItems } from "../../hooks/settings-queries";
 import {
   normalizeWorkflowRef,
 } from "../workflow/useWorkflowInputs";
@@ -67,6 +62,7 @@ import { MobileCardGroup, MobileScreenHeader } from "./MobileChrome";
 import { MobileSelectRow, type MobileSettingOption } from "./MobileSettingsRow";
 import { MobileCreateWorkspaceSheet } from "./MobileCreateWorkspaceSheet";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
+import { useProjectDaemonInstalls } from "@/hooks/project-queries";
 import { useCapability } from "@/lib/surfaceContext";
 import {
   DEFAULT_MACHINE,
@@ -75,8 +71,10 @@ import {
   chatMachineOptions,
   defaultChatMachine,
   defaultMachineDaemon,
+  installedDaemonIds,
   startOptionsForMachine,
 } from "@/lib/chatMachine";
+import { type Worktree, useWorktreeList } from "../../hooks/worktree-queries";
 
 // Workflow refs arrive in two shapes — bare names from ListWorkflows ("agent")
 // and URIs from preferences ("builtin://agent"). Every comparison has to
@@ -120,20 +118,13 @@ export function MobileNewChat() {
   const { worktrees, hasMore, isLoadingMore, loadMore } = useWorktreeList(currentProject?.id);
 
   const { workflows, loading: workflowsLoading } = useWorkflows();
-  const preferences = usePreferencesStore((s) => s.preferences);
-  const preferencesLoading = usePreferencesStore((s) => s.isLoading);
-  const loadPreferences = usePreferencesStore((s) => s.loadPreferences);
-  const isWorkflowHidden = usePreferencesStore((s) => s.isWorkflowHidden);
+  const { isWorkflowHidden } = useHiddenItems();
 
-  const userDefaultWorkflow = preferences?.defaultWorkflow || DEFAULT_WORKFLOW;
+  const userDefaultWorkflow = useDefaultWorkflow();
 
   // null means "whatever the user's default is" — resolved at send time so a
   // preferences load that lands after mount is still respected.
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!preferences && !preferencesLoading) void loadPreferences();
-  }, [preferences, preferencesLoading, loadPreferences]);
 
   // The user's pick on this screen wins over the one the URL arrived with.
   const [pickedWorktreeId, setPickedWorktreeId] = useState<string | null>(null);
@@ -174,13 +165,14 @@ export function MobileNewChat() {
 
   const canPickMachine = useCapability("chatDaemonSelection");
   const { data: daemons = [], isLoading: daemonsLoading } = useDaemonList();
+  const installs = useProjectDaemonInstalls();
   const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
   const machine =
     selectedMachine ?? defaultChatMachine({ daemons, loading: daemonsLoading, surface: "mobile" }) ?? DEFAULT_MACHINE;
   const noMachine = machine === NO_MACHINE;
   // DEFAULT_MACHINE sends no daemon (the server picks); show the machine it
   // will land on — an awake one, or one still starting.
-  const machineRowValue = machine === DEFAULT_MACHINE ? (defaultMachineDaemon(daemons)?.daemonId ?? "") : machine;
+  const machineRowValue = machine === DEFAULT_MACHINE ? (defaultMachineDaemon(daemons, installedDaemonIds(installs.data ?? [], currentProject?.id))?.daemonId ?? "") : machine;
   const machineRowOptions = [
     ...chatMachineOptions(daemons).map((option) => ({
       value: option.value,
@@ -324,7 +316,7 @@ export function MobileNewChat() {
           bottom inset to whichever element actually sits at the edge. */}
       <div
         className="flex shrink-0 items-end gap-2 border-t border-border px-3 py-3"
-        style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+        style={{ paddingBottom: "calc(0.75rem + var(--mobile-safe-bottom, env(safe-area-inset-bottom)))" }}
       >
         <textarea
           value={message}

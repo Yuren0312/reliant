@@ -20,6 +20,8 @@ import * as rpc from "./api";
 import * as dashboards from "./dashboardsApi";
 import * as delivery from "./deliveryApi";
 import * as issues from "./issuesApi";
+import * as metrics from "./metricsApi";
+import * as rum from "./rumApi";
 
 export interface ObservabilityApi {
   /** The caller's current organization — what every request is scoped by. Null while it is still being provisioned. */
@@ -30,8 +32,13 @@ export interface ObservabilityApi {
   queryPanel: typeof rpc.queryPanel;
   getServiceOverview: typeof rpc.getServiceOverview;
   getFlamegraph: typeof rpc.getFlamegraph;
+  getServiceSignals: typeof rpc.getServiceSignals;
   getObservabilityUsage: typeof rpc.getObservabilityUsage;
   listAttributeValues: typeof rpc.listAttributeValues;
+  // Metrics explorer: the catalog, one metric's detail, and its exemplars.
+  listMetricCatalog: typeof metrics.listMetricCatalog;
+  getMetric: typeof metrics.getMetric;
+  listMetricExemplars: typeof metrics.listMetricExemplars;
   listWorkloads: typeof rpc.listWorkloads;
   getWorkload: typeof rpc.getWorkload;
   // Alerting (AlertingService): org-scoped, mutations need admin.
@@ -59,6 +66,11 @@ export interface ObservabilityApi {
   updateIssueStatus: typeof issues.updateIssueStatus;
   // Activity (ActivityService): who changed what — an issue's history, the project feed.
   listActivity: typeof activity.listActivity;
+  // Sessions (RumService): real-user sessions, their timelines and masked replays.
+  listSessions: typeof rum.listSessions;
+  getSession: typeof rum.getSession;
+  getSessionTimeline: typeof rum.getSessionTimeline;
+  getSessionReplay: typeof rum.getSessionReplay;
   // Native dashboards (DashboardService, decision DB): reads need membership,
   // authoring the admin role.
   listDashboards: typeof dashboards.listDashboards;
@@ -83,8 +95,12 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   queryPanel: rpc.queryPanel,
   getServiceOverview: rpc.getServiceOverview,
   getFlamegraph: rpc.getFlamegraph,
+  getServiceSignals: rpc.getServiceSignals,
   getObservabilityUsage: rpc.getObservabilityUsage,
   listAttributeValues: rpc.listAttributeValues,
+  listMetricCatalog: metrics.listMetricCatalog,
+  getMetric: metrics.getMetric,
+  listMetricExemplars: metrics.listMetricExemplars,
   listWorkloads: rpc.listWorkloads,
   getWorkload: rpc.getWorkload,
   listAlerts: alerting.listAlerts,
@@ -107,6 +123,10 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   listIssueEvents: issues.listIssueEvents,
   updateIssueStatus: issues.updateIssueStatus,
   listActivity: activity.listActivity,
+  listSessions: rum.listSessions,
+  getSession: rum.getSession,
+  getSessionTimeline: rum.getSessionTimeline,
+  getSessionReplay: rum.getSessionReplay,
   listDashboards: dashboards.listDashboards,
   listDashboardTemplates: dashboards.listDashboardTemplates,
   getDashboard: dashboards.getDashboard,

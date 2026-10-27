@@ -8,7 +8,7 @@
  * - Simpler, cleaner UI with less visual noise
  */
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useState, memo, useCallback, useMemo, useEffect } from "react";
 import {
   ChevronDown,
@@ -28,20 +28,22 @@ import {
 import { cn } from "../../lib/utils";
 import { useSurface } from "../../lib/surfaceContext";
 import { GenericToolRenderer, ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
+import { TruncatedOutputNotice } from "./tool-renderers/TruncatedOutputNotice";
+import { fetchFullToolResult, useFullToolResult } from "../../hooks/tool-result-queries";
 import { useChat, useChatMessages, useStreamingMessages, useToolCallStates } from "../../store/chatStoreHooks";
 import {
   useApproveToolRequest,
   useDenyToolRequest,
 } from "../../hooks/approval-queries";
-import type { ToolApprovalRequest } from "../../api/client";
 import { FileLink } from "./FileLink";
-import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults, isSpawnTool } from "../../lib/toolFormatters";
+import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults, isSpawnTool, isShellTool } from "../../lib/toolFormatters";
+import { DeployedAppCard, deployOfShellCall } from "../Apps/DeployedAppCard";
 import { parseFilePath } from "../../lib/filePath";
 import { openFile, classifyPath } from "../../lib/fileOpener";
 import { toast } from "../../lib/toast-manager";
 import { useTasksForChat, type TaskItem } from "../../hooks/task-queries";
 import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from "../Settings/ToolCallSettings";
-import { ApprovalStatus } from "../../gen/reliant/v1/approval_pb";
+import { ApprovalStatus, type Approval } from "../../gen/reliant/v1/approval_pb";
 import {
   ContentBlockType,
   ToolCallStatus,
@@ -155,10 +157,7 @@ function findShellCallForProcess(messages: Message[], processId: string): Conten
       if (block.type !== ContentBlockType.TOOL_CALL || baseToolName(block.toolName || "") !== "shell") {
         continue;
       }
-      if (
-        (block.toolCallId && resultCallIds.has(block.toolCallId)) ||
-        block.matchedResult?.content?.includes(processId)
-      ) {
+      if (block.toolCallId && resultCallIds.has(block.toolCallId)) {
         lastMatch = block;
       }
     }
@@ -181,10 +180,7 @@ function findSpawnCallForAgent(messages: Message[], agentId: string): ContentBlo
         fallback = block;
         continue;
       }
-      if (
-        (block.toolCallId && resultCallIds.has(block.toolCallId)) ||
-        block.matchedResult?.content?.includes(agentId)
-      ) {
+      if (block.toolCallId && resultCallIds.has(block.toolCallId)) {
         fallback = block;
       }
     }
@@ -283,7 +279,7 @@ interface ToolExecutionProps {
     | "backgrounded"
     | "denied"
     | "failed";
-  approval?: ToolApprovalRequest;
+  approval?: Approval;
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
@@ -345,6 +341,29 @@ function ToolExecutionComponent({
     }
   }, [isReadToolFlag, toolResult?.content, isExpanded, userHasToggled, toolCall.name, surface]);
 
+  // A large result arrives as a preview (truncated). The full output is
+  // fetched when the user asks for it, and then rendered in the preview's
+  // place by the same renderer; a copy fetches it too (loadFullResult).
+  const isTruncatedResult = !!toolResult?.truncated && !!chatId;
+  const [wantFullResult, setWantFullResult] = useState(false);
+  const fullResult = useFullToolResult(chatId, toolCall.id, isTruncatedResult && wantFullResult);
+  const fullResultContent = isTruncatedResult ? fullResult.data?.content : undefined;
+  const displayResult = useMemo<ToolResultData | undefined>(
+    () =>
+      toolResult && fullResultContent !== undefined
+        ? { ...toolResult, content: fullResultContent, truncated: false }
+        : toolResult,
+    [toolResult, fullResultContent],
+  );
+  const loadFullResult = useMemo(
+    () =>
+      isTruncatedResult && chatId
+        ? () => fetchFullToolResult(chatId, toolCall.id)
+        : undefined,
+    [isTruncatedResult, chatId, toolCall.id],
+  );
+  const showTruncatedNotice = isTruncatedResult && fullResultContent === undefined;
+
   const currentChat = useChat(chatId || "");
   const chatWorktreeId = currentChat?.worktreeId;
   const chatMessages = useChatMessages(chatId || undefined);
@@ -361,8 +380,8 @@ function ToolExecutionComponent({
   const toolCallStates = useToolCallStates(chatId || "");
   const liveToolCallState = toolCallStates.get(toolCall.id) || null;
 
-  const approveMutation = useApproveToolRequest();
-  const denyMutation = useDenyToolRequest();
+  const approveMutation = useApproveToolRequest(chatId || undefined);
+  const denyMutation = useDenyToolRequest(chatId || undefined);
 
   // Async spawn returns the tool result the moment the child agent is
   // dispatched, so the tool call's own status reads "completed" while the
@@ -431,6 +450,11 @@ function ToolExecutionComponent({
   // result.
   const isCompleted = currentStatus === "completed" || (!spawnChildWorkflowId && !!toolResult);
   const hasFailed = currentStatus === "failed" || (!spawnChildWorkflowId && (toolResult?.is_error ?? false));
+  // A shell call that deployed a forge app links to what it deployed (Apps/DeployedAppCard).
+  const shellDeploy = useMemo(
+    () => (isShellTool(toolNameLower) ? deployOfShellCall(toolCall.input, toolResult) : null),
+    [toolNameLower, toolCall.input, toolResult]
+  );
 
   // Approval logic - if backend created a pending approval, we need to show UI for it.
   const needsApproval = approval?.status === ApprovalStatus.PENDING;
@@ -540,7 +564,7 @@ function ToolExecutionComponent({
   // Handlers
   const handleApprove = useCallback(() => {
     if (approval && chatId) {
-      approveMutation.mutate({ chatId, requestId: approval.id });
+      approveMutation.mutate({ requestId: approval.id });
     } else if (onApprove) {
       onApprove(toolCall.id);
     }
@@ -548,7 +572,7 @@ function ToolExecutionComponent({
 
   const handleDeny = useCallback(() => {
     if (approval && chatId) {
-      denyMutation.mutate({ chatId, requestId: approval.id });
+      denyMutation.mutate({ requestId: approval.id });
     } else if (onDeny) {
       onDeny(toolCall.id);
     }
@@ -738,7 +762,8 @@ function ToolExecutionComponent({
     // in every renderer: ToolCallData.input is absent until the call's
     // arguments arrive, but a renderer's contract is that `input` is present.
     input: resolvedWaitTarget.displayInput ?? {},
-    result: toolResult,
+    result: displayResult,
+    loadFullResult,
     worktreeId: chatWorktreeId,
     chatId,
     isExpanded,
@@ -904,7 +929,7 @@ function ToolExecutionComponent({
 
           <div className="flex items-center gap-1 shrink-0">
             {hasFileOpenAffordance && (
-              <Tooltip content="Open file" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Open file" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={openPrimaryFile}
                 className="touch-target inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
@@ -916,7 +941,7 @@ function ToolExecutionComponent({
 </Tooltip>
             )}
             {(isSpawnToolFlag || toolBaseName === "spawn_status") && spawnThreadId && onSelectThread && (
-              <Tooltip content="Open full thread view" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Open full thread view" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onSelectThread(spawnThreadId); }}
                 className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Open full thread view"
@@ -926,7 +951,7 @@ function ToolExecutionComponent({
 </Tooltip>
             )}
             {isExecuting && !isCancelling && !isSpawnToolFlag && onConvertToBackground && (
-              <Tooltip content="Push to background" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Push to background" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onConvertToBackground(toolCall.id); }}
                 className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Push tool execution to background"
@@ -936,7 +961,7 @@ function ToolExecutionComponent({
 </Tooltip>
             )}
             {(isExecuting || isCancelling) && onCancel && (
-              <Tooltip content="Cancel" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Cancel" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onCancel(toolCall.id); }}
                 className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Cancel tool execution"
@@ -985,9 +1010,9 @@ function ToolExecutionComponent({
         )}
 
         {/* Denial reason */}
-        {approval?.status === ApprovalStatus.DENIED && approval.denial_reason && (
+        {approval?.status === ApprovalStatus.DENIED && approval.denialReason && (
           <div className="px-2 py-1 border-t border-destructive/20 bg-destructive/5 text-xs text-destructive-ink">
-            Denied: {approval.denial_reason}
+            Denied: {approval.denialReason}
           </div>
         )}
 
@@ -995,8 +1020,22 @@ function ToolExecutionComponent({
         {isExpandable && !shouldShowApprovalUI && isExpanded && (
           <div className={contentClassName}>
             <ToolContentArea ctx={renderContext} />
+            {showTruncatedNotice && (
+              <TruncatedOutputNotice
+                originalSize={toolResult?.original_size}
+                isLoading={fullResult.isFetching}
+                error={fullResult.error ?? undefined}
+                onShowFull={() => {
+                  if (wantFullResult) void fullResult.refetch();
+                  else setWantFullResult(true);
+                }}
+              />
+            )}
           </div>
         )}
+
+        {/* The deploy's outcome stays visible collapsed: the live URL is what the user asked for. */}
+        {shellDeploy && !shouldShowApprovalUI && <DeployedAppCard deploy={shellDeploy} />}
       </div>
   );
 }

@@ -1,18 +1,18 @@
 import type { ReactNode } from "react";
 import Badge from "../forge-ui/badge";
 import Status from "../forge-ui/status";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { cn } from "../../lib/utils";
 import { formatAbsoluteTime, formatRelativeTime } from "../../lib/relativeTime";
-import type { Worktree } from "../../store/worktreeStore";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { hasCheckout, lifecycleOf, workingTreeState } from "./workspaceStatus";
-import { useWorkspaceGitStatus } from "./useWorkspaceGitStatus";
+import { useWorkspaceGitStatus } from "../../hooks/worktree-git-queries";
 import {
   workspaceColumn,
   workspaceIconButton,
   workspaceIconButtonDanger,
 } from "./workspaceStyles";
+import { type Worktree } from "../../hooks/worktree-queries";
 
 interface IconActionProps {
   label: string;
@@ -28,7 +28,7 @@ interface IconActionProps {
 /** An icon-only row action: always a tooltip, always an accessible name. */
 export function IconAction({ label, hint, icon, onClick, disabled, danger, testId }: IconActionProps) {
   return (
-    <Tooltip content={hint ?? label} delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={hint ?? label} delay={300} triggerClassName="inline-flex">
       <button
         type="button"
         aria-label={label}
@@ -118,7 +118,7 @@ export function TimeCell({ value, empty = "Never" }: { value?: string | null; em
     return <span className="text-xs text-muted-foreground">{empty}</span>;
   }
   return (
-    <Tooltip content={formatAbsoluteTime(value)} delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={formatAbsoluteTime(value)} delay={300} triggerClassName="inline-flex">
       <span className="whitespace-nowrap text-xs text-muted-foreground">{relative}</span>
     </Tooltip>
   );
@@ -140,7 +140,7 @@ export function GitStateCell({ worktree }: { worktree: Worktree }) {
       <Tooltip
         content={worktree.failure_reason || lifecycle.description}
         delay={300}
-        wrapperClassName="inline-flex"
+        triggerClassName="inline-flex"
       >
         <GitStateLabel
           worktreeId={worktreeId}
@@ -161,7 +161,7 @@ export function GitStateCell({ worktree }: { worktree: Worktree }) {
       <Tooltip
         content="Git status is read from your machine, which could not reach this workspace."
         delay={300}
-        wrapperClassName="inline-flex"
+        triggerClassName="inline-flex"
       >
         <GitStateLabel worktreeId={worktreeId} variant="neutral" label="Unavailable" />
       </Tooltip>
@@ -170,7 +170,7 @@ export function GitStateCell({ worktree }: { worktree: Worktree }) {
 
   const state = workingTreeState(data);
   return (
-    <Tooltip content={state.detail} delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={state.detail} delay={300} triggerClassName="inline-flex">
       <GitStateLabel worktreeId={worktreeId} variant={state.variant} label={state.label} />
     </Tooltip>
   );

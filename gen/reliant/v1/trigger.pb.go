@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -1792,9 +1793,14 @@ type TriggerEvent struct {
 	// Who the source says sent the event: trigger.sender. Unset for a firing
 	// recorded without one (a start a person made themselves, or one recorded
 	// before senders were).
-	Sender        *TriggerSender `protobuf:"bytes,10,opt,name=sender,proto3,oneof" json:"sender,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Sender *TriggerSender `protobuf:"bytes,10,opt,name=sender,proto3,oneof" json:"sender,omitempty"`
+	// Read-only: the asynchronous firing workflow identifier for this event.
+	// Match FireTriggerResponse.fire_workflow_id to find its outcome and chat_id.
+	// Empty for ad hoc launches. An identifier is not proof a workflow started:
+	// an inbound event may be rejected before its fire is launched.
+	FireWorkflowId string `protobuf:"bytes,11,opt,name=fire_workflow_id,json=fireWorkflowId,proto3" json:"fire_workflow_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *TriggerEvent) Reset() {
@@ -1895,6 +1901,13 @@ func (x *TriggerEvent) GetSender() *TriggerSender {
 		return x.Sender
 	}
 	return nil
+}
+
+func (x *TriggerEvent) GetFireWorkflowId() string {
+	if x != nil {
+		return x.FireWorkflowId
+	}
+	return ""
 }
 
 // TriggerSender is trigger.sender: who sent the event that fired a trigger,
@@ -4379,7 +4392,7 @@ var File_reliant_v1_trigger_proto protoreflect.FileDescriptor
 const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/trigger.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x15reliant/v1/chat.proto\x1a\x14reliant/v1/run.proto\"\x9a\x02\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x15reliant/v1/chat.proto\x1a\x14reliant/v1/run.proto\"\x9a\x02\n" +
 	"\rTriggerHealth\x127\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x1f.reliant.v1.TriggerHealthStatusR\x06status\x121\n" +
 	"\x14consecutive_failures\x18\x02 \x01(\x05R\x13consecutiveFailures\x12+\n" +
@@ -4498,7 +4511,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\v_last_eventB\x10\n" +
 	"\x0e_connection_idB\x0e\n" +
 	"\f_webhook_urlB\x13\n" +
-	"\x11_workflow_trigger\"\xe2\x03\n" +
+	"\x11_workflow_trigger\"\x8c\x04\n" +
 	"\fTriggerEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\"\n" +
 	"\n" +
@@ -4512,7 +4525,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\apayload\x18\b \x01(\v2\x17.google.protobuf.StructR\apayload\x122\n" +
 	"\x03run\x18\t \x01(\v2\x1b.reliant.v1.TriggerEventRunH\x02R\x03run\x88\x01\x01\x126\n" +
 	"\x06sender\x18\n" +
-	" \x01(\v2\x19.reliant.v1.TriggerSenderH\x03R\x06sender\x88\x01\x01B\r\n" +
+	" \x01(\v2\x19.reliant.v1.TriggerSenderH\x03R\x06sender\x88\x01\x01\x12(\n" +
+	"\x10fire_workflow_id\x18\v \x01(\tR\x0efireWorkflowIdB\r\n" +
 	"\v_trigger_idB\n" +
 	"\n" +
 	"\b_chat_idB\x06\n" +
@@ -4770,25 +4784,38 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x1fWORKFLOW_TRIGGER_OUTCOME_FAILED\x10\x04\x12(\n" +
 	"$WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED\x10\x05\x12)\n" +
 	"%WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED\x10\x06\x12$\n" +
-	" WORKFLOW_TRIGGER_OUTCOME_UPDATED\x10\a2\xfa\n" +
-	"\n" +
+	" WORKFLOW_TRIGGER_OUTCOME_UPDATED\x10\a2\xd5\r\n" +
 	"\x0eTriggerService\x12V\n" +
 	"\rCreateTrigger\x12 .reliant.v1.CreateTriggerRequest\x1a!.reliant.v1.CreateTriggerResponse\"\x00\x12M\n" +
 	"\n" +
 	"GetTrigger\x12\x1d.reliant.v1.GetTriggerRequest\x1a\x1e.reliant.v1.GetTriggerResponse\"\x00\x12S\n" +
-	"\fListTriggers\x12\x1f.reliant.v1.ListTriggersRequest\x1a .reliant.v1.ListTriggersResponse\"\x00\x12V\n" +
-	"\rUpdateTrigger\x12 .reliant.v1.UpdateTriggerRequest\x1a!.reliant.v1.UpdateTriggerResponse\"\x00\x12V\n" +
-	"\rDeleteTrigger\x12 .reliant.v1.DeleteTriggerRequest\x1a!.reliant.v1.DeleteTriggerResponse\"\x00\x12b\n" +
-	"\x11SetTriggerEnabled\x12$.reliant.v1.SetTriggerEnabledRequest\x1a%.reliant.v1.SetTriggerEnabledResponse\"\x00\x12P\n" +
-	"\vFireTrigger\x12\x1e.reliant.v1.FireTriggerRequest\x1a\x1f.reliant.v1.FireTriggerResponse\"\x00\x12b\n" +
+	"\fListTriggers\x12\x1f.reliant.v1.ListTriggersRequest\x1a .reliant.v1.ListTriggersResponse\"\x00\x12\x8a\x01\n" +
+	"\rUpdateTrigger\x12 .reliant.v1.UpdateTriggerRequest\x1a!.reliant.v1.UpdateTriggerResponse\"4\xa2\xbb\x180:.\n" +
+	"\x06update\x12$\n" +
+	"\atrigger\x12\x02id\x1a\x15response.trigger.name\x12V\n" +
+	"\rDeleteTrigger\x12 .reliant.v1.DeleteTriggerRequest\x1a!.reliant.v1.DeleteTriggerResponse\"\x00\x12\xa4\x01\n" +
+	"\x11SetTriggerEnabled\x12$.reliant.v1.SetTriggerEnabledRequest\x1a%.reliant.v1.SetTriggerEnabledResponse\"B\xa2\xbb\x18>:<\n" +
+	"\vset_enabled\x12$\n" +
+	"\atrigger\x12\x02id\x1a\x15response.trigger.name*\aenabled\x12\x86\x01\n" +
+	"\vFireTrigger\x12\x1e.reliant.v1.FireTriggerRequest\x1a\x1f.reliant.v1.FireTriggerResponse\"6\xa2\xbb\x182:0\n" +
+	"\x04fire\x12\r\n" +
+	"\atrigger\x12\x02id*\x19response.fire_workflow_id\x12b\n" +
 	"\x11ListTriggerEvents\x12$.reliant.v1.ListTriggerEventsRequest\x1a%.reliant.v1.ListTriggerEventsResponse\"\x00\x12Y\n" +
-	"\x0eGetLaunchEvent\x12!.reliant.v1.GetLaunchEventRequest\x1a\".reliant.v1.GetLaunchEventResponse\"\x00\x12e\n" +
-	"\x12RotateWebhookToken\x12%.reliant.v1.RotateWebhookTokenRequest\x1a&.reliant.v1.RotateWebhookTokenResponse\"\x00\x12Y\n" +
-	"\x0eEnableWorkflow\x12!.reliant.v1.EnableWorkflowRequest\x1a\".reliant.v1.EnableWorkflowResponse\"\x00\x12\\\n" +
-	"\x0fDisableWorkflow\x12\".reliant.v1.DisableWorkflowRequest\x1a#.reliant.v1.DisableWorkflowResponse\"\x00\x12n\n" +
-	"\x15ResolveTriggerSenders\x12(.reliant.v1.ResolveTriggerSendersRequest\x1a).reliant.v1.ResolveTriggerSendersResponse\"\x00\x12_\n" +
-	"\x10ListReplayEvents\x12#.reliant.v1.ListReplayEventsRequest\x1a$.reliant.v1.ListReplayEventsResponse\"\x00\x12V\n" +
-	"\rPreviewReplay\x12 .reliant.v1.PreviewReplayRequest\x1a!.reliant.v1.PreviewReplayResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x0eGetLaunchEvent\x12!.reliant.v1.GetLaunchEventRequest\x1a\".reliant.v1.GetLaunchEventResponse\"\x00\x12\xa7\x01\n" +
+	"\x12RotateWebhookToken\x12%.reliant.v1.RotateWebhookTokenRequest\x1a&.reliant.v1.RotateWebhookTokenResponse\"B\xa2\xbb\x18>:<\n" +
+	"\x14rotate_webhook_token\x12$\n" +
+	"\atrigger\x12\x02id\x1a\x15response.trigger.name\x12\x89\x01\n" +
+	"\x0eEnableWorkflow\x12!.reliant.v1.EnableWorkflowRequest\x1a\".reliant.v1.EnableWorkflowResponse\"0\xa2\xbb\x18,:*\n" +
+	"\x06enable\x12\x14\n" +
+	"\bworkflow\x12\bworkflow*\n" +
+	"project_id\x12\x8d\x01\n" +
+	"\x0fDisableWorkflow\x12\".reliant.v1.DisableWorkflowRequest\x1a#.reliant.v1.DisableWorkflowResponse\"1\xa2\xbb\x18-:+\n" +
+	"\adisable\x12\x14\n" +
+	"\bworkflow\x12\bworkflow*\n" +
+	"project_id\x12q\n" +
+	"\x15ResolveTriggerSenders\x12(.reliant.v1.ResolveTriggerSendersRequest\x1a).reliant.v1.ResolveTriggerSendersResponse\"\x03\x90\x02\x01\x12_\n" +
+	"\x10ListReplayEvents\x12#.reliant.v1.ListReplayEventsRequest\x1a$.reliant.v1.ListReplayEventsResponse\"\x00\x12Y\n" +
+	"\rPreviewReplay\x12 .reliant.v1.PreviewReplayRequest\x1a!.reliant.v1.PreviewReplayResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_trigger_proto_rawDescOnce sync.Once

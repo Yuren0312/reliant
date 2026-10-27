@@ -1,24 +1,11 @@
-import { useEffect } from "react";
-import { usePrivacyStore } from "../../store/privacyStore";
+import { usePrivacyConsent, useUpdatePrivacySettings } from "../../hooks/privacy-queries";
 import { AlertTriangle } from "lucide-react";
-import { Toggle } from "../ui/Toggle";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
 export function PrivacySettings() {
-  const {
-    crashReportingEnabled,
-    analyticsEnabled,
-    setCrashReporting,
-    setAnalytics,
-    initialize,
-  } = usePrivacyStore();
-
-  useEffect(() => {
-    // Initialize privacy settings (async to load from Electron if available)
-    initialize().catch((err) => {
-      console.error('Failed to initialize privacy settings:', err);
-    });
-  }, [initialize]);
+  const { crashReportingEnabled, analyticsEnabled } = usePrivacyConsent();
+  const { setCrashReporting, setAnalytics } = useUpdatePrivacySettings();
 
   return (
     <div className="space-y-6">
@@ -40,10 +27,12 @@ export function PrivacySettings() {
               information.
             </p>
           </div>
-          <Toggle
+          <ToggleSwitch
             checked={crashReportingEnabled}
             onChange={setCrashReporting}
-            label={`${crashReportingEnabled ? "Disable" : "Enable"} crash reporting`}
+            ariaLabel={`${crashReportingEnabled ? "Disable" : "Enable"} crash reporting`}
+            size="lg"
+            className="forge-ui"
           />
         </div>
 
@@ -59,10 +48,12 @@ export function PrivacySettings() {
               did, not what you wrote.
             </p>
           </div>
-          <Toggle
+          <ToggleSwitch
             checked={analyticsEnabled}
             onChange={setAnalytics}
-            label={`${analyticsEnabled ? "Disable" : "Enable"} analytics`}
+            ariaLabel={`${analyticsEnabled ? "Disable" : "Enable"} analytics`}
+            size="lg"
+            className="forge-ui"
           />
         </div>
 

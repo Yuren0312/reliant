@@ -16,8 +16,12 @@
  * transcript are stubbed; everything between them and the wire is real.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { queryClient as presetQueryClient } from "@/lib/query-client";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -70,26 +74,41 @@ const rpc = vi.hoisted(() => ({
   listProjectDaemons: vi.fn(),
 }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    chat: () => ({ getChat: rpc.getChat, startChat: rpc.startChat, listMessages: rpc.listMessages }),
-    trigger: () => ({
-      getLaunchEvent: rpc.getLaunchEvent,
-      listTriggers: rpc.listTriggers,
-      fireTrigger: rpc.fireTrigger,
-    }),
-    run: () => ({ listRuns: rpc.listRuns }),
-    workflow: () => ({ listWorkflows: rpc.listWorkflows, getWorkflow: rpc.getWorkflow }),
-    preset: () => ({
+// PresetService, RunService, the launch event and the seed-prompt read are
+// reached through connectClient (the generated hooks), so they are answered
+// at the transport by the same fakes. Integration events are named from the
+// catalog's trigger types; none here.
+beforeEach(() => {
+  setTransport(mockTransport({
+      "ChatService.GetChat": (req: unknown) => rpc.getChat(req as never),
+      "ChatService.StartChat": (req: unknown) => rpc.startChat(req as never),
+      // The run form lists workspaces through the generated WorktreeService hooks.
+      ...serviceHandlers("WorktreeService", { listWorktrees: rpc.listWorktrees }),
+      ...serviceHandlers("WorkflowService", { listWorkflows: rpc.listWorkflows, getWorkflow: rpc.getWorkflow }),
+      ...serviceHandlers("PresetService", {
       listPresetsForWorkflow: rpc.listPresetsForWorkflow,
       getDefaultPresetsBatch: rpc.getDefaultPresetsBatch,
     }),
-    worktree: () => ({ listWorktrees: rpc.listWorktrees }),
-    daemonRegistry: () => ({ listDaemons: rpc.listDaemons }),
-    project: () => ({ listProjectDaemons: rpc.listProjectDaemons }),
-  },
-  setDaemonLastSeen: vi.fn(),
-}));
+      ...serviceHandlers("RunService", { listRuns: rpc.listRuns }),
+      ...serviceHandlers("TriggerService", { getLaunchEvent: rpc.getLaunchEvent, listTriggers: rpc.listTriggers, fireTrigger: rpc.fireTrigger }),
+      ...serviceHandlers("ChatService", { listMessages: rpc.listMessages }),
+      "CatalogService.SearchCatalog": { response: {} },
+      ...serviceHandlers("ProjectService", { listProjectDaemons: rpc.listProjectDaemons }),
+      ...serviceHandlers("DaemonRegistryService", { listDaemons: rpc.listDaemons }),
+    }));
+});
+afterEach(() => {
+  // Unmount BEFORE the transport goes. Testing Library's own cleanup is an
+  // afterEach registered at import, so it runs after this one: until then the
+  // run detail is still mounted, and a GetChat its detail query starts in that
+  // window (late under load) went to the real network and failed the test
+  // ("This test made a real network request … ChatService/GetChat").
+  cleanup();
+  setTransport(null);
+  // The preset reads are cached in the app's query client; no test may see
+  // another's answers.
+  presetQueryClient.clear();
+});
 
 // The run's chat is "loaded" straight from GetChat; the stores the real
 // loader drives are not under test here.
@@ -108,7 +127,7 @@ vi.mock("@/store/globalUpdatesStore", () => ({
 
 import { RunDetail } from "../RunDetailPage";
 
-function protoChat(overrides: Partial<ProtoChat> = {}) {
+function protoChat(overrides: Partial<Omit<ProtoChat, "$typeName">> = {}) {
   return create(ChatSchema, {
     id: "chat-1",
     title: "Nightly triage · 2026-10-06 09:00",

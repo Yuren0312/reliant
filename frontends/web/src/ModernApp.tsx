@@ -20,6 +20,7 @@ import { Sidebar } from "./components/Layout/Sidebar";
 import { TabbedViewerPanel } from "./components/Layout/TabbedViewerPanel";
 import { useViewerStore } from "./store/viewerStore";
 import { useProjectStore } from "./store/projectStore";
+import { fetchProjects, getCachedProjects } from "./hooks/project-queries";
 import { useFileDeletionStore } from "./store/fileDeletionStore";
 import { createFile, createFolder, moveFile, deleteFileOrFolder } from "./api/fileSystem";
 import { toast } from "./lib/toast-manager";
@@ -27,7 +28,7 @@ import { ResizableSidebar } from "./components/Layout/ResizableSidebar";
 import { RightSidebar } from "./components/FileBrowser/RightSidebar";
 import { GlobalSearch, FindReplace } from "./components/FileBrowser";
 import { QuickFileOpen } from "./components/Layout/QuickFileOpen";
-import { NewChatView } from "./components/Chat/NewChatView";
+import { HomeNewChat } from "./components/Apps/HomeNewChat";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 import { approveAllPendingApprovals } from "./hooks/approval-queries";
 import { useChatList, getCachedChatList, getChatFromCache } from "./hooks/chat-queries";
@@ -59,9 +60,7 @@ import { useTerminalStore } from "./store/terminalStore";
 import { useWorktreeStore } from "./store/worktreeStore";
 import { resolveTerminalWorkingDir } from "./lib/terminalWorkingDir";
 import { useUpdateStreamConnection } from "./hooks/useUpdateStreamConnection";
-import { useProcessStore } from "./store/processStore";
 
-import { isGrpcReady } from "./api/grpc-client";
 import { useNotificationStore, startPermissionRefresh } from "./store/notificationStore";
 import { useWorkspaceStateStore, type RightSidebarTab } from "./store/workspaceStateStore";
 import {
@@ -76,8 +75,10 @@ import { useWorkspaceRestore, useAutoSaveWorkspaceState } from "./hooks/useWorks
 import { focusChatInput } from "./hooks/useFocusManager";
 import { useTourStore } from "./store/tourStore";
 import { useModalStore } from "./store/modalStore";
-import { useGlobalDataStore } from "./store/globalDataStore";
+import { useCachedWorkflows } from "./hooks/workflow-queries";
 import { trackEvent } from "./lib/analytics";
+import { useCurrentWorktree, resolveWorktree, useCachedWorktrees, getCurrentWorktree, invalidateWorktreeLists } from "./hooks/worktree-queries";
+import { restoreLastWorktree } from "./hooks/worktree-actions";
 
 // Stable empty reference so the useChatList default doesn't churn the tray effect.
 const EMPTY_CHAT_LIST: Chat[] = [];
@@ -90,7 +91,6 @@ function App() {
   // the tray-status effect below.
   const { data: chats = EMPTY_CHAT_LIST } = useChatList(currentProject?.id);
   const selectProject = useProjectStore((state) => state.selectProject);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
   // Onboarding state (`plan`, `reset-onboarding`) now lives on /onboarding —
   // see OnboardingRoute. We still read the github_* params here because non-
   // onboarding OAuth callers (GitHubSyncStatus, AddRepoModal) return to /
@@ -107,15 +107,17 @@ function App() {
     (state) => state.createSession
   );
   const openTerminal = useTerminalStore((state) => state.openTerminal);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
+  const currentWorktree = useCurrentWorktree();
+  // The tray lists the workspaces the app already holds; it never pages them in.
+  const worktrees = useCachedWorktrees(currentProject?.id);
 
   // Backend ready gate is defined later in this file; we must not reference it
   // before initialization.
   const [isBackendReady, setIsBackendReady] = useState(false);
 
-  // Ensure global, project-scoped data (workflows/presets) is loaded whenever a project
-  const cachedWorkflows = useGlobalDataStore((s) => s.workflows);
+  // The current project's workflows as already cached (the tray menu lists
+  // them; it does not fetch them on its own).
+  const cachedWorkflows = useCachedWorkflows();
 
   // Track session start once on mount
   useEffect(() => {
@@ -129,16 +131,12 @@ function App() {
       : "Reliant";
   }, [currentProject?.name]);
 
-  // NOTE: Workflows and presets are fetched by projectStore.selectProject().
-  // With singleflight at the gRPC layer, duplicate concurrent calls are deduplicated
-  // automatically, so no secondary trigger is needed here.
-
   // UI state - use persisted values as defaults, initialized lazily from workspace state
   // NOTE: We use lazy initialization with getState() instead of subscribing to the whole
   // worktree state object, which would cause re-renders on every state change.
   const [showFileBrowser, setShowFileBrowserLocal] = useState(() => {
     const projectId = useProjectStore.getState().currentProject?.id;
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+    const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
     if (!projectId) return false;
     return useWorkspaceStateStore.getState().getWorktreeState(projectId, worktreeId).rightPanelState.fileBrowser;
   });
@@ -167,7 +165,7 @@ function App() {
       const newValue = typeof value === 'function' ? value(prev) : value;
       // Persist to workspace state
       const projectId = useProjectStore.getState().currentProject?.id;
-      const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+      const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
       if (projectId) {
         useWorkspaceStateStore.getState().setRightPanelState(projectId, worktreeId, { fileBrowser: newValue });
       }
@@ -220,15 +218,14 @@ function App() {
     }
 
     (async () => {
-      let projects = useProjectStore.getState().projects;
+      let projects = getCachedProjects();
       if (projects.length === 0) {
         try {
-          await useProjectStore.getState().loadProjects();
+          projects = await fetchProjects();
         } catch (err) {
           logger.warn("[ModernApp] Failed to load projects for deep-link", err);
           return;
         }
-        projects = useProjectStore.getState().projects;
       }
       const match = projects.find((p) => p.id === routeProjectId);
       if (!match) {
@@ -381,13 +378,12 @@ function App() {
       // Reload worktrees to get the updated main worktree with correct branch name
       // This is important because git init may have created a branch with a custom name
       // (e.g., "master" instead of "main") and the main worktree needs to reflect this
-      const { refreshWorktrees, restoreLastWorktree } = useWorktreeStore.getState();
-      await refreshWorktrees(projectId);
+      await invalidateWorktreeLists(queryClient);
       await restoreLastWorktree(projectId);
       logger.info('[ModernApp] Reloaded worktrees after git initialization');
     }
     handleCloseGitInitModal();
-  }, [handleCloseGitInitModal]);
+  }, [handleCloseGitInitModal, queryClient]);
 
   // Navigating to the project picker. Shared with Settings → Projects, which
   // offers the same "Add project" entry point — the store-clearing order this
@@ -396,7 +392,7 @@ function App() {
 
   // Get current worktreeId from the global worktree store (single source of truth)
   const getCurrentWorktreeId = useCallback(() => {
-    return useWorktreeStore.getState().currentWorktree?.id || undefined;
+    return useWorktreeStore.getState().currentWorktreeId || undefined;
   }, []);
 
   // Working directory for a new terminal in the current workspace, or
@@ -406,10 +402,7 @@ function App() {
   // the project root — a shell in the main checkout under a branch's tab.
   // TerminalPanel creates the session itself once the path settles.
   const getTerminalWorkingDir = useCallback(() => {
-    const { currentWorktree: selected, worktrees: loaded } = useWorktreeStore.getState();
-    const worktree = selected
-      ? loaded.find((w) => w.id === selected.id) ?? selected
-      : null;
+    const worktree = getCurrentWorktree();
     const resolved = resolveTerminalWorkingDir(worktree, currentProject);
     if (resolved.kind !== "ready") {
       logger.info("[Terminal] Workspace has no directory yet; not creating a terminal", {
@@ -464,9 +457,9 @@ function App() {
    */
   const cycleProject = useCallback(
     async (direction: 1 | -1) => {
-      const { projects, currentProject: active, selectProject } =
-        useProjectStore.getState();
-      if (!projects || projects.length < 2) return;
+      const projects = getCachedProjects();
+      const { currentProject: active, selectProject } = useProjectStore.getState();
+      if (projects.length < 2) return;
 
       const index = projects.findIndex((p) => p.id === active?.id);
       if (index === -1) return;
@@ -490,7 +483,7 @@ function App() {
         const worktreeStore = useWorktreeStore.getState();
         const activeChatId = chatStore.activeChatId;
         const activeChat = activeChatId ? getChatFromCache(activeChatId) ?? null : null;
-        const currentWorktreeId = activeChat?.worktreeId || worktreeStore.currentWorktree?.id || null;
+        const currentWorktreeId = activeChat?.worktreeId || worktreeStore.currentWorktreeId || null;
         chatStore.clearCurrentChat(currentWorktreeId);
       },
       onCloseTab: () => {
@@ -1053,11 +1046,10 @@ function App() {
 
         // Projects are loaded in parallel by Root.tsx's Promise.all.
         // Safety net: if they haven't loaded yet (e.g. Root.tsx load failed), retry here.
-        const projectStore = useProjectStore.getState();
-        if (projectStore.projects.length === 0 && !projectStore.isLoading) {
+        if (getCachedProjects().length === 0) {
           // Timeout prevents hanging when no daemon/backend is available (browser-only users)
           await Promise.race([
-            loadProjects(),
+            fetchProjects(),
             new Promise((resolve) => setTimeout(resolve, 3000)),
           ]);
         }
@@ -1082,7 +1074,7 @@ function App() {
     return () => {
       mounted = false;
     };
-  }, [loadProjects]); // Run once on mount — workspace restore handles project selection
+  }, []); // Run once on mount — workspace restore handles project selection
 
   // Connect the live update stream once the backend is ready. Chats are
   // already loaded by workspace restore / selectProject before isBackendReady
@@ -1099,27 +1091,6 @@ function App() {
     // Start permission refresh interval to detect system permission changes
     startPermissionRefresh();
   }, [isBackendReady, projectId]);
-
-  // Fetch background processes on app mount to ensure we have current state
-  // This is critical because processes survive server restarts and we need
-  // to load them from the database into our stores on initial load.
-  // Streaming events only capture NEW events, not existing state.
-  useEffect(() => {
-    if (!isBackendReady) return;
-
-    // Guard: gRPC must be ready, otherwise these calls
-    // hit a non-existent server and produce ERR_CONNECTION_REFUSED.
-    if (!isGrpcReady()) {
-      logger.info("⏭️ Skipping background process fetch — gRPC not ready");
-      return;
-    }
-
-    // Fetch all processes (no worktree filter) to populate stores.
-    // Both stores are kept in sync by globalUpdatesStore streaming events;
-    // we only need one initial fetch and let the event handler propagate.
-    logger.info("🔄 Fetching background processes on app mount");
-    useProcessStore.getState().fetchProcesses();
-  }, [isBackendReady]);
 
   // Listen for toggle file browser requests
   useEffect(() => {
@@ -1198,7 +1169,6 @@ function App() {
             name: projectInfo.name || "",
             path: projectInfo.path || "",
             is_git_repo: true,
-            worktree_count: 0, // Temporary, will be updated when projects load
             last_active: new Date().toISOString(),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -1369,7 +1339,7 @@ function App() {
         if (!chat) return;
         if (project?.id) {
           if (chat.worktreeId) {
-            const targetWorktree = await worktreeStore.resolveWorktree(chat.worktreeId);
+            const targetWorktree = await resolveWorktree(chat.worktreeId);
             if (targetWorktree) {
               await worktreeStore.switchWorktreeContext(project.id, targetWorktree);
             }
@@ -1464,7 +1434,7 @@ function App() {
           return;
         }
 
-        const target = await worktreeStore.resolveWorktree(targetId);
+        const target = await resolveWorktree(targetId);
         if (!target) return;
         await worktreeStore.switchWorktreeContext(project.id, target);
       });
@@ -1580,10 +1550,7 @@ function App() {
                 onNavigateToWorktrees={noopNavigateWorktrees}
               />
             ) : (
-              <NewChatView
-                tabId="new-chat"
-                onNavigateToWorktrees={noopNavigateWorktrees}
-              />
+              <HomeNewChat onNavigateToWorktrees={noopNavigateWorktrees} />
             )}
           </div>
         </div>
@@ -1605,7 +1572,7 @@ function App() {
   // We deliberately do NOT gate on `isBackendReady` or `isWorkspaceRestoring`:
   // a mid-onboarding user has no projects to list and no workspace to restore,
   // and waiting for ListProjects to complete (which can run several hundred
-  // ms to a couple seconds before the singleflight inside loadProjects
+  // ms to a couple seconds before the shared fetch inside fetchProjects
   // resolves) just delays the redirect — leaving the user staring at a
   // LoadingSpinner before the OnboardingPage / ComputeStep mounts and fires
   // its own queries (ListDaemons, etc.). Gate only on `isUserLoading` so we
@@ -1694,7 +1661,6 @@ function App() {
               const fullProject = {
                 ...project,
                 is_git_repo: project.is_git_repo ?? true,
-                worktree_count: project.worktree_count ?? 0,
                 last_active: new Date().toISOString(),
                 created_at: project.created_at ?? new Date().toISOString(),
                 updated_at: project.updated_at ?? new Date().toISOString(),
@@ -1748,7 +1714,7 @@ function App() {
                   navigate({ to: '/settings' });
                 }}
                 onOpenForge={() => {
-                  navigate({ to: '/forge' });
+                  navigate({ to: '/apps' });
                 }}
                 onOpenObservability={() => {
                   navigate({ to: '/forge/observability' });
@@ -1787,7 +1753,7 @@ function App() {
                     navigate({ to: '/settings' });
                   }}
                   onOpenForge={() => {
-                    navigate({ to: '/forge' });
+                    navigate({ to: '/apps' });
                   }}
                   onOpenObservability={() => {
                     navigate({ to: '/forge/observability' });

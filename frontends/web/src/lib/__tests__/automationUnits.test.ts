@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { Trigger, TriggerHealth } from "../../api/trigger-grpc";
+import type { Trigger, TriggerHealth } from "@/hooks/trigger-model";
 import { aggregateHealth, automationUnits, groupAutomationUnits, unitsNeedingYou, workflowAutomationsFor } from "../automationUnits";
 
 function health(status: TriggerHealth["status"], extra: Partial<TriggerHealth> = {}): TriggerHealth {
@@ -33,6 +33,7 @@ function trigger(overrides: Partial<Trigger> & { id: string }): Trigger {
     createdAt: "",
     updatedAt: "",
     source: { kind: "unknown" } as Trigger["source"],
+    webhookManaged: false,
     ...overrides,
   };
 }

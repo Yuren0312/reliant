@@ -43,6 +43,9 @@ import {
 import { createForgeConsoleRoutes } from "@/forgeConsoleRoutes";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useProjectStore, type Project } from "@/store/projectStore";
+import { projectsKey } from "@/hooks/project-queries";
+import { ListProjectsResponseSchema } from "@/gen/reliant/v1/project_pb";
+import { create } from "@bufbuild/protobuf";
 
 import { ConsoleLayout } from "../Console/ConsoleLayout";
 import { DashboardPage, DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
@@ -61,8 +64,9 @@ import {
   LegacyCommandRoute,
   LegacyDomainsRoute,
   LegacyEnvRoute,
-  LegacyObservabilityRoute,
+  OrgObservabilityRoute,
 } from "../Console/ForgeEntryRoutes";
+import { OrgConsoleLayout } from "../Org";
 import { ForgeDomainsPage } from "../Domains/ForgeDomainsPage";
 import { ForgeEnvPage } from "../EnvPage/ForgeEnvPage";
 import { ForgeLayout } from "../ForgeLayout";
@@ -76,7 +80,6 @@ const PROJECT: Project = {
   name: "control-plane",
   path: "/src/control-plane",
   is_git_repo: true,
-  worktree_count: 0,
   last_active: "",
   created_at: "",
   updated_at: "",
@@ -443,9 +446,10 @@ function buildRouter(path: string) {
     monitoring: MonitoringSettingsPage,
     settings: ProjectSettingsPage,
     activity: ActivityPage,
+    orgLayout: OrgConsoleLayout,
+    orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,
     legacyEnv: LegacyEnvRoute,
-    legacyObservability: LegacyObservabilityRoute,
     legacyDomains: LegacyDomainsRoute,
     legacyCommand: LegacyCommandRoute,
   });
@@ -471,12 +475,30 @@ function ForgePanePreviewCase() {
 
   useEffect(() => {
     const restore = installFakeNetwork(scenario);
-    useProjectStore.setState({ projects: [PROJECT, OTHER], currentProject: PROJECT });
+    useProjectStore.setState({ currentProject: PROJECT });
     setReady(true);
     return restore;
   }, [scenario]);
 
-  const queryClient = useMemo(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }), []);
+  const queryClient = useMemo(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // The project list the pane's pickers read, as ListProjects answers it.
+    client.setQueryData(
+      projectsKey(),
+      create(ListProjectsResponseSchema, {
+        projects: [PROJECT, OTHER].map((project) => ({
+          id: project.id,
+          name: project.name,
+          path: project.path,
+          isGitRepo: project.is_git_repo,
+          isForge: project.is_forge,
+          forgeProjectName: project.forge_project_name ?? "",
+        })),
+        total: 2,
+      }),
+    );
+    return client;
+  }, []);
   const router = useMemo(() => buildRouter(path), [path]);
   const obsApi = useMemo(() => createFixtureApi(), []);
 

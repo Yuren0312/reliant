@@ -58,8 +58,8 @@ import {
   Workflow as WorkflowIcon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useWorkflows, type WorkflowDef } from "../../store/globalDataStore";
-import { usePreferencesStore } from "../../store/preferencesStore";
+import { useWorkflows, type WorkflowDef } from "../../hooks/workflow-queries";
+import { useHiddenItems } from "../../hooks/settings-queries";
 import { normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
 import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { MobileMenuButton } from "./MobileMenuButton";
@@ -115,7 +115,7 @@ function originOf(workflow: WorkflowDef): OriginId {
 
 export function MobileWorkflowCatalog() {
   const { workflows, loading } = useWorkflows();
-  const isWorkflowHidden = usePreferencesStore((s) => s.isWorkflowHidden);
+  const { isWorkflowHidden } = useHiddenItems();
 
   const seen = new Set<string>();
   const visibleWorkflows = workflows
