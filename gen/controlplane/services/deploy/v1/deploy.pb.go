@@ -215,6 +215,13 @@ const (
 	DeployCapacityCode_DEPLOY_CAPACITY_CODE_SPEND_CAP_REACHED DeployCapacityCode = 5
 	// The plan could not be determined. Retry.
 	DeployCapacityCode_DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN DeployCapacityCode = 6
+	// The org is an unclaimed (anonymous) deploy and the demand is outside the
+	// claimable plan. Final: it is refused, never queued; the reason lists each
+	// offence and the fix is to sign up. Same reason string forge raises itself.
+	DeployCapacityCode_DEPLOY_CAPACITY_CODE_CLAIMABLE_INELIGIBLE DeployCapacityCode = 7
+	// The demand fits the claimable plan but the platform will not take it right
+	// now (compute is off, or the platform-wide ceiling is full). Retry later.
+	DeployCapacityCode_DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE DeployCapacityCode = 8
 )
 
 // Enum value maps for DeployCapacityCode.
@@ -227,6 +234,8 @@ var (
 		4: "DEPLOY_CAPACITY_CODE_EXCEEDS_CEILING",
 		5: "DEPLOY_CAPACITY_CODE_SPEND_CAP_REACHED",
 		6: "DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN",
+		7: "DEPLOY_CAPACITY_CODE_CLAIMABLE_INELIGIBLE",
+		8: "DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE",
 	}
 	DeployCapacityCode_value = map[string]int32{
 		"DEPLOY_CAPACITY_CODE_UNSPECIFIED":               0,
@@ -236,6 +245,8 @@ var (
 		"DEPLOY_CAPACITY_CODE_EXCEEDS_CEILING":           4,
 		"DEPLOY_CAPACITY_CODE_SPEND_CAP_REACHED":         5,
 		"DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN":              6,
+		"DEPLOY_CAPACITY_CODE_CLAIMABLE_INELIGIBLE":      7,
+		"DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE":     8,
 	}
 )
 
@@ -8102,7 +8113,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"*DEPLOY_OBJECT_COMPARISON_STATE_UNSPECIFIED\x10\x00\x12+\n" +
 	"'DEPLOY_OBJECT_COMPARISON_STATE_COMPARED\x10\x01\x121\n" +
 	"-DEPLOY_OBJECT_COMPARISON_STATE_NO_ENVIRONMENT\x10\x02\x121\n" +
-	"-DEPLOY_OBJECT_COMPARISON_STATE_BUNDLE_MISSING\x10\x03*\xb2\x02\n" +
+	"-DEPLOY_OBJECT_COMPARISON_STATE_BUNDLE_MISSING\x10\x03*\x91\x03\n" +
 	"\x12DeployCapacityCode\x12$\n" +
 	" DEPLOY_CAPACITY_CODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOY_CAPACITY_CODE_OK\x10\x01\x12(\n" +
@@ -8110,7 +8121,9 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	".DEPLOY_CAPACITY_CODE_STATIC_FREE_TIER_EXCEEDED\x10\x03\x12(\n" +
 	"$DEPLOY_CAPACITY_CODE_EXCEEDS_CEILING\x10\x04\x12*\n" +
 	"&DEPLOY_CAPACITY_CODE_SPEND_CAP_REACHED\x10\x05\x12%\n" +
-	"!DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN\x10\x062\x8a'\n" +
+	"!DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN\x10\x06\x12-\n" +
+	")DEPLOY_CAPACITY_CODE_CLAIMABLE_INELIGIBLE\x10\a\x12.\n" +
+	"*DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE\x10\b2\x8a'\n" +
 	"\rDeployService\x12p\n" +
 	"\x0fGetCapabilities\x12-.controlplane.v1.GetDeployCapabilitiesRequest\x1a..controlplane.v1.GetDeployCapabilitiesResponse\x12^\n" +
 	"\tGetTenant\x12'.controlplane.v1.GetDeployTenantRequest\x1a(.controlplane.v1.GetDeployTenantResponse\x12g\n" +

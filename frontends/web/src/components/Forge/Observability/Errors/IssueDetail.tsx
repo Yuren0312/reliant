@@ -16,6 +16,7 @@ import Button from "@/components/forge-ui/button";
 import { useIssue, useIssueEvents } from "@/hooks/observability-queries";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { Issue, IssueDetail as IssueDetailModel, IssueEvent, IssueFrame } from "@/services/controlPlane/observability/issuesTypes";
 import type { RumScope } from "@/services/controlPlane/observability/rumTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
@@ -28,7 +29,7 @@ import { AttributeTable } from "../AttributeTable";
 import { shortCommit } from "../deliveryScope";
 import { formatAgo, formatCount, formatTimestamp, formatWhen } from "../format";
 import type { ObsNavigate } from "../obsSearch";
-import { ObsError, ObsLoadingRows } from "../ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows } from "../ObsStates";
 import { SessionName } from "../Sessions/SessionName";
 import { rumScopeOf, sessionLink } from "../Sessions/sessionModel";
 import { StatusBadge, Trend } from "./IssueBits";
@@ -69,7 +70,7 @@ export function IssueDetail({
       </div>
     );
   }
-  if (detail.error || !detail.data) {
+  if ((detail.error && !keepsLastResult(detail.error, detail.data)) || !detail.data) {
     const kind = issuesErrorKind(detail.error);
     return (
       <div className="space-y-3" data-testid="obs-issue" data-state="error">
@@ -92,7 +93,7 @@ export function IssueDetail({
     open: (sessionId, atMs) => navigate(sessionLink(sessionId, atMs > 0 ? atMs - SESSION_LEAD_MS : undefined)),
   };
   return (
-    <IssueBody
+    <><ObsAsOf updatedAt={detail.dataUpdatedAt} /><IssueBody
       detail={detail.data}
       scope={scope}
       subject={subject}
@@ -101,7 +102,7 @@ export function IssueDetail({
       openTrace={openTrace}
       openSession={openSession}
       openIssue={(id) => navigate({ issue: id })}
-    />
+    /></>
   );
 }
 

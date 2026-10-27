@@ -33,7 +33,7 @@ import {
   type IssueTimelineEntry as WireTimelineEntry,
 } from "@/gen/controlplane/services/issues/v1/issues_pb";
 
-import { getControlPlaneClient } from "../client";
+import { obsClient } from "./obsClient";
 import { msOf } from "./api";
 import type {
   AddIssueCommentRequest,
@@ -61,7 +61,7 @@ import type {
 } from "./issuesTypes";
 
 function client() {
-  return getControlPlaneClient(IssuesService);
+  return obsClient(IssuesService);
 }
 
 function timestamp(ms: number): Timestamp {

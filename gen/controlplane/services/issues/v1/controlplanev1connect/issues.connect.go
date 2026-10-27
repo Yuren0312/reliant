@@ -59,6 +59,9 @@ const (
 	// IssuesServiceLinkIssueChatProcedure is the fully-qualified name of the IssuesService's
 	// LinkIssueChat RPC.
 	IssuesServiceLinkIssueChatProcedure = "/controlplane.v1.IssuesService/LinkIssueChat"
+	// IssuesServiceListAssignableUsersProcedure is the fully-qualified name of the IssuesService's
+	// ListAssignableUsers RPC.
+	IssuesServiceListAssignableUsersProcedure = "/controlplane.v1.IssuesService/ListAssignableUsers"
 	// IssuesServiceListIssueTimelineProcedure is the fully-qualified name of the IssuesService's
 	// ListIssueTimeline RPC.
 	IssuesServiceListIssueTimelineProcedure = "/controlplane.v1.IssuesService/ListIssueTimeline"
@@ -104,6 +107,13 @@ type IssuesServiceClient interface {
 	// Reliant"). Idempotent per (issue, chat): linking a chat again changes
 	// nothing but a non-empty title, and writes no new timeline entry.
 	LinkIssueChat(context.Context, *connect.Request[v1.LinkIssueChatRequest]) (*connect.Response[v1.LinkIssueChatResponse], error)
+	// ListAssignableUsers returns the people an issue of the org can be assigned
+	// to: its members, as {id, name} and nothing else, ordered by name. A person
+	// needs membership of the org (any role); a machine credential needs obs:read
+	// and to act for that org. Served from Postgres alone. This is the read an
+	// assignee picker uses; the member list with grants and emails
+	// (ListOrgMemberGrants) needs token:read.
+	ListAssignableUsers(context.Context, *connect.Request[v1.ListAssignableUsersRequest]) (*connect.Response[v1.ListAssignableUsersResponse], error)
 	// ListIssueTimeline returns the issue's timeline, oldest first: status changes
 	// (opened, resolved, ignored, reopened, regressed), comments, assignment
 	// changes and linked chats. Deleted comments are not in it. Served from
@@ -177,6 +187,12 @@ func NewIssuesServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(issuesServiceMethods.ByName("LinkIssueChat")),
 			connect.WithClientOptions(opts...),
 		),
+		listAssignableUsers: connect.NewClient[v1.ListAssignableUsersRequest, v1.ListAssignableUsersResponse](
+			httpClient,
+			baseURL+IssuesServiceListAssignableUsersProcedure,
+			connect.WithSchema(issuesServiceMethods.ByName("ListAssignableUsers")),
+			connect.WithClientOptions(opts...),
+		),
 		listIssueTimeline: connect.NewClient[v1.ListIssueTimelineRequest, v1.ListIssueTimelineResponse](
 			httpClient,
 			baseURL+IssuesServiceListIssueTimelineProcedure,
@@ -188,16 +204,17 @@ func NewIssuesServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // issuesServiceClient implements IssuesServiceClient.
 type issuesServiceClient struct {
-	listIssues         *connect.Client[v1.ListIssuesRequest, v1.ListIssuesResponse]
-	getIssue           *connect.Client[v1.GetIssueRequest, v1.GetIssueResponse]
-	listIssueEvents    *connect.Client[v1.ListIssueEventsRequest, v1.ListIssueEventsResponse]
-	updateIssueStatus  *connect.Client[v1.UpdateIssueStatusRequest, v1.UpdateIssueStatusResponse]
-	addIssueComment    *connect.Client[v1.AddIssueCommentRequest, v1.AddIssueCommentResponse]
-	updateIssueComment *connect.Client[v1.UpdateIssueCommentRequest, v1.UpdateIssueCommentResponse]
-	deleteIssueComment *connect.Client[v1.DeleteIssueCommentRequest, v1.DeleteIssueCommentResponse]
-	assignIssue        *connect.Client[v1.AssignIssueRequest, v1.AssignIssueResponse]
-	linkIssueChat      *connect.Client[v1.LinkIssueChatRequest, v1.LinkIssueChatResponse]
-	listIssueTimeline  *connect.Client[v1.ListIssueTimelineRequest, v1.ListIssueTimelineResponse]
+	listIssues          *connect.Client[v1.ListIssuesRequest, v1.ListIssuesResponse]
+	getIssue            *connect.Client[v1.GetIssueRequest, v1.GetIssueResponse]
+	listIssueEvents     *connect.Client[v1.ListIssueEventsRequest, v1.ListIssueEventsResponse]
+	updateIssueStatus   *connect.Client[v1.UpdateIssueStatusRequest, v1.UpdateIssueStatusResponse]
+	addIssueComment     *connect.Client[v1.AddIssueCommentRequest, v1.AddIssueCommentResponse]
+	updateIssueComment  *connect.Client[v1.UpdateIssueCommentRequest, v1.UpdateIssueCommentResponse]
+	deleteIssueComment  *connect.Client[v1.DeleteIssueCommentRequest, v1.DeleteIssueCommentResponse]
+	assignIssue         *connect.Client[v1.AssignIssueRequest, v1.AssignIssueResponse]
+	linkIssueChat       *connect.Client[v1.LinkIssueChatRequest, v1.LinkIssueChatResponse]
+	listAssignableUsers *connect.Client[v1.ListAssignableUsersRequest, v1.ListAssignableUsersResponse]
+	listIssueTimeline   *connect.Client[v1.ListIssueTimelineRequest, v1.ListIssueTimelineResponse]
 }
 
 // ListIssues calls controlplane.v1.IssuesService.ListIssues.
@@ -245,6 +262,11 @@ func (c *issuesServiceClient) LinkIssueChat(ctx context.Context, req *connect.Re
 	return c.linkIssueChat.CallUnary(ctx, req)
 }
 
+// ListAssignableUsers calls controlplane.v1.IssuesService.ListAssignableUsers.
+func (c *issuesServiceClient) ListAssignableUsers(ctx context.Context, req *connect.Request[v1.ListAssignableUsersRequest]) (*connect.Response[v1.ListAssignableUsersResponse], error) {
+	return c.listAssignableUsers.CallUnary(ctx, req)
+}
+
 // ListIssueTimeline calls controlplane.v1.IssuesService.ListIssueTimeline.
 func (c *issuesServiceClient) ListIssueTimeline(ctx context.Context, req *connect.Request[v1.ListIssueTimelineRequest]) (*connect.Response[v1.ListIssueTimelineResponse], error) {
 	return c.listIssueTimeline.CallUnary(ctx, req)
@@ -290,6 +312,13 @@ type IssuesServiceHandler interface {
 	// Reliant"). Idempotent per (issue, chat): linking a chat again changes
 	// nothing but a non-empty title, and writes no new timeline entry.
 	LinkIssueChat(context.Context, *connect.Request[v1.LinkIssueChatRequest]) (*connect.Response[v1.LinkIssueChatResponse], error)
+	// ListAssignableUsers returns the people an issue of the org can be assigned
+	// to: its members, as {id, name} and nothing else, ordered by name. A person
+	// needs membership of the org (any role); a machine credential needs obs:read
+	// and to act for that org. Served from Postgres alone. This is the read an
+	// assignee picker uses; the member list with grants and emails
+	// (ListOrgMemberGrants) needs token:read.
+	ListAssignableUsers(context.Context, *connect.Request[v1.ListAssignableUsersRequest]) (*connect.Response[v1.ListAssignableUsersResponse], error)
 	// ListIssueTimeline returns the issue's timeline, oldest first: status changes
 	// (opened, resolved, ignored, reopened, regressed), comments, assignment
 	// changes and linked chats. Deleted comments are not in it. Served from
@@ -359,6 +388,12 @@ func NewIssuesServiceHandler(svc IssuesServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(issuesServiceMethods.ByName("LinkIssueChat")),
 		connect.WithHandlerOptions(opts...),
 	)
+	issuesServiceListAssignableUsersHandler := connect.NewUnaryHandler(
+		IssuesServiceListAssignableUsersProcedure,
+		svc.ListAssignableUsers,
+		connect.WithSchema(issuesServiceMethods.ByName("ListAssignableUsers")),
+		connect.WithHandlerOptions(opts...),
+	)
 	issuesServiceListIssueTimelineHandler := connect.NewUnaryHandler(
 		IssuesServiceListIssueTimelineProcedure,
 		svc.ListIssueTimeline,
@@ -385,6 +420,8 @@ func NewIssuesServiceHandler(svc IssuesServiceHandler, opts ...connect.HandlerOp
 			issuesServiceAssignIssueHandler.ServeHTTP(w, r)
 		case IssuesServiceLinkIssueChatProcedure:
 			issuesServiceLinkIssueChatHandler.ServeHTTP(w, r)
+		case IssuesServiceListAssignableUsersProcedure:
+			issuesServiceListAssignableUsersHandler.ServeHTTP(w, r)
 		case IssuesServiceListIssueTimelineProcedure:
 			issuesServiceListIssueTimelineHandler.ServeHTTP(w, r)
 		default:
@@ -430,6 +467,10 @@ func (UnimplementedIssuesServiceHandler) AssignIssue(context.Context, *connect.R
 
 func (UnimplementedIssuesServiceHandler) LinkIssueChat(context.Context, *connect.Request[v1.LinkIssueChatRequest]) (*connect.Response[v1.LinkIssueChatResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.LinkIssueChat is not implemented"))
+}
+
+func (UnimplementedIssuesServiceHandler) ListAssignableUsers(context.Context, *connect.Request[v1.ListAssignableUsersRequest]) (*connect.Response[v1.ListAssignableUsersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IssuesService.ListAssignableUsers is not implemented"))
 }
 
 func (UnimplementedIssuesServiceHandler) ListIssueTimeline(context.Context, *connect.Request[v1.ListIssueTimelineRequest]) (*connect.Response[v1.ListIssueTimelineResponse], error) {

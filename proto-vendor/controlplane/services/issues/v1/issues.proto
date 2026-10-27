@@ -197,6 +197,19 @@ service IssuesService {
     };
   }
 
+  // ListAssignableUsers returns the people an issue of the org can be assigned
+  // to: its members, as {id, name} and nothing else, ordered by name. A person
+  // needs membership of the org (any role); a machine credential needs obs:read
+  // and to act for that org. Served from Postgres alone. This is the read an
+  // assignee picker uses; the member list with grants and emails
+  // (ListOrgMemberGrants) needs token:read.
+  rpc ListAssignableUsers(ListAssignableUsersRequest) returns (ListAssignableUsersResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // ListIssueTimeline returns the issue's timeline, oldest first: status changes
   // (opened, resolved, ignored, reopened, regressed), comments, assignment
   // changes and linked chats. Deleted comments are not in it. Served from
@@ -249,6 +262,8 @@ enum IssueSort {
 }
 
 message ListIssuesRequest {
+  option (buf.validate.message).oneof = {fields: ["assignee", "unassigned"]};
+
   IssueScope scope = 1 [(buf.validate.field).required = true];
   // Only issues in one of these states. Empty = new, unresolved and regressed
   // (the open ones).
@@ -267,10 +282,30 @@ message ListIssuesRequest {
   // Only the issues of this issue source (Issue.source). Unset or empty: errors
   // only — a source's issues are never mixed into the error inbox.
   optional string source = 10 [(buf.validate.field).string.pattern = "^([a-z0-9][a-z0-9_.-]{0,63})?$"];
-  // Only the issues assigned to this user (a user id). Unset: every issue.
+  // Only the issues assigned to this user: a user id, or "me" for the person
+  // the caller acts as (the signed-in user, or the user a CLI login or
+  // credential-helper token acts for). "me" on a credential that acts for no
+  // one (an organization automation token) is refused FAILED_PRECONDITION.
+  // Unset: every issue. Exclusive with unassigned.
   optional string assignee = 12 [
     (buf.validate.field).string.min_len = 1,
     (buf.validate.field).string.max_len = 128
+  ];
+  // Only the issues assigned to no one. Set it to true or leave it unset;
+  // false is refused, since "not unassigned" would be a second spelling of
+  // "every issue". Exclusive with assignee.
+  optional bool unassigned = 13 [(buf.validate.field).bool.const = true];
+  // Only the issues of one incident: those whose Issue.incident_key is this.
+  // The key is derived at read time from the cause and the first-seen times of
+  // the environment's server error issues, so send the same
+  // incident_window_seconds that produced it. An unknown or stale key lists
+  // nothing. statuses still applies (the default hides resolved issues, which
+  // Issue.related_count counts), so pass every status to list the whole
+  // incident. Incidents are server errors: with a key, source is the error
+  // inbox and platform=BROWSER lists nothing.
+  optional string incident_key = 14 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 64
   ];
   IssueSort sort = 7 [(buf.validate.field).enum.defined_only = true];
   // Rows per page. Default 50, max 100.
@@ -539,6 +574,30 @@ message ListIssueTimelineRequest {
   ];
   // next_page_token from the previous page; valid only with the same issue.
   string page_token = 3 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListAssignableUsersRequest {
+  // The organization whose members are listed.
+  string org_id = 1 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Only the users whose name contains this (case-insensitive).
+  optional string text = 2 [(buf.validate.field).string.max_len = 256];
+  // Rows per page. Default 50, max 100.
+  int32 page_size = 3 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 100
+  ];
+  // next_page_token from the previous page; valid only with the same request.
+  string page_token = 4 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListAssignableUsersResponse {
+  // name is the user's display name, or their email when they have none (as
+  // IssueUser everywhere else); no other field of the user is returned.
+  repeated controlplane.v1.IssueUser users = 1;
+  string next_page_token = 2;
 }
 
 // IssueActor is who did something: a person, a machine credential or the

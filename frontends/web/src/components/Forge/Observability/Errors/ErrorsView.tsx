@@ -38,7 +38,7 @@ import { cn } from "@/lib/utils";
 import { formatAgo, formatCount, formatWhen } from "../format";
 import { ServiceSelect } from "../LogsView";
 import { issueStatusParam, type ObsNavigate } from "../obsSearch";
-import { ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
 import { IssueDetail } from "./IssueDetail";
 import { IssuesNotConfigured } from "./IssueStates";
 import { StatusBadge, Trend } from "./IssueBits";
@@ -103,6 +103,7 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
   return (
     <div className="space-y-3" data-testid="obs-errors">
       <IssueToolbar scope={scope} range={range} text={text} service={service} statuses={statuses} platform={platform} sort={sort} assignee={assignee} navigate={navigate} />
+      {issues.data && <ObsAsOf updatedAt={issues.dataUpdatedAt} />}
       {meUnknown ? (
         <p className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground" data-testid="obs-errors-mine-unknown">
           Reliant can&apos;t tell who you are here, so &ldquo;Assigned to me&rdquo; has nothing to match.{" "}
@@ -312,7 +313,8 @@ function IssueTable({
           <thead>
             <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
               <th scope="col" className="px-4 py-2 font-medium">Issue</th>
-XX
+              <th scope="col" className="px-4 py-2 font-medium">Status</th>
+              <th scope="col" className="px-4 py-2 font-medium">Assignee</th>
               <th scope="col" className="px-4 py-2 text-right font-medium">Events</th>
               <th scope="col" className="px-4 py-2 text-right font-medium">Affected</th>
               <th scope="col" className="px-4 py-2 font-medium">Trend</th>

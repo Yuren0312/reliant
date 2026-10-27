@@ -237,7 +237,7 @@ func (x IssueActor_Kind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use IssueActor_Kind.Descriptor instead.
 func (IssueActor_Kind) EnumDescriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{28, 0}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{30, 0}
 }
 
 // IssueTimeRange is a half-open range [start, end). Both ends are required when
@@ -399,9 +399,26 @@ type ListIssuesRequest struct {
 	// Only the issues of this issue source (Issue.source). Unset or empty: errors
 	// only — a source's issues are never mixed into the error inbox.
 	Source *string `protobuf:"bytes,10,opt,name=source,proto3,oneof" json:"source,omitempty"`
-	// Only the issues assigned to this user (a user id). Unset: every issue.
-	Assignee *string   `protobuf:"bytes,12,opt,name=assignee,proto3,oneof" json:"assignee,omitempty"`
-	Sort     IssueSort `protobuf:"varint,7,opt,name=sort,proto3,enum=controlplane.v1.IssueSort" json:"sort,omitempty"`
+	// Only the issues assigned to this user: a user id, or "me" for the person
+	// the caller acts as (the signed-in user, or the user a CLI login or
+	// credential-helper token acts for). "me" on a credential that acts for no
+	// one (an organization automation token) is refused FAILED_PRECONDITION.
+	// Unset: every issue. Exclusive with unassigned.
+	Assignee *string `protobuf:"bytes,12,opt,name=assignee,proto3,oneof" json:"assignee,omitempty"`
+	// Only the issues assigned to no one. Set it to true or leave it unset;
+	// false is refused, since "not unassigned" would be a second spelling of
+	// "every issue". Exclusive with assignee.
+	Unassigned *bool `protobuf:"varint,13,opt,name=unassigned,proto3,oneof" json:"unassigned,omitempty"`
+	// Only the issues of one incident: those whose Issue.incident_key is this.
+	// The key is derived at read time from the cause and the first-seen times of
+	// the environment's server error issues, so send the same
+	// incident_window_seconds that produced it. An unknown or stale key lists
+	// nothing. statuses still applies (the default hides resolved issues, which
+	// Issue.related_count counts), so pass every status to list the whole
+	// incident. Incidents are server errors: with a key, source is the error
+	// inbox and platform=BROWSER lists nothing.
+	IncidentKey *string   `protobuf:"bytes,14,opt,name=incident_key,json=incidentKey,proto3,oneof" json:"incident_key,omitempty"`
+	Sort        IssueSort `protobuf:"varint,7,opt,name=sort,proto3,enum=controlplane.v1.IssueSort" json:"sort,omitempty"`
 	// Rows per page. Default 50, max 100.
 	PageSize int32 `protobuf:"varint,8,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// next_page_token from the previous page; valid only with the same request.
@@ -495,6 +512,20 @@ func (x *ListIssuesRequest) GetSource() string {
 func (x *ListIssuesRequest) GetAssignee() string {
 	if x != nil && x.Assignee != nil {
 		return *x.Assignee
+	}
+	return ""
+}
+
+func (x *ListIssuesRequest) GetUnassigned() bool {
+	if x != nil && x.Unassigned != nil {
+		return *x.Unassigned
+	}
+	return false
+}
+
+func (x *ListIssuesRequest) GetIncidentKey() string {
+	if x != nil && x.IncidentKey != nil {
+		return *x.IncidentKey
 	}
 	return ""
 }
@@ -2138,6 +2169,132 @@ func (x *ListIssueTimelineRequest) GetPageToken() string {
 	return ""
 }
 
+type ListAssignableUsersRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The organization whose members are listed.
+	OrgId string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// Only the users whose name contains this (case-insensitive).
+	Text *string `protobuf:"bytes,2,opt,name=text,proto3,oneof" json:"text,omitempty"`
+	// Rows per page. Default 50, max 100.
+	PageSize int32 `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// next_page_token from the previous page; valid only with the same request.
+	PageToken     string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAssignableUsersRequest) Reset() {
+	*x = ListAssignableUsersRequest{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAssignableUsersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAssignableUsersRequest) ProtoMessage() {}
+
+func (x *ListAssignableUsersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAssignableUsersRequest.ProtoReflect.Descriptor instead.
+func (*ListAssignableUsersRequest) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ListAssignableUsersRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ListAssignableUsersRequest) GetText() string {
+	if x != nil && x.Text != nil {
+		return *x.Text
+	}
+	return ""
+}
+
+func (x *ListAssignableUsersRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListAssignableUsersRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
+type ListAssignableUsersResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// name is the user's display name, or their email when they have none (as
+	// IssueUser everywhere else); no other field of the user is returned.
+	Users         []*v1.IssueUser `protobuf:"bytes,1,rep,name=users,proto3" json:"users,omitempty"`
+	NextPageToken string          `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAssignableUsersResponse) Reset() {
+	*x = ListAssignableUsersResponse{}
+	mi := &file_services_issues_v1_issues_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAssignableUsersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAssignableUsersResponse) ProtoMessage() {}
+
+func (x *ListAssignableUsersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_issues_v1_issues_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAssignableUsersResponse.ProtoReflect.Descriptor instead.
+func (*ListAssignableUsersResponse) Descriptor() ([]byte, []int) {
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ListAssignableUsersResponse) GetUsers() []*v1.IssueUser {
+	if x != nil {
+		return x.Users
+	}
+	return nil
+}
+
+func (x *ListAssignableUsersResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
+}
+
 // IssueActor is who did something: a person, a machine credential or the
 // system (the issues worker).
 type IssueActor struct {
@@ -2153,7 +2310,7 @@ type IssueActor struct {
 
 func (x *IssueActor) Reset() {
 	*x = IssueActor{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[28]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2165,7 +2322,7 @@ func (x *IssueActor) String() string {
 func (*IssueActor) ProtoMessage() {}
 
 func (x *IssueActor) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[28]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2178,7 +2335,7 @@ func (x *IssueActor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueActor.ProtoReflect.Descriptor instead.
 func (*IssueActor) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{28}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *IssueActor) GetKind() IssueActor_Kind {
@@ -2218,7 +2375,7 @@ type IssueStatusEntry struct {
 
 func (x *IssueStatusEntry) Reset() {
 	*x = IssueStatusEntry{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[29]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2230,7 +2387,7 @@ func (x *IssueStatusEntry) String() string {
 func (*IssueStatusEntry) ProtoMessage() {}
 
 func (x *IssueStatusEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[29]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2243,7 +2400,7 @@ func (x *IssueStatusEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueStatusEntry.ProtoReflect.Descriptor instead.
 func (*IssueStatusEntry) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{29}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *IssueStatusEntry) GetFrom() v1.IssueStatus {
@@ -2284,7 +2441,7 @@ type IssueCommentEntry struct {
 
 func (x *IssueCommentEntry) Reset() {
 	*x = IssueCommentEntry{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[30]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2296,7 +2453,7 @@ func (x *IssueCommentEntry) String() string {
 func (*IssueCommentEntry) ProtoMessage() {}
 
 func (x *IssueCommentEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[30]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2309,7 +2466,7 @@ func (x *IssueCommentEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueCommentEntry.ProtoReflect.Descriptor instead.
 func (*IssueCommentEntry) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{30}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *IssueCommentEntry) GetComment() *IssueComment {
@@ -2332,7 +2489,7 @@ type IssueAssignmentEntry struct {
 
 func (x *IssueAssignmentEntry) Reset() {
 	*x = IssueAssignmentEntry{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[31]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2344,7 +2501,7 @@ func (x *IssueAssignmentEntry) String() string {
 func (*IssueAssignmentEntry) ProtoMessage() {}
 
 func (x *IssueAssignmentEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[31]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2357,7 +2514,7 @@ func (x *IssueAssignmentEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueAssignmentEntry.ProtoReflect.Descriptor instead.
 func (*IssueAssignmentEntry) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{31}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *IssueAssignmentEntry) GetFrom() *v1.IssueUser {
@@ -2384,7 +2541,7 @@ type IssueChatEntry struct {
 
 func (x *IssueChatEntry) Reset() {
 	*x = IssueChatEntry{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[32]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2396,7 +2553,7 @@ func (x *IssueChatEntry) String() string {
 func (*IssueChatEntry) ProtoMessage() {}
 
 func (x *IssueChatEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[32]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2409,7 +2566,7 @@ func (x *IssueChatEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueChatEntry.ProtoReflect.Descriptor instead.
 func (*IssueChatEntry) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{32}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *IssueChatEntry) GetLink() *IssueChatLink {
@@ -2441,7 +2598,7 @@ type IssueTimelineEntry struct {
 
 func (x *IssueTimelineEntry) Reset() {
 	*x = IssueTimelineEntry{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[33]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2453,7 +2610,7 @@ func (x *IssueTimelineEntry) String() string {
 func (*IssueTimelineEntry) ProtoMessage() {}
 
 func (x *IssueTimelineEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[33]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2466,7 +2623,7 @@ func (x *IssueTimelineEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueTimelineEntry.ProtoReflect.Descriptor instead.
 func (*IssueTimelineEntry) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{33}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *IssueTimelineEntry) GetId() string {
@@ -2582,7 +2739,7 @@ type ListIssueTimelineResponse struct {
 
 func (x *ListIssueTimelineResponse) Reset() {
 	*x = ListIssueTimelineResponse{}
-	mi := &file_services_issues_v1_issues_proto_msgTypes[34]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2594,7 +2751,7 @@ func (x *ListIssueTimelineResponse) String() string {
 func (*ListIssueTimelineResponse) ProtoMessage() {}
 
 func (x *ListIssueTimelineResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_issues_v1_issues_proto_msgTypes[34]
+	mi := &file_services_issues_v1_issues_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2607,7 +2764,7 @@ func (x *ListIssueTimelineResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListIssueTimelineResponse.ProtoReflect.Descriptor instead.
 func (*ListIssueTimelineResponse) Descriptor() ([]byte, []int) {
-	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{34}
+	return file_services_issues_v1_issues_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ListIssueTimelineResponse) GetEntries() []*IssueTimelineEntry {
@@ -2648,7 +2805,7 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x05 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x17\n" +
 	"\aenv_ids\x18\x06 \x03(\tR\x06envIdsB\r\n" +
-	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\xfe\x04\n" +
+	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\xeb\x05\n" +
 	"\x11ListIssuesRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.IssueScopeR\x05scope\x128\n" +
 	"\bstatuses\x18\x02 \x03(\x0e2\x1c.controlplane.v1.IssueStatusR\bstatuses\x12?\n" +
@@ -2658,7 +2815,11 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x04text\x18\x06 \x01(\tH\x03R\x04text\x88\x01\x01\x12\x1b\n" +
 	"\x06source\x18\n" +
 	" \x01(\tH\x04R\x06source\x88\x01\x01\x12\x1f\n" +
-	"\bassignee\x18\f \x01(\tH\x05R\bassignee\x88\x01\x01\x12.\n" +
+	"\bassignee\x18\f \x01(\tH\x05R\bassignee\x88\x01\x01\x12#\n" +
+	"\n" +
+	"unassigned\x18\r \x01(\bH\x06R\n" +
+	"unassigned\x88\x01\x01\x12&\n" +
+	"\fincident_key\x18\x0e \x01(\tH\aR\vincidentKey\x88\x01\x01\x12.\n" +
 	"\x04sort\x18\a \x01(\x0e2\x1a.controlplane.v1.IssueSortR\x04sort\x12\x1b\n" +
 	"\tpage_size\x18\b \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
@@ -2669,7 +2830,9 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x13_since_promotion_idB\a\n" +
 	"\x05_textB\t\n" +
 	"\a_sourceB\v\n" +
-	"\t_assignee\"l\n" +
+	"\t_assigneeB\r\n" +
+	"\v_unassignedB\x0f\n" +
+	"\r_incident_key\"l\n" +
 	"\x12ListIssuesResponse\x12.\n" +
 	"\x06issues\x18\x01 \x03(\v2\x16.controlplane.v1.IssueR\x06issues\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xa4\x01\n" +
@@ -2801,7 +2964,17 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x03 \x01(\tR\tpageToken\"\xb6\x01\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\x91\x01\n" +
+	"\x1aListAssignableUsersRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x17\n" +
+	"\x04text\x18\x02 \x01(\tH\x00R\x04text\x88\x01\x01\x12\x1b\n" +
+	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageTokenB\a\n" +
+	"\x05_text\"w\n" +
+	"\x1bListAssignableUsersResponse\x120\n" +
+	"\x05users\x18\x01 \x03(\v2\x1a.controlplane.v1.IssueUserR\x05users\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xb6\x01\n" +
 	"\n" +
 	"IssueActor\x124\n" +
 	"\x04kind\x18\x01 \x01(\x0e2 .controlplane.v1.IssueActor.KindR\x04kind\x12\x0e\n" +
@@ -2856,7 +3029,7 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x1eISSUE_RESOLVE_KIND_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ISSUE_RESOLVE_KIND_NOW\x10\x01\x12#\n" +
 	"\x1fISSUE_RESOLVE_KIND_NEXT_RELEASE\x10\x02\x12\x1e\n" +
-	"\x1aISSUE_RESOLVE_KIND_VERSION\x10\x032\xf3\a\n" +
+	"\x1aISSUE_RESOLVE_KIND_VERSION\x10\x032\xe5\b\n" +
 	"\rIssuesService\x12U\n" +
 	"\n" +
 	"ListIssues\x12\".controlplane.v1.ListIssuesRequest\x1a#.controlplane.v1.ListIssuesResponse\x12O\n" +
@@ -2867,7 +3040,8 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\x12UpdateIssueComment\x12*.controlplane.v1.UpdateIssueCommentRequest\x1a+.controlplane.v1.UpdateIssueCommentResponse\x12m\n" +
 	"\x12DeleteIssueComment\x12*.controlplane.v1.DeleteIssueCommentRequest\x1a+.controlplane.v1.DeleteIssueCommentResponse\x12X\n" +
 	"\vAssignIssue\x12#.controlplane.v1.AssignIssueRequest\x1a$.controlplane.v1.AssignIssueResponse\x12^\n" +
-	"\rLinkIssueChat\x12%.controlplane.v1.LinkIssueChatRequest\x1a&.controlplane.v1.LinkIssueChatResponse\x12j\n" +
+	"\rLinkIssueChat\x12%.controlplane.v1.LinkIssueChatRequest\x1a&.controlplane.v1.LinkIssueChatResponse\x12p\n" +
+	"\x13ListAssignableUsers\x12+.controlplane.v1.ListAssignableUsersRequest\x1a,.controlplane.v1.ListAssignableUsersResponse\x12j\n" +
 	"\x11ListIssueTimeline\x12).controlplane.v1.ListIssueTimelineRequest\x1a*.controlplane.v1.ListIssueTimelineResponseB\xd3\x01\n" +
 	"\x13com.controlplane.v1B\vIssuesProtoP\x01ZRgithub.com/reliant-labs/reliant/gen/controlplane/services/issues/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
@@ -2884,130 +3058,135 @@ func file_services_issues_v1_issues_proto_rawDescGZIP() []byte {
 }
 
 var file_services_issues_v1_issues_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_services_issues_v1_issues_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
+var file_services_issues_v1_issues_proto_msgTypes = make([]protoimpl.MessageInfo, 38)
 var file_services_issues_v1_issues_proto_goTypes = []any{
-	(IssueSort)(0),                     // 0: controlplane.v1.IssueSort
-	(IssueStatusChange)(0),             // 1: controlplane.v1.IssueStatusChange
-	(IssueResolveKind)(0),              // 2: controlplane.v1.IssueResolveKind
-	(IssueActor_Kind)(0),               // 3: controlplane.v1.IssueActor.Kind
-	(*IssueTimeRange)(nil),             // 4: controlplane.v1.IssueTimeRange
-	(*IssueScope)(nil),                 // 5: controlplane.v1.IssueScope
-	(*ListIssuesRequest)(nil),          // 6: controlplane.v1.ListIssuesRequest
-	(*ListIssuesResponse)(nil),         // 7: controlplane.v1.ListIssuesResponse
-	(*GetIssueRequest)(nil),            // 8: controlplane.v1.GetIssueRequest
-	(*GetIssueResponse)(nil),           // 9: controlplane.v1.GetIssueResponse
-	(*IssueEvent)(nil),                 // 10: controlplane.v1.IssueEvent
-	(*IssueFrame)(nil),                 // 11: controlplane.v1.IssueFrame
-	(*IssueVersionBreakdown)(nil),      // 12: controlplane.v1.IssueVersionBreakdown
-	(*IssueReleaseRef)(nil),            // 13: controlplane.v1.IssueReleaseRef
-	(*ListIssueEventsRequest)(nil),     // 14: controlplane.v1.ListIssueEventsRequest
-	(*ListIssueEventsResponse)(nil),    // 15: controlplane.v1.ListIssueEventsResponse
-	(*IssueResolveIn)(nil),             // 16: controlplane.v1.IssueResolveIn
-	(*UpdateIssueStatusRequest)(nil),   // 17: controlplane.v1.UpdateIssueStatusRequest
-	(*UpdateIssueStatusResponse)(nil),  // 18: controlplane.v1.UpdateIssueStatusResponse
-	(*IssueComment)(nil),               // 19: controlplane.v1.IssueComment
-	(*AddIssueCommentRequest)(nil),     // 20: controlplane.v1.AddIssueCommentRequest
-	(*AddIssueCommentResponse)(nil),    // 21: controlplane.v1.AddIssueCommentResponse
-	(*UpdateIssueCommentRequest)(nil),  // 22: controlplane.v1.UpdateIssueCommentRequest
-	(*UpdateIssueCommentResponse)(nil), // 23: controlplane.v1.UpdateIssueCommentResponse
-	(*DeleteIssueCommentRequest)(nil),  // 24: controlplane.v1.DeleteIssueCommentRequest
-	(*DeleteIssueCommentResponse)(nil), // 25: controlplane.v1.DeleteIssueCommentResponse
-	(*AssignIssueRequest)(nil),         // 26: controlplane.v1.AssignIssueRequest
-	(*AssignIssueResponse)(nil),        // 27: controlplane.v1.AssignIssueResponse
-	(*LinkIssueChatRequest)(nil),       // 28: controlplane.v1.LinkIssueChatRequest
-	(*IssueChatLink)(nil),              // 29: controlplane.v1.IssueChatLink
-	(*LinkIssueChatResponse)(nil),      // 30: controlplane.v1.LinkIssueChatResponse
-	(*ListIssueTimelineRequest)(nil),   // 31: controlplane.v1.ListIssueTimelineRequest
-	(*IssueActor)(nil),                 // 32: controlplane.v1.IssueActor
-	(*IssueStatusEntry)(nil),           // 33: controlplane.v1.IssueStatusEntry
-	(*IssueCommentEntry)(nil),          // 34: controlplane.v1.IssueCommentEntry
-	(*IssueAssignmentEntry)(nil),       // 35: controlplane.v1.IssueAssignmentEntry
-	(*IssueChatEntry)(nil),             // 36: controlplane.v1.IssueChatEntry
-	(*IssueTimelineEntry)(nil),         // 37: controlplane.v1.IssueTimelineEntry
-	(*ListIssueTimelineResponse)(nil),  // 38: controlplane.v1.ListIssueTimelineResponse
-	nil,                                // 39: controlplane.v1.IssueEvent.AttributesEntry
-	(*timestamppb.Timestamp)(nil),      // 40: google.protobuf.Timestamp
-	(v1.IssueStatus)(0),                // 41: controlplane.v1.IssueStatus
-	(v1.IssuePlatform)(0),              // 42: controlplane.v1.IssuePlatform
-	(*v1.Issue)(nil),                   // 43: controlplane.v1.Issue
-	(*v1.IssueUser)(nil),               // 44: controlplane.v1.IssueUser
+	(IssueSort)(0),                      // 0: controlplane.v1.IssueSort
+	(IssueStatusChange)(0),              // 1: controlplane.v1.IssueStatusChange
+	(IssueResolveKind)(0),               // 2: controlplane.v1.IssueResolveKind
+	(IssueActor_Kind)(0),                // 3: controlplane.v1.IssueActor.Kind
+	(*IssueTimeRange)(nil),              // 4: controlplane.v1.IssueTimeRange
+	(*IssueScope)(nil),                  // 5: controlplane.v1.IssueScope
+	(*ListIssuesRequest)(nil),           // 6: controlplane.v1.ListIssuesRequest
+	(*ListIssuesResponse)(nil),          // 7: controlplane.v1.ListIssuesResponse
+	(*GetIssueRequest)(nil),             // 8: controlplane.v1.GetIssueRequest
+	(*GetIssueResponse)(nil),            // 9: controlplane.v1.GetIssueResponse
+	(*IssueEvent)(nil),                  // 10: controlplane.v1.IssueEvent
+	(*IssueFrame)(nil),                  // 11: controlplane.v1.IssueFrame
+	(*IssueVersionBreakdown)(nil),       // 12: controlplane.v1.IssueVersionBreakdown
+	(*IssueReleaseRef)(nil),             // 13: controlplane.v1.IssueReleaseRef
+	(*ListIssueEventsRequest)(nil),      // 14: controlplane.v1.ListIssueEventsRequest
+	(*ListIssueEventsResponse)(nil),     // 15: controlplane.v1.ListIssueEventsResponse
+	(*IssueResolveIn)(nil),              // 16: controlplane.v1.IssueResolveIn
+	(*UpdateIssueStatusRequest)(nil),    // 17: controlplane.v1.UpdateIssueStatusRequest
+	(*UpdateIssueStatusResponse)(nil),   // 18: controlplane.v1.UpdateIssueStatusResponse
+	(*IssueComment)(nil),                // 19: controlplane.v1.IssueComment
+	(*AddIssueCommentRequest)(nil),      // 20: controlplane.v1.AddIssueCommentRequest
+	(*AddIssueCommentResponse)(nil),     // 21: controlplane.v1.AddIssueCommentResponse
+	(*UpdateIssueCommentRequest)(nil),   // 22: controlplane.v1.UpdateIssueCommentRequest
+	(*UpdateIssueCommentResponse)(nil),  // 23: controlplane.v1.UpdateIssueCommentResponse
+	(*DeleteIssueCommentRequest)(nil),   // 24: controlplane.v1.DeleteIssueCommentRequest
+	(*DeleteIssueCommentResponse)(nil),  // 25: controlplane.v1.DeleteIssueCommentResponse
+	(*AssignIssueRequest)(nil),          // 26: controlplane.v1.AssignIssueRequest
+	(*AssignIssueResponse)(nil),         // 27: controlplane.v1.AssignIssueResponse
+	(*LinkIssueChatRequest)(nil),        // 28: controlplane.v1.LinkIssueChatRequest
+	(*IssueChatLink)(nil),               // 29: controlplane.v1.IssueChatLink
+	(*LinkIssueChatResponse)(nil),       // 30: controlplane.v1.LinkIssueChatResponse
+	(*ListIssueTimelineRequest)(nil),    // 31: controlplane.v1.ListIssueTimelineRequest
+	(*ListAssignableUsersRequest)(nil),  // 32: controlplane.v1.ListAssignableUsersRequest
+	(*ListAssignableUsersResponse)(nil), // 33: controlplane.v1.ListAssignableUsersResponse
+	(*IssueActor)(nil),                  // 34: controlplane.v1.IssueActor
+	(*IssueStatusEntry)(nil),            // 35: controlplane.v1.IssueStatusEntry
+	(*IssueCommentEntry)(nil),           // 36: controlplane.v1.IssueCommentEntry
+	(*IssueAssignmentEntry)(nil),        // 37: controlplane.v1.IssueAssignmentEntry
+	(*IssueChatEntry)(nil),              // 38: controlplane.v1.IssueChatEntry
+	(*IssueTimelineEntry)(nil),          // 39: controlplane.v1.IssueTimelineEntry
+	(*ListIssueTimelineResponse)(nil),   // 40: controlplane.v1.ListIssueTimelineResponse
+	nil,                                 // 41: controlplane.v1.IssueEvent.AttributesEntry
+	(*timestamppb.Timestamp)(nil),       // 42: google.protobuf.Timestamp
+	(v1.IssueStatus)(0),                 // 43: controlplane.v1.IssueStatus
+	(v1.IssuePlatform)(0),               // 44: controlplane.v1.IssuePlatform
+	(*v1.Issue)(nil),                    // 45: controlplane.v1.Issue
+	(*v1.IssueUser)(nil),                // 46: controlplane.v1.IssueUser
 }
 var file_services_issues_v1_issues_proto_depIdxs = []int32{
-	40, // 0: controlplane.v1.IssueTimeRange.start:type_name -> google.protobuf.Timestamp
-	40, // 1: controlplane.v1.IssueTimeRange.end:type_name -> google.protobuf.Timestamp
+	42, // 0: controlplane.v1.IssueTimeRange.start:type_name -> google.protobuf.Timestamp
+	42, // 1: controlplane.v1.IssueTimeRange.end:type_name -> google.protobuf.Timestamp
 	4,  // 2: controlplane.v1.IssueScope.time_range:type_name -> controlplane.v1.IssueTimeRange
 	5,  // 3: controlplane.v1.ListIssuesRequest.scope:type_name -> controlplane.v1.IssueScope
-	41, // 4: controlplane.v1.ListIssuesRequest.statuses:type_name -> controlplane.v1.IssueStatus
-	42, // 5: controlplane.v1.ListIssuesRequest.platform:type_name -> controlplane.v1.IssuePlatform
+	43, // 4: controlplane.v1.ListIssuesRequest.statuses:type_name -> controlplane.v1.IssueStatus
+	44, // 5: controlplane.v1.ListIssuesRequest.platform:type_name -> controlplane.v1.IssuePlatform
 	0,  // 6: controlplane.v1.ListIssuesRequest.sort:type_name -> controlplane.v1.IssueSort
-	43, // 7: controlplane.v1.ListIssuesResponse.issues:type_name -> controlplane.v1.Issue
+	45, // 7: controlplane.v1.ListIssuesResponse.issues:type_name -> controlplane.v1.Issue
 	4,  // 8: controlplane.v1.GetIssueRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
-	43, // 9: controlplane.v1.GetIssueResponse.issue:type_name -> controlplane.v1.Issue
+	45, // 9: controlplane.v1.GetIssueResponse.issue:type_name -> controlplane.v1.Issue
 	10, // 10: controlplane.v1.GetIssueResponse.latest_event:type_name -> controlplane.v1.IssueEvent
 	11, // 11: controlplane.v1.GetIssueResponse.frames:type_name -> controlplane.v1.IssueFrame
 	12, // 12: controlplane.v1.GetIssueResponse.by_version:type_name -> controlplane.v1.IssueVersionBreakdown
 	13, // 13: controlplane.v1.GetIssueResponse.first_release:type_name -> controlplane.v1.IssueReleaseRef
-	40, // 14: controlplane.v1.IssueEvent.timestamp:type_name -> google.protobuf.Timestamp
-	39, // 15: controlplane.v1.IssueEvent.attributes:type_name -> controlplane.v1.IssueEvent.AttributesEntry
-	40, // 16: controlplane.v1.IssueVersionBreakdown.first_seen_at:type_name -> google.protobuf.Timestamp
-	40, // 17: controlplane.v1.IssueVersionBreakdown.last_seen_at:type_name -> google.protobuf.Timestamp
-	40, // 18: controlplane.v1.IssueReleaseRef.promoted_at:type_name -> google.protobuf.Timestamp
+	42, // 14: controlplane.v1.IssueEvent.timestamp:type_name -> google.protobuf.Timestamp
+	41, // 15: controlplane.v1.IssueEvent.attributes:type_name -> controlplane.v1.IssueEvent.AttributesEntry
+	42, // 16: controlplane.v1.IssueVersionBreakdown.first_seen_at:type_name -> google.protobuf.Timestamp
+	42, // 17: controlplane.v1.IssueVersionBreakdown.last_seen_at:type_name -> google.protobuf.Timestamp
+	42, // 18: controlplane.v1.IssueReleaseRef.promoted_at:type_name -> google.protobuf.Timestamp
 	4,  // 19: controlplane.v1.ListIssueEventsRequest.time_range:type_name -> controlplane.v1.IssueTimeRange
 	10, // 20: controlplane.v1.ListIssueEventsResponse.events:type_name -> controlplane.v1.IssueEvent
 	2,  // 21: controlplane.v1.IssueResolveIn.kind:type_name -> controlplane.v1.IssueResolveKind
 	1,  // 22: controlplane.v1.UpdateIssueStatusRequest.status:type_name -> controlplane.v1.IssueStatusChange
 	16, // 23: controlplane.v1.UpdateIssueStatusRequest.resolve_in:type_name -> controlplane.v1.IssueResolveIn
-	40, // 24: controlplane.v1.UpdateIssueStatusRequest.ignored_until:type_name -> google.protobuf.Timestamp
-	43, // 25: controlplane.v1.UpdateIssueStatusResponse.issue:type_name -> controlplane.v1.Issue
-	44, // 26: controlplane.v1.IssueComment.author:type_name -> controlplane.v1.IssueUser
-	40, // 27: controlplane.v1.IssueComment.created_at:type_name -> google.protobuf.Timestamp
-	40, // 28: controlplane.v1.IssueComment.updated_at:type_name -> google.protobuf.Timestamp
+	42, // 24: controlplane.v1.UpdateIssueStatusRequest.ignored_until:type_name -> google.protobuf.Timestamp
+	45, // 25: controlplane.v1.UpdateIssueStatusResponse.issue:type_name -> controlplane.v1.Issue
+	46, // 26: controlplane.v1.IssueComment.author:type_name -> controlplane.v1.IssueUser
+	42, // 27: controlplane.v1.IssueComment.created_at:type_name -> google.protobuf.Timestamp
+	42, // 28: controlplane.v1.IssueComment.updated_at:type_name -> google.protobuf.Timestamp
 	19, // 29: controlplane.v1.AddIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
 	19, // 30: controlplane.v1.UpdateIssueCommentResponse.comment:type_name -> controlplane.v1.IssueComment
-	43, // 31: controlplane.v1.AssignIssueResponse.issue:type_name -> controlplane.v1.Issue
-	44, // 32: controlplane.v1.IssueChatLink.linked_by:type_name -> controlplane.v1.IssueUser
-	40, // 33: controlplane.v1.IssueChatLink.linked_at:type_name -> google.protobuf.Timestamp
+	45, // 31: controlplane.v1.AssignIssueResponse.issue:type_name -> controlplane.v1.Issue
+	46, // 32: controlplane.v1.IssueChatLink.linked_by:type_name -> controlplane.v1.IssueUser
+	42, // 33: controlplane.v1.IssueChatLink.linked_at:type_name -> google.protobuf.Timestamp
 	29, // 34: controlplane.v1.LinkIssueChatResponse.link:type_name -> controlplane.v1.IssueChatLink
-	3,  // 35: controlplane.v1.IssueActor.kind:type_name -> controlplane.v1.IssueActor.Kind
-	41, // 36: controlplane.v1.IssueStatusEntry.from:type_name -> controlplane.v1.IssueStatus
-	41, // 37: controlplane.v1.IssueStatusEntry.to:type_name -> controlplane.v1.IssueStatus
-	40, // 38: controlplane.v1.IssueStatusEntry.ignored_until:type_name -> google.protobuf.Timestamp
-	19, // 39: controlplane.v1.IssueCommentEntry.comment:type_name -> controlplane.v1.IssueComment
-	44, // 40: controlplane.v1.IssueAssignmentEntry.from:type_name -> controlplane.v1.IssueUser
-	44, // 41: controlplane.v1.IssueAssignmentEntry.to:type_name -> controlplane.v1.IssueUser
-	29, // 42: controlplane.v1.IssueChatEntry.link:type_name -> controlplane.v1.IssueChatLink
-	40, // 43: controlplane.v1.IssueTimelineEntry.time:type_name -> google.protobuf.Timestamp
-	32, // 44: controlplane.v1.IssueTimelineEntry.actor:type_name -> controlplane.v1.IssueActor
-	33, // 45: controlplane.v1.IssueTimelineEntry.status:type_name -> controlplane.v1.IssueStatusEntry
-	34, // 46: controlplane.v1.IssueTimelineEntry.comment:type_name -> controlplane.v1.IssueCommentEntry
-	35, // 47: controlplane.v1.IssueTimelineEntry.assignment:type_name -> controlplane.v1.IssueAssignmentEntry
-	36, // 48: controlplane.v1.IssueTimelineEntry.chat:type_name -> controlplane.v1.IssueChatEntry
-	37, // 49: controlplane.v1.ListIssueTimelineResponse.entries:type_name -> controlplane.v1.IssueTimelineEntry
-	6,  // 50: controlplane.v1.IssuesService.ListIssues:input_type -> controlplane.v1.ListIssuesRequest
-	8,  // 51: controlplane.v1.IssuesService.GetIssue:input_type -> controlplane.v1.GetIssueRequest
-	14, // 52: controlplane.v1.IssuesService.ListIssueEvents:input_type -> controlplane.v1.ListIssueEventsRequest
-	17, // 53: controlplane.v1.IssuesService.UpdateIssueStatus:input_type -> controlplane.v1.UpdateIssueStatusRequest
-	20, // 54: controlplane.v1.IssuesService.AddIssueComment:input_type -> controlplane.v1.AddIssueCommentRequest
-	22, // 55: controlplane.v1.IssuesService.UpdateIssueComment:input_type -> controlplane.v1.UpdateIssueCommentRequest
-	24, // 56: controlplane.v1.IssuesService.DeleteIssueComment:input_type -> controlplane.v1.DeleteIssueCommentRequest
-	26, // 57: controlplane.v1.IssuesService.AssignIssue:input_type -> controlplane.v1.AssignIssueRequest
-	28, // 58: controlplane.v1.IssuesService.LinkIssueChat:input_type -> controlplane.v1.LinkIssueChatRequest
-	31, // 59: controlplane.v1.IssuesService.ListIssueTimeline:input_type -> controlplane.v1.ListIssueTimelineRequest
-	7,  // 60: controlplane.v1.IssuesService.ListIssues:output_type -> controlplane.v1.ListIssuesResponse
-	9,  // 61: controlplane.v1.IssuesService.GetIssue:output_type -> controlplane.v1.GetIssueResponse
-	15, // 62: controlplane.v1.IssuesService.ListIssueEvents:output_type -> controlplane.v1.ListIssueEventsResponse
-	18, // 63: controlplane.v1.IssuesService.UpdateIssueStatus:output_type -> controlplane.v1.UpdateIssueStatusResponse
-	21, // 64: controlplane.v1.IssuesService.AddIssueComment:output_type -> controlplane.v1.AddIssueCommentResponse
-	23, // 65: controlplane.v1.IssuesService.UpdateIssueComment:output_type -> controlplane.v1.UpdateIssueCommentResponse
-	25, // 66: controlplane.v1.IssuesService.DeleteIssueComment:output_type -> controlplane.v1.DeleteIssueCommentResponse
-	27, // 67: controlplane.v1.IssuesService.AssignIssue:output_type -> controlplane.v1.AssignIssueResponse
-	30, // 68: controlplane.v1.IssuesService.LinkIssueChat:output_type -> controlplane.v1.LinkIssueChatResponse
-	38, // 69: controlplane.v1.IssuesService.ListIssueTimeline:output_type -> controlplane.v1.ListIssueTimelineResponse
-	60, // [60:70] is the sub-list for method output_type
-	50, // [50:60] is the sub-list for method input_type
-	50, // [50:50] is the sub-list for extension type_name
-	50, // [50:50] is the sub-list for extension extendee
-	0,  // [0:50] is the sub-list for field type_name
+	46, // 35: controlplane.v1.ListAssignableUsersResponse.users:type_name -> controlplane.v1.IssueUser
+	3,  // 36: controlplane.v1.IssueActor.kind:type_name -> controlplane.v1.IssueActor.Kind
+	43, // 37: controlplane.v1.IssueStatusEntry.from:type_name -> controlplane.v1.IssueStatus
+	43, // 38: controlplane.v1.IssueStatusEntry.to:type_name -> controlplane.v1.IssueStatus
+	42, // 39: controlplane.v1.IssueStatusEntry.ignored_until:type_name -> google.protobuf.Timestamp
+	19, // 40: controlplane.v1.IssueCommentEntry.comment:type_name -> controlplane.v1.IssueComment
+	46, // 41: controlplane.v1.IssueAssignmentEntry.from:type_name -> controlplane.v1.IssueUser
+	46, // 42: controlplane.v1.IssueAssignmentEntry.to:type_name -> controlplane.v1.IssueUser
+	29, // 43: controlplane.v1.IssueChatEntry.link:type_name -> controlplane.v1.IssueChatLink
+	42, // 44: controlplane.v1.IssueTimelineEntry.time:type_name -> google.protobuf.Timestamp
+	34, // 45: controlplane.v1.IssueTimelineEntry.actor:type_name -> controlplane.v1.IssueActor
+	35, // 46: controlplane.v1.IssueTimelineEntry.status:type_name -> controlplane.v1.IssueStatusEntry
+	36, // 47: controlplane.v1.IssueTimelineEntry.comment:type_name -> controlplane.v1.IssueCommentEntry
+	37, // 48: controlplane.v1.IssueTimelineEntry.assignment:type_name -> controlplane.v1.IssueAssignmentEntry
+	38, // 49: controlplane.v1.IssueTimelineEntry.chat:type_name -> controlplane.v1.IssueChatEntry
+	39, // 50: controlplane.v1.ListIssueTimelineResponse.entries:type_name -> controlplane.v1.IssueTimelineEntry
+	6,  // 51: controlplane.v1.IssuesService.ListIssues:input_type -> controlplane.v1.ListIssuesRequest
+	8,  // 52: controlplane.v1.IssuesService.GetIssue:input_type -> controlplane.v1.GetIssueRequest
+	14, // 53: controlplane.v1.IssuesService.ListIssueEvents:input_type -> controlplane.v1.ListIssueEventsRequest
+	17, // 54: controlplane.v1.IssuesService.UpdateIssueStatus:input_type -> controlplane.v1.UpdateIssueStatusRequest
+	20, // 55: controlplane.v1.IssuesService.AddIssueComment:input_type -> controlplane.v1.AddIssueCommentRequest
+	22, // 56: controlplane.v1.IssuesService.UpdateIssueComment:input_type -> controlplane.v1.UpdateIssueCommentRequest
+	24, // 57: controlplane.v1.IssuesService.DeleteIssueComment:input_type -> controlplane.v1.DeleteIssueCommentRequest
+	26, // 58: controlplane.v1.IssuesService.AssignIssue:input_type -> controlplane.v1.AssignIssueRequest
+	28, // 59: controlplane.v1.IssuesService.LinkIssueChat:input_type -> controlplane.v1.LinkIssueChatRequest
+	32, // 60: controlplane.v1.IssuesService.ListAssignableUsers:input_type -> controlplane.v1.ListAssignableUsersRequest
+	31, // 61: controlplane.v1.IssuesService.ListIssueTimeline:input_type -> controlplane.v1.ListIssueTimelineRequest
+	7,  // 62: controlplane.v1.IssuesService.ListIssues:output_type -> controlplane.v1.ListIssuesResponse
+	9,  // 63: controlplane.v1.IssuesService.GetIssue:output_type -> controlplane.v1.GetIssueResponse
+	15, // 64: controlplane.v1.IssuesService.ListIssueEvents:output_type -> controlplane.v1.ListIssueEventsResponse
+	18, // 65: controlplane.v1.IssuesService.UpdateIssueStatus:output_type -> controlplane.v1.UpdateIssueStatusResponse
+	21, // 66: controlplane.v1.IssuesService.AddIssueComment:output_type -> controlplane.v1.AddIssueCommentResponse
+	23, // 67: controlplane.v1.IssuesService.UpdateIssueComment:output_type -> controlplane.v1.UpdateIssueCommentResponse
+	25, // 68: controlplane.v1.IssuesService.DeleteIssueComment:output_type -> controlplane.v1.DeleteIssueCommentResponse
+	27, // 69: controlplane.v1.IssuesService.AssignIssue:output_type -> controlplane.v1.AssignIssueResponse
+	30, // 70: controlplane.v1.IssuesService.LinkIssueChat:output_type -> controlplane.v1.LinkIssueChatResponse
+	33, // 71: controlplane.v1.IssuesService.ListAssignableUsers:output_type -> controlplane.v1.ListAssignableUsersResponse
+	40, // 72: controlplane.v1.IssuesService.ListIssueTimeline:output_type -> controlplane.v1.ListIssueTimelineResponse
+	62, // [62:73] is the sub-list for method output_type
+	51, // [51:62] is the sub-list for method input_type
+	51, // [51:51] is the sub-list for extension type_name
+	51, // [51:51] is the sub-list for extension extendee
+	0,  // [0:51] is the sub-list for field type_name
 }
 
 func init() { file_services_issues_v1_issues_proto_init() }
@@ -3018,7 +3197,8 @@ func file_services_issues_v1_issues_proto_init() {
 	file_services_issues_v1_issues_proto_msgTypes[1].OneofWrappers = []any{}
 	file_services_issues_v1_issues_proto_msgTypes[2].OneofWrappers = []any{}
 	file_services_issues_v1_issues_proto_msgTypes[13].OneofWrappers = []any{}
-	file_services_issues_v1_issues_proto_msgTypes[33].OneofWrappers = []any{
+	file_services_issues_v1_issues_proto_msgTypes[28].OneofWrappers = []any{}
+	file_services_issues_v1_issues_proto_msgTypes[35].OneofWrappers = []any{
 		(*IssueTimelineEntry_Status)(nil),
 		(*IssueTimelineEntry_Comment)(nil),
 		(*IssueTimelineEntry_Assignment)(nil),
@@ -3030,7 +3210,7 @@ func file_services_issues_v1_issues_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_issues_v1_issues_proto_rawDesc), len(file_services_issues_v1_issues_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   36,
+			NumMessages:   38,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

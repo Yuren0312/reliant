@@ -1984,6 +1984,13 @@ enum DeployCapacityCode {
   DEPLOY_CAPACITY_CODE_SPEND_CAP_REACHED = 5;
   // The plan could not be determined. Retry.
   DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN = 6;
+  // The org is an unclaimed (anonymous) deploy and the demand is outside the
+  // claimable plan. Final: it is refused, never queued; the reason lists each
+  // offence and the fix is to sign up. Same reason string forge raises itself.
+  DEPLOY_CAPACITY_CODE_CLAIMABLE_INELIGIBLE = 7;
+  // The demand fits the claimable plan but the platform will not take it right
+  // now (compute is off, or the platform-wide ceiling is full). Retry later.
+  DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE = 8;
 }
 
 message CheckDeployCapacityResponse {
