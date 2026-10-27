@@ -2,7 +2,7 @@
 import { useGetRun } from "@/hooks/run-service-hooks_gen";
 import type { RunNodeExecution } from "@/gen/reliant/v1/run_pb";
 import { WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 
 /** Reads the same bounded projection get_run uses; never raw node inputs. */
 export function RunNodes({ workflowId }: { workflowId: string }) {
