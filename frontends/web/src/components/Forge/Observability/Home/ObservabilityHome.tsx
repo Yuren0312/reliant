@@ -25,6 +25,7 @@ import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
 import { useAlerts, useObservabilityOrg, useServiceOverview, useWorkloads } from "@/hooks/observability-queries";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,7 @@ import { describePromotion, useReleaseMarkers } from "../releaseMarkers";
 import { formatAgo, formatBytes, formatCores, formatDuration, formatPercent, formatRate } from "../format";
 import type { ObsEnvironment } from "../obsPlace";
 import type { ObsSearch } from "../obsSearch";
-import { ObsError, ObsNothingYet, ObsNotSetUp } from "../ObsStates";
+import { ObsAsOf, ObsError, ObsNothingYet, ObsNotSetUp } from "../ObsStates";
 import { useNothingArrived } from "../serviceSignals";
 import { HealthStrip } from "./HealthStrip";
 import { byAttention, serviceRows, type ServiceRow } from "./homeModel";
@@ -176,11 +177,12 @@ export function ObservabilityHome({ project, env, environments, range, onRange, 
           <div className="px-4 pt-3">
             <h2 className="text-sm font-medium text-ink">Process health</h2>
             <p className="text-sm text-ink-muted">Deployed processes (service.name), not RPC services. Open a process to investigate.</p>
+            {overview.data && <ObsAsOf updatedAt={overview.dataUpdatedAt} className="mt-1" />}
           </div>
           <ServicesTable
             rows={rows}
             loading={overview.isLoading}
-            error={overview.error}
+            error={keepsLastResult(overview.error, overview.data) ? null : overview.error}
             onRetry={() => void overview.refetch()}
             showEnv={env === ENV_ALL}
             range={range}
