@@ -164,24 +164,13 @@ func TestStepExecutionLists(t *testing.T) {
 	for _, c := range []struct {
 		name string
 		wf   string
-		step string // "" lists the workflow
 		want string
 	}{
-		{"every step of a workflow, oldest first", "wf-s1", "", "[s1 s2 s3 s7]"},
-		{"a second workflow", "wf-s2", "", "[s4 s5 s6]"},
-		{"a workflow with no steps", "wf-none", "", "[]"},
-		{"every attempt of one step, oldest first", "wf-s1", "agent", "[s1 s7]"},
-		{"a step with one attempt", "wf-s1", "call_llm", "[s3]"},
-		{"every iteration of a loop step", "wf-s2", "loop_body-save", "[s5 s6]"},
-		{"a step of another workflow", "wf-s2", "agent", "[]"},
+		{"every step of a workflow, oldest first", "wf-s1", "[s1 s2 s3 s7]"},
+		{"a second workflow", "wf-s2", "[s4 s5 s6]"},
+		{"a workflow with no steps", "wf-none", "[]"},
 	} {
-		var got []*core.StepExecution
-		var err error
-		if c.step == "" {
-			got, err = store.ListWorkflowStepExecutions(ctx, env.ORM, c.wf)
-		} else {
-			got, err = store.ListStepExecutionsByStep(ctx, env.ORM, c.wf, c.step)
-		}
+		got, err := store.ListWorkflowStepExecutions(ctx, env.ORM, c.wf)
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}
@@ -190,8 +179,8 @@ func TestStepExecutionLists(t *testing.T) {
 		}
 	}
 	// The list carries the whole row, not just the key.
-	byStep, _ := store.ListStepExecutionsByStep(ctx, env.ORM, "wf-s1", "agent")
-	if byStep[1].OutputJSON != nstr("not json") || byStep[1].InputJSON != nstr(`{"i":6}`) || byStep[0].NodePath != nstr("agent") {
+	byStep, _ := store.ListWorkflowStepExecutions(ctx, env.ORM, "wf-s1")
+	if byStep[3].OutputJSON != nstr("not json") || byStep[3].InputJSON != nstr(`{"i":6}`) || byStep[0].NodePath != nstr("agent") {
 		t.Fatalf("listed rows lost columns: %+v", byStep)
 	}
 }
@@ -349,40 +338,6 @@ func TestChatStepExecutionViews(t *testing.T) {
 		if len(full) != wantN || len(basic) != wantN {
 			t.Fatalf("%s: %d full, %d basic steps, want %d each", chat, len(full), len(basic), wantN)
 		}
-	}
-}
-
-func TestRemoveWorkflowStepExecutions(t *testing.T) {
-	env := storetest.New(t)
-	ctx := context.Background()
-	seedSteps(t, env)
-	remaining := func(wf string) int {
-		t.Helper()
-		rows, err := store.ListWorkflowStepExecutions(ctx, env.ORM, wf)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return len(rows)
-	}
-
-	if err := store.RemoveWorkflowStepExecutions(ctx, env.ORM, "wf-s1"); err != nil {
-		t.Fatal(err)
-	}
-	if n1, n2, n3 := remaining("wf-s1"), remaining("wf-s2"), remaining("wf-other"); n1 != 0 || n2 != 3 || n3 != 1 {
-		t.Fatalf("after removing wf-s1: %d / %d / %d steps, want 0 / 3 / 1", n1, n2, n3)
-	}
-	if err := store.RemoveWorkflowStepExecutions(ctx, env.ORM, "wf-s1"); err != nil {
-		t.Fatalf("removing the steps of an emptied workflow is a no-op: %v", err)
-	}
-	if err := store.RemoveWorkflowStepExecutions(ctx, env.ORM, "wf-none"); err != nil {
-		t.Fatalf("removing the steps of an unknown workflow is a no-op: %v", err)
-	}
-	if err := store.RemoveWorkflowStepExecutions(ctx, env.ORM, "wf-s2"); err != nil {
-		t.Fatal(err)
-	}
-	left, _ := store.ListStepExecutionRecordsForChat(ctx, env.ORM, "chat-steps", "", 50)
-	if len(left) != 0 || remaining("wf-other") != 1 {
-		t.Fatalf("deletes left %d steps of the chat and %d of the other chat's, want 0 and 1", len(left), remaining("wf-other"))
 	}
 }
 

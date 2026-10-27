@@ -64,26 +64,12 @@ func ListWorkflowStepExecutions(ctx context.Context, db orm.Context, workflowID 
 	})
 }
 
-// ListStepExecutionsByStep is every execution of one step of a workflow,
-// oldest first, for CEL history queries.
-func ListStepExecutionsByStep(ctx context.Context, db orm.Context, workflowID, stepID string) ([]*core.StepExecution, error) {
-	return selectStepExecutions(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery {
-		return q.Where("workflow_id = ?", workflowID).Where("step_id = ?", stepID).Order("created_at ASC")
-	})
-}
-
 func selectStepExecutions(ctx context.Context, db orm.Context, apply func(*bun.SelectQuery) *bun.SelectQuery) ([]*core.StepExecution, error) {
 	var rows []*StepExecution
 	if err := apply(db.Bun().NewSelect().Model(&rows)).Scan(ctx); err != nil {
 		return nil, err
 	}
 	return stepExecutionsToCore(rows), nil
-}
-
-// RemoveWorkflowStepExecutions deletes every step of a workflow.
-func RemoveWorkflowStepExecutions(ctx context.Context, db orm.Context, workflowID string) error {
-	_, err := db.Bun().NewDelete().Model((*StepExecution)(nil)).Where("workflow_id = ?", workflowID).Exec(ctx)
-	return err
 }
 
 // stepExecutionRecordsForChatSQL is the full record of a chat's steps —

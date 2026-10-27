@@ -11,10 +11,8 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
-	"github.com/reliant-labs/forge/pkg/crud"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/uptrace/bun"
 
@@ -92,33 +90,12 @@ func ListContentBlocksForMessages(ctx context.Context, db orm.Context, messageID
 	return contentBlocksFromRows(rows), nil
 }
 
-// UpdateContentBlockBody rewrites a block's content, tool_input and version
-// (nil writes NULL), normalizing block in place first. A block that does not
-// exist is not an error.
-func UpdateContentBlockBody(ctx context.Context, db orm.Context, block *core.MessageContentBlock) error {
-	NormalizeContentBlock(block)
-	row := &MessageContentBlock{ID: block.ID, Content: block.Content, ToolInput: block.ToolInput, Version: intToInt64Ptr(block.Version)}
-	err := UpdateMessageContentBlockMasked(ctx, db, row,
-		[]string{MessageContentBlockFieldContent, MessageContentBlockFieldToolInput, MessageContentBlockFieldVersion},
-		crud.NoReadBack())
-	if errors.Is(err, orm.ErrNoRows) {
-		return nil
-	}
-	return err
-}
-
 // AppendToContentBlock appends one streamed delta to a block's content and
 // counts it in version — the hottest write on the streaming path, one per
 // provider delta. The delta's bytes travel inside the statement text (bun
 // formats every argument client-side); quotes, backslashes and `?` survive.
 func AppendToContentBlock(ctx context.Context, db orm.Context, blockID, delta string) error {
 	return appendToBlock(ctx, db, blockID, MessageContentBlockFieldContent, delta, true)
-}
-
-// AppendContentDelta appends a text delta to a block's content without
-// counting a version.
-func AppendContentDelta(ctx context.Context, db orm.Context, blockID, delta string) error {
-	return appendToBlock(ctx, db, blockID, MessageContentBlockFieldContent, delta, false)
 }
 
 // AppendToolInputDelta appends a JSON delta to a tool call block's
@@ -141,19 +118,6 @@ func appendToBlock(ctx context.Context, db orm.Context, blockID, col, delta stri
 	}
 	_, err := q.Set("updated_at = NOW()").Where("id = ?", blockID).Exec(ctx)
 	return err
-}
-
-// TouchMessageBlocks stamps updated_at on every block of a message — the
-// "streaming finished" mark — and reports how many it touched.
-func TouchMessageBlocks(ctx context.Context, db orm.Context, messageID string) (int64, error) {
-	res, err := db.Bun().NewUpdate().Model((*MessageContentBlock)(nil)).
-		Set("updated_at = NOW()").
-		Where("message_id = ?", messageID).
-		Exec(ctx)
-	if err != nil {
-		return 0, err
-	}
-	return res.RowsAffected()
 }
 
 // NormalizeContentBlock makes every free-text field of block valid UTF-8, in
