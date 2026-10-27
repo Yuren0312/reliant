@@ -39,6 +39,8 @@ import { useAlerts, useObservabilityOrg, useReleases, useWorkloads } from "@/hoo
 import { useProjectReleases } from "@/hooks/release-queries";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
 import type { ObsScope, Workload } from "@/services/controlPlane/observability/types";
+import type { DomainsState } from "@/hooks/forge-domain-queries";
+import { frontendsInScope } from "@/services/forge/frontends";
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
@@ -77,6 +79,7 @@ import {
 } from "./workloadModel";
 import { exitPhrase, jobFailurePhrase } from "./plainHealth";
 import { Chip, ChipMenu, HealthStatus, SkeletonRows, UsageMeter, WorkloadRelease } from "./workloadParts";
+import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
 import { LiveLinks } from "./LiveLinks";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
@@ -114,6 +117,12 @@ export interface OverviewHomeProps {
    * environment Reliant does not place.
    */
   hosted?: HostedByEnv;
+  /** GetStatus has not answered for every hosted environment yet. */
+  hostedLoading?: boolean;
+  /** The org's domains, to show which custom domains serve each frontend. Absent: not read (no domain column shown). */
+  domains?: DomainsState;
+  /** The Domains screen: where "Add a domain" lands. */
+  domainsHref?: string;
 }
 
 export type HostedByEnv = ReadonlyMap<string, ReadonlyMap<string, ForgeHostedWorkload>>;
@@ -123,7 +132,21 @@ const NO_HOSTED: HostedByEnv = new Map();
 export const OVERVIEW_RANGE: RangePreset = "24h";
 const ACTIVITY_DAYS = 30;
 
-export function OverviewHome({ project, env, envs, envsLoading, search, onSearch, hrefs, onSelectEnv, navigateTo, hosted = NO_HOSTED }: OverviewHomeProps) {
+export function OverviewHome({
+  project,
+  env,
+  envs,
+  envsLoading,
+  search,
+  onSearch,
+  hrefs,
+  onSelectEnv,
+  navigateTo,
+  hosted = NO_HOSTED,
+  hostedLoading = false,
+  domains,
+  domainsHref = "",
+}: OverviewHomeProps) {
   const range = search.range ?? OVERVIEW_RANGE;
   const org = useObservabilityOrg();
   const orgId = org.orgId;
@@ -234,6 +257,17 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
       </div>
 
       <LiveLinks envs={envs} hosted={hosted} />
+
+      {!unrecorded && (
+        <FrontendsPanel
+          scope={env}
+          envs={envs}
+          hosted={hosted}
+          loading={envsLoading || hostedLoading}
+          domains={domains}
+          domainsHref={domainsHref}
+        />
+      )}
 
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
@@ -359,6 +393,47 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
         </div>
       )}
     </div>
+  );
+}
+
+// ── Frontends ───────────────────────────────────────────────────────────────
+
+/**
+ * The scope's frontends beside its services: the sites people open, each with
+ * the address it is live at. Read from the GetStatus observations the page
+ * already holds (`hosted`), so it costs no request of its own; omitted while a
+ * scope that only self-managed environments covers has nothing Reliant hosts.
+ */
+function FrontendsPanel({
+  scope,
+  envs,
+  hosted,
+  loading,
+  domains,
+  domainsHref,
+}: {
+  scope: string;
+  envs: StripEnv[];
+  hosted: HostedByEnv;
+  loading: boolean;
+  domains: DomainsState | undefined;
+  domainsHref: string;
+}) {
+  const covered = envs.filter((candidate) => candidate.placed && (scope === ENV_ALL ? !candidate.preview : candidate.name === scope));
+  if (covered.length === 0) return null;
+  const frontends = frontendsInScope(scope, envs, hosted, domains?.availability === "available" ? domains.domains : null);
+  return (
+    <Panel title="Frontends" meta="Websites Reliant hosts, and the address each is live at." flush testId="overview-frontends">
+      {loading && frontends.length === 0 ? (
+        <FrontendsLoading />
+      ) : frontends.length === 0 ? (
+        <div className="px-4 pb-4">
+          <FrontendsEmpty env={scope === ENV_ALL ? undefined : scope} />
+        </div>
+      ) : (
+        <FrontendList frontends={frontends} showEnv={scope === ENV_ALL} domainsHref={domainsHref} />
+      )}
+    </Panel>
   );
 }
 

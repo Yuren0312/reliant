@@ -723,7 +723,7 @@ func TestRunnerFullLanesRunEverything(t *testing.T) {
 	for _, s := range steps {
 		got = append(got, strings.Join(s.argv, " "))
 	}
-	if len(got) != 3 || !strings.HasPrefix(got[0], "npm ci --dry-run") ||
+	if len(got) != 3 || !strings.HasPrefix(got[0], "pnpm install --frozen-lockfile --lockfile-only") ||
 		!strings.HasSuffix(got[1], "./...") || got[2] != "npx vitest run" {
 		t.Fatalf("full lanes = %v", got)
 	}
@@ -735,28 +735,29 @@ func TestRunnerFullLanesRunEverything(t *testing.T) {
 func TestLockfileChangeChecksTheInstallFirst(t *testing.T) {
 	r := &runner{root: "/repo"}
 	for _, tc := range []struct {
-		path, lanes, dir string
+		path, lanes, dir, lock string
 	}{
-		{"frontends/web/package.json", "web", "/repo/frontends/web"},
-		{"frontends/web/package-lock.json", "web", "/repo/frontends/web"},
-		{"electron/package-lock.json", "electron", "/repo/electron"},
-		{"package-lock.json", "electron", "/repo"},
-		{"tools/protoc-gen-es/package.json", "forge-generate", "/repo/tools/protoc-gen-es"},
+		{"frontends/web/package.json", "web", "/repo/frontends/web", pnpmLock},
+		{"frontends/web/pnpm-lock.yaml", "web", "/repo/frontends/web", pnpmLock},
+		{"frontends/web/pnpm-workspace.yaml", "web", "/repo/frontends/web", pnpmLock},
+		{"electron/package-lock.json", "electron", "/repo/electron", npmLock},
+		{"package-lock.json", "electron", "/repo", npmLock},
+		{"tools/protoc-gen-es/package.json", "forge-generate", "/repo/tools/protoc-gen-es", npmLock},
 	} {
 		steps := r.steps(classify(tc.path), laneSet(tc.lanes))
-		if len(steps) == 0 || strings.Join(steps[0].argv, " ") != strings.Join(lockfileArgv, " ") || steps[0].dir != tc.dir {
+		if len(steps) == 0 || strings.Join(steps[0].argv, " ") != strings.Join(lockfileArgv(tc.lock), " ") || steps[0].dir != tc.dir {
 			t.Errorf("%s: the first step must be the lockfile check in %s: %+v", tc.path, tc.dir, steps)
 		}
 	}
 	// The check belongs to the lanes that install from that project.
-	for _, s := range r.steps(classify("frontends/web/package-lock.json"), laneSet("go,electron")) {
+	for _, s := range r.steps(classify("frontends/web/pnpm-lock.yaml"), laneSet("go,electron")) {
 		if strings.HasPrefix(s.name, "npm lockfile") {
 			t.Errorf("-lanes without web must not check the web lockfile: %+v", s)
 		}
 	}
 	// Both files of one project are one check.
-	pl := classify("frontends/web/package.json", "frontends/web/package-lock.json")
-	if len(pl.Lockfiles) != 1 || pl.Lockfiles[0].Why != "changed: package.json, package-lock.json" {
+	pl := classify("frontends/web/package.json", "frontends/web/pnpm-lock.yaml")
+	if len(pl.Lockfiles) != 1 || pl.Lockfiles[0].Why != "changed: package.json, pnpm-lock.yaml" {
 		t.Errorf("one project, one check: %+v", pl.Lockfiles)
 	}
 	// A package.json that is not an npm project (a fixture, a vendored package) is not one.
@@ -770,27 +771,31 @@ func TestLockfileChangeChecksTheInstallFirst(t *testing.T) {
 // `git ls-files`) keeps the test cache-sound: the test process reads the
 // directories itself.
 func TestNPMProjectsNameEveryLockfile(t *testing.T) {
-	found := map[string]bool{}
-	for _, pat := range []string{"package-lock.json", "*/package-lock.json", "*/*/package-lock.json"} {
-		ms, err := filepath.Glob(filepath.Join(repoRoot, pat))
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, m := range ms {
-			rel, _ := filepath.Rel(repoRoot, filepath.Dir(m))
-			if !strings.Contains(rel, "node_modules") {
-				found[filepath.ToSlash(rel)] = true
+	found := map[string]string{}
+	for _, lock := range []string{npmLock, pnpmLock} {
+		for _, pat := range []string{lock, "*/" + lock, "*/*/" + lock} {
+			ms, err := filepath.Glob(filepath.Join(repoRoot, pat))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, m := range ms {
+				rel, _ := filepath.Rel(repoRoot, filepath.Dir(m))
+				if !strings.Contains(rel, "node_modules") {
+					found[filepath.ToSlash(rel)] = lock
+				}
 			}
 		}
 	}
-	for dir := range found {
-		if _, ok := npmProjects[dir]; !ok {
-			t.Errorf("%s/package-lock.json is in no npmProjects entry: add it with the lanes that install from it", dir)
+	for dir, lock := range found {
+		if p, ok := npmProjects[dir]; !ok {
+			t.Errorf("%s/%s is in no npmProjects entry: add it with the lanes that install from it", dir, lock)
+		} else if p.lockfile != lock {
+			t.Errorf("npmProjects says %s commits %s, the tree has %s", dir, p.lockfile, lock)
 		}
 	}
-	for dir := range npmProjects {
-		if !found[dir] {
-			t.Errorf("npmProjects names %s, which has no package-lock.json", dir)
+	for dir, p := range npmProjects {
+		if found[dir] == "" {
+			t.Errorf("npmProjects names %s, which has no %s", dir, p.lockfile)
 		}
 	}
 }
