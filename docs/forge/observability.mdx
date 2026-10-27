@@ -169,7 +169,7 @@ Profiles are the most expensive signal per useful byte: every sample is stored a
 | Raw retention (`--trace` lookups, short ranges) | 72 hours, then 48 | 24 hours |
 | Aggregates (range flamegraphs) | 30 days | 30 days |
 
-On Reliant's own fleet this cut stored profile bytes about 7.6 times (measured per pod: 2.5 GiB a day down to a modelled 0.33 GiB). A range flamegraph over an hour or more still holds about a minute of CPU samples per pod, and a question about one moment is answered from the raw tier for 24 hours.
+A model of Reliant's fleet predicts about **7.6× fewer expanded profile-row bytes** (2.56 GiB per day down to 0.336 GiB), excluding an older-pin staging service. This is not an achieved reduction or a compressed-disk/billing forecast; those depend on storage codecs, merges and workload behavior. Over an hour, a long-lived process has about a minute of wall-clock CPU capture, useful for sustained hotspots. Brief incidents or specific traces may have no samples at all. Captured trace-linked samples remain queryable in the raw tier for 24 hours; the aggregates retain range flamegraphs for 30 days.
 
 To sample faster for a while on one workload, set the cadence in its `env` and revert it afterwards: `FORGE_PROFILES_CPU_INTERVAL` (default `5m`, at least `30s`), `FORGE_PROFILES_CPU_DURATION` (default `5s`, at most half the interval) and `FORGE_PROFILES_HEAP_INTERVAL` (default `2h`). The `profiling` block of a workload picks which types are captured and the heap interval; agents can load the `observability/profiles` skill for the details. To keep profiles off entirely, leave `signals.profiles` unset on a hosted environment.
 
