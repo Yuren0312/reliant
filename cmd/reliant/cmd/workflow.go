@@ -4,6 +4,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -628,8 +629,10 @@ func readWorkflowLayout(dir string) (*workflowref.Layout, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer root.Close()
 		layout, err = workflowref.ReadLayout(root.FS())
+		if closeErr := root.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close workflow directory %s: %w", dir, closeErr))
+		}
 		if err != nil {
 			return nil, fmt.Errorf("reading %s: %w", dir, err)
 		}
@@ -764,9 +767,7 @@ func validateWorkflowFileIn(path, workflowDir string, layout *workflowref.Layout
 	var addressProblem error
 	if rel, relErr := filepath.Rel(workflowDir, path); relErr == nil {
 		location := filepath.ToSlash(rel)
-		if strings.HasPrefix(location, "../../") {
-			location = strings.TrimPrefix(location, "../../")
-		}
+		location = strings.TrimPrefix(location, "../../")
 		if entry := layout.Workflows.EntryAt(location); entry != nil && entry.Name != "" && entry.Problem != nil {
 			addressProblem = entry.Problem
 		}

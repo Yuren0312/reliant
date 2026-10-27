@@ -79,7 +79,7 @@ const (
 // ReadSourceLayout confines discovery to a source repository, including when
 // .reliant/workflows itself is a symlink. os.Root prevents symlink escapes
 // during opens as well as during discovery (a pre-read path check cannot).
-func ReadSourceLayout(ctx context.Context, sourceDir string) (*Layout, error) {
+func ReadSourceLayout(ctx context.Context, sourceDir string) (layout *Layout, err error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -87,7 +87,12 @@ func ReadSourceLayout(ctx context.Context, sourceDir string) (*Layout, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer root.Close()
+	defer func() {
+		if closeErr := root.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close workflow source %s: %w", sourceDir, closeErr))
+			layout = nil
+		}
+	}()
 	workflows, err := root.OpenRoot(Dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return NewLayout(nil), nil
@@ -95,7 +100,12 @@ func ReadSourceLayout(ctx context.Context, sourceDir string) (*Layout, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open workflows in %s: %w", sourceDir, err)
 	}
-	defer workflows.Close()
+	defer func() {
+		if closeErr := workflows.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close workflows in %s: %w", sourceDir, closeErr))
+			layout = nil
+		}
+	}()
 	return ReadLayoutContext(ctx, workflows.FS())
 }
 
@@ -173,7 +183,7 @@ func walkLayout(ctx context.Context, fsys fs.FS, p string, visit fs.WalkDirFunc)
 	return err
 }
 
-func walkLayoutDir(ctx context.Context, fsys fs.FS, p string, entry fs.DirEntry, visit fs.WalkDirFunc) error {
+func walkLayoutDir(ctx context.Context, fsys fs.FS, p string, entry fs.DirEntry, visit fs.WalkDirFunc) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -194,7 +204,11 @@ func walkLayoutDir(ctx context.Context, fsys fs.FS, p string, entry fs.DirEntry,
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close workflow directory %s: %w", p, closeErr))
+		}
+	}()
 	dir, ok := f.(fs.ReadDirFile)
 	if !ok {
 		return fmt.Errorf("%s: filesystem does not support bounded directory reads", p)
@@ -230,12 +244,17 @@ func (r contextLayoutReader) Read(p []byte) (int, error) {
 	return r.reader.Read(p)
 }
 
-func readLayoutFile(ctx context.Context, fsys fs.FS, p string) ([]byte, error) {
+func readLayoutFile(ctx context.Context, fsys fs.FS, p string) (data []byte, err error) {
 	f, err := fsys.Open(p)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close workflow YAML %s: %w", p, closeErr))
+			data = nil
+		}
+	}()
 	st, err := f.Stat()
 	if err != nil {
 		return nil, err
@@ -246,7 +265,7 @@ func readLayoutFile(ctx context.Context, fsys fs.FS, p string) ([]byte, error) {
 	if st.Size() > MaxWorkflowFileBytes {
 		return nil, fmt.Errorf("%s: workflow YAML exceeds %d bytes", p, MaxWorkflowFileBytes)
 	}
-	data, err := io.ReadAll(io.LimitReader(contextLayoutReader{ctx: ctx, reader: f}, MaxWorkflowFileBytes+1))
+	data, err = io.ReadAll(io.LimitReader(contextLayoutReader{ctx: ctx, reader: f}, MaxWorkflowFileBytes+1))
 	if err != nil {
 		return nil, err
 	}

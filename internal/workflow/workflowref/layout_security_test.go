@@ -2,6 +2,7 @@ package workflowref
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -88,6 +89,69 @@ func TestReadLayoutBoundsAndCancellation(t *testing.T) {
 		require.Nil(t, l)
 	})
 }
+
+// A successful read is still incomplete when closing the file/directory
+// fails. Preserve both errors if the content read also failed.
+func TestReadLayoutPropagatesCloseErrors(t *testing.T) {
+	closeErr := errors.New("close failed")
+	readErr := errors.New("read failed")
+	for _, tc := range []struct {
+		name, target string
+		readErr      error
+	}{
+		{name: "directory", target: "."},
+		{name: "file", target: "flow.yaml"},
+		{name: "read and close", target: "flow.yaml", readErr: readErr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fsys := closeErrorFS{FS: fstest.MapFS{"flow.yaml": {Data: []byte(wf("flow"))}}, target: tc.target, closeErr: closeErr, readErr: tc.readErr}
+			layout, err := ReadLayout(fsys)
+			require.ErrorIs(t, err, closeErr)
+			if tc.readErr != nil {
+				require.ErrorIs(t, err, readErr)
+			}
+			require.Nil(t, layout)
+		})
+	}
+}
+
+type closeErrorFS struct {
+	fs.FS
+	target            string
+	closeErr, readErr error
+}
+
+func (s closeErrorFS) Open(name string) (fs.File, error) {
+	f, err := s.FS.Open(name)
+	if err != nil || name != s.target {
+		return f, err
+	}
+	wrapped := closeErrorFile{File: f, closeErr: s.closeErr, readErr: s.readErr}
+	if dir, ok := f.(fs.ReadDirFile); ok {
+		return closeErrorDir{closeErrorFile: wrapped, dir: dir}, nil
+	}
+	return wrapped, nil
+}
+
+type closeErrorFile struct {
+	fs.File
+	closeErr, readErr error
+}
+
+func (f closeErrorFile) Close() error { return errors.Join(f.File.Close(), f.closeErr) }
+func (f closeErrorFile) Read(p []byte) (int, error) {
+	if f.readErr != nil {
+		return 0, f.readErr
+	}
+	return f.File.Read(p)
+}
+
+type closeErrorDir struct {
+	closeErrorFile
+	dir fs.ReadDirFile
+}
+
+func (d closeErrorDir) ReadDir(n int) ([]fs.DirEntry, error) { return d.dir.ReadDir(n) }
 
 type deniedLayoutFS struct{}
 

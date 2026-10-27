@@ -2,13 +2,14 @@ package daemonruntime
 
 import (
 	"context"
-	"github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
-	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUnsafeWorkflowSourceDoesNotProduceEmptySnapshot(t *testing.T) {
