@@ -168,7 +168,7 @@ func runForgeProcess(ctx context.Context, dir, name string, args ...string) (for
 	cmd.Dir = dir
 	cmd.WaitDelay = forgeWaitDelay
 	if org := forgeOrgEnv(ctx); org != nil {
-		cmd.Env = append(os.Environ(), org...)
+		cmd.Env = append(os.Environ(), org...) //nolint:forbidigo // forwards the first-party forge child's inherited environment plus its captured org; not a daemon configuration read
 	}
 
 	var stdout, stderr bytes.Buffer
