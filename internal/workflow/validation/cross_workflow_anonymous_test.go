@@ -75,6 +75,44 @@ func TestCrossWorkflowAnonymousInvocationsValidateEveryPath(t *testing.T) {
 	}
 }
 
+func TestCrossWorkflowSiblingDiagnosticPathsDoNotAlias(t *testing.T) {
+	wf, err := wfyaml.ParseWorkflow([]byte(`name: parent
+inputs:
+  flag:
+    type: boolean
+    default: false
+entry: outer
+nodes:
+  - id: outer
+    type: workflow
+    inline:
+      entry: first
+      nodes:
+        - id: first
+          type: workflow
+          ref: builtin://child
+          args:
+            yield: "{{inputs.flag}}"
+        - id: second
+          type: workflow
+          ref: builtin://child
+          args:
+            yield: "{{inputs.flag}}"
+`))
+	require.NoError(t, err)
+	result := &Result{}
+	validateCrossWorkflow(wf, &ValidationOptions{WorkflowLoader: func(string) (*pb.Workflow, error) {
+		return &pb.Workflow{Name: "child", Inputs: map[string]*pb.Input{"tools": {Type: "tools"}}}, nil
+	}}, result)
+	var paths []string
+	for _, problem := range result.Errors() {
+		if strings.Contains(problem.Message, "unknown input(s): yield") {
+			paths = append(paths, strings.Join(problem.Path, "."))
+		}
+	}
+	require.Equal(t, []string{"parent.nodes.outer.inline.nodes.first", "parent.nodes.outer.inline.nodes.second"}, paths)
+}
+
 func TestCrossWorkflowInvocationCycleProtection(t *testing.T) {
 	root, err := wfyaml.ParseWorkflow([]byte(`name: root
 entry: call

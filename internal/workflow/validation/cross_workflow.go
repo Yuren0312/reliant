@@ -95,7 +95,7 @@ func validateWorkflowTree(
 
 	currentPath := path
 	if nodePathPrefix == "" && workflow.GetName() != "" {
-		currentPath = append(append([]string{}, path...), workflow.GetName())
+		currentPath = joinPath(path, workflow.GetName())
 	}
 
 	for _, node := range workflow.GetNodes() {
@@ -109,7 +109,7 @@ func validateWorkflowTree(
 			continue
 		}
 
-		nodePath := append(currentPath, "nodes", node.GetId())
+		nodePath := joinPath(currentPath, "nodes", node.GetId())
 		switch contract.InputPolicy {
 		case core.InputPolicyInlineInheritParentInputs:
 			inlineWorkflow := resolveInlineWorkflow(node)
@@ -124,7 +124,7 @@ func validateWorkflowTree(
 				opts,
 				semantics,
 				nodeContractPath,
-				append(append([]string{}, nodePath...), "inline"),
+				joinPath(nodePath, "inline"),
 				contract.WorkflowIdentity,
 				active,
 				result,
@@ -167,7 +167,7 @@ func validateWorkflowTree(
 				opts,
 				semantics,
 				nodeContractPath,
-				append(append([]string{}, nodePath...), "ref"),
+				joinPath(nodePath, "ref"),
 				contract.WorkflowIdentity,
 				active,
 				result,
