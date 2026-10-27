@@ -202,8 +202,8 @@ export function BillingSection() {
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
-        title="Billing"
-        subtitle="Manage wallet credits, your compute plan, usage, and invoices."
+        title="Billing & usage"
+        subtitle="Manage wallet credits, your compute plan, usage, limits, and invoices."
       />
 
       {/* The route home, hoisted out of the Stripe-return banner.
@@ -1387,11 +1387,9 @@ function UsageAndInvoicesTab() {
         <UsagePanel />
       </div>
       {/* The usage notices the gateway sends point here ("Settings → Billing"). */}
-      {obsOrg.orgId && (
-        <div className="border-t border-border pt-6" data-testid="billing-observability-usage">
-          <UsageView orgId={obsOrg.orgId} />
-        </div>
-      )}
+      <div id="observability" className="border-t border-border pt-6" data-testid="billing-observability-usage">
+        <UsageView orgId={obsOrg.orgId} />
+      </div>
       {deployUsage.available && (
         <div className="border-t border-border pt-6">
           <DeployUsageSection

@@ -52,7 +52,7 @@ const sectionGroups: SectionGroup[] = [
       // meaningless without a control-plane backend.
       ...(hasControlPlane
         ? [
-            { id: "billing", label: "Billing", icon: CreditCard },
+            { id: "billing", label: "Billing & usage", icon: CreditCard },
             // What each member of the org may do. Cloud-only: a self-hosted
             // deployment has no organization to grant permissions within.
             { id: "member-permissions", label: "Member Permissions", icon: Shield },

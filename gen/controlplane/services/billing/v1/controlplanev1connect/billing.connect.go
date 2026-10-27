@@ -59,6 +59,9 @@ const (
 	// BillingServiceListCurrentUserInvoicesProcedure is the fully-qualified name of the
 	// BillingService's ListCurrentUserInvoices RPC.
 	BillingServiceListCurrentUserInvoicesProcedure = "/controlplane.v1.BillingService/ListCurrentUserInvoices"
+	// BillingServiceListOrgLimitChangesProcedure is the fully-qualified name of the BillingService's
+	// ListOrgLimitChanges RPC.
+	BillingServiceListOrgLimitChangesProcedure = "/controlplane.v1.BillingService/ListOrgLimitChanges"
 	// BillingServiceGetCurrentUserWalletOverviewProcedure is the fully-qualified name of the
 	// BillingService's GetCurrentUserWalletOverview RPC.
 	BillingServiceGetCurrentUserWalletOverviewProcedure = "/controlplane.v1.BillingService/GetCurrentUserWalletOverview"
@@ -149,6 +152,14 @@ type BillingServiceClient interface {
 	CreateCurrentUserCheckoutSession(context.Context, *connect.Request[v1.CreateCurrentUserCheckoutSessionRequest]) (*connect.Response[v1.CreateCurrentUserCheckoutSessionResponse], error)
 	CreateCurrentUserBillingPortalSession(context.Context, *connect.Request[v1.CreateCurrentUserBillingPortalSessionRequest]) (*connect.Response[v1.CreateCurrentUserBillingPortalSessionResponse], error)
 	ListCurrentUserInvoices(context.Context, *connect.Request[v1.ListCurrentUserInvoicesRequest]) (*connect.Response[v1.ListCurrentUserInvoicesResponse], error)
+	// ListOrgLimitChanges is the org's limit-change history, newest first: who
+	// changed which limit, from what, to what, and when. One list across every
+	// org limit (observability spend cap today; LLM cap, infra overage and wallet
+	// auto-recharge as they adopt it). Any member of org_id may read it.
+	//
+	// forge:custom — hand-written over the shared org_limit_changes table; it is
+	// not an entity list, so it gets no CRUD wiring or admin page.
+	ListOrgLimitChanges(context.Context, *connect.Request[v1.ListOrgLimitChangesRequest]) (*connect.Response[v1.ListOrgLimitChangesResponse], error)
 	// Wallet (per-user).
 	GetCurrentUserWalletOverview(context.Context, *connect.Request[v1.GetCurrentUserWalletOverviewRequest]) (*connect.Response[v1.GetCurrentUserWalletOverviewResponse], error)
 	// (GrantCurrentUserWelcomeCredit removed. There is no signup wallet credit:
@@ -322,6 +333,12 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(billingServiceMethods.ByName("ListCurrentUserInvoices")),
 			connect.WithClientOptions(opts...),
 		),
+		listOrgLimitChanges: connect.NewClient[v1.ListOrgLimitChangesRequest, v1.ListOrgLimitChangesResponse](
+			httpClient,
+			baseURL+BillingServiceListOrgLimitChangesProcedure,
+			connect.WithSchema(billingServiceMethods.ByName("ListOrgLimitChanges")),
+			connect.WithClientOptions(opts...),
+		),
 		getCurrentUserWalletOverview: connect.NewClient[v1.GetCurrentUserWalletOverviewRequest, v1.GetCurrentUserWalletOverviewResponse](
 			httpClient,
 			baseURL+BillingServiceGetCurrentUserWalletOverviewProcedure,
@@ -484,6 +501,7 @@ type billingServiceClient struct {
 	createCurrentUserCheckoutSession           *connect.Client[v1.CreateCurrentUserCheckoutSessionRequest, v1.CreateCurrentUserCheckoutSessionResponse]
 	createCurrentUserBillingPortalSession      *connect.Client[v1.CreateCurrentUserBillingPortalSessionRequest, v1.CreateCurrentUserBillingPortalSessionResponse]
 	listCurrentUserInvoices                    *connect.Client[v1.ListCurrentUserInvoicesRequest, v1.ListCurrentUserInvoicesResponse]
+	listOrgLimitChanges                        *connect.Client[v1.ListOrgLimitChangesRequest, v1.ListOrgLimitChangesResponse]
 	getCurrentUserWalletOverview               *connect.Client[v1.GetCurrentUserWalletOverviewRequest, v1.GetCurrentUserWalletOverviewResponse]
 	createCurrentUserWalletTopupSession        *connect.Client[v1.CreateCurrentUserWalletTopupSessionRequest, v1.CreateCurrentUserWalletTopupSessionResponse]
 	createCurrentUserWalletTopupPaymentIntent  *connect.Client[v1.CreateCurrentUserWalletTopupPaymentIntentRequest, v1.CreateCurrentUserWalletTopupPaymentIntentResponse]
@@ -546,6 +564,11 @@ func (c *billingServiceClient) CreateCurrentUserBillingPortalSession(ctx context
 // ListCurrentUserInvoices calls controlplane.v1.BillingService.ListCurrentUserInvoices.
 func (c *billingServiceClient) ListCurrentUserInvoices(ctx context.Context, req *connect.Request[v1.ListCurrentUserInvoicesRequest]) (*connect.Response[v1.ListCurrentUserInvoicesResponse], error) {
 	return c.listCurrentUserInvoices.CallUnary(ctx, req)
+}
+
+// ListOrgLimitChanges calls controlplane.v1.BillingService.ListOrgLimitChanges.
+func (c *billingServiceClient) ListOrgLimitChanges(ctx context.Context, req *connect.Request[v1.ListOrgLimitChangesRequest]) (*connect.Response[v1.ListOrgLimitChangesResponse], error) {
+	return c.listOrgLimitChanges.CallUnary(ctx, req)
 }
 
 // GetCurrentUserWalletOverview calls controlplane.v1.BillingService.GetCurrentUserWalletOverview.
@@ -698,6 +721,14 @@ type BillingServiceHandler interface {
 	CreateCurrentUserCheckoutSession(context.Context, *connect.Request[v1.CreateCurrentUserCheckoutSessionRequest]) (*connect.Response[v1.CreateCurrentUserCheckoutSessionResponse], error)
 	CreateCurrentUserBillingPortalSession(context.Context, *connect.Request[v1.CreateCurrentUserBillingPortalSessionRequest]) (*connect.Response[v1.CreateCurrentUserBillingPortalSessionResponse], error)
 	ListCurrentUserInvoices(context.Context, *connect.Request[v1.ListCurrentUserInvoicesRequest]) (*connect.Response[v1.ListCurrentUserInvoicesResponse], error)
+	// ListOrgLimitChanges is the org's limit-change history, newest first: who
+	// changed which limit, from what, to what, and when. One list across every
+	// org limit (observability spend cap today; LLM cap, infra overage and wallet
+	// auto-recharge as they adopt it). Any member of org_id may read it.
+	//
+	// forge:custom — hand-written over the shared org_limit_changes table; it is
+	// not an entity list, so it gets no CRUD wiring or admin page.
+	ListOrgLimitChanges(context.Context, *connect.Request[v1.ListOrgLimitChangesRequest]) (*connect.Response[v1.ListOrgLimitChangesResponse], error)
 	// Wallet (per-user).
 	GetCurrentUserWalletOverview(context.Context, *connect.Request[v1.GetCurrentUserWalletOverviewRequest]) (*connect.Response[v1.GetCurrentUserWalletOverviewResponse], error)
 	// (GrantCurrentUserWelcomeCredit removed. There is no signup wallet credit:
@@ -867,6 +898,12 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(billingServiceMethods.ByName("ListCurrentUserInvoices")),
 		connect.WithHandlerOptions(opts...),
 	)
+	billingServiceListOrgLimitChangesHandler := connect.NewUnaryHandler(
+		BillingServiceListOrgLimitChangesProcedure,
+		svc.ListOrgLimitChanges,
+		connect.WithSchema(billingServiceMethods.ByName("ListOrgLimitChanges")),
+		connect.WithHandlerOptions(opts...),
+	)
 	billingServiceGetCurrentUserWalletOverviewHandler := connect.NewUnaryHandler(
 		BillingServiceGetCurrentUserWalletOverviewProcedure,
 		svc.GetCurrentUserWalletOverview,
@@ -1033,6 +1070,8 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 			billingServiceCreateCurrentUserBillingPortalSessionHandler.ServeHTTP(w, r)
 		case BillingServiceListCurrentUserInvoicesProcedure:
 			billingServiceListCurrentUserInvoicesHandler.ServeHTTP(w, r)
+		case BillingServiceListOrgLimitChangesProcedure:
+			billingServiceListOrgLimitChangesHandler.ServeHTTP(w, r)
 		case BillingServiceGetCurrentUserWalletOverviewProcedure:
 			billingServiceGetCurrentUserWalletOverviewHandler.ServeHTTP(w, r)
 		case BillingServiceCreateCurrentUserWalletTopupSessionProcedure:
@@ -1118,6 +1157,10 @@ func (UnimplementedBillingServiceHandler) CreateCurrentUserBillingPortalSession(
 
 func (UnimplementedBillingServiceHandler) ListCurrentUserInvoices(context.Context, *connect.Request[v1.ListCurrentUserInvoicesRequest]) (*connect.Response[v1.ListCurrentUserInvoicesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.ListCurrentUserInvoices is not implemented"))
+}
+
+func (UnimplementedBillingServiceHandler) ListOrgLimitChanges(context.Context, *connect.Request[v1.ListOrgLimitChangesRequest]) (*connect.Response[v1.ListOrgLimitChangesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.ListOrgLimitChanges is not implemented"))
 }
 
 func (UnimplementedBillingServiceHandler) GetCurrentUserWalletOverview(context.Context, *connect.Request[v1.GetCurrentUserWalletOverviewRequest]) (*connect.Response[v1.GetCurrentUserWalletOverviewResponse], error) {
