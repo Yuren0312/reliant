@@ -28,8 +28,8 @@
 #              test this change adds or edits that runs over the per-test budget
 #              fails it (-test-budget auto)
 #   typecheck  scripts/web-typecheck.sh: frontends/web's `tsc -b` (app, tests,
-#              gen, node configs), from the newest incremental state any checkout
-#              of this clone left, when the web lane is selected or anything under
+#              gen, node configs), forcing a check with checkout-local state,
+#              when the web lane is selected or anything under
 #              frontends/web/ changed; vitest strips types without checking
 #              them, so this is the only phase that sees a test's type error
 #   lint       forge lint's own lanes (named; no golangci-lint or buf lint, which
@@ -221,17 +221,20 @@ sed -n '/^{/,$p' "$L/plan.log" >"$L/plan.json"
 # as "not selected" and be silently skipped.
 command -v jq >/dev/null 2>&1 || { echo "merge-gate: jq is not installed, so the plan cannot be read and no selected lane could be checked" >&2; exit 1; }
 jq -e . "$L/plan.json" >/dev/null 2>&1 || { echo "merge-gate: $L/plan.json is not valid JSON; refusing to guess what was selected" >&2; cat "$L/plan.log" >&2; exit 1; }
-j() { jq -r "$1" "$L/plan.json"; }
-gofull=$(j .go.full) ngo=$(j '.go.packages|length') ndef=$(j '.go.deferred|length') webfull=$(j .web.full) nweb=$(j '.web.tests|length')
-elec=$(j .electron.full) fgen=$(j .forge_generate.full) dgen=$(j .docs_generate.full)
-hooks_only=$(j '.forge_generate.hooks_only // false') hooks=$(j '(.forge_generate.hooks // []) | join(" ")')
-[ "$regen" = 1 ] && { fgen=true; hooks_only=false; }
-files=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
-# The web type-check. The test lane cannot stand in for it: vitest strips
-# types without checking them, and a changed .ts file no test imports selects
-# no test at all. tsc -b is whole-project, so it runs on any web change.
-typecheck=false
-if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || echo "$files" | grep -q '^frontends/web/'; then typecheck=true; fi
+run_plan=$L/plan.json
+j() { jq -r "$1" "$run_plan"; }
+load_selection() {
+  jq -e . "$run_plan" >/dev/null || return 1
+  gofull=$(j .go.full) ngo=$(j '.go.packages|length') ndef=$(j '.go.deferred|length') webfull=$(j .web.full) nweb=$(j '.web.tests|length')
+  elec=$(j .electron.full) fgen=$(j .forge_generate.full) dgen=$(j .docs_generate.full)
+  hooks_only=$(j '.forge_generate.hooks_only // false') hooks=$(j '(.forge_generate.hooks // []) | join(" ")')
+  [ "$regen" = 1 ] && { fgen=true; hooks_only=false; }
+  files=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)
+  # vitest strips types: every changed web source needs tsc, tested or not.
+  typecheck=false
+  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || echo "$files" | grep -q '^frontends/web/'; then typecheck=true; fi
+}
+load_selection || exit 1
 notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo FULL || echo "$nweb file(s)"); typecheck $typecheck; electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
 
 # ── npm installs a selected lane needs ────────────────────────────────────
@@ -252,17 +255,18 @@ npm_install() {
   scripts=--ignore-scripts; [ "$d" = electron ] && scripts=
   phase "$n" npm ci --prefix "$d" $scripts --no-audit --no-fund --loglevel=error
 }
-need=()
-if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ]; then need+=(. frontends/web); fi
-if [ "$elec" = true ]; then need+=(. electron); fi
-if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
-# Each install writes only its own node_modules: run them at once (one after
-# another, a lockfile bump spent 136s + 147s before any phase started).
-npm_pids=()
-for d in $(printf '%s\n' "${need[@]}" | sort -u); do
-  npm_install "$d" & npm_pids+=($!)
-done
-for p in "${npm_pids[@]}"; do wait "$p" || fail=1; done
+prepare_dependencies() {
+  local d p
+  local -a need=() npm_pids=()
+  if [ "$webfull" = true ] || [ "$nweb" -gt 0 ] || [ "$typecheck" = true ]; then need+=(. frontends/web); fi
+  if [ "$elec" = true ]; then need+=(. electron); fi
+  if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
+  for d in $(printf '%s\n' "${need[@]}" | sort -u); do
+    npm_install "$d" & npm_pids+=($!)
+  done
+  for p in "${npm_pids[@]}"; do wait "$p" || fail=1; done
+}
+prepare_dependencies
 
 # ── generate → docs, then build ‖ test ‖ typecheck ‖ lint ‖ migsafety ──────
 # Where a generator's output becomes the tree the other phases judge, it runs
@@ -281,10 +285,7 @@ pids=()
 # A generator running first and alone gets the whole budget; one beside the
 # other phases (in a scratch checkout), a quarter.
 gen_procs=$quarter; [ "$inplace" = 1 ] && gen_procs=$gate_cpus
-# The plan build and test run: the plan phase's, unless --amend folded a
-# regenerate into HEAD (below), which can change what the diff reaches.
-# gate-verify still judges the obligations against plan.json.
-run_plan=$L/plan.json
+# Every consumer, including gate-verify, uses the regenerated-tree plan.
 if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   [ "$fgen" = true ] && { phase generate gen_forge "$root" || fail=1; }
   [ "$fail" = 0 ] && [ "$dgen" = true ] && { phase docs gen_docs "$root" || fail=1; }
@@ -293,15 +294,24 @@ if [ "$fail" = 0 ] && [ "$inplace" = 1 ]; then
   if [ "$amend" = 1 ] && [ "$fail" = 0 ] && [ -n "$(git status --porcelain)" ]; then
     commit_amend || fail=1
     notes+=("regenerated before build and test: they judged the amended tree")
+  fi
+  # Dirty-tree generation can expand reach too, even without --amend.
+  if [ "$fail" = 0 ]; then
+    phase plan-2 go run ./tools/test-affected plan -json -reach "$reach" -base "$base" || fail=1
     if [ "$fail" = 0 ]; then
-      phase plan-2 go run ./tools/test-affected plan -json -reach "$reach" -base "$base" || fail=1
-      sed -n '/^{/,$p' "$L/plan-2.log" >"$L/plan-2.json"; run_plan=$L/plan-2.json
-    fi
-    # A regenerate that rewrote web sources (src/gen, the shortcuts data)
-    # type-checks them, even when the branch itself touched no web.
-    if [ "$fail" = 0 ] && [ "$typecheck" != true ] && cat "$L"/*.changed 2>/dev/null | grep -q '^frontends/web/'; then
-      typecheck=true
-      npm_install . && npm_install frontends/web || fail=1
+      sed -n '/^{/,$p' "$L/plan-2.log" >"$L/plan-2.json"
+      run_plan=$L/plan-2.json
+      old_fgen=$fgen old_dgen=$dgen old_hooks_only=$hooks_only old_hooks=$hooks
+      load_selection || fail=1
+      # A prior hook-only result cannot satisfy a newly full generation lane.
+      # Refuse rather than credit old rows for newly introduced obligations.
+      if { [ "$fgen" = true ] && [ "$old_fgen" != true ]; } ||
+         { [ "$dgen" = true ] && [ "$old_dgen" != true ]; } ||
+         { [ "$old_hooks_only" = true ] && { [ "$hooks_only" != true ] || [ "$hooks" != "$old_hooks" ]; }; }; then
+        echo "merge-gate: regeneration expanded generator obligations; rerun on the regenerated tree" >&2
+        fail=1
+      fi
+      prepare_dependencies
     fi
   fi
 elif [ "$fail" = 0 ]; then
@@ -341,7 +351,7 @@ lint_lanes=(--contract --conventions --generated-drift --go-markers --proto-mark
 if [ "$fail" = 0 ]; then
   phase build build_check & pids+=($!)
   phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
-    go run ./tools/test-affected run -plan "$run_plan" -lanes go,web,electron -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
+    go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes go,web,electron -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" & pids+=($!)
   if [ "$typecheck" = true ]; then
     phase typecheck scripts/web-typecheck.sh & pids+=($!)
   fi
@@ -376,7 +386,7 @@ fi
 # missing) leaves no result row; build/test green around it would otherwise
 # pass (reliant#1393 merged with docs-generate still queued). gate-verify fails
 # it by name. Its own failure to run is a failure too.
-if go run ./tools/test-affected gate-verify -plan "$L/plan.json" -dir "$L" >"$L/verify.log" 2>&1; then :; else
+if go run ./tools/test-affected gate-verify -plan "$run_plan" -base "$base" -dir "$L" >"$L/verify.log" 2>&1; then :; else
   fail=1
   [ -f "$L/verdict" ] || echo "FAILED: gate-verify could not run" >"$L/verdict"
   notes+=("$(head -c 300 "$L/verdict")")

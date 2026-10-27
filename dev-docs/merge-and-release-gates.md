@@ -15,7 +15,7 @@ Neither gate keeps a second copy of it.
 
 | Tier | Command | What it runs | When |
 |---|---|---|---|
-| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change; the web `tsc -b` (incremental, shared across checkouts) when a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint); migration-safety when a migration changed; and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
+| **merge** | `task ci:merge` (`scripts/merge-gate.sh`) | the affected tests (`-short`, cached, no `-race`, a per-test time budget) of the changed packages and their **direct** importers, and the vitest files within two imports of a changed module; a compile (no link) of every package whose build contains a change; the web `tsc -b --force` (checkout-local state) when a web file changed; forge lint's own lanes over the changed directories (no golangci-lint, no buf lint); migration-safety when a migration changed; and the forge-generate and docs-generate no-op checks only when one of their inputs changed | before **every merge**. The merge queue runs it on the squash it is about to land |
 | **release** | `task release:gate` (`scripts/release-gate.sh run`) | everything: unscoped `forge lint` (golangci over the whole module, buf, the whole-project lanes, the frontends), `task generate:check`, `task generate:docs:check`, `go build`, the web `tsc -b`, `go vet ./...`, `task test` (Go `-race -count=1` without `-short`, so every slow test runs, plus web and electron in full), `task test:integration` and `task test:e2e` | on a commit of **main**, before a release. `task release:tag` refuses a commit without a green record |
 
 ## The merge gate
@@ -84,12 +84,17 @@ The phases:
      the per-test budget fails it (below). When `--amend` folded a
      regenerate into HEAD first, the gate plans again (`plan-2`) and build
      and test run that plan, since regenerated code can change what the diff
-     reaches.
+     reaches. Saved plans require schema, exact base/head and a digest of
+     tracked and non-ignored untracked input bytes. Reuse after a source edit,
+     head/base change or incomplete JSON is refused. Selection, installs,
+     build/tests and closing verification all use the post-generation plan;
+     newly expanded generator obligations require a rerun rather than crediting
+     a narrower earlier generation result. The atomic control-plane generation
+     hook always executes: pins alone cannot identify installed plugin/runtime
+     bytes, so its former generated-output result cache is not reused.
    - **typecheck** is `scripts/web-typecheck.sh`: frontends/web's
-     `npm run typecheck` (`tsc -b`, which
-     includes `tsconfig.test.json`, so test files are type-checked), started
-     from the newest incremental state any checkout of this clone on the
-     machine left (below). It runs
+     `npm run typecheck -- --force` (`tsc -b --force`, which
+     includes `tsconfig.test.json`, so test files are type-checked). It runs
      when the plan selects the web lane or the diff touches anything under
      `frontends/web/`, or when a regenerate rewrote a web file. The web test lane cannot stand in for it: vitest strips types
      without checking them, and a changed module no test imports selects no
@@ -99,17 +104,13 @@ The phases:
      emitted declarations. The build info and declarations live in
      `frontends/web/node_modules/.tmp/`, which the gate's `git clean -fdq`
      keeps (it is ignored) and `npm ci` drops with the rest of
-     `node_modules`. `tsc -b` is fast from a current state and slow from a
-     cold one (measured at load ~150: cold 395s, no change 8s, one module
-     changed 26s), and the merge queue's typecheck took a median 528s: a
-     pool's state was whatever tree it last checked, or none after an
-     `npm ci`, and two pools whose `node_modules` were hard-linked copies
-     shared (and overwrote) one state. So the script gives the checkout its
-     own copy of hard-linked state files, starts from the shared cache
-     (`~/.cache/reliant-web-tsc/`, keyed by the lockfiles, tsconfigs and
-     TypeScript version) when that is newer, and saves a passing run's state
-     back with an atomic swap. Which state it starts from never changes the
-     verdict: tsc keys it by file content and relative path.
+     `node_modules`. The script detaches hard-linked state before invoking
+     tsc and never restores or publishes another checkout's state. `--force`
+     prevents the solution-builder's timestamp shortcut from skipping a
+     backdated source edit or a copied installation. Dependency/config hashes
+     alone do not make cross-checkout state safe: tsc can declare the project
+     current before comparing source content. These correctness repairs
+     invalidate the earlier shared-cache timing claims.
    - **lint** is forge lint's own lanes, named (`--contract --conventions
      --generated-drift --go-markers --proto-markers --create-nullability
      --computed-fields --read-only-fields --db-grants --column-markers

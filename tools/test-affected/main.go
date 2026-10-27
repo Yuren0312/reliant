@@ -104,7 +104,7 @@ func main() {
 	var pl *Plan
 	var err error
 	if *planFile != "" {
-		pl, err = readPlan(*planFile)
+		pl, err = readPlan(ctx, *root, *baseFlag, *planFile)
 	} else {
 		pl, err = plan(ctx, *root, *baseFlag, *full, splitList(*files), *reachFlag)
 	}
@@ -173,8 +173,22 @@ func laneSet(s string) map[lane]bool {
 }
 
 // plan computes the decision for the tree at root.
-func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []string, reachMode string) (*Plan, error) {
+func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []string, reachMode string) (result *Plan, resultErr error) {
 	root = mustAbs(root)
+	before, err := checkoutDigest(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		// What-if decisions are not executable evidence of this checkout.
+		if resultErr == nil && result != nil && len(whatIf) == 0 {
+			result.Schema = planSchema
+			result.InputDigest, resultErr = checkoutDigest(ctx, root)
+			if resultErr == nil && result.InputDigest != before {
+				resultErr = errors.New("checkout changed while planning; replan")
+			}
+		}
+	}()
 	module, err := moduleOf(root)
 	if err != nil {
 		return nil, err
@@ -220,7 +234,7 @@ func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []s
 // readPlan reads a plan `plan -json` wrote. Planning loads the whole module's
 // package graph (`go list -test -json ./...`: 17-141s in the merge queue on a
 // loaded host), so a gate that has planned once runs that plan.
-func readPlan(file string) (*Plan, error) {
+func readPlan(ctx context.Context, root, base, file string) (*Plan, error) {
 	b, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
@@ -229,8 +243,40 @@ func readPlan(file string) (*Plan, error) {
 	if i := bytes.IndexByte(b, '{'); i > 0 {
 		b = b[i:]
 	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(b, &fields); err != nil {
+		return nil, err
+	}
+	for _, key := range []string{"schema", "input_digest", "base", "head", "files", "go", "web", "electron", "forge_generate", "docs_generate", "migration_order"} {
+		value, ok := fields[key]
+		if !ok || (key != "files" && bytes.Equal(value, []byte("null"))) {
+			return nil, fmt.Errorf("%s: missing plan field %s", file, key)
+		}
+	}
+	for _, key := range []string{"go", "web", "electron", "forge_generate", "docs_generate", "migration_order"} {
+		var laneFields map[string]json.RawMessage
+		if err := json.Unmarshal(fields[key], &laneFields); err != nil {
+			return nil, err
+		}
+		var full bool
+		value, ok := laneFields["full"]
+		if !ok || bytes.Equal(value, []byte("null")) {
+			return nil, fmt.Errorf("%s: missing %s.full", file, key)
+		}
+		if err := json.Unmarshal(value, &full); err != nil {
+			return nil, err
+		}
+	}
 	var pl Plan
-	if err := json.Unmarshal(b, &pl); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&pl); err != nil {
+		return nil, fmt.Errorf("%s: %w", file, err)
+	}
+	if err := dec.Decode(new(any)); err != io.EOF {
+		return nil, fmt.Errorf("%s: trailing plan data", file)
+	}
+	if err := validatePlanIdentity(ctx, root, base, &pl); err != nil {
 		return nil, fmt.Errorf("%s: %w", file, err)
 	}
 	return &pl, nil

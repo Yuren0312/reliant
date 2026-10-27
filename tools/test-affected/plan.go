@@ -111,15 +111,17 @@ type MigOrderPlan struct {
 
 // Plan is the whole decision.
 type Plan struct {
-	Base     string       `json:"base"`
-	Head     string       `json:"head"`
-	Files    []FileReport `json:"files"`
-	Go       GoPlan       `json:"go"`
-	Web      WebPlan      `json:"web"`
-	Electron ElectronPlan `json:"electron"`
-	ForgeGen ForgeGenPlan `json:"forge_generate"`
-	DocGen   DocGenPlan   `json:"docs_generate"`
-	MigOrder MigOrderPlan `json:"migration_order"`
+	Schema      int          `json:"schema"`
+	InputDigest string       `json:"input_digest"`
+	Base        string       `json:"base"`
+	Head        string       `json:"head"`
+	Files       []FileReport `json:"files"`
+	Go          GoPlan       `json:"go"`
+	Web         WebPlan      `json:"web"`
+	Electron    ElectronPlan `json:"electron"`
+	ForgeGen    ForgeGenPlan `json:"forge_generate"`
+	DocGen      DocGenPlan   `json:"docs_generate"`
+	MigOrder    MigOrderPlan `json:"migration_order"`
 	// Lockfiles are the npm projects whose manifest or lockfile changed: the
 	// runner checks each still installs with `npm ci` before any test runs.
 	Lockfiles []LockfileCheck `json:"npm_lockfiles,omitempty"`

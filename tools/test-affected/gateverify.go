@@ -3,6 +3,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -27,6 +28,8 @@ func runGateVerify(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	planPath := fs.String("plan", "", "plan.json written by `test-affected plan -json`")
 	dir := fs.String("dir", "", "the gate's log directory (<phase>.row files)")
+	root := fs.String("root", ".", "judged repository root")
+	base := fs.String("base", "", "judged base commit")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -35,6 +38,9 @@ func runGateVerify(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	problems := verifyGate(*planPath, *dir)
+	if _, err := readPlan(context.Background(), *root, *base, *planPath); err != nil {
+		problems = append(problems, "plan identity invalid: "+err.Error())
+	}
 	verdict := "OK"
 	if len(problems) > 0 {
 		verdict = "FAILED: " + strings.Join(problems, "; ")
