@@ -1389,7 +1389,9 @@ function UsageAndInvoicesTab() {
       </div>
       {/* The usage notices the gateway sends point here ("Settings → Billing"). */}
       <div id="observability" className="border-t border-border pt-6" data-testid="billing-observability-usage">
-        <UsageView orgId={obsOrg.orgId} />
+        <div id="billing-observability-usage">
+          <UsageView orgId={obsOrg.orgId} />
+        </div>
       </div>
       {deployUsage.available && (
         <div className="border-t border-border pt-6">

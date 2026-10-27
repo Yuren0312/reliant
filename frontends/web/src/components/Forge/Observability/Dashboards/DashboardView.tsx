@@ -65,7 +65,7 @@ import { ObsChartMarkersProvider, type ChartBand, type ChartMarker } from "../ch
 import { deliveryScopeOf } from "../deliveryScope";
 import { formatAgo } from "../format";
 import type { ObsEnvironment } from "../obsPlace";
-import { ObsError } from "../ObsStates";
+import { ObsAsOf, ObsError } from "../ObsStates";
 import { useReleaseMarkers } from "../releaseMarkers";
 import { DashboardHeader } from "./DashboardHeader";
 import { ViewerControls } from "./ViewerControls";
@@ -1008,6 +1008,7 @@ function DashboardPanelCard({
           )}
           <div className="min-w-0">
             <h2 className="truncate text-sm font-medium text-ink">{panel.title || panel.id}</h2>
+            {query.data && <ObsAsOf updatedAt={query.dataUpdatedAt} className="mt-0.5" />}
             {panel.description && <p className="truncate text-xs text-ink-muted" title={panel.description}>{panel.description}</p>}
           </div>
         </div>

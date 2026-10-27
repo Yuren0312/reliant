@@ -54,7 +54,7 @@ import {
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { WorkloadKind as WireWorkloadKind, type DeclaredWorkload as WireDeclaredWorkload } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 
-import { getControlPlaneClient } from "../client";
+import { obsClient } from "./obsClient";
 import type {
   AttributeFilter,
   AttributeOp,
@@ -107,7 +107,7 @@ import { SERVICE_SIGNALS } from "./types";
 import type { MetricKind, SeriesMeta } from "./metricsTypes";
 
 function client() {
-  return getControlPlaneClient(ObservabilityService);
+  return obsClient(ObservabilityService);
 }
 
 // ── Scope and time ───────────────────────────────────────────────────────────
