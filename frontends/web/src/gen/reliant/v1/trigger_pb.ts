@@ -1197,7 +1197,8 @@ export type TriggerDefinition = Message<"reliant.v1.TriggerDefinition"> & {
 
   /**
    * Who the integration writes of this trigger's runs speak as. UNSPECIFIED
-   * means OWNER on create and "unchanged" on update. APP is refused on a
+   * means APP on create for a resolved GitHub integration source, OWNER for
+   * other new sources, and "unchanged" on update. APP is refused on a
    * deployment with no control plane to mint installation tokens from, and
    * for a trigger whose owner cannot push to a repository it writes to the
    * write fails when it happens (never silently as the owner).
@@ -1665,8 +1666,9 @@ export type EnableWorkflowRequest = Message<"reliant.v1.EnableWorkflowRequest"> 
 
   /**
    * Who the integration writes of every run speak as, as
-   * TriggerDefinition.acting_identity. Unspecified means the owner for a new
-   * activation and "unchanged" for an existing one.
+   * TriggerDefinition.acting_identity. Unspecified defaults each new source
+   * separately (APP for GitHub integration, OWNER otherwise) and preserves an
+   * existing activation's stored identity.
    *
    * @generated from field: reliant.v1.ActingIdentity acting_identity = 13;
    */
@@ -2502,7 +2504,8 @@ export enum ActingIdentity {
 
   /**
    * OWNER: the activation's owner, through their own GitHub App user token. What
-   * every activation did before identities existed; the default.
+   * every activation did before identities existed; still the default for
+   * new sources other than GitHub integration triggers.
    *
    * @generated from enum value: ACTING_IDENTITY_OWNER = 1;
    */

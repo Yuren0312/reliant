@@ -252,7 +252,8 @@ type ActingIdentity int32
 const (
 	ActingIdentity_ACTING_IDENTITY_UNSPECIFIED ActingIdentity = 0
 	// OWNER: the activation's owner, through their own GitHub App user token. What
-	// every activation did before identities existed; the default.
+	// every activation did before identities existed; still the default for
+	// new sources other than GitHub integration triggers.
 	ActingIdentity_ACTING_IDENTITY_OWNER ActingIdentity = 1
 	// APP: the GitHub App's bot (`reliant-labs[bot]`), through a per-repository
 	// installation token. control-plane mints it only when the owner's own token
@@ -2183,7 +2184,8 @@ type TriggerDefinition struct {
 	//	*TriggerDefinition_WorkflowTrigger
 	Source isTriggerDefinition_Source `protobuf_oneof:"source"`
 	// Who the integration writes of this trigger's runs speak as. UNSPECIFIED
-	// means OWNER on create and "unchanged" on update. APP is refused on a
+	// means APP on create for a resolved GitHub integration source, OWNER for
+	// other new sources, and "unchanged" on update. APP is refused on a
 	// deployment with no control plane to mint installation tokens from, and
 	// for a trigger whose owner cannot push to a repository it writes to the
 	// write fails when it happens (never silently as the owner).
@@ -3189,8 +3191,9 @@ type EnableWorkflowRequest struct {
 	// Per-trigger exceptions to the shared choices above.
 	Overrides []*WorkflowTriggerOverride `protobuf:"bytes,12,rep,name=overrides,proto3" json:"overrides,omitempty"`
 	// Who the integration writes of every run speak as, as
-	// TriggerDefinition.acting_identity. Unspecified means the owner for a new
-	// activation and "unchanged" for an existing one.
+	// TriggerDefinition.acting_identity. Unspecified defaults each new source
+	// separately (APP for GitHub integration, OWNER otherwise) and preserves an
+	// existing activation's stored identity.
 	ActingIdentity ActingIdentity `protobuf:"varint,13,opt,name=acting_identity,json=actingIdentity,proto3,enum=reliant.v1.ActingIdentity" json:"acting_identity,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache

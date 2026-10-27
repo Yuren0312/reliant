@@ -432,8 +432,11 @@ removing a declaration, or changing its source kind or integration, leaves its a
 they fire nothing, report why in `list_triggers`, and recover when the declaration is restored (or are
 enabled again by the user). Runs a trigger starts are unattended — nobody answers questions or approvals.
 
-**Who the run writes as.** When the user enables an automation they choose `acting_identity`: `owner` (default; GitHub
-comments, reviews and pull requests appear as the user) or `app` (they appear as the Reliant bot, `reliant-labs[bot]`). It is the
+**Who the run writes as.** New GitHub integration activations default to `acting_identity: app` (GitHub comments,
+reviews and pull requests appear as the Reliant bot, `reliant-labs[bot]`). Other sources, including schedules,
+webhooks and workflow events, still default to `owner` (writes appear as the user); a scheduled GitHub writer needs an
+explicit app choice. Existing activations retain their stored identity, and explicit owner choices stay owner.
+Only GitHub supports app identity; do not promise a bot identity for another integration. It is the
 ACTIVATION's choice, made in the app, not the workflow's and not yours: nothing in the YAML, an `action` node's `with:` or a prompt can
 switch it, and a person typing in the run's chat acts as themselves. It covers every integration action the run takes, an
 `action` node and an agent's integration tools alike, and only the writes: reads use the owner's access. Everything the bot
@@ -441,8 +444,8 @@ authors ends with a footer naming the automation and its owner, so do not write 
 repository the owner can push to, scoped to that one repository; if the owner cannot push, the Reliant GitHub App is not
 installed there, the App lacks a permission, the deployment has no App key, or minting fails, the write FAILS with the reason (it never falls back to the owner's name or to a saved connection; a write that names a saved connection on a bot run fails too, and a git_publish push is refused the same way),
 so a workflow that must keep going should handle the action's error output. When you hand a workflow to the user, say that
-a reviewer or triager can be enabled as the bot so the owner can approve and merge what it opens; otherwise the default is
-fine. A self-hosted deployment has no App and acts as the owner. Comments written by Reliant's own bot never fire
+new GitHub triggers default to the bot; scheduled GitHub writers need the user to choose it explicitly. A deployment
+without a control plane refuses the bot identity on save; the user must configure the App or explicitly choose owner. Comments written by Reliant's own bot never fire
 `issue_comment.created` or `pull_request_review_comment.created`, so a run that comments cannot trigger itself; other bots' comments do.
 
 ### When a run fails: `on_failure:`

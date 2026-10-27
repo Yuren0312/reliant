@@ -687,7 +687,7 @@ func (s *Service) triggerFromDefinition(
 		return nil, svcerr.InvalidArgument("filter: a schedule fires on time, not on an event, so there is nothing to filter")
 	}
 
-	identity, err := s.actingIdentityFor(def, existing)
+	identity, err := s.actingIdentityFor(def, existing, src)
 	if err != nil {
 		return nil, err
 	}
@@ -733,22 +733,25 @@ func (s *Service) triggerFromDefinition(
 
 // actingIdentityFor decides who a trigger's integration writes speak as.
 //
-// Unspecified means the owner on create and "unchanged" on update, so a client
-// that predates the field cannot flip an activation back to the owner by
-// omitting it. The app identity is refused where it could never work: with no
-// control plane there is no App key, and a write that would silently fall back
-// to the owner's own name is exactly what choosing a bot is meant to prevent.
-func (s *Service) actingIdentityFor(def *reliantv1.TriggerDefinition, existing *core.Trigger) (core.ActingIdentity, error) {
+// Unspecified means app for a new GitHub integration activation, owner for
+// other sources, and "unchanged" on update. Use the resolved source so inline
+// triggers and workflow declarations agree. Never reinterpret a stored identity
+// using the creation default. Missing bot infrastructure is an error, not a
+// reason to silently write under the owner's name.
+func (s *Service) actingIdentityFor(def *reliantv1.TriggerDefinition, existing *core.Trigger, src *triggers.Source) (core.ActingIdentity, error) {
 	identity, chosen := triggers.ActingIdentityFromProto(def.ActingIdentity)
 	if !chosen {
 		if existing != nil {
 			return existing.ActingIdentity.OrOwner(), nil
 		}
-		return core.ActingIdentityOwner, nil
+		identity = core.ActingIdentityOwner
+		if src.Kind == core.TriggerKindIntegration && src.Integration == "github" {
+			identity = core.ActingIdentityApp
+		}
 	}
 	if identity == core.ActingIdentityApp && s.deps.ControlPlane == nil {
 		return "", svcerr.FailedPrecondition("acting_identity: app needs a Reliant deployment with a control plane, which holds the GitHub App; " +
-			"this deployment has none, so its automations act as their owner")
+			"configure the App, or explicitly choose owner to write under your own name")
 	}
 	return identity, nil
 }
