@@ -230,12 +230,12 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
         </div>
       </div>
 
-      {/* In the console the layout says it once above the page; the env page's tab has no such layout. */}
-      {!consoleChrome && <ObsQuotaBanner />}
+      {/* App and org console layouts own the quota banner. An embedded env panel has no such layout. */}
+      {place.kind === "env" && <ObsQuotaBanner />}
 
-      {/* Usage is org-wide. Attribute filters and group-by mean nothing on Alerts. */}
+      {/* Attribute filters and group-by mean nothing on Alerts. */}
       {/* Only the org place draws app and environment pickers: in an app's console the top bar is the scope. */}
-      {scope && (!notSetUp || view === "alerts") && !nothingYet && view !== "usage" && (
+      {scope && (!notSetUp || view === "alerts") && !nothingYet && (
         <ObsScopeBar
           scope={scope}
           range={range}

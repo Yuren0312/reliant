@@ -50,6 +50,7 @@ import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/contro
 import { cn } from "@/lib/utils";
 
 import { ENV_ALL } from "../Console/envScope";
+import { consolePath, withSearch } from "../Console/paths";
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatAgo, formatBytes, formatCores } from "../Observability/format";
 import { promotionIsSuspect, type RollbackTarget } from "../Promote/rollback";
@@ -87,6 +88,7 @@ import { exitPhrase, jobFailurePhrase } from "./plainHealth";
 import { Chip, ChipMenu, HealthStatus, SkeletonRows, UsageMeter, WorkloadRelease } from "./workloadParts";
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
 import { LiveLinks } from "./LiveLinks";
+import { ProcessHealth } from "./ProcessHealth";
 import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface OverviewSearch {
@@ -403,6 +405,17 @@ export function OverviewHome({
               </p>
             )}
           </Panel>
+
+          {!unrecorded && <ProcessHealth
+            scope={kpiScope}
+            range={range}
+            workloads={workloads}
+            alerts={alerts.data ?? []}
+            envNameOf={(id) => envs.find(candidate => candidate.id === id)?.name}
+            workloadHref={(name, processEnv) => hrefs.workload(name, processEnv ?? env)}
+            logsHref={(name) => withSearch(consolePath(project, { kind: "obs-view", view: "logs" }), { env, range, service: name, severity: "error,fatal" })}
+            navigateTo={navigateTo}
+          />}
 
           <Panel title="Jobs" meta="Migrations, provisioning and scheduled jobs. The latest run of each." flush testId="overview-jobs">
             <JobsTable

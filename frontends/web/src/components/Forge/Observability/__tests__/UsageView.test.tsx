@@ -6,8 +6,7 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { screen, within } from "@testing-library/react";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 // This file pins the explicitly retained, read-only rollout fallback.
@@ -19,7 +18,7 @@ import { createFixtureApi, fixtureUsage, FIXTURE_ORG } from "../__fixtures__/fix
 import type { ObservabilityUsage } from "@/services/controlPlane/observability/types";
 import { usageNotice } from "../usageModel";
 import { LegacyUsageView as UsageView } from "../UsageView";
-import { renderPanel, renderWithApi } from "./obsTestUtils";
+import { renderWithApi } from "./obsTestUtils";
 
 vi.mock("uplot", async () => (await import("./obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("./obsMocks")).obsMocks.virtual());
