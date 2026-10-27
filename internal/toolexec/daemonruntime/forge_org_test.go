@@ -4,6 +4,7 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -49,6 +50,31 @@ func TestForgeOrg_HandlerCarriesTheRequestedOrgToTheRunner(t *testing.T) {
 	}
 	if got != "org-b" {
 		t.Fatalf("runner org = %q, want org-b", got)
+	}
+}
+
+// The forge subprocess is first-party: keep its existing helper/server/OS
+// environment, but the request's captured org wins over ambient stale state.
+func TestForgeOrg_RealChildInheritsHelperAndServerButOverridesOrg(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell child")
+	}
+	t.Setenv("RELIANT_SERVER_URL", "https://session.example.test")
+	t.Setenv("FORGE_CREDENTIAL_HELPER", "reliant auth forge-credential --daemon-server https://session.example.test")
+	t.Setenv(ForgeOrgEnv, "ambient-org")
+	t.Setenv("FORGE_ENV_FORWARD_TEST", "inherited-value")
+	ctx, err := bindForgeOrg(context.Background(), "captured-org")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := runForgeProcess(ctx, t.TempDir(), "sh", "-c",
+		`printf '%s\n' "$RELIANT_SERVER_URL" "$FORGE_CREDENTIAL_HELPER" "$RELIANT_FORGE_ORG" "$FORGE_ENV_FORWARD_TEST"`)
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("child failed: exit=%d err=%v", result.ExitCode, err)
+	}
+	want := "https://session.example.test\nreliant auth forge-credential --daemon-server https://session.example.test\ncaptured-org\ninherited-value\n"
+	if string(result.Stdout) != want || len(result.Stderr) != 0 {
+		t.Fatal("child did not preserve the helper/server environment and captured org override")
 	}
 }
 
