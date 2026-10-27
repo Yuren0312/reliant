@@ -58,7 +58,7 @@ import ToggleSwitch from "../../forge-ui/toggle_switch";
 import Button from "@/components/forge-ui/button";
 import { AutomationCta } from "../../Automations/AutomationCta";
 import { automationMachineLabel, daemonStatusLabel } from "../../Automations/daemonChoices";
-import { openAutomationDialog } from "../../Automations/automationDialog";
+import { openAutomationDialog } from "../../Automations/dialog/openAutomationDialog";
 import { RunList } from "../../runs/RunList";
 import { HealthIndicator, LastTriggerEvent, NextFire } from "../automationStatus";
 import { WorkflowBadge } from "../WorkflowSourceBadge";

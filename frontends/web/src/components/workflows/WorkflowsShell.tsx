@@ -11,8 +11,8 @@
  * you (WORKFLOW_UI.md §8), and its sidebar badge is the one count. The
  * Workflows list pins what needs you on top instead.
  *
- * It also hosts the automation dialog (AutomationDialogHost): every page in
- * the area opens it through openAutomationDialog().
+ * Every page opens the automation dialog through openAutomationDialog();
+ * its single host lives in the root shell, shared with chat and builder entry points.
  *
  * WHY A SIDEBAR. The sections used to be tab links squeezed into the title
  * bar beside "Close", where they read as window chrome rather than as the
@@ -58,7 +58,6 @@ import { useProjectStore } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
 import DropdownMenu from "../forge-ui/dropdown_menu";
 import Tooltip from "../forge-ui/tooltip";
-import { AutomationDialogHost } from "../Automations/automationDialog";
 import { useWorkflowsScope } from "./useWorkflowsScope";
 
 const TAB_ICONS: Record<WorkflowsTab, typeof Workflow> = {
@@ -139,7 +138,6 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
       >
         {isFillLayout(pathname) ? children : <div className="mx-auto w-full max-w-6xl">{children}</div>}
       </SidebarLayout>
-      <AutomationDialogHost />
     </div>
   );
 }

@@ -93,7 +93,8 @@ vi.mock("../../workflow/WorkflowViewerPanel", () => ({
 }));
 
 import { WorkflowDetailPage } from "../detail/WorkflowDetailPage";
-import { AutomationDialogHost, closeAutomationDialog } from "../../Automations/automationDialog";
+import { AutomationDialogHost } from "../../Automations/dialog/AutomationDialogHost";
+import { closeAutomationDialog } from "../../Automations/dialog/openAutomationDialog";
 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
@@ -196,7 +197,7 @@ describe("WorkflowDetailPage", () => {
     expect(off).toHaveTextContent("weekday-morning");
     expect(within(off).getByText("From the workflow file")).toBeInTheDocument();
     await userEvent.click(within(off).getByRole("button", { name: "Set up…" }));
-    expect(await screen.findByRole("form", { name: "Set up Triage" })).toBeInTheDocument();
+    expect(await screen.findByRole("form", { name: "Turn on Triage" })).toBeInTheDocument();
   });
 
   it("a workflow whose Chat trigger is off can still be run by hand: Run… is how it is run", async () => {
@@ -245,8 +246,11 @@ describe("WorkflowDetailPage", () => {
     expect(screen.queryByRole("button", { name: "Enable" })).toBeNull();
     await userEvent.click(await screen.findByRole("button", { name: "Add trigger…" }));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByLabelText("Name")).toHaveValue("Triage");
-    await waitFor(() => expect(within(dialog).getByLabelText("Workflow")).toHaveValue("triage"));
+    expect(within(dialog).getByRole("heading", { name: "When" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("heading", { name: "Do" })).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Name")).toBeNull();
+    expect(await within(dialog).findByText("Triage", { selector: "span.font-medium" })).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText("Workflow")).toBeNull();
   });
 
   it("a draft cannot run, and says why in text", async () => {

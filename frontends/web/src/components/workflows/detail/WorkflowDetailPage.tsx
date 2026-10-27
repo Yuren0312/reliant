@@ -40,7 +40,7 @@ import Card, { CardHeader, CardInset } from "../../forge-ui/card";
 import PageHeader from "../../forge-ui/page_header";
 import Button from "@/components/forge-ui/button";
 import { AutomationStateNotice } from "../../Automations/AutomationStateNotice";
-import { openAutomationDialog } from "../../Automations/automationDialog";
+import { openAutomationDialog } from "../../Automations/dialog/openAutomationDialog";
 import { RunList } from "../../runs/RunList";
 import { RunNowDialog } from "../../workflow/run/RunNowDialog";
 import { WorkflowViewerPanel } from "../../workflow/WorkflowViewerPanel";

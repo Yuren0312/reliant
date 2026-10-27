@@ -10,6 +10,7 @@
  * workflow's page, and Run… opening the run dialog.
  */
 
+import { useAutomationDialogStore } from "../../Automations/dialog/openAutomationDialog";
 import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
@@ -88,7 +89,8 @@ vi.mock("@/store/projectStore", () => {
 });
 
 import { WorkflowsListPage } from "../list/WorkflowsListPage";
-import { AutomationDialogHost, closeAutomationDialog } from "../../Automations/automationDialog";
+import { AutomationDialogHost } from "../../Automations/dialog/AutomationDialogHost";
+import { closeAutomationDialog } from "../../Automations/dialog/openAutomationDialog";
 
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset();
@@ -393,7 +395,8 @@ describe("WorkflowsListPage", () => {
     const triage = await screen.findByTestId("workflow-row-triage");
     await waitFor(() => expect(within(triage).getByTestId("workflow-row-starts-on")).toHaveTextContent(/^Off · /));
     await userEvent.click(within(triage).getByRole("button", { name: "Set up Triage (project, triage)" }));
-    expect(await screen.findByRole("form", { name: "Set up Triage" })).toBeInTheDocument();
+    // The one automation dialog, for this workflow's declared triggers.
+    expect(useAutomationDialogStore.getState().request).toMatchObject({ workflowRef: "triage", mode: "setup", showOpenWorkflow: true });
     // A workflow that declares nothing has no Set up.
     expect(within(screen.getByTestId("workflow-row-builtin://agent")).queryByRole("button", { name: /^Set up/ })).toBeNull();
   });

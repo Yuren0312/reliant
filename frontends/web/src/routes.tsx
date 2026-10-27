@@ -28,6 +28,7 @@ import { lazyRoute } from './lib/lazyRoute'
 import { AuthGuard } from './components/AuthGuard'
 import { ModalLayer } from './components/Modals/ModalLayer'
 import { AddProjectDialogHost } from './components/Projects/AddProjectDialog'
+import { AutomationDialogHost } from './components/Automations/dialog/AutomationDialogHost'
 import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
@@ -285,6 +286,8 @@ function RootShell() {
       {/* Add project opens over any route (the sidebar, Settings, the
           new-chat project chip, the shortcut, the tray). */}
       <AddProjectDialogHost />
+      {/* openAutomationDialog: one automation dialog for every page, chat card and builder panel. */}
+      <AutomationDialogHost />
       <AnonSignInNudge />
       <Toaster />
       <NewBuildPrompt />
