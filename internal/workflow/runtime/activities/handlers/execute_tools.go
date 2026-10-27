@@ -721,10 +721,9 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 		ctx = tools.WithSkills(ctx, a.projectSkills(ctx, tec.project.ID))
 	}
 
-	// Daemon routing priority: explicit node/workflow selector > the worktree's
-	// owning daemon > default resolution. A worktree-bound (e.g. branch) chat
-	// must run on the daemon that has its checkout on disk; a nil worktree
-	// DaemonID (main checkout / legacy rows) leaves routing at the default.
+	// Daemon routing priority: explicit node/workflow selector > durable chat
+	// pin > the worktree's owner > default resolution. Read the pin even when
+	// this live run's input snapshot predates launch-time pinning.
 	// ensureBatchWorkspace routes with the same functions, so the directory it
 	// checked is on the disk these calls run on. A thread-bound worktree
 	// exists on its owner alone, so an inherited selector (the parent's pin,
@@ -733,7 +732,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	if tec.worktree != nil {
 		worktreeDaemon = tec.worktree.DaemonID
 	}
-	tec.daemonSelector = toolDaemonSelector(worktreeDaemon, threadBoundExplicit(tec.worktreeThreadBound, worktreeDaemon, daemonSel))
+	tec.daemonSelector = toolDaemonSelector(worktreeDaemon, threadBoundExplicit(tec.worktreeThreadBound, worktreeDaemon, chatDaemonSelector(tec.chat, daemonSel)))
 
 	// The call is about to enter real execution -- record it durably as
 	// PENDING before dispatch so a reload mid-execution sees at least this

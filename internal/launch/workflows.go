@@ -852,7 +852,7 @@ func LoadProjectWorkflowBySlugFromDB(repo ProjectWorkflowLoader, ctx context.Con
 	}
 	protoWf, err := wfyaml.ParseWorkflow(entry.Content)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to parse project workflow %s: %w", entry.Path, err)
+		return nil, "", fmt.Errorf("failed to parse project workflow %s: %w", entry.Location(), err)
 	}
 	return protoWf, string(entry.Content), nil
 }

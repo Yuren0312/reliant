@@ -149,21 +149,9 @@ func (s *Service) ListWorkflows(
 	// 2. Load project workflows from .reliant/workflows/*.yaml files (read-only, team-shared)
 	projectWorkflows, projectInvalid := discoverProjectWorkflowsFromDB(catalog, ctx, project.ID)
 	for _, pwf := range projectWorkflows {
-		// Project workflows use slug generated from workflow name (not filename) as key
-		// This ensures user workflows with the same name properly override project workflows
-		// Use generateSlug to match user workflow slug generation
-		// Fallback to filename if name is empty (shouldn't happen, but safety check)
-		if pwf.Name == "" {
-			workflowsBySlug[pwf.Filename] = pwf
-			continue
-		}
-		slug := generateSlug(pwf.Name)
-		if slug == "" {
-			// If slug generation fails, fallback to filename
-			workflowsBySlug[pwf.Filename] = pwf
-			continue
-		}
-		workflowsBySlug[slug] = pwf
+		// Filename is the index's runnable address, not the YAML name:
+		// colliding nested workflows have distinct repo-qualified addresses.
+		workflowsBySlug[pwf.Filename] = pwf
 	}
 	invalidWorkflows = append(invalidWorkflows, projectInvalid...)
 
@@ -322,34 +310,46 @@ func discoverProjectWorkflowsFromDB(repo workflowsource.ProjectStore, ctx contex
 	for _, entry := range index.Entries() {
 		label := entry.Name
 		if label == "" {
-			label = entry.Path
+			label = entry.Location()
 		}
 		if entry.Problem != nil {
 			invalidWorkflows = append(invalidWorkflows, &reliantv1.InvalidWorkflow{
 				Name:   label,
 				Source: "project",
-				Path:   entry.Path,
+				Path:   entry.Location(),
 				Errors: []string{entry.Problem.Error()},
 			})
 			continue
 		}
 		protoWf, err := parseWorkflowYAML(entry.Content)
 		if err != nil {
-			logging.WarnContext(ctx, "Failed to parse stored project workflow", "error", err, "path", entry.Path)
+			logging.WarnContext(ctx, "Failed to parse stored project workflow", "error", err, "path", entry.Location())
 			invalidWorkflows = append(invalidWorkflows, &reliantv1.InvalidWorkflow{
-				Name:   entry.Slug,
+				Name:   entry.Address,
 				Source: "project",
-				Path:   entry.Path,
+				Path:   entry.Location(),
 				Errors: []string{err.Error()},
 			})
 			continue
 		}
 
+		var addressWarnings []*reliantv1.ValidationError
+		if entry.Warning != nil {
+			addressWarnings = append(addressWarnings, &reliantv1.ValidationError{Type: "warning:discovery", Message: entry.Warning.Error()})
+		}
+		listedName := protoWf.Name
+		if entry.Address != entry.Slug {
+			listedName = entry.Address
+		}
 		items = append(items, &reliantv1.WorkflowListItem{
-			Name:            protoWf.Name,
-			Title:           protoWf.Title,
-			IsHidden:        protoWf.Hidden,
-			Filename:        entry.Slug,
+			ValidationErrors: addressWarnings,
+			Name:             listedName,
+			Title:            protoWf.Title,
+			IsHidden:         protoWf.Hidden,
+			// The address a ref resolves to: a nested repo's workflow whose
+			// bare name the root or another repo also claims is
+			// "<repo>/<slug>" (workflowref.Index).
+			Filename:        entry.Address,
 			Description:     protoWf.Description,
 			StepCount:       int32(len(protoWf.Nodes)),
 			Source:          "project",
