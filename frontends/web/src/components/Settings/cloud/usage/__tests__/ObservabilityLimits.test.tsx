@@ -13,7 +13,14 @@ describe("observability limits", () => {
     render(<ObservabilityLimits orgId="org" limits={limits(false)} save={vi.fn()} reload={vi.fn()} />);
     expect(screen.queryByRole("button", { name: /edit observability/i })).not.toBeInTheDocument();
     expect(screen.getByText(/Cap at \$50.00/)).toBeInTheDocument();
-    expect(screen.getByText(/delivery and recipient routing are not yet connected/)).toBeInTheDocument();
+  });
+  it("describes wired owner/admin email without claiming live delivery or selectable receivers", () => {
+    render(<ObservabilityLimits orgId="org" limits={limits(false)} save={vi.fn()} reload={vi.fn()} />);
+    const notice = screen.getByText(/Usage threshold and cap-reached notices/);
+    expect(notice).toHaveTextContent("wired to email organization owners and admins via Resend");
+    expect(notice).toHaveTextContent("Delivery has not been live-tested.");
+    expect(notice).toHaveTextContent("Selecting recipients, Slack channels or webhooks for these notices is not supported.");
+    expect(screen.queryByText(/preferences are saved only|delivery and recipient routing are not yet connected/)).not.toBeInTheDocument();
   });
   it("sends the read version including zero, and explicit zero for no overage", async () => {
     const save = vi.fn().mockResolvedValue(create(UpdateObservabilityLimitsResponseSchema, { limits: limits(), spendCapRaisedToCharged: true }));
