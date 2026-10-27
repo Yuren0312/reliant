@@ -135,6 +135,17 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     handler: 'onEditorFind',
     passthrough: true
   },
+  findInPage: {
+    id: 'findInPage',
+    name: 'Find in Page',
+    description: 'Find text on the page',
+    category: 'Search & Navigation',
+    defaultBinding: 'Cmd+F',
+    defaultWebBinding: '',
+    context: 'global',
+    handler: 'onFindInPage',
+    desktopOnly: true
+  },
   focusChat: {
     id: 'focusChat',
     name: 'Focus Chat Input',

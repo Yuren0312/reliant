@@ -43,6 +43,11 @@ export interface ShortcutDefinition {
   handler: string;
   allowInInput?: boolean;
   passthrough?: boolean;
+  /**
+   * Exists only in the desktop app — what a browser tab provides itself, like
+   * find-in-page. Unbound in a browser, whatever the user remapped it to.
+   */
+  desktopOnly?: boolean;
 }
 
 interface ShortcutsState {
@@ -94,7 +99,10 @@ function overrideUnavailable(
  *
  * A user override wins wherever it can fire. Otherwise desktop takes the plain
  * default and the browser takes the web default, which is where chords the
- * browser reserves (Cmd+T, Cmd+W) are replaced by ones it releases.
+ * browser reserves (Cmd+T, Cmd+W) are replaced by ones it releases. A
+ * desktop-only shortcut is unbound in a browser, override or not: overrides
+ * follow the user between surfaces, and there the browser's own feature is
+ * the one the key should reach.
  *
  * Every surface that SHOWS a binding must use this, so what the UI says is
  * what the dispatcher actually matches.
@@ -102,10 +110,11 @@ function overrideUnavailable(
 export function effectiveBinding(
   shortcut: Pick<
     ShortcutDefinition,
-    "currentBinding" | "defaultBinding" | "defaultWebBinding"
+    "currentBinding" | "defaultBinding" | "defaultWebBinding" | "desktopOnly"
   >,
   platform: KeyboardPlatform = detectPlatform(),
 ): string {
+  if (shortcut.desktopOnly && !platform.isDesktop) return "";
   const surfaceDefault = platform.isDesktop
     ? shortcut.defaultBinding
     : shortcut.defaultWebBinding;
@@ -127,7 +136,7 @@ export function effectiveBinding(
 export function shortcutLabel(
   shortcut: Pick<
     ShortcutDefinition,
-    "currentBinding" | "defaultBinding" | "defaultWebBinding"
+    "currentBinding" | "defaultBinding" | "defaultWebBinding" | "desktopOnly"
   >,
   platform: KeyboardPlatform = detectPlatform(),
 ): string {

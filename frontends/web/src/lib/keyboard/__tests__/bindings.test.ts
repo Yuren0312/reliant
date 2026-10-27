@@ -246,11 +246,12 @@ describe("shortcut definitions", () => {
       },
     );
 
-    it.each([MAC_DESKTOP, MAC_WEB, PC_WEB])(
+    it.each([MAC_WEB, PC_WEB])(
       "is left to the browser's find with no conversation on screen",
       (platform) => {
         // The dashboard, Settings, the Inbox, Runs: "find" there means the
-        // page, not chat history (Cmd+E is the chat switcher everywhere).
+        // page, not chat history (Cmd+E is the chat switcher everywhere), and
+        // a browser tab has its own find bar for that.
         const registry = buildRegistry(platform);
         const chord = parseBinding("Cmd+F", platform.isMac);
 
@@ -259,17 +260,41 @@ describe("shortcut definitions", () => {
       },
     );
 
-    it("defers to the editor's own find inside Monaco", () => {
+    it("finds in the page with no conversation on screen in the desktop app", () => {
+      // The desktop app has no browser find bar to leave the key to.
       const registry = buildRegistry(MAC_DESKTOP);
-      const result = registry.resolve(parseBinding("Cmd+F", true), [
-        "monaco",
-        "chat-view",
-        "global",
-      ]);
+      const chord = parseBinding("Cmd+F", true);
 
-      expect(result.shortcut?.id).toBe("editorFind");
-      expect(result.shortcut?.passthrough).toBe(true);
+      for (const contexts of [["global"], ["chat-input", "global"], ["file-tree", "global"]]) {
+        expect(registry.resolve(chord, contexts).shortcut?.id).toBe("findInPage");
+      }
     });
+
+    it("leaves find-in-page out of a browser tab entirely", () => {
+      const shortcut = defaultShortcuts.findInPage;
+      expect(shortcut.desktopOnly).toBe(true);
+      expect(shortcut.defaultWebBinding).toBe("");
+      expect(shortcut.context).toBe("global");
+    });
+
+    it.each([MAC_DESKTOP, MAC_WEB, PC_WEB])(
+      "defers to the editor's own find inside Monaco",
+      (platform) => {
+        const registry = buildRegistry(platform);
+        const result = registry.resolve(parseBinding("Cmd+F", platform.isMac), [
+          "monaco",
+          "chat-view",
+          "global",
+        ]);
+
+        expect(result.shortcut?.id).toBe("editorFind");
+        expect(result.shortcut?.passthrough).toBe(true);
+        expect(
+          registry.resolve(parseBinding("Cmd+F", platform.isMac), ["monaco", "global"])
+            .shortcut?.id,
+        ).toBe("editorFind");
+      },
+    );
   });
 
   describe("Cmd+L", () => {
@@ -343,6 +368,11 @@ describe("shortcut definitions", () => {
       { chord: "Cmd+Y", owner: "ModernApp (file-operation redo)" },
       { chord: "PageUp", owner: "FileTree (scroll by viewport)" },
       { chord: "PageDown", owner: "FileTree (scroll by viewport)" },
+      // The find bar's next/previous match. It is a page of its own (in the
+      // desktop app's find-bar view), but a shortcut on these would put a
+      // second meaning on the chord Chrome users know as "find next".
+      { chord: "Cmd+G", owner: "FindBar (next match)" },
+      { chord: "Cmd+Shift+G", owner: "FindBar (previous match)" },
     ];
 
     it.each(RESERVED_FOR_COMPONENTS)(

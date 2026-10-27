@@ -34,6 +34,11 @@
 #   `binding` is the desktop (Electron) chord. `web_binding` overrides it in a
 #   browser tab. Omit web_binding when the chord works in both.
 #
+#   `desktop_only: true` — the shortcut does not exist in a browser tab: no
+#   binding there (a remap does not apply either), absent from the web's
+#   Settings list. For what the browser already provides itself, like
+#   find-in-page; it cannot be combined with web_binding.
+#
 #   Browsers fall into three buckets, and the bucket decides whether an override
 #   is required:
 #     HARD-RESERVED — the page never receives the event; preventDefault cannot
@@ -162,9 +167,10 @@ shortcuts:
   # context rather than meaning one fixed thing: the editor keeps its own find,
   # a conversation on screen searches that conversation, and anywhere else — a
   # project home with no chat open, Settings, the Inbox, Workflows, Runs, Apps
-  # — it is left unclaimed, so a browser tab gets its own find-in-page. Chat
-  # history stays a keystroke away everywhere through switchChat (Cmd+E), and
-  # the slash menu's "Search Chats" runs this from any page. Registering the
+  # — it is find-in-page: the browser's own in a tab, findInPage (below) in the
+  # desktop app. Chat history stays a keystroke away everywhere through
+  # switchChat (Cmd+E), and the slash menu's "Search Chats" runs this from any
+  # page. Registering the
   # Monaco entry explicitly is what lets the dispatcher stay out of Monaco's
   # way — this replaces the old hardcoded "skip Cmd+F if Monaco is focused"
   # branch.
@@ -184,6 +190,21 @@ shortcuts:
     context: monaco
     passthrough: true
     handler: onEditorFind
+
+  # The rest of Cmd+F: off a conversation and outside the editor, find text on
+  # the page. A browser tab already has that — its own find bar — so this
+  # exists only in the desktop app, which has no browser chrome to provide one.
+  # It sits in `global`, below chatSearch (`chat-view`) and editorFind
+  # (`monaco`), so those still win where they apply. Edit › Find in the desktop
+  # menu delivers this id, and with a conversation on screen it searches the
+  # conversation instead, exactly as the key would there.
+  - id: findInPage
+    name: Find in Page
+    description: Find text on the page
+    category: Search & Navigation
+    binding: Cmd+F
+    desktop_only: true
+    handler: onFindInPage
 
   # ==================================
   # Focus
