@@ -190,7 +190,7 @@ func (r *NATSDaemonRouter) rideOutDisconnect(
 			if outcome == dispatchUndelivered {
 				seen = r.daemonLastSeen(ctx, userID, daemonID)
 			}
-			deadline = seen.Add(DaemonReconnectGrace)
+			deadline = r.reconnectDeadline(ctx, userID, daemonID, seen.Add(DaemonReconnectGrace))
 			if !time.Now().Before(deadline) {
 				// Away longer than a reconnect takes: fail as fast as ever.
 				return 0, err

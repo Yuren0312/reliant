@@ -104,6 +104,16 @@ type daemonClient struct {
 	// results holds each tool result until a gateway acknowledges it, so a
 	// result finished while the daemon was between streams still arrives.
 	results resultOutbox
+	// restartMu orders new admission, completion and the deadline. The state
+	// survives gateway reconnects, but never a replacement daemon process.
+	updating        atomic.Bool
+	restartMu       sync.Mutex
+	restartStatus   *reliantv1.DaemonRestartStatus
+	restartAborted  map[string]bool
+	restartCommands int
+	restartStop     func() bool
+	// restartAfter is a deterministic timer seam; nil uses time.AfterFunc.
+	restartAfter func(time.Duration, func()) func() bool
 
 	cancelMu    sync.Mutex
 	cancelByReq map[string]context.CancelFunc
@@ -274,6 +284,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	ctx, stopRuntime := context.WithCancel(ctx)
 	defer stopRuntime()
 	client.armWorkspaceGuard(ctx, stopRuntime)
+	defer client.stopRestartTimer()
 	initializeWorktreeActivity(ctx, opts.BootstrapConfig.DataDir)
 
 	// Publish the runtime record before the first dial. Until the gateway acks
@@ -718,6 +729,9 @@ func (d *daemonClient) recordStreamStopped(detail string) {
 }
 
 func (d *daemonClient) recordStreamTransition(s daemonstate.Stream, detail string, retrying bool) {
+	if d.updating.Load() {
+		s = daemonstate.StreamUpdating
+	}
 	if level, attrs, ok := d.transitions.transition(s, summarizeReason(detail)); ok {
 		logging.Log(level, logPrefix+" daemon stream state", attrs...)
 	}
@@ -1033,7 +1047,8 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			// This daemon moves to another replica when its gateway drains,
 			// and holds tool results until they are acknowledged
 			// (gateway_session.go).
-			MovesOnDrain: true,
+			MovesOnDrain:  true,
+			RestartStatus: d.restartSnapshot(),
 		}},
 	}
 	stampBuildIdentity(register.GetRegister())
@@ -1165,6 +1180,10 @@ func (d *daemonClient) receiveSession(
 // handleServerMessage dispatches one message that arrived on session s. A
 // request's reply goes back on s while s is open (see reply).
 func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySession, msg *reliantv1.ServerMessage) error {
+	if notice := msg.GetRestartRequested(); notice != nil {
+		d.beginRestart(ctx, notice)
+		return nil
+	}
 	switch m := msg.Message.(type) {
 	case *reliantv1.ServerMessage_ToolRequest:
 		if m.ToolRequest == nil {
@@ -1172,10 +1191,18 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 		}
 		// Recorded before the goroutine starts, so a status question that
 		// arrives right behind the request already finds it running.
+		d.restartMu.Lock()
+		if d.restartStatus != nil {
+			d.restartMu.Unlock()
+			return d.reply(s, &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_ToolResponse{ToolResponse: &reliantv1.ToolResponse{
+				RequestId: m.ToolRequest.RequestId, IsError: true, ErrorCode: toolexec.ErrorCodeDaemonUndelivered, ErrorMessage: "machine updating; request not executed",
+			}}})
+		}
 		d.results.start(m.ToolRequest.RequestId)
 		if s != nil && m.ToolRequest.RequestId != "" {
 			s.inFlight.Add(1) // until a gateway acknowledges the result
 		}
+		d.restartMu.Unlock()
 		go d.executeTool(s, m.ToolRequest)
 		return nil
 
@@ -1324,10 +1351,27 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 		if m.DaemonCommand == nil {
 			return nil
 		}
+		d.restartMu.Lock()
+		if d.restartStatus != nil && m.DaemonCommand.CommandType != toolexec.ToolStatusCommand {
+			d.restartMu.Unlock()
+			return d.reply(s, &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_DaemonCommandResponse{DaemonCommandResponse: &reliantv1.DaemonCommandResponse{
+				RequestId: m.DaemonCommand.RequestId, ErrorCode: toolexec.ErrorCodeDaemonUndelivered, ErrorMessage: "machine updating; command not executed",
+			}}})
+		}
+		d.restartCommands++
 		if s != nil {
 			s.inFlight.Add(1) // until its response is queued
 		}
-		go d.handleDaemonCommand(s, m.DaemonCommand)
+		d.restartMu.Unlock()
+		go func() {
+			defer func() {
+				d.restartMu.Lock()
+				d.restartCommands--
+				d.restartProgressLocked()
+				d.restartMu.Unlock()
+			}()
+			d.handleDaemonCommand(s, m.DaemonCommand)
+		}()
 		return nil
 
 	case *reliantv1.ServerMessage_TerminalInput:
@@ -1715,6 +1759,9 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 			hb.Disk = rep
 		}
 		hb.ToolCallsInFlight = uint32(d.results.runningCount())
+		d.restartMu.Lock()
+		d.publishRestartLocked()
+		d.restartMu.Unlock()
 		if err := s.send(&reliantv1.DaemonMessage{
 			Message: &reliantv1.DaemonMessage_Heartbeat{Heartbeat: hb},
 		}); err != nil {
@@ -1784,8 +1831,15 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 		return
 	}
 
-	// Before the tool can do anything a restart would cut short.
+	// Ordered with the drain deadline: a goroutine not yet scheduled when
+	// the deadline fired must neither execute nor resurrect a running marker.
+	d.restartMu.Lock()
+	if d.restartAborted[req.RequestId] {
+		d.restartMu.Unlock()
+		return
+	}
 	d.results.persistRunning(req.RequestId)
+	d.restartMu.Unlock()
 
 	releaseRecovery, admissionErr := beginRecoveryWork()
 	if admissionErr != nil {
@@ -1811,6 +1865,14 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 		defer d.unregisterCancel(req.ToolCallId)
 	}
 	defer cancel()
+	// The deadline may have fired before this goroutine registered its
+	// cancellation. Do not start it late or resurrect its terminal result.
+	d.restartMu.Lock()
+	aborted := d.restartAborted[req.RequestId]
+	d.restartMu.Unlock()
+	if aborted {
+		return
+	}
 
 	// Backgrounding is addressed the same way, and for the same reason: the
 	// only id a user can name from the UI is the tool call's. Probe both so a

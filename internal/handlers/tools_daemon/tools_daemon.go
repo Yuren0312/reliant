@@ -170,6 +170,10 @@ type daemonConnection struct {
 	// a drain notice and holds its results until acknowledged. Set once, at
 	// registration.
 	movesOnDrain bool
+	// admissionMu serializes restart with queueing new work. In-flight replies,
+	// cancel and acknowledgements do not require new admission.
+	admissionMu sync.Mutex
+	restart     atomic.Pointer[reliantv1.DaemonRestartStatus]
 	// drainNoticeSent is set once this replica has told the daemon it is
 	// draining (handOver). From then on the daemon may end the stream
 	// itself once it has moved, which is the drain working, not a fault.

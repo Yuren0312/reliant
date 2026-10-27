@@ -1214,6 +1214,8 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 	}
 	if !resp.Success {
 		switch resp.ErrorCode {
+		case ErrorCodeDaemonUndelivered:
+			return nil, ErrDaemonUpdating
 		case ErrorCodeDaemonInterrupted:
 			return nil, fmt.Errorf("daemon command %q failed: %w", commandType, interruption(resp.ErrorMessage))
 		case ErrorCodeDaemonRoundTrip:
@@ -1439,6 +1441,10 @@ func (r *NATSDaemonRouter) toolRequestRoundTrip(ctx context.Context, userID, dae
 	if err != nil {
 		forget()
 		return nil, dispatchFinal, err
+	}
+	if resp.ErrorCode == ErrorCodeDaemonUndelivered {
+		forget()
+		return nil, dispatchUndelivered, ErrDaemonUpdating
 	}
 	if resp.ErrorCode == ErrorCodeDaemonInterrupted {
 		resp, outcome, err := r.awaitRedelivery(ctx, inbox, userID, daemonID, request, resp, deadline)
