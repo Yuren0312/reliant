@@ -23,8 +23,10 @@ access. The gateway's exported `RequestDaemonRestart` is also the test hook.
 
 1. The gateway persists a restart observation, gates admission, unsubscribes
    and flushes new-work subjects using its existing make-before-break drain.
-   Results, cancellation, backgrounding and the administrative retry subject
-   stay live. A callback selected before unsubscribe is refused before queueing
+   Results, cancellation, backgrounding, status-only daemon commands and the
+   administrative retry subject stay live. `tools.recovery` remains reachable
+   for held-result recovery; `tools.online` is withdrawn, so this does not
+   advertise admission for new work. A callback selected before unsubscribe is refused before queueing
    and returns `DAEMON_UNDELIVERED`, not an unknown-outcome interruption.
 2. `RestartRequested` tells the daemon the reason and hard deadline. The daemon
    records `updating`, stops new admissions, and waits for running calls and
@@ -35,14 +37,26 @@ access. The gateway's exported `RequestDaemonRestart` is also the test hook.
    follows recording that verdict; a late successful completion cannot replace
    it. Completed, unacknowledged results remain in the persistent outbox.
 4. The daemon reports `drained` (and `timed_out` when applicable) and remains
-   quiesced. Its supervisor/operator must replace it. Merely restarting a cloud
-   container does not deliver a new image; B2 does not perform that replacement.
-5. A gateway reconnect by the *same process* carries its restart observation in
-   registration, so gateway hand-over cannot re-enable work. A new process has
-   none: registration clears the observation and reconnect restores routing.
+   quiesced. An uncooperative daemon command holds `drained=false` until it
+   actually terminates: cancellation is not proof of termination. Its late
+   completion is reported as outcome-unknown, never successful. Its
+   supervisor/operator must replace it. Merely restarting a cloud container
+   does not deliver a new image; B2 does not perform that replacement.
+5. Every process creates one random incarnation UUID, reused on both stream
+   registration paths but never persisted across process starts. Durable intent
+   names that UUID. A same-process reconnect retains and re-sends the intent
+   even when its original notice was lost before receipt. A different verified
+   incarnation clears only the exact intent read, fenced to the current
+   owner/daemon attachment. Missing identity fails closed; absence of a local
+   observation is never treated as proof of replacement. Registration starts
+   admission closed until restoration succeeds, including during reconnect
+   races with new work or administrative requests.
 
 The observation lives on the daemon identity, not its disappearing attachment.
-Writes are fenced to the owning attachment generation. The registry reports
+Writes are fenced to the owning attachment generation; a zero-row write is
+not durable success. Repeated observations retry persistence after lease
+recreation. Tool-result acknowledgements follow confirmed NATS publication
+and flush, never merely delivery to a gateway's buffered local waiter. The registry reports
 `UPDATING` while attached and through the bounded replacement window when
 unattached; it also serves the drain deadline and progress. Workers read that
 persisted deadline when a request finds the machine unavailable, extending the

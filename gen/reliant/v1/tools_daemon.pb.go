@@ -1168,9 +1168,11 @@ type DaemonRegister struct {
 	CommitTimeUnix int64 `protobuf:"varint,15,opt,name=commit_time_unix,json=commitTimeUnix,proto3" json:"commit_time_unix,omitempty"`
 	// forge_version is the forge module version linked into the binary.
 	ForgeVersion string `protobuf:"bytes,16,opt,name=forge_version,json=forgeVersion,proto3" json:"forge_version,omitempty"`
-	// Present when this same process reconnects while draining. An absent
-	// status means a fresh process: the previous restart has completed.
+	// Current process-local observation; absence is not proof of replacement.
 	RestartStatus *DaemonRestartStatus `protobuf:"bytes,17,opt,name=restart_status,json=restartStatus,proto3" json:"restart_status,omitempty"`
+	// Random UUID created once per daemon process, never persisted across process
+	// starts. Stable across gateway reconnects. Not an authorization identity.
+	IncarnationId string `protobuf:"bytes,18,opt,name=incarnation_id,json=incarnationId,proto3" json:"incarnation_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1301,6 +1303,13 @@ func (x *DaemonRegister) GetRestartStatus() *DaemonRestartStatus {
 		return x.RestartStatus
 	}
 	return nil
+}
+
+func (x *DaemonRegister) GetIncarnationId() string {
+	if x != nil {
+		return x.IncarnationId
+	}
+	return ""
 }
 
 // ToolResponse contains the result of tool execution. The daemon keeps it until
@@ -2419,8 +2428,11 @@ type DaemonRestartStatus struct {
 	Reason         string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
 	Drained        bool                   `protobuf:"varint,3,opt,name=drained,proto3" json:"drained,omitempty"`
 	TimedOut       bool                   `protobuf:"varint,4,opt,name=timed_out,json=timedOut,proto3" json:"timed_out,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The process this durable intent targets. Gateway writes bind it to the
+	// authenticated owner/daemon and current attachment, not caller metadata.
+	IncarnationId string `protobuf:"bytes,5,opt,name=incarnation_id,json=incarnationId,proto3" json:"incarnation_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DaemonRestartStatus) Reset() {
@@ -2479,6 +2491,13 @@ func (x *DaemonRestartStatus) GetTimedOut() bool {
 		return x.TimedOut
 	}
 	return false
+}
+
+func (x *DaemonRestartStatus) GetIncarnationId() string {
+	if x != nil {
+		return x.IncarnationId
+	}
+	return ""
 }
 
 // GatewayHello is an intentionally-empty marker. See ServerMessage.hello.
@@ -5209,7 +5228,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x05error\x18\a \x01(\tR\x05error\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc9\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xf0\x04\n" +
 	"\x0eDaemonRegister\x12\x1a\n" +
 	"\bhostname\x18\x03 \x01(\tR\bhostname\x12\x1a\n" +
 	"\bplatform\x18\x04 \x01(\tR\bplatform\x12\x1f\n" +
@@ -5227,7 +5246,8 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x06commit\x18\x0e \x01(\tR\x06commit\x12(\n" +
 	"\x10commit_time_unix\x18\x0f \x01(\x03R\x0ecommitTimeUnix\x12#\n" +
 	"\rforge_version\x18\x10 \x01(\tR\fforgeVersion\x12F\n" +
-	"\x0erestart_status\x18\x11 \x01(\v2\x1f.reliant.v1.DaemonRestartStatusR\rrestartStatus\x1a9\n" +
+	"\x0erestart_status\x18\x11 \x01(\v2\x1f.reliant.v1.DaemonRestartStatusR\rrestartStatus\x12%\n" +
+	"\x0eincarnation_id\x18\x12 \x01(\tR\rincarnationId\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x80\x02\n" +
@@ -5319,12 +5339,13 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\amessage\"T\n" +
 	"\x10RestartRequested\x12(\n" +
 	"\x10deadline_unix_ms\x18\x01 \x01(\x03R\x0edeadlineUnixMs\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x8e\x01\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xb5\x01\n" +
 	"\x13DaemonRestartStatus\x12(\n" +
 	"\x10deadline_unix_ms\x18\x01 \x01(\x03R\x0edeadlineUnixMs\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12\x18\n" +
 	"\adrained\x18\x03 \x01(\bR\adrained\x12\x1b\n" +
-	"\ttimed_out\x18\x04 \x01(\bR\btimedOut\"\x0e\n" +
+	"\ttimed_out\x18\x04 \x01(\bR\btimedOut\x12%\n" +
+	"\x0eincarnation_id\x18\x05 \x01(\tR\rincarnationId\"\x0e\n" +
 	"\fGatewayHello\"8\n" +
 	"\fGatewayDrain\x12(\n" +
 	"\x10deadline_unix_ms\x18\x01 \x01(\x03R\x0edeadlineUnixMs\".\n" +

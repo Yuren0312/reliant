@@ -3,6 +3,10 @@ package tools_daemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+
+	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
 	"strings"
 	"time"
 
@@ -25,7 +29,16 @@ func (s *Service) RequestDaemonRestart(ctx context.Context, userID, daemonID str
 	}
 	conn.admissionMu.Lock()
 	defer conn.admissionMu.Unlock()
+	if _, err := uuid.Parse(conn.incarnationID); err != nil {
+		return nil, svcerr.FailedPrecondition("daemon process identity is required for planned restart")
+	}
 	if status := conn.restart.Load(); status != nil {
+		if status.DeadlineUnixMs == 0 {
+			return nil, svcerr.FailedPrecondition("daemon registration is not ready")
+		}
+		if err := s.persistRestart(ctx, conn, status); err != nil {
+			return nil, err
+		}
 		if !status.Drained {
 			err := s.sendControlToConn(conn, &pb.ServerMessage{Message: &pb.ServerMessage_RestartRequested{RestartRequested: &pb.RestartRequested{DeadlineUnixMs: status.DeadlineUnixMs, Reason: status.Reason}}})
 			return status, err
@@ -36,7 +49,7 @@ func (s *Service) RequestDaemonRestart(ctx context.Context, userID, daemonID str
 	if req.DeadlineUnixMs > 0 {
 		deadline = minTime(deadline, time.UnixMilli(req.DeadlineUnixMs))
 	}
-	status := &pb.DaemonRestartStatus{DeadlineUnixMs: deadline.UnixMilli(), Reason: req.Reason}
+	status := &pb.DaemonRestartStatus{DeadlineUnixMs: deadline.UnixMilli(), Reason: req.Reason, IncarnationId: conn.incarnationID}
 	if err := s.persistRestart(ctx, conn, status); err != nil {
 		return nil, err
 	}
@@ -87,21 +100,70 @@ func (s *Service) persistRestart(ctx context.Context, conn *daemonConnection, st
 	return s.deps.Repo.SetDaemonRestartStatus(ctx, conn.userID, conn.daemonID, conn.attachedAt, data)
 }
 
-// restoreRestart runs before announcing a registered stream. A reconnecting
-// draining process carries its status; a new process carries none and clears
-// the old observation, including while a previous stream tears down.
+// restoreRestart runs before announcing new-work availability. A nil local
+// observation never proves replacement: durable intent targets a process UUID,
+// not the stream/lease, and is resent when its original notice was lost.
 func (s *Service) restoreRestart(ctx context.Context, conn *daemonConnection, reg *pb.DaemonRegister) error {
 	conn.admissionMu.Lock()
 	defer conn.admissionMu.Unlock()
-	status := reg.GetRestartStatus()
-	// Registration has already published this connection's admission state.
-	// A manual request racing the final registration writes may have advanced
-	// it; never clear that request using the older registration snapshot.
-	if current := conn.restart.Load(); current != nil {
-		status = current
+	conn.incarnationID = reg.GetIncarnationId()
+	if _, err := uuid.Parse(conn.incarnationID); err != nil {
+		return svcerr.FailedPrecondition("daemon process identity is required")
+	}
+	var previous string
+	var status *pb.DaemonRestartStatus
+	if s.deps.Repo != nil {
+		row, err := s.deps.Repo.GetDaemon(ctx, conn.daemonID)
+		if err != nil {
+			return err
+		}
+		if row == nil || row.UserID != conn.userID {
+			return svcerr.NotFound("daemon not found")
+		}
+		previous = row.RestartStatus
+		if previous != "" {
+			status = &pb.DaemonRestartStatus{}
+			if err := json.Unmarshal([]byte(previous), status); err != nil {
+				return fmt.Errorf("decode restart intent: %w", err)
+			}
+			if _, err := uuid.Parse(status.IncarnationId); err != nil {
+				return svcerr.FailedPrecondition("restart intent has no verified process identity")
+			}
+			if status.IncarnationId != conn.incarnationID {
+				status = nil
+			}
+		}
+	}
+	if local := reg.GetRestartStatus(); local != nil {
+		if local.IncarnationId != conn.incarnationID {
+			return svcerr.FailedPrecondition("restart observation belongs to another process")
+		}
+		if status != nil && local.DeadlineUnixMs == status.DeadlineUnixMs {
+			status = proto.Clone(status).(*pb.DaemonRestartStatus)
+			status.Drained = status.Drained || local.Drained
+			status.TimedOut = status.TimedOut || local.TimedOut
+		} else if previous == "" {
+			status = proto.Clone(local).(*pb.DaemonRestartStatus)
+		}
+	}
+	data := ""
+	if status != nil {
+		b, err := json.Marshal(status)
+		if err != nil {
+			return err
+		}
+		data = string(b)
+	}
+	if s.deps.Repo != nil {
+		if err := s.deps.Repo.CompareDaemonRestartStatus(ctx, conn.userID, conn.daemonID, conn.attachedAt, previous, data); err != nil {
+			return err
+		}
 	}
 	conn.restart.Store(status)
-	return s.persistRestart(ctx, conn, status)
+	if status != nil {
+		return s.sendControlToConn(conn, &pb.ServerMessage{Message: &pb.ServerMessage_RestartRequested{RestartRequested: &pb.RestartRequested{DeadlineUnixMs: status.DeadlineUnixMs, Reason: status.Reason}}})
+	}
+	return nil
 }
 
 // recordRestart runs on the receive loop so a drained report is not lost to
@@ -110,7 +172,7 @@ func (s *Service) recordRestart(ctx context.Context, conn *daemonConnection, sta
 	conn.admissionMu.Lock()
 	defer conn.admissionMu.Unlock()
 	prev := conn.restart.Load()
-	if prev == nil || status == nil || status.DeadlineUnixMs != prev.DeadlineUnixMs {
+	if prev == nil || status == nil || status.DeadlineUnixMs != prev.DeadlineUnixMs || status.IncarnationId != conn.incarnationID || prev.IncarnationId != conn.incarnationID {
 		return nil
 	}
 	if prev.Drained && !status.Drained {

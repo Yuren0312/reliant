@@ -123,12 +123,12 @@ func TestDaemonRestartStopsNewRoutingButDeliversInFlightResult(t *testing.T) {
 func TestDaemonRestartRegistrationRetainsOnlySameProcessDrain(t *testing.T) {
 	svc := newTestService(nil)
 	conn := newTestConn("user", "daemon", newParkedStream())
-	status := &pb.DaemonRestartStatus{DeadlineUnixMs: time.Now().Add(time.Minute).UnixMilli(), Reason: "test", Drained: true}
-	require.NoError(t, svc.restoreRestart(context.Background(), conn, &pb.DaemonRegister{RestartStatus: status}))
+	status := &pb.DaemonRestartStatus{DeadlineUnixMs: time.Now().Add(time.Minute).UnixMilli(), Reason: "test", Drained: true, IncarnationId: conn.incarnationID}
+	require.NoError(t, svc.restoreRestart(context.Background(), conn, &pb.DaemonRegister{RestartStatus: status, IncarnationId: conn.incarnationID}))
 	require.NotNil(t, conn.restart.Load())
 	require.ErrorIs(t, svc.sendToConn(conn, &pb.ServerMessage{Message: &pb.ServerMessage_ToolRequest{ToolRequest: &pb.ToolRequest{RequestId: "new"}}}), toolexec.ErrDaemonUpdating)
 	conn = newTestConn("user", "daemon", newParkedStream()) // a fresh process/connection
-	require.NoError(t, svc.restoreRestart(context.Background(), conn, &pb.DaemonRegister{}))
+	require.NoError(t, svc.restoreRestart(context.Background(), conn, &pb.DaemonRegister{IncarnationId: conn.incarnationID}))
 	require.Nil(t, conn.restart.Load())
 	require.NoError(t, svc.sendToConn(conn, &pb.ServerMessage{Message: &pb.ServerMessage_ToolRequest{ToolRequest: &pb.ToolRequest{RequestId: "after"}}}))
 	require.Equal(t, "after", (<-conn.sendCh).GetToolRequest().RequestId)
@@ -141,9 +141,9 @@ func TestDaemonRestartDrainedReportIsStoredBeforeReturn(t *testing.T) {
 		return json.Unmarshal([]byte(data), stored)
 	}})
 	conn := newTestConn("user", "daemon", newParkedStream())
-	status := &pb.DaemonRestartStatus{DeadlineUnixMs: 1234, Reason: "test"}
+	status := &pb.DaemonRestartStatus{DeadlineUnixMs: 1234, Reason: "test", IncarnationId: conn.incarnationID}
 	conn.restart.Store(status)
-	require.NoError(t, svc.recordRestart(context.Background(), conn, &pb.DaemonRestartStatus{DeadlineUnixMs: 1234, Reason: "test", Drained: true, TimedOut: true}))
+	require.NoError(t, svc.recordRestart(context.Background(), conn, &pb.DaemonRestartStatus{DeadlineUnixMs: 1234, Reason: "test", Drained: true, TimedOut: true, IncarnationId: conn.incarnationID}))
 	require.True(t, stored.Drained)
 	require.True(t, stored.TimedOut)
 }

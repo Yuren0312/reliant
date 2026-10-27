@@ -37,7 +37,7 @@ func (d *daemonClient) beginRestart(_ context.Context, notice *pb.RestartRequest
 	if notice.DeadlineUnixMs > 0 && time.UnixMilli(notice.DeadlineUnixMs).Before(deadline) {
 		deadline = time.UnixMilli(notice.DeadlineUnixMs)
 	}
-	d.restartStatus = &pb.DaemonRestartStatus{DeadlineUnixMs: deadline.UnixMilli(), Reason: notice.Reason}
+	d.restartStatus = &pb.DaemonRestartStatus{DeadlineUnixMs: deadline.UnixMilli(), Reason: notice.Reason, IncarnationId: d.incarnationID}
 	d.updating.Store(true)
 	d.recordStream(daemonstate.StreamUpdating, notice.Reason)
 	d.publishRestartLocked()

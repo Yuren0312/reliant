@@ -218,6 +218,9 @@ func (s *Service) ConnectDaemon(
 		return err
 	}
 
+	if _, err := uuid.Parse(reg.GetIncarnationId()); err != nil {
+		return svcerr.FailedPrecondition("daemon process identity is required")
+	}
 	if err := validateAssertedDaemonID(reg.GetDaemonId()); err != nil {
 		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Rejected malformed client-asserted daemon_id",
 			"userID", userID, "assertedDaemonID", truncateForLog(reg.GetDaemonId()))
@@ -310,7 +313,9 @@ func (s *Service) ConnectDaemon(
 		processOutputSubs:   make(map[string][]chan *toolexec.ProcessOutputEvent),
 	}
 
-	conn.restart.Store(reg.GetRestartStatus())
+	conn.incarnationID = reg.GetIncarnationId()
+	// Closed to new work until durable intent has been restored below.
+	conn.restart.Store(&reliantv1.DaemonRestartStatus{})
 	// Register connection: keyed by daemonID, with secondary index by userID.
 	s.mu.Lock()
 	oldConn := s.connections[daemonID]
@@ -426,6 +431,9 @@ func (s *Service) RegisterOutboundConnection(
 	if s.draining.Load() {
 		return nil, errGatewayDraining
 	}
+	if _, err := uuid.Parse(reg.GetIncarnationId()); err != nil {
+		return nil, svcerr.FailedPrecondition("daemon process identity is required")
+	}
 
 	now := leaseTime(time.Now())
 	capabilitiesJSON, err := jsonStringSlicePtr(reg.Capabilities)
@@ -487,7 +495,9 @@ func (s *Service) RegisterOutboundConnection(
 		processOutputSubs:   make(map[string][]chan *toolexec.ProcessOutputEvent),
 	}
 
-	conn.restart.Store(reg.GetRestartStatus())
+	conn.incarnationID = reg.GetIncarnationId()
+	// Closed to new work until durable intent has been restored below.
+	conn.restart.Store(&reliantv1.DaemonRestartStatus{})
 	// Register connection.
 	s.mu.Lock()
 	oldConn := s.connections[daemonID]

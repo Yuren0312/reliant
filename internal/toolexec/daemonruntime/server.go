@@ -52,6 +52,7 @@ func (s *daemonServer) ConnectGateway(
 			DaemonType:    resolveDaemonType(d.host.DaemonType, "cloud"),
 			Labels:        d.registerLabels(),
 			RestartStatus: d.restartSnapshot(),
+			IncarnationId: d.incarnationID,
 		}},
 	}
 	stampBuildIdentity(register.GetRegister())

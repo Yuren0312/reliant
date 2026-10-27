@@ -108,6 +108,7 @@ type daemonClient struct {
 	// survives gateway reconnects, but never a replacement daemon process.
 	updating        atomic.Bool
 	restartMu       sync.Mutex
+	incarnationID   string // random per process, stable across stream reconnects
 	restartStatus   *reliantv1.DaemonRestartStatus
 	restartAborted  map[string]bool
 	restartCommands int
@@ -551,8 +552,9 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	}
 
 	client := &daemonClient{
-		daemonID:   bootCfg.DaemonID,
-		daemonName: daemonName,
+		incarnationID: uuid.NewString(),
+		daemonID:      bootCfg.DaemonID,
+		daemonName:    daemonName,
 		// userID is set later from RegistrationAck (gateway-derived from PAT).
 		hostname:          hostname,
 		platform:          runtime.GOOS,
@@ -1049,6 +1051,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			// (gateway_session.go).
 			MovesOnDrain:  true,
 			RestartStatus: d.restartSnapshot(),
+			IncarnationId: d.incarnationID,
 		}},
 	}
 	stampBuildIdentity(register.GetRegister())

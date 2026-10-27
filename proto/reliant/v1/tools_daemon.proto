@@ -266,9 +266,11 @@ message DaemonRegister {
   int64 commit_time_unix = 15;
   // forge_version is the forge module version linked into the binary.
   string forge_version = 16;
-  // Present when this same process reconnects while draining. An absent
-  // status means a fresh process: the previous restart has completed.
+  // Current process-local observation; absence is not proof of replacement.
   DaemonRestartStatus restart_status = 17;
+  // Random UUID created once per daemon process, never persisted across process
+  // starts. Stable across gateway reconnects. Not an authorization identity.
+  string incarnation_id = 18;
 }
 
 // ToolResponse contains the result of tool execution. The daemon keeps it until
@@ -515,6 +517,9 @@ message DaemonRestartStatus {
   string reason = 2;
   bool drained = 3;
   bool timed_out = 4;
+  // The process this durable intent targets. Gateway writes bind it to the
+  // authenticated owner/daemon and current attachment, not caller metadata.
+  string incarnation_id = 5;
 }
 
 // GatewayHello is an intentionally-empty marker. See ServerMessage.hello.
